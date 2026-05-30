@@ -186,13 +186,18 @@ def truncate_for_tool(text: str, *, label: str) -> str:
     """Cap tool output so a single bad command can't blow up the prompt."""
     if len(text.encode("utf-8")) <= MAX_TOOL_OUTPUT_BYTES:
         return text
-    truncated: str = text.encode("utf-8")[:MAX_TOOL_OUTPUT_BYTES].decode(
-        "utf-8", errors="ignore"
-    )
-    return (
-        f"{truncated}\n\n[output truncated at {MAX_TOOL_OUTPUT_BYTES} bytes — "
+    notice: str = (
+        f"\n\n[output truncated at {MAX_TOOL_OUTPUT_BYTES} bytes — "
         f"narrow your {label} call (e.g. add path/glob/limit) for full content]"
     )
+    # Reserve room for the notice so the *total* result stays within the cap —
+    # otherwise the notice pushes the output past MAX_TOOL_OUTPUT_BYTES and a
+    # near-cap input can come out larger than it went in.
+    budget: int = max(0, MAX_TOOL_OUTPUT_BYTES - len(notice.encode("utf-8")))
+    truncated: str = text.encode("utf-8")[:budget].decode(
+        "utf-8", errors="ignore"
+    )
+    return f"{truncated}{notice}"
 
 
 def run_cmd(
@@ -999,7 +1004,13 @@ def tool_read_file(args: dict[str, Any]) -> str:
     limit: int = min(
         MAX_FILE_READ_LINES, int(args.get("limit", MAX_FILE_READ_LINES))
     )
-    path: Path = safe_repo_path(rel)
+    try:
+        path: Path = safe_repo_path(rel)
+    except ValueError as e:
+        # Mirror tool_grep's handling: surface the sandbox violation as a
+        # tool_result string instead of letting it propagate, so the model
+        # gets a clear message it can recover from.
+        return f"Error: {e}"
     if not path.exists() or not path.is_file():
         return f"Error: file not found: {rel}"
     with path.open("r", encoding="utf-8", errors="replace") as f:
