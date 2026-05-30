@@ -1,0 +1,48 @@
+name: 🐞 Bug report
+description: Something isn't working as documented.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please redact any secrets (API keys, tokens)
+        from logs before pasting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow snippet
+      description: The relevant part of your `.github/workflows/*.yml` that calls the action.
+      render: yaml
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Action version
+      description: The `uses:` ref you pinned (e.g. `DailybotHQ/ai-pr-reviewer@v1` or a SHA).
+      placeholder: DailybotHQ/ai-pr-reviewer@v1
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - anthropic
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant workflow logs
+      description: Paste the `[ai-pr-reviewer]` log lines. Redact secrets.
+      render: shell
