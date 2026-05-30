@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.env
+.venv
+venv/
+.python-version
+.mypy_cache/
+.pytest_cache/
+
+# Scratch space — git-ignored. Agents write throwaway files here; nothing
+# inside tmp/ is ever tracked or committed. See AGENTS.md → "Temporary Files".
+tmp/

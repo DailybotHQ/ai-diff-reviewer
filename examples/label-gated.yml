@@ -1,0 +1,41 @@
+# Label-gated review — only run when the author marks the PR as ready,
+# and tag the PR with `pr-reviewed` once the review is done.
+#
+# This pattern is great for high-traffic repos where you don't want every
+# work-in-progress push to trigger an LLM review. The author iterates
+# freely; when the PR is ready, they add the `ready` label and the review
+# runs once. After it succeeds (and isn't blocked by strictness), the
+# action applies `pr-reviewed`, which downstream automation (e.g. branch
+# protection or merge bots) can require as a condition for merge.
+
+name: PR review (label-gated)
+on:
+  pull_request:
+    branches: [main]
+    # `labeled` fires the workflow when the author adds the gate label;
+    # `synchronize` re-runs the review when new commits come in *while*
+    # the label is set.
+    types: [opened, synchronize, labeled]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          label-gate: ready
+          applied-label: pr-reviewed

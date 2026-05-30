@@ -1,0 +1,41 @@
+# Custom prompt — the review is only as good as the prompt that drives
+# it. Most teams want to teach the reviewer their house rules: required
+# patterns, forbidden anti-patterns, links to internal docs. Drop the
+# prompt into your repo and point the action at it.
+#
+# See `docs/PROMPTS.md` in this action's repo for what good custom
+# prompts look like.
+
+name: PR review (custom prompt)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Path is relative to the consumer's checkout (NOT the action's
+          # checkout). Make sure the prompt file is committed to the repo
+          # under review.
+          prompt-file: .github/prompts/our_review_rules.md
+          # Stricter cap because the custom prompt is opinionated and the
+          # team prefers a few high-signal comments over a long list.
+          max-inline-comments: 6

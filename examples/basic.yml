@@ -1,0 +1,36 @@
+# Minimal usage — review every PR to main, never block the check.
+#
+# Copy this into `.github/workflows/pr-review.yml` of your repo. Add your
+# Anthropic API key as a secret named `ANTHROPIC_API_KEY` (Settings →
+# Secrets and variables → Actions).
+
+name: PR review
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  # Cancel in-flight reviews when new commits land on the same PR, so the
+  # review always anchors to the latest HEAD.
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Required: the action runs `git diff origin/<base>...HEAD` to
+          # produce the diff seed. A shallow clone wouldn't have the base.
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,38 @@
+# Strict gate — fail the GitHub check when the reviewer flags critical
+# findings, so branch protection can require a clean review before merge.
+#
+# Pair this with a branch-protection rule on `main`:
+#   Settings → Branches → main → "Require status checks to pass" →
+#   add the `review` job (it shows up by name once it has run at least
+#   once on a PR).
+
+name: PR review (strict)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # `block-on-critical` fails the check when any inline comment is
+          # severity `critical`. Use `block-on-warning` for stricter teams
+          # who treat warnings as blockers too.
+          strictness: block-on-critical

@@ -1,0 +1,41 @@
+name: Self-review
+
+# Dogfood: review every PR to this action's own `main` with the action
+# itself. The local checkout under `./` is what gets used (instead of a
+# `uses: DailybotHQ/ai-pr-reviewer@v1` pin) so the in-flight changes are
+# what reviews the in-flight changes.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: self-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  self-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run AI PR Reviewer (local checkout)
+        # `./` resolves to this repo's checkout — i.e. we use the version
+        # of the action that this PR is proposing, not the published one.
+        # This is the canonical "test in CI" setup for action repos.
+        uses: ./
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          strictness: lenient
+          # The action's own prompt is the bundled default — no override
+          # needed; that's the prompt we ship to users, so dogfooding it
+          # is the right thing.

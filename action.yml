@@ -1,0 +1,123 @@
+name: 'AI PR Reviewer'
+description: 'Run an LLM-driven code review on every pull request — inline comments, severity-based gating, no infra required.'
+author: 'DailybotHQ'
+
+# Marketplace branding. Use anything from the GitHub Octicons set; the colour
+# scopes how the listing tile renders. Purple is closest to the "review" hue
+# in the GitHub UI.
+branding:
+  icon: 'check-circle'
+  color: 'purple'
+
+inputs:
+  api-key:
+    description: 'API key for the chosen provider (Anthropic for v1).'
+    required: true
+  github-token:
+    description: 'Token used to read the PR diff and post the review. Needs `pull-requests: write` and `contents: read`. Pass either the default `secrets.GITHUB_TOKEN` or a PAT/automation token if you want the review attributed to a specific bot account.'
+    required: true
+
+  provider:
+    description: 'LLM provider. Currently supports `anthropic`. Future: `openai`, `azure-openai`, `google`.'
+    required: false
+    default: 'anthropic'
+  model:
+    description: 'Model id for the chosen provider. Empty = provider default (Anthropic → `claude-sonnet-4-6`).'
+    required: false
+    default: ''
+
+  prompt-file:
+    description: 'Path inside the consumer checkout to a markdown system prompt. Empty = use the bundled `prompts/default.md`. The prompt is what makes the reviewer opinionated about your codebase — see docs/PROMPTS.md.'
+    required: false
+    default: ''
+
+  label-gate:
+    description: 'If non-empty, the review only runs when the PR carries this label (e.g. `ready`). Useful to keep work-in-progress noise out of the review queue.'
+    required: false
+    default: ''
+  applied-label:
+    description: 'If non-empty, this label is applied to the PR after a successful, non-blocked review (e.g. `pr-reviewed`). Empty = no label is applied.'
+    required: false
+    default: ''
+
+  collapse-previous:
+    description: 'On every new run, mark previous bot reviews/comments as `OUTDATED` via GraphQL `minimizeComment` so only the latest review is visually active.'
+    required: false
+    default: 'true'
+  tracking-comment:
+    description: 'Post a tracking/spinner comment that transitions in-place from `Working…` to `View review →` when the review completes. The first line carries a `<!-- ai-pr-reviewer-marker -->` marker so downstream automation can locate it.'
+    required: false
+    default: 'true'
+
+  strictness:
+    description: 'How strictly to gate the GitHub check on the review outcome. `lenient` — always succeed. `block-on-critical` — fail the check if any inline comment is severity `critical`. `block-on-warning` — fail if any inline comment is `critical` or `warning`. The model decides the severity per comment via the `severity` tool argument; the bundled default prompt explains the levels.'
+    required: false
+    default: 'lenient'
+
+  max-inline-comments:
+    description: 'Hard cap on the number of inline comments the reviewer can queue per run. The model is instructed to stay well under this; the cap is the safety net.'
+    required: false
+    default: '10'
+  max-turns:
+    description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls.'
+    required: false
+    default: '30'
+
+outputs:
+  review-url:
+    description: 'URL of the posted PR review (empty when the run was skipped).'
+    value: ${{ steps.review.outputs.review-url }}
+  severity:
+    description: 'Highest severity flagged in this review: `none`, `info`, `warning`, or `critical`.'
+    value: ${{ steps.review.outputs.severity }}
+  inline-attached:
+    description: 'Number of inline comments actually attached to the review.'
+    value: ${{ steps.review.outputs.inline-attached }}
+  inline-dropped:
+    description: 'Number of inline comments dropped because GitHub rejected the review with HTTP 422 (the action retries summary-only on 422).'
+    value: ${{ steps.review.outputs.inline-dropped }}
+  blocked:
+    description: 'Whether the strictness gate decided to fail the check (`true`/`false`). When `true`, the action exits with code 2 so the GitHub check turns red.'
+    value: ${{ steps.review.outputs.blocked }}
+  skipped:
+    description: 'Whether the run was skipped by the label gate (`true`/`false`).'
+    value: ${{ steps.review.outputs.skipped }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run AI PR reviewer
+      id: review
+      shell: bash
+      env:
+        # All inputs are forwarded with an `AIPRR_` prefix so the Python script
+        # has a stable, non-clashing namespace regardless of which provider
+        # we add next. Direct `INPUT_*` variables are NOT used — composite
+        # actions only set those for the action's own runtime, not for
+        # arbitrary `run:` blocks.
+        AIPRR_PROVIDER: ${{ inputs.provider }}
+        AIPRR_API_KEY: ${{ inputs.api-key }}
+        AIPRR_GH_TOKEN: ${{ inputs.github-token }}
+        AIPRR_MODEL: ${{ inputs.model }}
+        AIPRR_PROMPT_FILE: ${{ inputs.prompt-file }}
+        AIPRR_LABEL_GATE: ${{ inputs.label-gate }}
+        AIPRR_APPLIED_LABEL: ${{ inputs.applied-label }}
+        AIPRR_COLLAPSE_PREVIOUS: ${{ inputs.collapse-previous }}
+        AIPRR_TRACKING_COMMENT: ${{ inputs.tracking-comment }}
+        AIPRR_STRICTNESS: ${{ inputs.strictness }}
+        AIPRR_MAX_INLINE_COMMENTS: ${{ inputs.max-inline-comments }}
+        AIPRR_MAX_TURNS: ${{ inputs.max-turns }}
+
+        # Repo / PR context — pulled from the consumer's `pull_request` event.
+        AIPRR_REPO: ${{ github.repository }}
+        AIPRR_PR_NUMBER: ${{ github.event.pull_request.number }}
+        AIPRR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        AIPRR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+        # `github.action_path` is the absolute path to *this action's* checkout
+        # on the runner, which is what we need to locate `scripts/reviewer.py`
+        # and `prompts/default.md` regardless of the consumer's workspace.
+        AIPRR_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        python3 "${AIPRR_ACTION_PATH}/scripts/reviewer.py"
