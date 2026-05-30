@@ -26,7 +26,14 @@ Initial public release.
 - Bounded retries on Anthropic 429/5xx; bounded conversation pruning to keep token cost from compounding.
 - Documentation: README, PROMPTS guide, STRICTNESS guide, PROVIDERS roadmap.
 - Examples: `basic.yml`, `label-gated.yml`, `strict.yml`, `custom-prompt.yml`.
-- Self-test workflow (`py_compile` + smoke run on the action repo's own PRs).
+- `code_check` workflow gating every PR/push to `main` (compile, `action.yml`
+  contract validation, actionlint, unit tests).
+- `auto-release` workflow: SemVer bump from Conventional Commits on merge to
+  `main`, tag + major-alias move + GitHub Release (tag-only, no commit to
+  protected `main`).
+- Stdlib-`unittest` test suite under `tests/` for the runtime's pure logic.
+- Self-review workflow dogfooding the action on its own PRs.
+- Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
 [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/DailybotHQ/ai-pr-reviewer/releases/tag/v1.0.0

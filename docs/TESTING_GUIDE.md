@@ -137,3 +137,29 @@ We will add more rigorous testing if any of the following becomes true:
 4. We add features that aren't safely dogfoodable (e.g. `block-on-warning` exercising paths that don't fire on this repo's own PRs).
 
 Until then: keep it simple, keep the bar at compile + dogfood, and keep the contributor experience friction-free.
+
+## Automated tests (unit suite)
+
+Beyond `py_compile` and dogfooding, the runtime's pure logic is covered by a
+standard-library `unittest` suite in `tests/`. It uses no third-party runner,
+so it runs on a vanilla machine with nothing installed:
+
+```bash
+# From the repo root
+python3 -m unittest discover -s tests -v
+```
+
+What it covers (no network — the agentic loop is driven by a fake provider):
+
+- Input parsing (`parse_bool`), log redaction, and tool-output truncation.
+- Severity aggregation and strictness gating.
+- Path sandboxing (`safe_repo_path`) and the `read_file` / `grep` / `glob`
+  tool handlers.
+- Inline-comment queueing (cap + severity normalisation) and the
+  `submit_review` idempotency guard.
+- Tracking-comment rendering (including the `collapse-previous` note toggle).
+- Action-output writing (`write_action_output` / `write_all_outputs`).
+- Provider construction and the conversation-pruning invariant of the loop.
+
+CI runs this suite in the `code_check` workflow on every PR and push to
+`main`. Add a test alongside any change to the runtime's pure functions.

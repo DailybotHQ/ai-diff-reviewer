@@ -117,3 +117,21 @@ A diff between the two is a documentation regression.
 ## Local Python version
 
 Targets `python3.10+`. Most contributors will have `python3` from the system; the script also runs on `python3.11` and `python3.12`. We don't take a dep on a non-default version.
+
+## Run the test suite
+
+The runtime has a standard-library `unittest` suite (no install needed):
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+This is the same suite the `code_check` CI workflow runs on every PR and push
+to `main`. Run it before pushing any change to `scripts/reviewer.py`.
+
+## Validate the action.yml contract locally
+
+```bash
+python3 -m pip install pyyaml   # CI-only tooling, not a runtime dependency
+python3 .github/scripts/validate_action.py
+```

@@ -50,8 +50,13 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 ├── prompts/
 │   └── default.md                  # Bundled default system prompt (technology-agnostic)
 ├── examples/                       # Copy-paste workflow snippets for common setups
+├── tests/                          # Stdlib-unittest suite for the runtime
 ├── docs/                           # User-facing + contributor-facing documentation
-├── .github/workflows/              # CI, release, self-review
+├── .github/
+│   ├── workflows/                  # code_check, auto-release, release, self-review
+│   ├── scripts/                    # CI-only helpers (action.yml validator)
+│   ├── ISSUE_TEMPLATE/             # Bug + feature issue forms
+│   └── dependabot.yml              # Weekly GitHub Actions bumps
 ├── .agents/                        # Canonical AI-agent configuration (symlinked from .claude)
 │   ├── agents/                     # Sub-agent definitions
 │   ├── commands/                   # Slash commands (commit, pr, release, prompt-test, …)
@@ -116,7 +121,7 @@ Every commit that touches `scripts/reviewer.py` MUST compile cleanly:
 python3 -m py_compile scripts/reviewer.py
 ```
 
-CI runs this on every PR; pre-commit-checking it locally is courtesy, not optional. There is no broader test suite (the reviewer's "test" is dogfooding on real PRs — see [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)).
+CI runs this on every PR; pre-commit-checking it locally is courtesy, not optional. Beyond compilation there is a stdlib-`unittest` suite in `tests/` covering the runtime's pure logic, plus dogfooding on real PRs. Run it locally with `python3 -m unittest discover -s tests` (see [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)).
 
 ### 6. Conventional Commits (MANDATORY)
 
@@ -228,6 +233,7 @@ Reusable **Skills** (slash commands and one-shot workflows) and **Agents** (spec
 - [ ] All code in English with type hints.
 - [ ] No new non-stdlib imports in `scripts/reviewer.py`.
 - [ ] `python3 -m py_compile scripts/reviewer.py` passes.
+- [ ] `python3 -m unittest discover -s tests` passes (if the runtime changed).
 - [ ] `action.yml` parses (the CI job validates this; locally: `python3 -c 'import yaml; yaml.safe_load(open("action.yml"))'`).
 - [ ] If `action.yml` inputs/outputs changed: README's tables updated.
 - [ ] If runtime behaviour changed: `CHANGELOG.md` entry under `[Unreleased]`.
