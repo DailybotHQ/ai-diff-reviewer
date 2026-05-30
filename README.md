@@ -3,10 +3,28 @@
 > An LLM-driven pull-request reviewer as a GitHub Action — inline comments, severity-based gating, no infrastructure.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Powered by Dailybot](https://img.shields.io/badge/Powered%20by-Dailybot-6C5CE7.svg)](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer)
 
 A composite GitHub Action that runs a real code review on every pull request: posts inline comments, marks previous reviews as outdated, gates the GitHub check based on configurable strictness, and applies a "reviewed" label. Stdlib-only Python — no Docker image to pull, no Node modules, no infrastructure beyond your provider's API key.
 
 Originally built to replace [`anthropics/claude-code-action@v1`](https://github.com/anthropics/claude-code-action) when its `restoreConfigFromBase` step started crashing on repos that ship `.claude` as a symlink. The action solves that problem and a few more — same review quality, more configuration knobs, friendlier failure modes.
+
+---
+
+## Contents
+
+- [Quick start](#quick-start)
+- [What you get out of the box](#what-you-get-out-of-the-box)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+- [Strictness levels](#strictness-levels)
+- [Recipes](#recipes)
+- [Required permissions](#required-permissions)
+- [How it works](#how-it-works)
+- [Provider roadmap](#provider-roadmap)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
@@ -224,3 +242,9 @@ Bug reports, feature requests, provider implementations, and prompt improvements
 ## License
 
 [MIT](LICENSE) © 2026 AI PR Reviewer contributors.
+
+---
+
+## :electric_plug: Powered by [Dailybot](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer)
+
+[Dailybot](https://www.dailybot.com/product/ai) is an AI-powered async communication platform that keeps **people and agents** visible — without adding more meetings or tools. It lives where your team already works (Slack, Teams, Google Chat, Discord, VS Code, and the CLI) and turns scattered signals into clear progress: async check-ins and standups, AI summaries that detect blockers and read team sentiment, workflow automation and approvals, team analytics, and recognition. As AI agents join the workflow, Dailybot surfaces their status and activity right alongside your team's — so long-running agents never go dark. [Learn more](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer).
