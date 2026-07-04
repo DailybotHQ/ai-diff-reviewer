@@ -13,6 +13,14 @@ In Claude Code, type `/<name>`. In Codex / Cursor / Gemini, type `#<name>` (or w
 | `/release` | Cut a new `vX.Y.Z` release tag and publish a GitHub Release. | [commands/release.md](../commands/release.md) → [skills/release](../skills/release/SKILL.md) |
 | `/prompt-test` | Smoke-test a prompt change with before/after on real PRs. | [commands/prompt-test.md](../commands/prompt-test.md) → [skills/prompt-test](../skills/prompt-test/SKILL.md) |
 | `/add-provider` | Scaffold a new `Provider` implementation. | [commands/add-provider.md](../commands/add-provider.md) → [skills/add-provider](../skills/add-provider/SKILL.md) |
+| `/dwp-create` | Decompose a goal into a Deep Work Plan (numbered tasks + validation gates). | [commands/dwp-create.md](../commands/dwp-create.md) → [skills/deepworkplan/create](../skills/deepworkplan/create/SKILL.md) |
+| `/dwp-execute` | Execute a Deep Work Plan task by task, validating each gate. | [commands/dwp-execute.md](../commands/dwp-execute.md) → [skills/deepworkplan/execute](../skills/deepworkplan/execute/SKILL.md) |
+| `/dwp-refine` | Add, remove, or reorder tasks while preserving completed work. | [commands/dwp-refine.md](../commands/dwp-refine.md) → [skills/deepworkplan/refine](../skills/deepworkplan/refine/SKILL.md) |
+| `/dwp-resume` | Reconstruct state and continue an interrupted plan. | [commands/dwp-resume.md](../commands/dwp-resume.md) → [skills/deepworkplan/resume](../skills/deepworkplan/resume/SKILL.md) |
+| `/dwp-status` | Report progress on a plan without making changes. | [commands/dwp-status.md](../commands/dwp-status.md) → [skills/deepworkplan/status](../skills/deepworkplan/status/SKILL.md) |
+| `/dwp-verify` | Emit a CONFORMANT / NOT CONFORMANT verdict against the DWP spec. | [commands/dwp-verify.md](../commands/dwp-verify.md) → [skills/deepworkplan/verify](../skills/deepworkplan/verify/SKILL.md) |
+| `/skill-create` | Author or update a reusable skill under `.agents/skills/`. | [commands/skill-create.md](../commands/skill-create.md) → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) |
+| `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. | [commands/agent-create.md](../commands/agent-create.md) → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) |
 
 ## How commands map to skills
 

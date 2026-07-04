@@ -27,6 +27,7 @@ For the philosophy of why these exist and when to use each, see [docs/AI_AGENT_C
 | [`release`](../skills/release/SKILL.md) | 2 | release | Cutting a new `vX.Y.Z` tag and publishing the GitHub Release. |
 | [`prompt-test`](../skills/prompt-test/SKILL.md) | 2 | evaluate | Producing before/after evidence for a prompt change. Required for any non-trivial `prompts/default.md` PR. |
 | [`add-provider`](../skills/add-provider/SKILL.md) | 3 | scaffold | Scaffolding a new `Provider` implementation (class, registry, defaults, inputs, docs). |
+| [`deepworkplan`](../skills/deepworkplan/SKILL.md) | 3 | methodology | Structured plan-execute-verify loop for novel/large work. Router + eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`). Backed by the `dwp-*` / `skill-create` / `agent-create` slash commands. |
 
 ## Slash commands
 
@@ -41,6 +42,14 @@ The full reference lives in [COMMANDS_REFERENCE.md](COMMANDS_REFERENCE.md). Quic
 | `/release` | [skills/release](../skills/release/SKILL.md) | 2 |
 | `/prompt-test` | [skills/prompt-test](../skills/prompt-test/SKILL.md) | 2 |
 | `/add-provider` | [skills/add-provider](../skills/add-provider/SKILL.md) | 3 |
+| `/dwp-create` | thin delegator → [skills/deepworkplan/create](../skills/deepworkplan/create/SKILL.md) | 2 |
+| `/dwp-execute` | thin delegator → [skills/deepworkplan/execute](../skills/deepworkplan/execute/SKILL.md) | 2 |
+| `/dwp-refine` | thin delegator → [skills/deepworkplan/refine](../skills/deepworkplan/refine/SKILL.md) | 2 |
+| `/dwp-resume` | thin delegator → [skills/deepworkplan/resume](../skills/deepworkplan/resume/SKILL.md) | 2 |
+| `/dwp-status` | thin delegator → [skills/deepworkplan/status](../skills/deepworkplan/status/SKILL.md) | 1 |
+| `/dwp-verify` | thin delegator → [skills/deepworkplan/verify](../skills/deepworkplan/verify/SKILL.md) | 2 |
+| `/skill-create` | thin delegator → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) | 2 |
+| `/agent-create` | thin delegator → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) | 2 |
 
 ## Adding a new agent
 

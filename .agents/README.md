@@ -9,27 +9,46 @@ This directory is the **single source of truth** for every AI coding agent worki
 ```
 .agents/
 ├── README.md                          # This file
-├── settings.json                      # Harness settings (env, hooks, …)
+├── settings.json                      # Harness settings (env, Dailybot hooks)
 ├── agents/                            # Sub-agent definitions (specialised personas)
 │   ├── prompt-engineer.md
 │   ├── provider-implementer.md
 │   └── reviewer.md
 ├── commands/                          # Slash commands (every .md becomes /<name>)
 │   ├── add-provider.md
+│   ├── agent-create.md                # → skills/deepworkplan/author (thin delegator)
 │   ├── branch.md
 │   ├── code-review.md
 │   ├── commit.md
+│   ├── dwp-create.md                  # → skills/deepworkplan/create
+│   ├── dwp-execute.md                 # → skills/deepworkplan/execute
+│   ├── dwp-refine.md                  # → skills/deepworkplan/refine
+│   ├── dwp-resume.md                  # → skills/deepworkplan/resume
+│   ├── dwp-status.md                  # → skills/deepworkplan/status
+│   ├── dwp-verify.md                  # → skills/deepworkplan/verify
 │   ├── pr.md
 │   ├── prompt-test.md
-│   └── release.md
+│   ├── release.md
+│   └── skill-create.md                # → skills/deepworkplan/author
 ├── skills/                            # Reusable workflows
 │   ├── add-provider/SKILL.md
+│   ├── deepworkplan/                  # DWP methodology (installed v2.15.0, SHA256-verified)
+│   │   ├── SKILL.md                   # router
+│   │   ├── {create,execute,refine,resume,status,verify,onboard,author}/SKILL.md
+│   │   ├── addons/                    # dailybot (installed), devcontainer, design-system, dependency-upgrade
+│   │   ├── spec/, shared/, guide/, examples/
 │   ├── prompt-test/SKILL.md
 │   └── release/SKILL.md
 └── docs/
     ├── COMMANDS_REFERENCE.md          # Full reference for every slash command
     └── skills_agents_catalog.md       # Catalog with tier classification
 ```
+
+## Deep Work Plan integration
+
+This repo has the **Deep Work Plan (DWP)** methodology installed at `skills/deepworkplan/`. Eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`) drive the plan-execute-verify loop. Deep-work plan outputs land at the repo-root `.dwp/` directory (gitignored). See the root `AGENTS.md` → "Deep Work Plan" section for the full picture.
+
+**Dailybot addon** (opt-in, already installed): hook enforcement is wired in `settings.json` (Claude Code) and `../.cursor/hooks.json` (Cursor). Repo identity is at `../.dailybot/profile.json` — credential-free.
 
 ## How agents discover what's here
 

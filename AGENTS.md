@@ -24,7 +24,10 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 | Strictness (user-facing) | [docs/STRICTNESS.md](docs/STRICTNESS.md) |
 | Prompts (user-facing) | [docs/PROMPTS.md](docs/PROMPTS.md) |
 | Providers (user-facing) | [docs/PROVIDERS.md](docs/PROVIDERS.md) |
+| Performance | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
+| Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
 
 ---
 
@@ -71,6 +74,23 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 ├── CONTRIBUTING.md
 └── LICENSE                         # MIT
 ```
+
+---
+
+## Quick Commands
+
+The real, runnable commands for local work on this repo. No install phase — Python 3.10+ ships with everything needed (the runtime is stdlib-only). See [`docs/DEVELOPMENT_COMMANDS.md`](docs/DEVELOPMENT_COMMANDS.md) for the full reference and local-debug envs.
+
+| Purpose | Command |
+|---|---|
+| Compile-check the runtime (MANDATORY before commit — [Rule #5](#5-compile-check-before-commit)) | `python3 -m py_compile scripts/reviewer.py` |
+| Run the full unit-test suite (stdlib `unittest`, no third-party runner) | `python3 -m unittest discover -s tests -v` |
+| Validate the `action.yml` public contract (CI parity — needs `pip install pyyaml`) | `python3 .github/scripts/validate_action.py` |
+| Parse `action.yml` (quick sanity check, needs `pip install pyyaml`) | `python3 -c 'import yaml; yaml.safe_load(open("action.yml"))'` |
+| Objectively verify DWP conformance | `bash .agents/skills/deepworkplan/verify/conformance.sh` |
+| Verify auth to Dailybot (never prompts, safe to run) | `dailybot status --auth` |
+
+Every one of these runs on a vanilla `ubuntu-latest` matching the CI environment ([`.github/workflows/code_check.yml`](.github/workflows/code_check.yml)) — if it passes locally, it passes in CI.
 
 ---
 
@@ -177,6 +197,82 @@ Defined in [.agents/commands/](.agents/commands/). When invoked, look up the pro
 | `/add-provider` | Scaffold a new `Provider` implementation. |
 | `/code-review` | Run a focused review on the current branch. |
 | `/branch` | Generate a branch name from intent. |
+| `/dwp-create` | Decompose a goal into a Deep Work Plan (numbered tasks + validation gates). |
+| `/dwp-execute` | Execute a Deep Work Plan task by task, validating each gate. |
+| `/dwp-refine` | Add, remove, or reorder tasks while preserving completed work. |
+| `/dwp-resume` | Reconstruct state and continue an interrupted plan. |
+| `/dwp-status` | Report progress on a plan without making changes. |
+| `/dwp-verify` | Objective pass/fail conformance report against the DWP spec. |
+| `/skill-create` | Author or update a reusable skill under `.agents/skills/`. |
+| `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. |
+
+The eight `dwp-*` / `skill-create` / `agent-create` entries are thin delegators to the installed `deepworkplan` skill at [`.agents/skills/deepworkplan/`](.agents/skills/deepworkplan/) — see the [Deep Work Plan](#deep-work-plan) section below.
+
+---
+
+## Deep Work Plan
+
+This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer).
+
+### The eight sub-skills
+
+Installed at [.agents/skills/deepworkplan/](.agents/skills/deepworkplan/):
+
+| Sub-skill | Purpose |
+|---|---|
+| `create` | Decompose a goal into a numbered, sequential Deep Work Plan with per-task validation gates. |
+| `execute` | Run a plan task by task, checking each gate, updating progress. |
+| `refine` | Modify a plan (add, remove, reorder tasks) while preserving completed work. |
+| `resume` | Reconstruct state and continue an interrupted plan across sessions or agents. |
+| `status` | Report progress without making changes. |
+| `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
+| `onboard` | Make a repository AI-first (reasoned analysis + non-destructive generation). |
+| `author` | Author or evolve this repo's own skills, agents, and commands. |
+
+The `dwp-*`, `skill-create`, and `agent-create` slash commands in [.agents/commands/](.agents/commands/) are thin delegators to these — the skill is the single source of truth.
+
+### Where plans live
+
+Deep Work Plan outputs — plans, drafts, and onboarding recon/report — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source.
+
+```
+.dwp/
+├── plans/       ← PLAN_{name}/ directories (executing/executed plans)
+├── drafts/      ← {name}_draft_refined.md (created by /dwp-create)
+└── onboard/     ← RECON.md and REPORT.md from /deepworkplan-onboard
+```
+
+Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+
+### When to reach for it
+
+- The task has multiple valid approaches, touches many files, or needs to survive across sessions → `/dwp-create` first, then `/dwp-execute`.
+- A previous plan was interrupted → `/dwp-resume`.
+- Before wrapping onboarding or a large change → `/dwp-verify` gives an objective conformance gate.
+- Small, obvious edits → don't bother; work directly.
+
+DWP is complementary to the repo's existing `/release`, `/prompt-test`, and `/add-provider` skills — those remain the right tools for their specific workflows. DWP is for **novel** work that needs decomposition and gates.
+
+### Dailybot reporting (optional, non-blocking)
+
+This repo has the **Dailybot addon** enabled. When the `dailybot` CLI is on `PATH` and authenticated (`dailybot login`), significant DWP work surfaces to the team's Dailybot standup as agent updates. If Dailybot is absent, unauthenticated, unreachable, or `.dailybot/disabled` exists at the repo root, reporting **skips silently and never blocks the primary work**.
+
+**Four lifecycle events** (per [DWP Dailybot addon SPEC §5.1](.agents/skills/deepworkplan/addons/dailybot/SPEC.md)):
+
+| Event | When | Level |
+|---|---|---|
+| **Kickoff** | A plan is materialized and approved — describe *what is being built and why*. Fires once per plan. | regular |
+| **Significant task** | A feature / bug fix / major refactor ships mid-plan. Intermediate setup tasks are **not** reported. | regular |
+| **Blocked** | The plan halts on a stop condition and `state.json.blocked` is populated — the team sees what's stuck and what it needs. | regular (with `blockers`) |
+| **Completion** | The plan finishes — describe *what was built*, never "completed a plan". Fires once per plan. | **milestone** |
+
+Every event is emitted via the dailybot `report` sub-skill (`dailybot agent update ... --milestone --json-data ...`); payloads are derived from the plan's state layer when present (`.dwp/plans/PLAN_{name}/state.json`).
+
+**Deterministic hooks.** This repo commits harness hook configs for both Claude Code (`.agents/settings.json`, resolved as `.claude/settings.json` via the symlink) and Cursor (`.cursor/hooks.json`). They call `dailybot hook session-start|activity|stop` at session start, after file writes, and end of turn — the harness itself reminds the agent about unreported work. All hook commands are local-only (no network), always exit `0`, and cannot block. When a reminder fires, respond with either a lifecycle-appropriate report or `dailybot hook dismiss` — never ignore silently.
+
+**Repo identity.** `.dailybot/profile.json` carries the credential-free repo identity (`name`, `default_metadata`, `report` policy). To silence Dailybot for a session or a whole clone, `touch .dailybot/disabled`. To turn reminders off while keeping manual reporting available, set `"report": {"nudge": false}` in `profile.json`.
+
+**Uninstall.** Delete `.dailybot/`, `.cursor/hooks.json`, and remove the three hook entries from `.agents/settings.json` (every entry contains the string `dailybot hook`).
 
 ---
 
