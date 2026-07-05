@@ -9,8 +9,8 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | Document | Purpose |
 |---|---|
 | [PRODUCT_SPEC.md](PRODUCT_SPEC.md) | The non-technical "why" — the problem the action solves, who it's for, success criteria, and explicit non-goals. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | The real components: composite action shell, `scripts/reviewer.py` runtime, the five tools the model calls, and the review-submission flow (including the 422 fallback). |
-| [PERFORMANCE.md](PERFORMANCE.md) | Cost and latency budget of the agentic loop: `MAX_TURNS`, `max_tokens`, conversation pruning, and per-review cost drivers. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | The real components: composite action shell, `scripts/reviewer.py` runtime, the two provider families (chat-completions + agent-runner), the tools the chat-completions family calls, the `.aiprr/findings.json` contract the agent-runner family uses, and the review-submission flow (including the 422 fallback). |
+| [PERFORMANCE.md](PERFORMANCE.md) | Cost and latency budget for both provider families: the agentic loop's `MAX_TURNS`/`max_tokens`/conversation pruning on the chat-completions path, and the single vendor-CLI invocation shape on the agent-runner path. |
 
 ## Standards & how to build
 
@@ -27,9 +27,9 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 
 | Document | Purpose |
 |---|---|
-| [PROMPTS.md](PROMPTS.md) | What a good custom prompt looks like — the main lever consumers pull to adapt the reviewer to their codebase. |
-| [PROVIDERS.md](PROVIDERS.md) | Provider abstraction, the Anthropic-shape contract, and the roadmap for OpenAI / Gemini / Azure. |
-| [STRICTNESS.md](STRICTNESS.md) | The three strictness modes and how the model's `severity` argument maps to the GitHub check outcome. |
+| [PROMPTS.md](PROMPTS.md) | What a good custom prompt looks like — the main lever consumers pull to adapt the reviewer to their codebase. Explains how prompts are used verbatim by the chat-completions family and layered on top of vendor system prompts by the agent-runner family. |
+| [PROVIDERS.md](PROVIDERS.md) | Both provider families — the chat-completions Anthropic-shape contract and the agent-runner `.aiprr/findings.json` contract — plus the shipping providers (`anthropic`, `claude-code`, `cursor`, `codex`) and the roadmap for raw OpenAI / Gemini / Bedrock. |
+| [STRICTNESS.md](STRICTNESS.md) | The three strictness modes and how the model's `severity` argument maps to the GitHub check outcome. Applies uniformly to both provider families. |
 
 ## AI-agent playbooks
 
