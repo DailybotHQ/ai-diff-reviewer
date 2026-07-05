@@ -6,15 +6,33 @@
 
 The action is I/O-bound, not CPU-bound. On a `ubuntu-latest` runner the runtime is dominated by:
 
-1. **The provider API latency** — one Anthropic call per agentic-loop turn. Each call is a full round-trip over TLS with model inference at the far end (multi-second per turn, not milliseconds).
+1. **The provider call** — either N API round-trips on the chat-completions family (one per agentic-loop turn, multi-second each) or one long-running vendor CLI invocation on the agent-runner family (see [Two performance shapes](#two-performance-shapes) below).
 2. **GitHub API calls** — repo metadata, file list, PR diff, the final `POST /pulls/{n}/reviews`, and (optionally) the GraphQL `minimizeComment` mutation for auto-collapse.
-3. **Local subprocess** — `git diff origin/<base>...HEAD` once at the start.
+3. **Local subprocess** — `git diff origin/<base>...HEAD` once at the start, plus (on the agent-runner family) the `claude` / `cursor-agent` / `codex` subprocess for the entire review.
+4. **CLI installation** — on the agent-runner family only, a one-off `npm install -g` (Claude Code / Codex) or `curl | bash` (Cursor Agent) before the review runs. See [Modular install cost](#modular-install-cost).
 
 CPU time inside `scripts/reviewer.py` is negligible. That's why the runtime is stdlib-only and single-file: there's no compute-heavy path that would benefit from a native extension or a virtualenv.
 
-## The agentic-loop budget
+## Two performance shapes
 
-The primary cost dimension is **turns × tokens**. Each turn is one Anthropic API call plus a batch of tool calls; conversation history grows across turns (quadratic in billable tokens if unbounded).
+As of v1.1.0 the action ships two provider families with different cost/latency profiles. Choose based on which trade-off matches your team:
+
+| Aspect | Chat-completions family (`anthropic`) | Agent-runner family (`claude-code`, `cursor`, `codex`) |
+|---|---|---|
+| Loop owner | This action drives the turn loop | Vendor CLI drives its own loop |
+| Cost knob you control | `max-turns` × `max_tokens` × conversation pruning | `agent-max-turns` (forwarded verbatim to the CLI) + whatever the vendor bills per invocation |
+| Latency floor | ~5–15 s per turn × 5–15 turns typical | Wallclock of a single vendor CLI invocation (typically 30–180 s end-to-end for a mid-size PR) |
+| Cold-start cost | Zero — action starts and immediately hits the provider API | One-off install of the selected CLI (~10–40 s wallclock on `ubuntu-latest`, cached in the runner image on subsequent steps of the same job but not across jobs) |
+| Predictability | High — every constant is enforced by our runtime | Medium — the vendor CLI decides how many turns it needs; we only cap the wall clock via `agent-max-turns` and the workflow-level `timeout-minutes` |
+| Findings contract | Model calls the `post_inline_comment` tool; we accumulate `ReviewState` in-process | Vendor CLI writes `.aiprr/findings.json`; we parse it, cap at `max-inline-comments`, and submit |
+
+Both families converge on the same `ReviewResult` payload before `POST /pulls/{n}/reviews`, so downstream behaviour (severity gating, 422 fallback, tracking comment) is identical.
+
+## The agentic-loop budget (chat-completions family only)
+
+For the `anthropic` provider (and any future chat-completions provider — raw OpenAI, Gemini, Bedrock), the primary cost dimension is **turns × tokens**. Each turn is one API call plus a batch of tool calls; conversation history grows across turns (quadratic in billable tokens if unbounded).
+
+Agent-runner providers don't hit this section — they own their own loop internally. Skip to [The agent-runner budget](#the-agent-runner-budget).
 
 | Constant | Default | Effect |
 |---|---|---|
@@ -31,6 +49,32 @@ The primary cost dimension is **turns × tokens**. Each turn is one Anthropic AP
 
 If you increase `max-turns` or `MAX_CONVERSATION_TURNS_RETAINED`, **estimate the token impact first**. `AGENTS.md` DON'T #9 makes this explicit: raising defaults without measuring the per-review cost delta is not merged.
 
+## The agent-runner budget
+
+For the `claude-code`, `cursor`, and `codex` providers, we don't run a turn loop — the vendor CLI does. Our cost surface is:
+
+| Knob | Effect |
+|---|---|
+| `agent-max-turns` (forwarded to the CLI's own turn cap) | Upper bound on turns inside the vendor's loop. Consulted differently per vendor: Claude Code respects it directly, Cursor Agent honours it as `--max-steps`, Codex maps it to its own agentic-budget flag. Default `30`. |
+| `agent-extra-args` | Escape hatch to pass raw vendor flags (e.g. `--model`, `--verbose`). Not cost-capped by us — misuse (`--max-turns 999`) will bill you exactly what the CLI bills you. |
+| `mcp-config-file` | Path to an MCP config the CLI loads. Extra tools = more turns = more spend. Same "you pay what you enable" principle. |
+| `max-inline-comments` | Hard cap on findings we ingest from `.aiprr/findings.json`. Extra findings are dropped and counted in the `inline-dropped` action output. Default `10`. |
+
+The vendor CLI decides how many turns it needs; there is no per-turn output-token cap we control. In practice a mid-size PR review takes 60–180 s of wallclock and bills like a normal Claude / Cursor / Codex session of similar length. Estimate cost by running once against a representative PR before turning it on across the org.
+
+## Modular install cost
+
+The `runs.steps` in `action.yml` install the selected agent-runner CLI **only when needed**. The gate is a shell `if:` against `inputs.provider`.
+
+| Provider | Install command | Cold wallclock (rough) |
+|---|---|---|
+| `anthropic` | (none) | 0 s |
+| `claude-code` | `npm install -g @anthropic-ai/claude-code@<claude-code-version>` | 10–25 s |
+| `cursor` | `curl -fsSL https://cursor.com/install | bash -s -- --version <cursor-version>` | 20–40 s |
+| `codex` | `npm install -g @openai/codex@<codex-version>` | 10–25 s |
+
+Selecting `provider: anthropic` (the default) pays the classic zero-install cost this repo is optimised for. Selecting a CLI provider pays a one-off install per workflow job; there is no cross-job cache (GitHub-hosted runners don't share filesystem state), so pinning a specific `<cli>-version` matters mostly for reproducibility, not for warm-boot speed.
+
 ## Tool-loop guardrails
 
 Every tool the model can call has a hard cap so a bad `read_file(path, limit=999999)` or a runaway `grep` can't blow up the prompt.
@@ -43,6 +87,8 @@ Every tool the model can call has a hard cap so a bad `read_file(path, limit=999
 | [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `200_000` | Cap on the seed diff embedded in the first user message. Larger diffs are truncated with a pointer to `read_file`. |
 
 These caps mean the model **cannot** flood its own context. A huge file or an over-broad grep degrades gracefully into a truncation message — the review continues, the offending call retries with a narrower scope.
+
+Agent-runner providers use the vendor CLI's own tools (their file-search, their code execution, their MCP integrations) rather than our five-tool shim, so these particular guardrails don't apply on that path. The vendor CLIs have their own equivalents.
 
 ## Timeouts
 
@@ -74,16 +120,24 @@ The runtime handles this by **retrying summary-only** on 422 — the review stil
 
 ## Cost knobs consumers actually pull
 
-Only two `action.yml` inputs affect per-review cost directly:
+Common to both provider families:
+
+- **`max-inline-comments`** (default `10`) — hard cap on inline comments; the review summary is not capped. Applied uniformly across both families.
+- **`model`** — swapping model tiers has the biggest effect on both cost and quality. The `DEFAULT_MODELS` table at the top of `scripts/reviewer.py` picks a deliberate midpoint per provider; override if your budget or quality bar is different.
+
+Chat-completions family only:
 
 - **`max-turns`** (default `30`) — increase for larger PRs, but each unit added is up to `ANTHROPIC_MAX_TOKENS = 8192` extra output tokens.
-- **`max-inline-comments`** (default `10`) — increase for very large PRs; low is fine because the review summary is not capped.
 
-The `model` input has an indirect effect: switching from Sonnet to Haiku roughly halves per-token cost at the price of some review quality; switching to Opus doubles cost at the price of latency. The bundled default is `claude-sonnet-4-6` (from [`DEFAULT_MODELS`](../scripts/reviewer.py)) — a deliberate midpoint.
+Agent-runner family only:
+
+- **`agent-max-turns`** (default `30`) — forwarded to the vendor CLI; the vendor decides how strictly to honour it.
+- **`agent-extra-args`** — free-form vendor flags. Not cost-capped by us.
+- **`mcp-config-file`** — path to an MCP config for the vendor CLI. Extra tools = more turns = more spend.
 
 ## Local performance measurement
 
-There is no benchmark suite (adding one would violate the stdlib-only rule for the runtime). The dogfooding channel via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml) is the real measurement: it runs against every PR to this repo and its Actions logs record turn count, per-turn latency, and total wallclock. See [`docs/PR_REVIEW_WORKFLOW.md`](PR_REVIEW_WORKFLOW.md) for how to read those logs.
+There is no benchmark suite (adding one would violate the stdlib-only rule for the runtime). The dogfooding channel via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml) is the real measurement: it runs against every PR to this repo as a **4-leg matrix** (one per shipping provider) and its Actions logs record turn count, per-turn latency, and total wallclock — separately for each provider so you can compare their performance apples-to-apples on the same PR diff. See [`docs/PR_REVIEW_WORKFLOW.md`](PR_REVIEW_WORKFLOW.md) for how to read those logs and how to tell which review came from which leg (via the per-provider `self-reviewed:*` labels).
 
 ## Related docs
 

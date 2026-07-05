@@ -94,9 +94,32 @@ The `prompt-file` input is a path **inside the consumer's checkout** (not the ac
 
 The default prompt (`prompts/default.md` *inside this action's repo*) is used when `prompt-file` is empty. You can also start by copying the default into your own repo, then editing it — that's how most teams converge on a high-quality prompt fastest.
 
+## How the prompt is applied per provider family
+
+The two provider families use your prompt slightly differently. Both accept the same file — the difference is where it lands in the model's context.
+
+### Chat-completions family (`anthropic`, future raw OpenAI/Gemini)
+
+Your prompt **is** the system prompt, verbatim. The action owns the tool-use loop and sends `system=<your prompt>` on every turn. This gives you full control: persona, severity rubric, output shape, and house rules all come from your file — the action does not add anything except the tool schema.
+
+### Agent-runner family (`claude-code`, `cursor`, `codex`)
+
+The vendor CLI already has its own tuned system prompt for code review (`claude` has a coding-agent prompt, `cursor-agent` has one, `codex` has one). The action **layers your prompt on top** rather than replacing the vendor's — your file is appended as a `--append-system-prompt`-style directive plus the `.aiprr/findings.json` output-schema directive that makes the file-based findings contract work.
+
+Practical consequences:
+
+- Persona and tone rules still work — they add to whatever the vendor already asks for.
+- Severity definitions still work — they overlay the vendor's default severity thinking.
+- Output-format instructions in your prompt are **best-effort** — the definitive output contract is `.aiprr/findings.json`, injected by the action after your prompt.
+- The vendor CLI's own review skills (running tests, using its native file-search tools, executing local commands with its own sandbox) are still active. Your prompt does not disable them.
+
+If you need the exact same behaviour across providers, use the chat-completions family (`anthropic`) — that's what it exists for. If you want the highest-effort review at the price of some determinism, use the agent-runner family and lean into the vendor's own reviewer strengths.
+
 ## Prompt caching
 
 The action sends the system prompt with `cache_control: ephemeral` on every Anthropic call, so a long, opinionated prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. **Don't worry about prompt length** — go as long as you need to be specific.
+
+Agent-runner providers do their own caching internally (Claude Code, Cursor Agent and Codex all cache their system prompts with the underlying model provider), so the same "long, opinionated prompt is free after the first call" principle applies — you just don't set the cache flag yourself.
 
 ## Sharing prompts
 
