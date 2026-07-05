@@ -47,18 +47,25 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **License:** MIT.
 - **Channel:** GitHub Marketplace (publicly searchable) + direct repo URL for `uses:`.
 - **Versioning:** SemVer. The moving major tag (`v1`) auto-points to the latest `v1.x.y` so consumers pinning `@v1` get patches and minor features automatically.
-- **Provider parity:** v1 ships with Anthropic; the `Provider` abstraction in `scripts/reviewer.py` makes adding OpenAI, Gemini, Azure OpenAI, or self-hosted endpoints a one-class addition. See [PROVIDERS.md](PROVIDERS.md).
+- **Provider parity:** as of `v1.1.0` the action ships with **four** providers across two families:
+  - Chat-completions family (this action drives the tool-use loop): `anthropic`.
+  - Agent-runner family (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`.
+  Each CLI provider only installs when selected — `provider: anthropic` (the default) pays zero install cost. Adding a new chat-completions provider (OpenAI, Gemini, Azure OpenAI, self-hosted vLLM/Ollama) or a new agent-runner CLI is a one-class addition. See [PROVIDERS.md](PROVIDERS.md).
 
 ## Quality bar
 
 - **Stdlib-only runtime** — no install phase, no supply-chain surface beyond Python itself.
-- **Single-file implementation** — `scripts/reviewer.py` is ~1500 LOC, fully type-hinted, runnable directly without the action wrapper for local debugging.
-- **Compile-checked in CI** on every PR.
-- **Dogfooded** — the action reviews its own PRs via `.github/workflows/self-review.yml`.
+- **Single-file implementation** — `scripts/reviewer.py` is ~2400 LOC, fully type-hinted, runnable directly without the action wrapper for local debugging.
+- **Compile-checked in CI** on every PR, plus a 109-test stdlib `unittest` suite covering the pure logic (parsers, dispatch, subprocess boundary, roundtrip serialization, env allowlist).
+- **CLI installers smoke-tested** — a matrix job exercises each agent-runner CLI installer on a fresh runner before it reaches consumers.
+- **Dogfooded** — the action reviews its own PRs via `.github/workflows/self-review.yml`, running a 4-leg matrix across all shipping providers with distinct `self-reviewed:*` labels so each provider's review is separately identifiable in the PR conversation.
 
 ## Roadmap (not a commitment)
 
-- v1.1 — OpenAI provider, Azure OpenAI provider.
-- v1.2 — Gemini provider.
+- ~~v1.1 — Coding-agent CLIs (Claude Code, Cursor Agent, OpenAI Codex).~~ **Shipped in `v1.1.0`.**
+- v1.2 — Raw OpenAI Chat Completions provider (chat-completions family, zero install) for teams who want OpenAI without the Codex CLI.
+- v1.3 — Raw Gemini provider (chat-completions family, cached-content system-prompt reuse).
+- v1.x — Raw AWS Bedrock provider (chat-completions family) — pending a stdlib-only SigV4 design discussion.
 - v1.x — Community-curated prompt library at `prompts/community/<stack>.md`.
+- v1.x — `.aiprr/findings.json` v2 schema (optional `suggestions` field for line-range code snippets, backwards-compatible via forward-compat parser).
 - v2.0 — only if a breaking change to the public input/output contract is unavoidable.
