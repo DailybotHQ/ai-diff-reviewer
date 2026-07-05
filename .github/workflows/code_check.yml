@@ -122,18 +122,22 @@ jobs:
 
       - name: Sanity — reviewer.py imports the provider class
         shell: bash
+        env:
+          PROVIDER_ID: ${{ matrix.provider }}
         run: |
           set -euo pipefail
           # Simulate provider dispatch via build_provider() to catch bit-rot
           # between action.yml (installer wiring) and reviewer.py (dispatch).
+          #
+          # Import via sys.path (not spec_from_file_location) because Python
+          # 3.12's @dataclass helper walks sys.modules[cls.__module__].__dict__
+          # during class construction — spec_from_file_location skips that
+          # registration and blows up on the first dataclass at module scope.
           python3 -c "
           import os, sys
           sys.path.insert(0, 'scripts')
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('r', 'scripts/reviewer.py')
-          r = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(r)
-          p = r.build_provider('${{ matrix.provider }}', api_key='k', model='')
+          import reviewer as r
+          p = r.build_provider(os.environ['PROVIDER_ID'], api_key='k', model='')
           assert isinstance(p, r.AgentRunnerProvider), 'wrong class'
           print(f'OK: {type(p).__name__} constructed and CLI on PATH')
           "
