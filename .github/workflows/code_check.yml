@@ -64,3 +64,76 @@ jobs:
 
       - name: Step 1 - 🧪 Run the unit-test suite (stdlib unittest)
         run: python3 -m unittest discover -s tests -v
+
+  cli-install-smoke:
+    name: 'CLI install smoke — ${{ matrix.provider }}'
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [claude-code, cursor, codex]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Verify each provider's install steps from action.yml succeed on a
+      # fresh runner. The install script must:
+      #   1. Place the CLI binary on PATH.
+      #   2. Report a version.
+      # We don't invoke the CLI with a real API key — the goal is to catch
+      # a broken installer script (404 URLs, npm package renames, dropped
+      # dependencies) BEFORE it reaches consumers on `main`.
+      - name: Set up Node.js (Claude Code + Codex)
+        if: matrix.provider == 'claude-code' || matrix.provider == 'codex'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code CLI
+        if: matrix.provider == 'claude-code'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::npm install -g @anthropic-ai/claude-code"
+          npm install -g "@anthropic-ai/claude-code"
+          echo "::endgroup::"
+          claude --version
+
+      - name: Install OpenAI Codex CLI
+        if: matrix.provider == 'codex'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::npm install -g @openai/codex"
+          npm install -g "@openai/codex"
+          echo "::endgroup::"
+          codex --version
+
+      - name: Install Cursor Agent CLI
+        if: matrix.provider == 'cursor'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Install cursor-agent"
+          curl -fsSL https://cursor.com/install | bash
+          echo "::endgroup::"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cursor-agent" --version
+
+      - name: Sanity — reviewer.py imports the provider class
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Simulate provider dispatch via build_provider() to catch bit-rot
+          # between action.yml (installer wiring) and reviewer.py (dispatch).
+          python3 -c "
+          import os, sys
+          sys.path.insert(0, 'scripts')
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('r', 'scripts/reviewer.py')
+          r = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(r)
+          p = r.build_provider('${{ matrix.provider }}', api_key='k', model='')
+          assert isinstance(p, r.AgentRunnerProvider), 'wrong class'
+          print(f'OK: {type(p).__name__} constructed and CLI on PATH')
+          "
