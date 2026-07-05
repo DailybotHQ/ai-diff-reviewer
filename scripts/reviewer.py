@@ -22,7 +22,8 @@ self-hosted runner that has Python 3.10+.
 
 Environment (set by the composite action's `env:` block; see action.yml):
 
-    AIPRR_PROVIDER           Provider id (currently only `anthropic`).
+    AIPRR_PROVIDER           Provider id (`anthropic`, `claude-code`, `cursor`,
+                            or `codex`).
     AIPRR_API_KEY            Provider API key.
     AIPRR_GH_TOKEN           GitHub token for PR/review operations.
     AIPRR_MODEL              Model id (empty = provider default).
@@ -530,10 +531,13 @@ def gh_submit_review_with_fallback(
     repo: str,
     pr_number: int,
     head_sha: str,
-    body: str,
-    inline_comments: list[dict[str, Any]],
+    result: "ReviewResult",
 ) -> tuple[dict[str, Any], int]:
     """Submit the review; on a 422, retry summary-only and report the drop.
+
+    Consumes a provider-independent `ReviewResult`. Encodes findings into the
+    GitHub Reviews API inline shape at the boundary so agent-runner providers
+    can hand back a `ReviewResult` without knowing the GitHub API schema.
 
     Returns `(review, dropped_count)`. A 422 from `POST /pulls/{n}/reviews`
     rejects the entire request when any single inline comment points at a
@@ -543,13 +547,16 @@ def gh_submit_review_with_fallback(
     With it we drop the inline comments and post summary-only — the original
     422 body is logged so an operator can see which comment was rejected.
     """
+    inline_comments: list[dict[str, Any]] = findings_to_gh_inline_comments(
+        result.findings
+    )
     try:
         review: dict[str, Any] = gh_submit_review(
             token=token,
             repo=repo,
             pr_number=pr_number,
             head_sha=head_sha,
-            body=body,
+            body=result.summary,
             inline_comments=inline_comments,
         )
         return review, 0
@@ -568,7 +575,7 @@ def gh_submit_review_with_fallback(
             repo=repo,
             pr_number=pr_number,
             head_sha=head_sha,
-            body=body,
+            body=result.summary,
             inline_comments=[],
         )
         return review, len(inline_comments)
@@ -663,14 +670,85 @@ class AnthropicProvider(Provider):
         raise last_error
 
 
-def build_provider(provider_id: str, *, api_key: str, model: str) -> Provider:
-    """Construct the provider implementation for `provider_id`."""
+class AgentRunnerProvider:
+    """Provider that delegates the full review to a vendor's coding-agent CLI.
+
+    Unlike `Provider` (chat-completions family — this action owns the tool-use
+    loop), an `AgentRunnerProvider` hands off the entire agentic loop to the
+    vendor CLI running in headless mode and receives structured findings via a
+    file-based contract (`.aiprr/findings.json` — see `parse_findings_file`).
+
+    Concrete implementations (`ClaudeCodeProvider`, `CursorProvider`,
+    `CodexProvider`) live below this class.
+    """
+
+    def install(self) -> None:
+        """Sanity-check that the CLI is on PATH.
+
+        The composite action installs the CLI in a preceding step; this
+        method is a defensive verification, not the install itself.
+        """
+        raise NotImplementedError
+
+    def run_review(
+        self,
+        *,
+        pr_context: PRContext,
+        review_instructions: str,
+        workspace: Path,
+        output_dir: Path,
+    ) -> ReviewResult:
+        """Invoke the vendor CLI headless; return a ReviewResult."""
+        raise NotImplementedError
+
+
+def build_provider(
+    provider_id: str, *, api_key: str, model: str
+) -> Provider | AgentRunnerProvider:
+    """Construct the provider implementation for `provider_id`.
+
+    Returns either a `Provider` (chat-completions family, action owns the
+    tool-use loop) or an `AgentRunnerProvider` (vendor CLI owns the loop).
+    `main()` dispatches on the returned instance type.
+    """
     if provider_id == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model)
     raise ValueError(
         f"Unsupported provider: {provider_id!r}. Currently supported: "
         f"{sorted(DEFAULT_MODELS)}."
     )
+
+
+# ---------------------------------------------------------------------------
+# Provider-independent review payload
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Finding:
+    """A single inline finding, provider-independent.
+
+    Both provider families (chat-completions via `Provider` and agent-runner
+    via `AgentRunnerProvider`) surface findings as this dataclass so the
+    downstream submission / label / strictness paths never need to know
+    which provider produced the review.
+    """
+
+    path: str
+    line: int
+    body: str
+    severity: str = SEVERITY_INFO
+    start_line: int | None = None
+    side: str | None = "RIGHT"
+
+
+@dataclass
+class ReviewResult:
+    """Provider-independent review payload consumed by the submission path."""
+
+    summary: str = ""
+    findings: list[Finding] = field(default_factory=list)
+    overall_severity: str = SEVERITY_NONE
 
 
 # ---------------------------------------------------------------------------
@@ -1142,6 +1220,66 @@ def overall_severity(severities: list[str]) -> str:
     return max(ranked)[1]
 
 
+def state_to_review_result(state: "ReviewState") -> ReviewResult:
+    """Adapt a `ReviewState` (populated by `drive_review`) into a `ReviewResult`.
+
+    Bridges the chat-completions provider family into the provider-independent
+    shape the submission path consumes. The CLI (agent-runner) providers
+    produce `ReviewResult` directly via `parse_findings_file`, so the two
+    families converge at this dataclass.
+    """
+    findings: list[Finding] = []
+    for i, comment in enumerate(state.inline_comments):
+        severity: str = (
+            state.severities[i] if i < len(state.severities) else SEVERITY_INFO
+        )
+        findings.append(
+            Finding(
+                path=str(comment.get("path", "")),
+                line=int(comment.get("line", 0)),
+                body=str(comment.get("body", "")),
+                severity=severity,
+                start_line=(
+                    int(comment["start_line"])
+                    if "start_line" in comment
+                    and comment["start_line"] is not None
+                    else None
+                ),
+                side=comment.get("side", "RIGHT"),
+            )
+        )
+    severities: list[str] = [f.severity for f in findings]
+    return ReviewResult(
+        summary=state.final_summary or "",
+        findings=findings,
+        overall_severity=overall_severity(severities),
+    )
+
+
+def findings_to_gh_inline_comments(
+    findings: list[Finding],
+) -> list[dict[str, Any]]:
+    """Convert a `list[Finding]` into the GitHub Reviews API inline shape.
+
+    Kept separate from `state_to_review_result` so agent-runner providers
+    (which produce `Finding`s directly from `.aiprr/findings.json`) can reuse
+    the same encoder without round-tripping through `ReviewState`.
+    """
+    out: list[dict[str, Any]] = []
+    for f in findings:
+        comment: dict[str, Any] = {
+            "path": f.path,
+            "body": f.body,
+            "line": f.line,
+            "side": f.side or "RIGHT",
+        }
+        if f.start_line is not None:
+            comment["start_line"] = f.start_line
+            comment["start_side"] = f.side or "RIGHT"
+        out.append(comment)
+    return out
+
+
 def evaluate_strictness(
     severity: str, strictness: str
 ) -> tuple[bool, str]:
@@ -1473,10 +1611,21 @@ def main() -> int:
             f"{len(pr_ctx.changed_files)} files"
         )
 
-        provider: Provider = build_provider(
+        provider: Provider | AgentRunnerProvider = build_provider(
             provider_id, api_key=api_key, model=model
         )
 
+        if isinstance(provider, AgentRunnerProvider):
+            # Agent-runner path: vendor CLI owns the tool-use loop, we
+            # receive structured findings via file-based contract.
+            # (Concrete AgentRunnerProvider implementations land in later
+            # tasks; the abstraction lives here to unify the submission path.)
+            raise RuntimeError(
+                f"AgentRunnerProvider ({type(provider).__name__}) invoked but "
+                "no concrete implementation registered — this is a wiring bug."
+            )
+
+        # Chat-completions path: this action owns the tool-use loop.
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": render_user_prompt(pr_ctx)}
         ]
@@ -1490,6 +1639,7 @@ def main() -> int:
             state=state,
             max_turns=max_turns,
         )
+        result: ReviewResult = state_to_review_result(state)
     except Exception as e:  # noqa: BLE001
         log(f"Agentic loop crashed: {type(e).__name__}: {e}")
         gh_update_issue_comment(
@@ -1507,8 +1657,8 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Post the review (with 422 fallback)
     # ------------------------------------------------------------------
-    if state.final_summary is None:
-        state.final_summary = (
+    if not result.summary:
+        result.summary = (
             "## Code Review Summary\n\n"
             "_The reviewer hit the turn cap without producing a structured "
             "summary. Inline comments (if any) are still attached below._"
@@ -1516,8 +1666,8 @@ def main() -> int:
         log("No submit_review captured — posting fallback summary")
 
     log(
-        f"Submitting review: {len(state.inline_comments)} inline comment(s), "
-        f"{len(state.final_summary)} chars of summary"
+        f"Submitting review: {len(result.findings)} inline comment(s), "
+        f"{len(result.summary)} chars of summary"
     )
 
     try:
@@ -1526,8 +1676,7 @@ def main() -> int:
             repo=repo,
             pr_number=pr_number,
             head_sha=head_sha,
-            body=state.final_summary,
-            inline_comments=state.inline_comments,
+            result=result,
         )
     except Exception as e:  # noqa: BLE001
         log(f"Failed to post review: {e}")
@@ -1549,14 +1698,14 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Strictness gate
     # ------------------------------------------------------------------
-    severity: str = overall_severity(state.severities)
+    severity: str = result.overall_severity
     blocked, block_reason = evaluate_strictness(severity, strictness)
     log(
         f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
         f"({block_reason})"
     )
 
-    attached_inline: int = len(state.inline_comments) - dropped_inline
+    attached_inline: int = len(result.findings) - dropped_inline
     gh_update_issue_comment(
         token=gh_token,
         repo=repo,

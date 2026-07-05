@@ -253,6 +253,128 @@ class ToolSubmitReviewTests(unittest.TestCase):
         self.assertEqual(state.final_summary, "first")
 
 
+class StateToReviewResultTests(unittest.TestCase):
+    """Adapter: ReviewState (chat-completions path) → ReviewResult (unified)."""
+
+    def test_happy_path_maps_all_fields(self) -> None:
+        state = reviewer.ReviewState()
+        reviewer.tool_post_inline_comment(
+            {
+                "path": "a.py",
+                "line": 12,
+                "body": "critical bug",
+                "severity": "critical",
+            },
+            state,
+        )
+        reviewer.tool_post_inline_comment(
+            {
+                "path": "b.py",
+                "line": 8,
+                "start_line": 5,
+                "body": "range issue",
+                "severity": "warning",
+                "side": "LEFT",
+            },
+            state,
+        )
+        state.final_summary = "## Summary\n\nTwo issues found."
+
+        result = reviewer.state_to_review_result(state)
+
+        self.assertEqual(result.summary, "## Summary\n\nTwo issues found.")
+        self.assertEqual(len(result.findings), 2)
+        self.assertEqual(result.overall_severity, reviewer.SEVERITY_CRITICAL)
+
+        first = result.findings[0]
+        self.assertEqual(first.path, "a.py")
+        self.assertEqual(first.line, 12)
+        self.assertEqual(first.body, "critical bug")
+        self.assertEqual(first.severity, "critical")
+        self.assertIsNone(first.start_line)
+
+        second = result.findings[1]
+        self.assertEqual(second.path, "b.py")
+        self.assertEqual(second.start_line, 5)
+        self.assertEqual(second.side, "LEFT")
+        self.assertEqual(second.severity, "warning")
+
+    def test_empty_state_yields_empty_result(self) -> None:
+        state = reviewer.ReviewState()
+
+        result = reviewer.state_to_review_result(state)
+
+        self.assertEqual(result.summary, "")
+        self.assertEqual(result.findings, [])
+        self.assertEqual(result.overall_severity, reviewer.SEVERITY_NONE)
+
+
+class FindingsToGhInlineCommentsTests(unittest.TestCase):
+    """Encoder: list[Finding] → GitHub Reviews API inline shape."""
+
+    def test_single_line_finding(self) -> None:
+        findings = [
+            reviewer.Finding(
+                path="a.py",
+                line=42,
+                body="typo",
+                severity="info",
+                side="RIGHT",
+            )
+        ]
+        out = reviewer.findings_to_gh_inline_comments(findings)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["path"], "a.py")
+        self.assertEqual(out[0]["line"], 42)
+        self.assertEqual(out[0]["side"], "RIGHT")
+        self.assertNotIn("start_line", out[0])
+
+    def test_multiline_finding_adds_start_side(self) -> None:
+        findings = [
+            reviewer.Finding(
+                path="a.py",
+                line=10,
+                body="range",
+                start_line=8,
+                side="LEFT",
+            )
+        ]
+        out = reviewer.findings_to_gh_inline_comments(findings)
+        self.assertEqual(out[0]["start_line"], 8)
+        self.assertEqual(out[0]["start_side"], "LEFT")
+
+    def test_empty_findings_yields_empty_list(self) -> None:
+        self.assertEqual(reviewer.findings_to_gh_inline_comments([]), [])
+
+
+class AgentRunnerProviderContractTests(unittest.TestCase):
+    """The abstract base class exposes the expected interface."""
+
+    def test_install_raises_not_implemented(self) -> None:
+        with self.assertRaises(NotImplementedError):
+            reviewer.AgentRunnerProvider().install()
+
+    def test_run_review_raises_not_implemented(self) -> None:
+        provider = reviewer.AgentRunnerProvider()
+        with self.assertRaises(NotImplementedError):
+            provider.run_review(
+                pr_context=reviewer.PRContext(
+                    title="t",
+                    author="a",
+                    head_ref="h",
+                    base_ref="b",
+                    state="open",
+                    additions=0,
+                    deletions=0,
+                    commits=0,
+                    body="",
+                ),
+                review_instructions="",
+                workspace=Path("."),
+                output_dir=Path("."),
+            )
+
+
 class ExecuteToolTests(unittest.TestCase):
     def test_unknown_tool(self) -> None:
         state = reviewer.ReviewState()
