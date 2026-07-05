@@ -24,14 +24,15 @@ How documentation is organised in this repo, who each file is for, and what to u
 | `docs/AI_AGENT_COLLAB.md` | AI coding agents (multi-agent or sub-agent flows) | When to spawn helpers, how to coordinate, escalation. |
 | `docs/PR_REVIEW_WORKFLOW.md` | AI coding agents reading review feedback | How to tell live feedback from collapsed/outdated comments. |
 | `docs/STRICTNESS.md` | Consumers configuring the gate | Three modes, how to calibrate, downstream patterns. |
-| `docs/PROMPTS.md` | Consumers writing custom prompts | Anatomy of a good prompt, illustrative example, prompt caching. |
-| `docs/PROVIDERS.md` | Consumers + contributors interested in providers | Roadmap, contract, gotchas per provider. |
+| `docs/PROMPTS.md` | Consumers writing custom prompts | Anatomy of a good prompt, illustrative example, prompt caching, and how the two provider families differ in how they apply your prompt (verbatim vs. layered on top of the vendor's own system prompt). |
+| `docs/PROVIDERS.md` | Consumers + contributors interested in providers | Both provider families — the chat-completions Anthropic-shape contract and the agent-runner `.aiprr/findings.json` contract — plus the shipping providers (`anthropic`, `claude-code`, `cursor`, `codex`), the roadmap, and gotchas per provider. |
+| `docs/PERFORMANCE.md` | Consumers thinking about cost, contributors tuning caps | Cost and latency budget for both provider families: the agentic loop's `MAX_TURNS`/`max_tokens`/conversation pruning on the chat-completions path, and the single vendor-CLI invocation shape on the agent-runner path. |
 
 ## Two doc folders, three audiences
 
 Within `docs/`, files split along three audiences:
 
-- **User-facing** (consumers): `STRICTNESS.md`, `PROMPTS.md`, `PROVIDERS.md`. These are what someone reading the README wants to dig into next.
+- **User-facing** (consumers): `STRICTNESS.md`, `PROMPTS.md`, `PROVIDERS.md`, `PERFORMANCE.md`. These are what someone reading the README wants to dig into next.
 - **Contributor-facing** (engineers working on this repo): `ARCHITECTURE.md`, `SECURITY.md`, `TESTING_GUIDE.md`, `DEVELOPMENT_COMMANDS.md`, `DEVELOPMENT_GUIDELINES.md`, `STANDARDS.md`, `DOCUMENTATION_GUIDE.md`, `PRODUCT_SPEC.md`.
 - **AI-agent-facing** (Claude Code, Cursor, Codex, etc.): `AI_AGENT_ONBOARDING.md`, `AI_AGENT_COLLAB.md`, `PR_REVIEW_WORKFLOW.md`.
 
@@ -43,11 +44,12 @@ We don't enforce sub-folders — the docs are flat in `docs/`. The audience tag 
 |---|---|
 | New `action.yml` input | `action.yml`, `README.md` (table + at least one example), `CHANGELOG.md`, possibly `examples/` |
 | New `action.yml` output | `action.yml`, `README.md` (table), `CHANGELOG.md`, possibly `STRICTNESS.md` if it's gate-related |
-| Runtime behaviour change | `CHANGELOG.md`, possibly `ARCHITECTURE.md` |
-| New provider | `scripts/reviewer.py`, `docs/PROVIDERS.md`, `CHANGELOG.md`, smoke-test evidence in PR description |
-| Default prompt change | `prompts/default.md`, `CHANGELOG.md`, before/after evidence in PR description |
+| Runtime behaviour change | `CHANGELOG.md`, possibly `ARCHITECTURE.md`, unit test under `tests/` |
+| New chat-completions provider | `scripts/reviewer.py` (`Provider` subclass + `build_provider()` dispatch + `DEFAULT_MODELS`), `docs/PROVIDERS.md`, `CHANGELOG.md`, unit tests under `tests/`, smoke-test evidence on a real PR |
+| New agent-runner provider (new CLI) | `scripts/reviewer.py` (`AgentRunnerProvider` subclass, reuse `_invoke_cli_agent` / `_build_cli_env`), `action.yml` (new install step + version input), `.github/workflows/code_check.yml` (add matrix leg to `cli-install-smoke`), `.github/workflows/self-review.yml` (add matrix leg with `applied-label`), `docs/PROVIDERS.md`, `examples/provider-<name>.yml`, `CHANGELOG.md`, unit tests under `tests/`, smoke-test evidence on a real PR |
+| Default prompt change | `prompts/default.md`, `CHANGELOG.md`, before/after evidence in PR description (ideally across multiple providers, since agent-runner CLIs layer the prompt differently) |
 | Process / convention change | `AGENTS.md`, the relevant doc in `docs/`, and a sentence in `CONTRIBUTING.md` if it affects contributors |
-| Security-relevant change | `docs/SECURITY.md`, `CHANGELOG.md` (with a `[Security]` tag) |
+| Security-relevant change | `docs/SECURITY.md`, `CHANGELOG.md` (with a `[Security]` tag), unit test if a boundary function is touched |
 
 ## Style
 
