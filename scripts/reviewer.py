@@ -50,6 +50,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -71,11 +73,18 @@ GITHUB_REST_BASE: str = "https://api.github.com"
 GITHUB_GRAPHQL_URL: str = "https://api.github.com/graphql"
 
 # Provider defaults — keyed by `AIPRR_PROVIDER`. Adding a new provider means:
-#   1. New entry here for the default model id.
-#   2. New `Provider` implementation below.
+#   1. New entry here for the default model id (or a sentinel like "auto" for
+#      agent-runner CLIs that pick their own default at invocation time).
+#   2. New `Provider` or `AgentRunnerProvider` implementation below.
 #   3. New branch in `build_provider()`.
 DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-sonnet-4-6",
+    # Agent-runner (CLI) providers — empty means "let the CLI pick its own
+    # default at runtime" (usually the account-tier default for that vendor).
+    # A `model:` input from the consumer overrides this.
+    "claude-code": "auto",
+    "cursor": "composer-2.5",
+    "codex": "gpt-5-codex",
 }
 
 DEFAULT_MAX_TURNS: int = 30
@@ -717,6 +726,336 @@ class AgentRunnerProvider:
         raise NotImplementedError
 
 
+def _swap_mcp_config(
+    src_file: str, dest_path: Path
+) -> tuple[Path | None, str | None]:
+    """Copy an MCP config to a CLI's expected location, backing up the previous.
+
+    Returns `(dest_path_or_None, backup_content_or_None)` so the caller can
+    restore/delete on exit. If `src_file` is empty, both return values are
+    `None` — a no-op that the finally block can safely handle.
+    """
+    if not src_file:
+        return None, None
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    backup: str | None = None
+    if dest_path.exists():
+        backup = dest_path.read_text(encoding="utf-8")
+    shutil.copyfile(src_file, dest_path)
+    return dest_path, backup
+
+
+def _restore_mcp_config(dest_path: Path | None, backup: str | None) -> None:
+    """Restore or delete the MCP config after a CLI invocation."""
+    if dest_path is None:
+        return
+    if backup is not None:
+        dest_path.write_text(backup, encoding="utf-8")
+    else:
+        dest_path.unlink(missing_ok=True)
+
+
+def _invoke_cli_agent(
+    *,
+    argv: list[str],
+    workspace: Path,
+    findings_path: Path,
+    env: dict[str, str],
+    cli_name: str,
+) -> ReviewResult:
+    """Run a CLI agent subprocess and parse its findings.json output.
+
+    Common to all AgentRunnerProvider implementations. Enforces:
+      - Argv-list form (no `shell=True`) — see docs/SECURITY.md.
+      - Hard timeout via CLI_INVOCATION_TIMEOUT.
+      - Structured error on non-zero exit with truncated stderr.
+      - Delegation to parse_findings_file() for output validation.
+    """
+    log(f"Invoking {cli_name}: {' '.join(shlex.quote(a) for a in argv[:2])} …")
+    try:
+        result = subprocess.run(
+            argv,
+            cwd=str(workspace),
+            env=env,
+            timeout=CLI_INVOCATION_TIMEOUT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"{cli_name} CLI exceeded the timeout of "
+            f"{CLI_INVOCATION_TIMEOUT}s. Consider lowering `agent-max-turns` "
+            f"or narrowing the PR scope."
+        ) from e
+
+    if result.returncode != 0:
+        stderr_tail: str = (result.stderr or "")[-MAX_ERROR_BODY_CHARS:]
+        stdout_tail: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+        raise RuntimeError(
+            f"{cli_name} CLI exited with code {result.returncode}. "
+            f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
+        )
+
+    return parse_findings_file(findings_path)
+
+
+class ClaudeCodeProvider(AgentRunnerProvider):
+    """Claude Code CLI (headless) as an agent-runner provider.
+
+    Auth: `ANTHROPIC_API_KEY` env var (from the consumer's `api-key` input).
+    CLI: `@anthropic-ai/claude-code` on npm. Installed by the composite step
+    in `action.yml` when `provider: claude-code`.
+    """
+
+    CLI_NAME: str = "Claude Code"
+    CLI_BIN: str = "claude"
+    MCP_DEST: Path = Path.home() / ".claude" / "mcp.json"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        extra_args: str = "",
+        mcp_config_file: str = "",
+    ) -> None:
+        self.api_key: str = api_key
+        self.model: str = model
+        self.extra_args: str = extra_args
+        self.mcp_config_file: str = mcp_config_file
+
+    def install(self) -> None:
+        result = run_cmd([self.CLI_BIN, "--version"])
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"{self.CLI_NAME} CLI not found on PATH. The composite step "
+                "should install `@anthropic-ai/claude-code` before invoking "
+                "reviewer.py."
+            )
+
+    def run_review(
+        self,
+        *,
+        pr_context: PRContext,
+        review_instructions: str,
+        workspace: Path,
+        output_dir: Path,
+    ) -> ReviewResult:
+        findings_path: Path = output_dir / FINDINGS_JSON_REL
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write review instructions (with findings-contract directive) to a
+        # file so we can pass it via --append-system-prompt.
+        instructions_file: Path = output_dir / ".aiprr" / "instructions.md"
+        instructions_file.write_text(
+            write_findings_prompt_directive(review_instructions, findings_path),
+            encoding="utf-8",
+        )
+
+        mcp_dest, mcp_backup = _swap_mcp_config(
+            self.mcp_config_file, self.MCP_DEST
+        )
+        try:
+            user_prompt: str = render_user_prompt(pr_context)
+            argv: list[str] = [
+                self.CLI_BIN,
+                "-p",
+                user_prompt,
+                "--append-system-prompt",
+                str(instructions_file),
+                "--output-format",
+                "stream-json",
+                "--verbose",
+            ]
+            if self.model and self.model != "auto":
+                argv += ["--model", self.model]
+            if self.extra_args:
+                argv += shlex.split(self.extra_args)
+
+            env: dict[str, str] = {**os.environ, "ANTHROPIC_API_KEY": self.api_key}
+            return _invoke_cli_agent(
+                argv=argv,
+                workspace=workspace,
+                findings_path=findings_path,
+                env=env,
+                cli_name=self.CLI_NAME,
+            )
+        finally:
+            _restore_mcp_config(mcp_dest, mcp_backup)
+            instructions_file.unlink(missing_ok=True)
+
+
+class CursorProvider(AgentRunnerProvider):
+    """Cursor Agent CLI (headless, local runtime) as an agent-runner provider.
+
+    Auth: `CURSOR_API_KEY` env var (from the consumer's `api-key` input).
+    CLI: `cursor-agent` — installed via `curl -fsSL https://cursor.com/install
+    | bash` by the composite step.
+
+    Local runtime only for v1.1.0 (no `/v1/agents` cloud REST path). The CLI
+    operates against `workspace` directly.
+    """
+
+    CLI_NAME: str = "Cursor Agent"
+    CLI_BIN: str = "cursor-agent"
+    MCP_DEST: Path = Path.home() / ".cursor" / "mcp.json"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        extra_args: str = "",
+        mcp_config_file: str = "",
+    ) -> None:
+        self.api_key: str = api_key
+        self.model: str = model
+        self.extra_args: str = extra_args
+        self.mcp_config_file: str = mcp_config_file
+
+    def install(self) -> None:
+        result = run_cmd([self.CLI_BIN, "--version"])
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"{self.CLI_NAME} CLI not found on PATH. The composite step "
+                "should install cursor-agent before invoking reviewer.py."
+            )
+
+    def run_review(
+        self,
+        *,
+        pr_context: PRContext,
+        review_instructions: str,
+        workspace: Path,
+        output_dir: Path,
+    ) -> ReviewResult:
+        findings_path: Path = output_dir / FINDINGS_JSON_REL
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Cursor Agent CLI does not expose a separate --append-system-prompt;
+        # we inline our review instructions as the front of the user prompt.
+        # The vendor's own code-tuned baseline system prompt still applies.
+        enriched_instructions: str = write_findings_prompt_directive(
+            review_instructions, findings_path
+        )
+        user_prompt: str = (
+            enriched_instructions
+            + "\n\n---\n\n"
+            + render_user_prompt(pr_context)
+        )
+
+        mcp_dest, mcp_backup = _swap_mcp_config(
+            self.mcp_config_file, self.MCP_DEST
+        )
+        try:
+            argv: list[str] = [
+                self.CLI_BIN,
+                "-p",
+                user_prompt,
+                "--output-format",
+                "text",
+            ]
+            if self.model:
+                argv += ["--model", self.model]
+            if self.extra_args:
+                argv += shlex.split(self.extra_args)
+
+            env: dict[str, str] = {**os.environ, "CURSOR_API_KEY": self.api_key}
+            return _invoke_cli_agent(
+                argv=argv,
+                workspace=workspace,
+                findings_path=findings_path,
+                env=env,
+                cli_name=self.CLI_NAME,
+            )
+        finally:
+            _restore_mcp_config(mcp_dest, mcp_backup)
+
+
+class CodexProvider(AgentRunnerProvider):
+    """OpenAI Codex CLI (headless) as an agent-runner provider.
+
+    Auth: `OPENAI_API_KEY` env var (from the consumer's `api-key` input).
+    CLI: `@openai/codex` on npm. Installed by the composite step when
+    `provider: codex`.
+    """
+
+    CLI_NAME: str = "OpenAI Codex"
+    CLI_BIN: str = "codex"
+    MCP_DEST: Path = Path.home() / ".codex" / "mcp.json"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        extra_args: str = "",
+        mcp_config_file: str = "",
+    ) -> None:
+        self.api_key: str = api_key
+        self.model: str = model
+        self.extra_args: str = extra_args
+        self.mcp_config_file: str = mcp_config_file
+
+    def install(self) -> None:
+        result = run_cmd([self.CLI_BIN, "--version"])
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"{self.CLI_NAME} CLI not found on PATH. The composite step "
+                "should install `@openai/codex` before invoking reviewer.py."
+            )
+
+    def run_review(
+        self,
+        *,
+        pr_context: PRContext,
+        review_instructions: str,
+        workspace: Path,
+        output_dir: Path,
+    ) -> ReviewResult:
+        findings_path: Path = output_dir / FINDINGS_JSON_REL
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        enriched_instructions: str = write_findings_prompt_directive(
+            review_instructions, findings_path
+        )
+        user_prompt: str = (
+            enriched_instructions
+            + "\n\n---\n\n"
+            + render_user_prompt(pr_context)
+        )
+
+        mcp_dest, mcp_backup = _swap_mcp_config(
+            self.mcp_config_file, self.MCP_DEST
+        )
+        try:
+            # Codex CLI headless is `codex exec` (fully non-interactive since
+            # ~v0.2). Older versions used `--print`; the `exec` subcommand
+            # is the stable surface as of Codex CLI 0.5+.
+            argv: list[str] = [
+                self.CLI_BIN,
+                "exec",
+                "--skip-git-repo-check",
+                user_prompt,
+            ]
+            if self.model:
+                argv += ["--model", self.model]
+            if self.extra_args:
+                argv += shlex.split(self.extra_args)
+
+            env: dict[str, str] = {**os.environ, "OPENAI_API_KEY": self.api_key}
+            return _invoke_cli_agent(
+                argv=argv,
+                workspace=workspace,
+                findings_path=findings_path,
+                env=env,
+                cli_name=self.CLI_NAME,
+            )
+        finally:
+            _restore_mcp_config(mcp_dest, mcp_backup)
+
+
 def build_provider(
     provider_id: str, *, api_key: str, model: str
 ) -> Provider | AgentRunnerProvider:
@@ -728,6 +1067,32 @@ def build_provider(
     """
     if provider_id == "anthropic":
         return AnthropicProvider(api_key=api_key, model=model)
+
+    # Agent-runner providers share a common constructor shape — extra_args
+    # and mcp_config_file come from the AIPRR_* env vars set by action.yml.
+    extra_args: str = os.environ.get("AIPRR_AGENT_EXTRA_ARGS", "").strip()
+    mcp_config: str = os.environ.get("AIPRR_MCP_CONFIG_FILE", "").strip()
+    if provider_id == "claude-code":
+        return ClaudeCodeProvider(
+            api_key=api_key,
+            model=model,
+            extra_args=extra_args,
+            mcp_config_file=mcp_config,
+        )
+    if provider_id == "cursor":
+        return CursorProvider(
+            api_key=api_key,
+            model=model,
+            extra_args=extra_args,
+            mcp_config_file=mcp_config,
+        )
+    if provider_id == "codex":
+        return CodexProvider(
+            api_key=api_key,
+            model=model,
+            extra_args=extra_args,
+            mcp_config_file=mcp_config,
+        )
     raise ValueError(
         f"Unsupported provider: {provider_id!r}. Currently supported: "
         f"{sorted(DEFAULT_MODELS)}."
@@ -1782,30 +2147,33 @@ def main() -> int:
         )
 
         if isinstance(provider, AgentRunnerProvider):
-            # Agent-runner path: vendor CLI owns the tool-use loop, we
-            # receive structured findings via file-based contract.
-            # (Concrete AgentRunnerProvider implementations land in later
-            # tasks; the abstraction lives here to unify the submission path.)
-            raise RuntimeError(
-                f"AgentRunnerProvider ({type(provider).__name__}) invoked but "
-                "no concrete implementation registered — this is a wiring bug."
+            # Agent-runner path: vendor CLI owns the tool-use loop. Verify the
+            # CLI is on PATH (defensive — the composite step should have
+            # installed it), then invoke and parse findings.json.
+            provider.install()
+            workspace: Path = Path.cwd()
+            result: ReviewResult = provider.run_review(
+                pr_context=pr_ctx,
+                review_instructions=system_prompt,
+                workspace=workspace,
+                output_dir=workspace,
             )
+        else:
+            # Chat-completions path: this action owns the tool-use loop.
+            messages: list[dict[str, Any]] = [
+                {"role": "user", "content": render_user_prompt(pr_ctx)}
+            ]
+            tools: list[dict[str, Any]] = tools_schema(max_inline_comments)
 
-        # Chat-completions path: this action owns the tool-use loop.
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": render_user_prompt(pr_ctx)}
-        ]
-        tools: list[dict[str, Any]] = tools_schema(max_inline_comments)
-
-        drive_review(
-            provider=provider,
-            system_prompt=system_prompt,
-            messages=messages,
-            tools=tools,
-            state=state,
-            max_turns=max_turns,
-        )
-        result: ReviewResult = state_to_review_result(state)
+            drive_review(
+                provider=provider,
+                system_prompt=system_prompt,
+                messages=messages,
+                tools=tools,
+                state=state,
+                max_turns=max_turns,
+            )
+            result = state_to_review_result(state)
     except Exception as e:  # noqa: BLE001
         log(f"Agentic loop crashed: {type(e).__name__}: {e}")
         gh_update_issue_comment(
