@@ -122,10 +122,13 @@ If a clone or filesystem mishandled them:
 
 ```bash
 rm -f .claude && ln -s .agents .claude
+rm -f .cursor && ln -s .agents .cursor
 rm -f CLAUDE.md && ln -s AGENTS.md CLAUDE.md
 ```
 
-CI does not validate this; if you commit a regular file at `.claude` or `CLAUDE.md` by accident, please re-create the symlinks before pushing.
+The `.cursor → .agents` symlink is a v2.16.0 methodology requirement (alongside `.claude → .agents`) — Cursor reads `hooks.json` from `.cursor/hooks.json`, which resolves via the symlink chain to `.agents/hooks.json` (the canonical location). Claude Code reads `settings.json` from `.claude/settings.json`, which resolves the same way to `.agents/settings.json`. Both agents share the same canonical `.agents/` store; the symlinks exist so each agent can find its own config file at the path it expects.
+
+CI does not validate this; if you commit a regular file at `.claude`, `.cursor`, or `CLAUDE.md` by accident, please re-create the symlinks before pushing.
 
 ## Search
 

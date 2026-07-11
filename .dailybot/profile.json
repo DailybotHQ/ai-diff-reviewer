@@ -4,7 +4,9 @@
     "repo": "ai-pr-reviewer"
   },
   "report": {
+    "mode": "balanced",
     "min_interval_minutes": 30,
-    "nudge": true
+    "nudge": true,
+    "soft_turn_threshold": 8
   }
 }
