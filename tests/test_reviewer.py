@@ -99,6 +99,141 @@ class OverallSeverityTests(unittest.TestCase):
         )
 
 
+class CountLabelEventsTests(unittest.TestCase):
+    """`count_label_events` paginates and filters correctly."""
+
+    def _monkeypatch_gh_request(
+        self, responses: list[list[dict[str, Any]]]
+    ) -> None:
+        """Replace `gh_request` with a fake that returns queued responses.
+
+        Each call pops the next response off the queue. When the queue
+        is exhausted, returns an empty list (simulates "no more pages").
+        """
+        self._responses = responses
+        self._call_count = 0
+
+        def fake_gh_request(method: str, path: str, **kwargs: Any) -> Any:
+            self._call_count += 1
+            if not self._responses:
+                return []
+            return self._responses.pop(0)
+
+        self._orig = reviewer.gh_request
+        reviewer.gh_request = fake_gh_request  # type: ignore[assignment]
+
+    def _restore(self) -> None:
+        reviewer.gh_request = self._orig  # type: ignore[assignment]
+
+    def test_counts_matching_labeled_events(self) -> None:
+        self._monkeypatch_gh_request(
+            [
+                [
+                    {"event": "labeled", "label": {"name": "ready"}},
+                    {"event": "labeled", "label": {"name": "other"}},
+                    {"event": "closed"},
+                    {"event": "labeled", "label": {"name": "ready"}},
+                ]
+            ]
+        )
+        try:
+            n = reviewer.count_label_events(
+                token="t", repo="o/r", pr_number=1, label="ready"
+            )
+            self.assertEqual(n, 2)
+        finally:
+            self._restore()
+
+    def test_empty_label_returns_zero_without_api_call(self) -> None:
+        self._monkeypatch_gh_request([])
+        try:
+            n = reviewer.count_label_events(
+                token="t", repo="o/r", pr_number=1, label=""
+            )
+            self.assertEqual(n, 0)
+            self.assertEqual(self._call_count, 0)
+        finally:
+            self._restore()
+
+    def test_paginates_until_less_than_full_page(self) -> None:
+        # First page: 100 items → paginate. Second page: 2 items → stop.
+        page1 = [
+            {"event": "labeled", "label": {"name": "ready"}}
+        ] * 100
+        page2 = [
+            {"event": "labeled", "label": {"name": "ready"}},
+            {"event": "closed"},
+        ]
+        self._monkeypatch_gh_request([page1, page2])
+        try:
+            n = reviewer.count_label_events(
+                token="t", repo="o/r", pr_number=1, label="ready"
+            )
+            self.assertEqual(n, 101)
+            self.assertEqual(self._call_count, 2)
+        finally:
+            self._restore()
+
+
+class GhPatchPrBodySignatureTests(unittest.TestCase):
+    """Regression: `gh_patch_pr_body` uses positional method+path (matches
+    `gh_request`'s actual signature). If someone reverts to keyword args,
+    this will catch it."""
+
+    def test_calls_patch_with_new_body(self) -> None:
+        captured: dict[str, Any] = {}
+
+        def fake_gh_request(method: str, path: str, **kwargs: Any) -> Any:
+            captured["method"] = method
+            captured["path"] = path
+            captured["body"] = kwargs.get("body")
+            return {}
+
+        orig = reviewer.gh_request
+        reviewer.gh_request = fake_gh_request  # type: ignore[assignment]
+        try:
+            reviewer.gh_patch_pr_body(
+                token="t", repo="o/r", pr_number=42, new_body="hello"
+            )
+        finally:
+            reviewer.gh_request = orig  # type: ignore[assignment]
+        self.assertEqual(captured["method"], "PATCH")
+        self.assertIn("/repos/o/r/pulls/42", captured["path"])
+        self.assertEqual(captured["body"], {"body": "hello"})
+
+
+class SetPrDescriptionToolSchemaTests(unittest.TestCase):
+    """Sanity checks on the exposed schema for the autocomplete surface."""
+
+    def test_tool_description_forbids_secrets(self) -> None:
+        schema = reviewer.tools_schema(
+            10, allow_set_pr_description=True
+        )
+        tool = next(
+            t for t in schema if t["name"] == "set_pr_description"
+        )
+        # The description warns the model against leaking secrets — the
+        # single most important prompt-injection mitigation for this
+        # write-back path.
+        desc: str = tool["description"].lower()
+        self.assertTrue(
+            "secret" in desc or "credential" in desc or "token" in desc,
+            "set_pr_description schema must warn against secret leakage",
+        )
+
+    def test_tool_description_mentions_marker(self) -> None:
+        schema = reviewer.tools_schema(
+            10, allow_set_pr_description=True
+        )
+        tool = next(
+            t for t in schema if t["name"] == "set_pr_description"
+        )
+        self.assertIn(
+            "ai-pr-reviewer-description-autocompleted",
+            tool["description"],
+        )
+
+
 class ResolveTriggerActionTests(unittest.TestCase):
     """Matrix coverage across the four trigger modes."""
 
