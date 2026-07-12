@@ -142,10 +142,12 @@ MAX_TRACKING_ERROR_CHARS: int = 1500
 STRICTNESS_LENIENT: str = "lenient"
 STRICTNESS_BLOCK_CRITICAL: str = "block-on-critical"
 STRICTNESS_BLOCK_WARNING: str = "block-on-warning"
+STRICTNESS_BLOCK_ANY: str = "block-on-any"
 VALID_STRICTNESS: tuple[str, ...] = (
     STRICTNESS_LENIENT,
     STRICTNESS_BLOCK_CRITICAL,
     STRICTNESS_BLOCK_WARNING,
+    STRICTNESS_BLOCK_ANY,
 )
 
 # Severity levels — ordered low→high so `max(SEVERITY_RANK)` yields the most
@@ -1919,6 +1921,14 @@ def evaluate_strictness(
                 f"found `{severity}` severity — block-on-warning fired"
             )
         return False, f"highest severity `{severity}` ≤ warning threshold"
+    if strictness == STRICTNESS_BLOCK_ANY:
+        # Zero-tolerance: blocks on any finding, including `info`. The gate
+        # fires whenever a comment was posted (i.e. severity is not `none`).
+        if severity != SEVERITY_NONE:
+            return True, (
+                f"found `{severity}` severity — block-on-any fired"
+            )
+        return False, "no findings — block-on-any passes"
     return False, "unhandled strictness branch"
 
 

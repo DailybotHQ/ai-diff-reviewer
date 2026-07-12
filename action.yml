@@ -50,7 +50,7 @@ inputs:
     default: 'true'
 
   strictness:
-    description: 'How strictly to gate the GitHub check on the review outcome. `lenient` — always succeed. `block-on-critical` — fail the check if any inline comment is severity `critical`. `block-on-warning` — fail if any inline comment is `critical` or `warning`. The model decides the severity per comment via the `severity` tool argument; the bundled default prompt explains the levels.'
+    description: 'How strictly to gate the GitHub check on the review outcome. `lenient` — always succeed. `block-on-critical` — fail the check if any inline comment is severity `critical`. `block-on-warning` — fail if any inline comment is `critical` or `warning`. `block-on-any` — fail if ANY inline comment was posted, including `info` (zero-tolerance mode for security-critical or regulated stacks). The model decides the severity per comment via the `severity` tool argument; the bundled default prompt explains the levels.'
     required: false
     default: 'lenient'
 

@@ -142,6 +142,39 @@ class EvaluateStrictnessTests(unittest.TestCase):
         self.assertFalse(blocked)
         self.assertIn("lenient", reason)
 
+    def test_block_on_any_blocks_on_info(self) -> None:
+        blocked, reason = reviewer.evaluate_strictness(
+            reviewer.SEVERITY_INFO, reviewer.STRICTNESS_BLOCK_ANY
+        )
+        self.assertTrue(blocked)
+        self.assertIn("block-on-any", reason)
+
+    def test_block_on_any_blocks_on_warning(self) -> None:
+        self.assertTrue(
+            reviewer.evaluate_strictness(
+                reviewer.SEVERITY_WARNING, reviewer.STRICTNESS_BLOCK_ANY
+            )[0]
+        )
+
+    def test_block_on_any_blocks_on_critical(self) -> None:
+        self.assertTrue(
+            reviewer.evaluate_strictness(
+                reviewer.SEVERITY_CRITICAL, reviewer.STRICTNESS_BLOCK_ANY
+            )[0]
+        )
+
+    def test_block_on_any_passes_on_none(self) -> None:
+        blocked, reason = reviewer.evaluate_strictness(
+            reviewer.SEVERITY_NONE, reviewer.STRICTNESS_BLOCK_ANY
+        )
+        self.assertFalse(blocked)
+        self.assertIn("no findings", reason)
+
+    def test_block_on_any_in_valid_strictness(self) -> None:
+        self.assertIn(
+            reviewer.STRICTNESS_BLOCK_ANY, reviewer.VALID_STRICTNESS
+        )
+
 
 class SafeRepoPathTests(unittest.TestCase):
     def setUp(self) -> None:

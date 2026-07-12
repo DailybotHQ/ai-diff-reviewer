@@ -1,6 +1,6 @@
 # Strictness — gating the GitHub check
 
-The `strictness` input decides what makes the GitHub check go red. Three modes; pick the one that matches your team's tolerance for false positives.
+The `strictness` input decides what makes the GitHub check go red. Four modes; pick the one that matches your team's tolerance for false positives.
 
 ## How it works
 
@@ -10,7 +10,7 @@ The `strictness` input decides what makes the GitHub check go red. Three modes; 
 
 That's the entire mechanism. There's no separate "scoring" step — the model's per-comment severity decisions are the gate, and the action just adds them up.
 
-## The three modes
+## The four modes
 
 ### `lenient` (default)
 
@@ -41,6 +41,40 @@ The check fails if any inline comment is `warning` **or** `critical`. Only `info
 - The team culture is "every warning gets resolved before merge".
 
 This mode will produce the most "wait, why is the check red" moments. It's strict for a reason; pick it deliberately.
+
+### `block-on-any`
+
+The check fails if the reviewer posted **any** inline comment, including `info`. Zero-tolerance mode.
+
+**Use when:**
+- You're running a security-critical stack (payments, identity, medical, defense) where every finding — even informational — deserves triage before merge.
+- Your team has committed to a "no unresolved review comments on `main`" policy.
+- You're working on a small, mature codebase where the prompt is very well calibrated and every `info` finding is genuinely actionable.
+
+**Warning:** this mode is unforgiving. It **will** produce false positives if your prompt has not been calibrated — an over-eager `info` from a generic prompt will block every PR. Do NOT jump to `block-on-any` from `lenient`; run at `block-on-warning` for at least two weeks first, tune the `Project-specific severity overrides` section of your custom prompt (see [PROMPTS.md](PROMPTS.md)) until the false-positive rate is near zero, then promote.
+
+**Escape hatches:** treat `block-on-any` the same way you would treat "must pass linter" — if the reviewer is wrong, the fix is to tighten the prompt (downgrade a whole class of `info` to "don't post it in the first place") rather than override the gate on a per-PR basis.
+
+## Choosing your mode
+
+A short decision tree:
+
+```
+Do you already have the reviewer running and are the severity labels
+well-calibrated?
+├── No  → start with `lenient` (observe for at least a week)
+└── Yes
+    │
+    Does your stack tolerate any un-triaged findings on `main`?
+    ├── Yes, findings are advisory → `block-on-critical` (recommended default)
+    └── No, warnings must be resolved before merge
+        │
+        Does the team also want to enforce triage of `info` findings?
+        ├── No, warnings + critical is enough → `block-on-warning`
+        └── Yes, zero-tolerance                → `block-on-any`
+```
+
+**Practical rollout path:** `lenient` (week 1) → `block-on-critical` (weeks 2–4) → `block-on-warning` (once the team is used to it) → `block-on-any` (only if you have a strong reason and a well-calibrated prompt).
 
 ## Calibrating severity in your prompt
 

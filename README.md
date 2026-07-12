@@ -89,7 +89,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 | `applied-label` | | `''` | If non-empty, this label is applied to the PR after a successful, non-blocked review (e.g. `pr-reviewed`). The label is auto-created if it doesn't exist. |
 | `collapse-previous` | | `true` | Mark previous bot reviews/comments as `OUTDATED` via GraphQL `minimizeComment`. |
 | `tracking-comment` | | `true` | Post a spinner comment that transitions to the final review URL. |
-| `strictness` | | `lenient` | `lenient` / `block-on-critical` / `block-on-warning` — see [docs/STRICTNESS.md](docs/STRICTNESS.md). |
+| `strictness` | | `lenient` | `lenient` / `block-on-critical` / `block-on-warning` / `block-on-any` — see [docs/STRICTNESS.md](docs/STRICTNESS.md). |
 | `max-inline-comments` | | `10` | Hard cap on inline comments per review. |
 | `max-turns` | | `30` | Hard cap on the agentic-loop iterations (chat-completions providers only). |
 | `agent-max-turns` | | `''` | Cap on the CLI provider's internal turn count. Empty = provider default. Ignored for chat-completions providers. |
@@ -119,6 +119,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 | `lenient` (default) | Nothing. The review posts; the check is always green. |
 | `block-on-critical` | One or more inline comments tagged `critical`. |
 | `block-on-warning` | One or more inline comments tagged `critical` or `warning`. |
+| `block-on-any` | Any inline comment at all, including `info`. Zero-tolerance mode — use for security-critical or regulated stacks where every finding must be resolved before merge. |
 
 The model decides severity per inline comment via the tool's `severity` argument; the bundled default prompt explains the levels in detail. Customise the prompt to make the model more or less aggressive about each tier.
 
