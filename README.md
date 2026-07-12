@@ -165,10 +165,55 @@ Pair with a branch protection rule that requires the PR-review check to pass.
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
+    # Full replacement:
     prompt-file: .github/prompts/our_house_rules.md
+    # Or layer overrides on top of the bundled default (mutually exclusive
+    # with `prompt-file`, or complementary — see docs/PROMPTS.md):
+    # prompt-extension-file: examples/prompts/python-strict.md
 ```
 
-The prompt is the most powerful knob. See [docs/PROMPTS.md](docs/PROMPTS.md) for what good prompts look like (severity definitions, project-specific anti-patterns, "don't comment on" lists, etc.).
+The prompt is the most powerful knob. See [docs/PROMPTS.md](docs/PROMPTS.md) for the "Base vs Extension vs Replacement" decision guide, the starter extensions in [`examples/prompts/`](examples/prompts/), and the meta-prompt that lets your favorite AI generate a repo-tailored prompt for you.
+
+### Review-once-per-label workflow
+
+Run only when you signal readiness by adding a label; toggle the label off/on to re-run:
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    trigger-mode: label-once
+    label-gate: ai-review
+```
+
+Full guide: [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md).
+
+### Auto-fill missing PR descriptions
+
+Let the reviewer write a first-draft body when the current one is empty or under 50 chars. Guarded by a marker so it never overwrites your edits.
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    pr-description-mode: autocomplete
+```
+
+Full guide: [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md).
+
+### AI-driven complexity labels
+
+Apply a `complexity:low/medium/high` label based on cognitive load, files touched, and security surface — not line count:
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    complexity-labels-enabled: true
+```
 
 ### Use a non-default automation account
 

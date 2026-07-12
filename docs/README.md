@@ -27,9 +27,11 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 
 | Document | Purpose |
 |---|---|
-| [PROMPTS.md](PROMPTS.md) | What a good custom prompt looks like — the main lever consumers pull to adapt the reviewer to their codebase. Explains how prompts are used verbatim by the chat-completions family and layered on top of vendor system prompts by the agent-runner family. |
+| [PROMPTS.md](PROMPTS.md) | What a good custom prompt looks like — the main lever consumers pull to adapt the reviewer to their codebase. Explains `prompt-file` vs `prompt-extension-file` and the meta-prompt for AI-generated custom prompts. |
 | [PROVIDERS.md](PROVIDERS.md) | Both provider families — the chat-completions Anthropic-shape contract and the agent-runner `.aiprr/findings.json` contract — plus the shipping providers (`anthropic`, `claude-code`, `cursor`, `codex`) and the roadmap for raw OpenAI / Gemini / Bedrock. |
-| [STRICTNESS.md](STRICTNESS.md) | The three strictness modes and how the model's `severity` argument maps to the GitHub check outcome. Applies uniformly to both provider families. |
+| [STRICTNESS.md](STRICTNESS.md) | The four strictness modes (`lenient` / `block-on-critical` / `block-on-warning` / `block-on-any`) and how the model's `severity` argument maps to the GitHub check outcome. |
+| [TRIGGER_MODES.md](TRIGGER_MODES.md) | The four `trigger-mode` values (`always` / `label-required` / `label-once` / `label-added-only`) and how to pair them with the workflow's `on:` block. |
+| [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |
 
 ## AI-agent playbooks
 
