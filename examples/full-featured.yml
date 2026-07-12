@@ -1,0 +1,58 @@
+# Everything on: label-once trigger + PR description autocomplete +
+# complexity labeling + custom extension prompt + block-on-warning
+# strictness. The showcase example.
+
+name: PR review (full-featured)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # 1. Trigger: only run when the author signals readiness via label.
+          trigger-mode: label-once
+          label-gate: ai-review
+
+          # 2. Prompt: layer TypeScript-strict overrides on the default.
+          #    Swap for python-strict.md or security-focused.md as needed,
+          #    or point at your own .github/prompts/pr-review-extension.md.
+          prompt-extension-file: examples/prompts/typescript-strict.md
+
+          # 3. Description: auto-write a first draft if the body is
+          #    missing or under 100 chars. The marker prevents re-writes.
+          pr-description-mode: autocomplete
+          pr-description-min-length: 100
+
+          # 4. Complexity: apply `complexity:low/medium/high` labels.
+          complexity-labels-enabled: true
+
+          # 5. Strictness: block on any warning or worse.
+          strictness: block-on-warning
+          max-inline-comments: 15
+
+          # 6. Housekeeping.
+          applied-label: reviewed
+          collapse-previous: true
+          tracking-comment: true

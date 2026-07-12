@@ -1,0 +1,47 @@
+# Trigger the review exactly once per label application (recommended
+# workflow for teams that want the AI to review a PR "when it's ready",
+# NOT on every push).
+#
+# How it works:
+# 1. Subscribe to both `synchronize` (so the same generation isn't
+#    re-reviewed on subsequent pushes) AND `labeled`/`unlabeled` (so
+#    toggling the label off/on re-triggers the review with a fresh
+#    label_toggle_generation).
+# 2. The action counts `LabeledEvent` events for `label-gate` on the
+#    PR timeline. If the count is greater than the recorded generation
+#    on the last successful review's tracking comment, the review runs.
+#
+# Re-run flow for the author: remove the `ai-review` label, then re-add
+# it. That bumps `label_toggle_generation` and the reviewer runs again.
+
+name: PR review (label-once)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          trigger-mode: label-once
+          label-gate: ai-review
+          strictness: block-on-critical

@@ -1,0 +1,40 @@
+# When a PR is opened without a body (or with a placeholder one), let
+# the reviewer write a first-draft description automatically. Guarded
+# by a marker so subsequent runs never overwrite maintainer edits.
+#
+# Requires `pull-requests: write` (which the reviewer already requires
+# for posting inline comments). No new permission needed.
+
+name: PR review (with description autocomplete)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, edited]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-description-mode: autocomplete
+          # Threshold: a body under 50 chars is treated as "vague" and
+          # the reviewer proposes a draft. Bump this for teams that want
+          # more thorough default descriptions.
+          pr-description-min-length: 50
+          strictness: block-on-critical

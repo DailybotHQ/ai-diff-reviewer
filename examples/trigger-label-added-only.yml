@@ -1,0 +1,34 @@
+# Fire the review only when a specific label is added to the PR — never
+# on push, synchronize, or edit. Use this when the reviewer is an
+# on-demand tool ("review this now") rather than a continuous check.
+
+name: PR review (label-added-only)
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          trigger-mode: label-added-only
+          label-gate: ai-review
+          strictness: block-on-critical

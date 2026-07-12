@@ -1,0 +1,43 @@
+# Ask the reviewer to assess each PR's complexity and apply a
+# `complexity:low|medium|high` label. The assessment factors cognitive
+# load, files touched, security surface, and coverage delta — NOT raw
+# line count (which is a poor proxy in modern codebases).
+#
+# Use to route reviews: PRs labeled `complexity:high` might require
+# two reviewers, `complexity:low` one, `complexity:medium` senior
+# review, etc. That routing lives in a separate workflow that reacts
+# to the label — this example just applies it.
+
+name: PR review (with complexity labeling)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          complexity-labels-enabled: true
+          # Change the prefix if your team uses a different labeling
+          # convention — e.g. `size:` for backward compatibility with
+          # existing size-labelling automation.
+          complexity-label-prefix: 'complexity:'
+          strictness: block-on-critical

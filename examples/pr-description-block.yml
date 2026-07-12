@@ -1,0 +1,40 @@
+# Fail the check when a PR has an empty or too-short description. The
+# reviewer still posts its inline comments; the gate is orthogonal to
+# severity — it fires purely on description adequacy.
+#
+# Contrast with `pr-description-mode: warn`, which only flags in the
+# summary and leaves the check green.
+
+name: PR review (require rich description)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, edited]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-description-mode: block
+          # Teams that want a Definition-of-Ready-style enforcement
+          # typically set this to 200-400 chars so the description
+          # actually explains context, not just what changed.
+          pr-description-min-length: 200
+          strictness: block-on-critical
