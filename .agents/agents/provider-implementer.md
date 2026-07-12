@@ -182,6 +182,7 @@ The PR description must paste:
 - **No new files.** Add the provider next to the existing ones in `scripts/reviewer.py` unless the implementation is genuinely large (>300 LOC), in which case `scripts/providers/<name>.py` is acceptable but needs to stay stdlib-only.
 - **Preserve existing behaviour.** No provider addition should change any other provider's path through the runtime. New providers add code; they don't refactor shared paths.
 - **Agent-runner providers MUST:** (a) use `_build_cli_env()` (never `{**os.environ, ...}`); (b) funnel `extra_args` through `shlex.split` (never string-concat into argv); (c) subject to the `max-inline-comments` cap applied in `main()`; (d) use `_invoke_cli_agent` (never bare `subprocess.run` — you'd bypass the timeout + stderr-tail-on-error handling).
+- **v1.2.0+ inputs are provider-agnostic.** `pr-description-mode`, `complexity-labels-enabled`, and `trigger-mode` are dispatched in `main()` — no per-provider work is needed. But the smoke test SHOULD verify that a new provider produces a functional review under all 4 legs of the dogfood matrix (`anthropic`, `claude-code`, `cursor`, `codex`), especially when `pr-description-mode: autocomplete` is active (which exposes the `set_pr_description` tool only to chat-completions providers — agent-runner providers cannot yet drive description autocomplete, though the description WARN/BLOCK modes still work for them).
 
 ## Tone
 
