@@ -1,6 +1,6 @@
 ---
 name: ai-diff-reviewer
-description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace). Router for three capabilities — (1) run a local review of the current branch's diff using the SAME methodology as the CI action, (2) generate a repo-tailored `.review/extension.md` via the `generate-extension` sub-skill, (3) install and configure the GitHub Action itself in a repo that doesn't have it yet via the `setup` sub-skill (also doubles as the reference manual for every `action.yml` input). Auto-detects `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) and layers it on top of the shipped default prompt for full local↔CI parity. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", wants to customize the reviewer to this repo, asks "how do I set up ai diff reviewer?", or asks a reference-style question about any of the action's inputs.
+description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace). Router for four capabilities — (1) run a local review of the current branch's diff using the SAME methodology as the CI action, (2) generate a repo-tailored `.review/extension.md` via the `generate-extension` sub-skill, (3) install and configure the GitHub Action itself in a repo that doesn't have it yet via the `setup` sub-skill (also doubles as the reference manual for every `action.yml` input), (4) author a well-documented pull request from the current branch's diff (Conventional-Commits title inference, structured body, PR-template merge, `gh pr create`/`edit`) via the `open-pr` sub-skill. Auto-detects `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) and layers it on top of the shipped default prompt for full local↔CI parity. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", wants to customize the reviewer to this repo, asks "how do I set up ai diff reviewer?", asks a reference-style question about any of the action's inputs, or asks to "open a PR", "create the pull request", or "write the PR body" for the current branch.
 version: "1.5.0"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
@@ -55,21 +55,25 @@ Bump to the latest with `npx skills update ai-diff-reviewer`.
 
 ## What it does
 
-Three coordinated capabilities, routed by intent:
+Four coordinated capabilities, routed by intent:
 
 | Capability | Sub-skill | When it fires |
 |---|---|---|
 | **Run a local review** | (this file — default flow) | Developer wants CI-parity review of the current branch's diff before pushing |
 | **Generate the extension file** | [`generate-extension`](generate-extension/SKILL.md) | Developer wants to customize the reviewer to this repo — "generate a `.review/extension.md` for this project" |
 | **Set up the GitHub Action** | [`setup`](setup/SKILL.md) | Developer wants to install and configure the AI Diff Reviewer action in a repo that doesn't have it yet — "set up ai diff reviewer for this repo" |
+| **Open a well-documented pull request** | [`open-pr`](open-pr/SKILL.md) | Developer wants to author the PR title + body from the current branch's diff — "open the PR", "create a pull request", "write the PR body", "update the PR description" |
 
-All three share the same shipped [`prompt.md`](prompt.md) as the base —
-one runs it locally, one tailors what layers on top, one installs the
-CI pipeline that runs the same prompt on every PR. The `setup`
-sub-skill also serves as the **reference manual** for every `action.yml`
-input via [`setup/reference.md`](setup/reference.md) — any coding
-agent can answer *"what does `strictness` do?"* without opening the
-action source.
+The four sub-skills form a lifecycle: **setup** installs the CI action
+once per repo; **generate-extension** tailors the review prompt once
+per repo; the parent **run a local review** flow catches issues before
+pushing on every branch; and **open-pr** authors the PR that ships the
+change to reviewers. The `setup` sub-skill also serves as the
+**reference manual** for every `action.yml` input via
+[`setup/reference.md`](setup/reference.md) — any coding agent can
+answer *"what does `strictness` do?"* without opening the action
+source. All four share the same shipped [`prompt.md`](prompt.md) as
+the review base.
 
 **First-time bootstrap.** The first time the review flow runs on a repo
 with no `.review/extension.md`, the skill asks a single question
@@ -108,19 +112,33 @@ prompt still catches ~90% of general-purpose issues. Full flow in Step
   action — *"what does `strictness` do?"*, *"how do I use
   `label-gate`?"* — via [`setup/reference.md`](setup/reference.md).
 
+**Open-PR flow (author the pull request) — triggers:**
+
+- "Open the PR", "create a pull request for this branch"
+- "Draft the PR title and description"
+- "Write the PR body"
+- "Update the PR description", "rewrite the PR body in the proper format"
+- "Make a draft PR" (adds `--draft`)
+
 If the trigger is ambiguous (e.g. developer says "help me with the
-review" on a repo that has no `.review/extension.md` yet), ask ONE
-clarifying question before routing. Two heuristics that help
-disambiguate:
+review" on a repo that has no `.review/extension.md` yet, or says
+"handle the PR" on a repo where a PR both needs a review AND has a
+one-line body), ask ONE clarifying question before routing. Heuristics
+that help disambiguate:
 
 - Repo already has `.github/workflows/pr-review.yml` (or similar) →
   probably NOT the setup flow.
 - Repo has NO workflows and the developer just installed the skill →
   probably the setup flow.
+- Developer just finished a session of code changes and hasn't asked for
+  a review yet → default review flow.
+- Developer just accepted a review's findings and applied fixes →
+  probably the open-pr flow (natural next step).
 
 Some harnesses (Claude Code, Cursor) also expose these as slash
 commands (`/ai-diff-reviewer`, `/ai-diff-reviewer-generate-extension`,
-`/ai-diff-reviewer-setup`); check the harness's skill-invocation docs.
+`/ai-diff-reviewer-setup`, `/ai-diff-reviewer-open-pr`); check the
+harness's skill-invocation docs.
 
 ---
 
@@ -333,6 +351,20 @@ post on a PR — this is the parity contract:
 Reproducing this exact shape (verdict → findings table → per-finding
 body → notes → recommendation) is what lets a developer trust "the
 local review says X, so CI will say X too."
+
+**Optional next-step hint.** When the review is clean (no 🚨 critical or
+⚠️ warning findings) OR when the developer explicitly signals they're
+ready to push, close the output with a one-line pointer to the sibling
+sub-skill:
+
+```text
+Next step: want me to open the PR? — I can draft the title + body from
+this same diff (see the `open-pr` sub-skill). Or run `gh pr create`
+yourself.
+```
+
+Do not print this hint when the review found blocking issues — fix
+first, ship second.
 
 ---
 

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **New `open-pr` sub-skill for the local `ai-diff-reviewer` skill
+  pack** (`skills/ai-diff-reviewer/open-pr/SKILL.md`). Authors a
+  well-documented pull request from the current branch's diff — infers
+  a Conventional-Commits (or repo-native, empirically detected from
+  recent merged PRs) title, drafts a structured body with mandatory
+  Summary / Test plan / Risks and conditional Related issues /
+  Screenshots / Breaking changes / Migrations / Dependencies sections
+  based on diff signals, merges (never overwrites) any
+  `.github/pull_request_template.md`, previews everything for a single
+  yes/edit/cancel, and executes via `gh pr create` (new PR) or `gh pr
+  edit` (refresh existing PR — includes body diff in the preview).
+  Supports `--draft`, non-default base branches (stacked PRs), and
+  degrades gracefully for fork PRs. Never pushes commits, never
+  auto-merges, never fabricates issue refs / CI URLs / migration
+  claims — surfaces the exact `gh` remediation and stops on any
+  failure (non-blocking rule). Complements the parent skill's local
+  review as the natural next step (review → fix → open the PR).
+  Companion trigger phrases: "open the PR", "create a pull request",
+  "write the PR body", "update the PR description", "make a draft PR".
+- **Parent `ai-diff-reviewer` skill routes to `open-pr`.** Updated the
+  `description` frontmatter to list four capabilities (was three);
+  added activation triggers for the open-pr flow; added the
+  `/ai-diff-reviewer-open-pr` slash-command hint; added an optional
+  next-step hint at the end of the review flow (Step 4) suggesting
+  the developer route to `open-pr` when the review comes back clean.
+- **README section for `open-pr`** — "Open the pull request from the
+  same diff" under `## Local review parity (companion skill)`,
+  documenting the triggers, the three-mandatory / six-conditional
+  section model, and the PR-template merge behavior.
+
+## [1.5.0] — 2026-07-14
+
 **Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`ai-diff-reviewer` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
 
 ### Changed
@@ -605,7 +638,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.3.3...v1.4.0

@@ -442,6 +442,25 @@ The sub-skill also serves as the **reference manual** for every `action.yml` inp
 
 Full wizard flow in [`skills/ai-diff-reviewer/setup/SKILL.md`](skills/ai-diff-reviewer/setup/SKILL.md).
 
+### Open the pull request from the same diff
+
+The skill also ships an **`open-pr` sub-skill** that authors the PR title and body from the current branch's diff — the natural next step after the local review says "looks good." Say:
+
+- *"Open the PR"* / *"Create a pull request for this branch"*
+- *"Draft the PR title and description"*
+- *"Update the PR description"* / *"Rewrite the PR body in the proper format"* (edit mode)
+- *"Make a draft PR"* (adds `--draft`)
+
+It reads the diff, empirically detects your repo's title convention from the last 20 merged PRs (Conventional Commits vs plain sentence), infers `<type>` and `<scope>` from the touched files, and drafts a structured body with **three mandatory sections** (Summary, Test plan, Risks) plus **conditional sections** that only appear when the diff signals them:
+
+- **Related issues** — when commits reference `Closes #N` / `Fixes #N`
+- **Screenshots** — when UI files (`.tsx`, `.vue`, `.css`, …) are touched (opt-in prompt)
+- **Breaking changes** — when a commit uses `feat!:` / `BREAKING CHANGE:` or removes public API surface
+- **Migrations** — when `migrations/`, `alembic/versions/`, `prisma/migrations/`, etc. are touched
+- **Dependencies** — when `package.json`, `poetry.lock`, `go.sum`, etc. are touched
+
+Your existing `.github/pull_request_template.md` is **merged, never overwritten** — repo-specific `## Checklist` / `## Rollout plan` sections are preserved intact; only the diff-derived sections override the template's placeholders. Preview → single `yes`/`edit`/`cancel` → `gh pr create` (new PR) or `gh pr edit` (refresh existing — with a body diff shown). Never pushes commits, never auto-merges, never fabricates issue refs. Full details in [`skills/ai-diff-reviewer/open-pr/SKILL.md`](skills/ai-diff-reviewer/open-pr/SKILL.md).
+
 ### First-run bootstrap prompt
 
 You don't have to think about `generate-extension` on day one. The first time you run the review on a repo with no `.review/extension.md`, the skill offers a **yes / no / never** prompt inline:
