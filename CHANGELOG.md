@@ -7,39 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Headline:** ship a local companion **`code-review` skill** alongside the action so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
+
+### Added
+- **Local companion skill: [`code-review`](skills/code-review/SKILL.md)** —
+  the same review methodology that runs on your PR in CI, now available
+  locally in every coding-agent harness. Install into any consumer repo
+  with `npx skills add DailybotHQ/ai-pr-reviewer --skill code-review`;
+  vendors into `.agents/skills/code-review/` and pins via
+  `skills-lock.json`. Uses the harness's own Read/Grep/Glob tools to
+  gather context and produces the review as terminal output in the same
+  format the CI bot would post (verdict + findings table + severity +
+  notes + recommendation). Because `skills/code-review/prompt.md` is a
+  byte-identical copy of `prompts/default.md` (kept in sync by
+  `auto-release.yml`), pinning the same version on both surfaces
+  guarantees local ↔ CI parity. Adopts the Open Agent Skills
+  conventions used by `DailybotHQ/agent-skill` and
+  `DailybotHQ/deepworkplan-skill`: YAML frontmatter with `name` /
+  `description` / `version` / `documentation_url` / `user-invocable` /
+  `metadata.openclaw` / `allowed-tools`, layout at
+  `skills/<name>/SKILL.md` in the repo root so `skills.sh` discovers
+  it, and no separate release cadence — the skill's version tracks
+  the action tag.
+- **Convention: `.review/extension.md`** for repo-specific prompt
+  overrides. The new companion skill auto-detects this path (with
+  `.github/ai-pr-reviewer/extension.md` as fallback for teams that
+  prefer `.github/` sibling to workflow files) and layers the file's
+  contents on top of the base prompt. Consumers reference the same
+  path from their CI workflow's `prompt-extension-file:` input, so
+  local and CI share ONE extension file with zero drift. Documented in
+  [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md)
+  and the [`README.md` § "Local review parity"](README.md) section.
+- **CI: [`scripts/validate-frontmatter.py`](scripts/validate-frontmatter.py)** —
+  Python + PyYAML validator that enforces the Open Agent Skills
+  contract on every `skills/**/SKILL.md`. Runs as the new
+  `Skills — SKILL.md frontmatter validation` job in
+  [`code_check.yml`](.github/workflows/code_check.yml). Adapted from
+  `DailybotHQ/agent-skill/scripts/validate-frontmatter.py` with the
+  `dailybot-` name-prefix rule dropped (this repo's skills use their
+  own slug space). Runtime remains stdlib-only per AGENTS.md Rule #2
+  — PyYAML is CI-only tooling.
+- **CI: `Skills — prompt-sync invariant`** job in
+  [`code_check.yml`](.github/workflows/code_check.yml) — fails any PR
+  where `skills/code-review/prompt.md` has drifted from
+  `prompts/default.md`, with a clear fix message pointing at
+  `cp prompts/default.md skills/code-review/prompt.md`. Ensures `main`
+  is never in an inconsistent state between prompt edits and the next
+  release cut.
+
+### Changed
+- **Auto-release now syncs skill artifacts on every version bump.** A
+  new step in [`auto-release.yml`](.github/workflows/auto-release.yml)
+  runs before the tag is created and (a) `sed`s the new SemVer into
+  the `version:` field of every `skills/**/SKILL.md` file, and (b)
+  copies `prompts/default.md` → `skills/code-review/prompt.md`. If the
+  changes are non-empty, they're committed as
+  `chore(release): sync skill artifacts for vX.Y.Z [skip release]` and
+  pushed to `main` alongside the tag via `git push --follow-tags`. The
+  `[skip release]` marker + the existing `chore(release):` prefix
+  guard on the workflow's `if:` together prevent an infinite trigger
+  loop. Consumer impact: none — the action's public contract in
+  `action.yml` is untouched; only the skill artifacts inside `skills/`
+  move.
+
+## [1.4.2] — 2026-07-14
+
+**Headline:** Marketplace-readiness housekeeping — root-level `SECURITY.md` so GitHub's *Report a vulnerability* discovery works out of the box, simplified security reporting channel (dropped the dead-end `CODEOWNERS` email path), and the CHANGELOG backfilled for the five same-day releases (`v1.3.1` through `v1.4.1`) whose bullets had accumulated in `[Unreleased]`. Purely docs and metadata — no runtime, `action.yml`, or workflow behavior changed.
+
 ### Added
 - **Root-level [`SECURITY.md`](SECURITY.md)** — Marketplace-readiness fix.
-  GitHub's *Report a vulnerability* discovery flow prefers the file at repo
-  root (or `.github/`); until now we only had the long-form model at
-  [`docs/SECURITY.md`](docs/SECURITY.md), which is the least-discoverable of
-  the three canonical locations. The new root file is a thin pointer that
-  carries the private-advisory reporting instructions, a supported-versions
-  table (`v1.x` current major), and highlights that link to the long-form
-  doc for the full trust model, per-provider egress surfaces, and accepted
-  risks. The two files stay in sync trivially (root = pointer; `docs/` =
-  source of truth).
+  GitHub's *Report a vulnerability* discovery flow prefers the file at
+  repo root (or `.github/`); until now we only had the long-form model
+  at [`docs/SECURITY.md`](docs/SECURITY.md), which is the least-
+  discoverable of the three canonical locations. The new root file is
+  a thin pointer that carries the private-advisory reporting
+  instructions, a supported-versions table (`v1.x` current major),
+  and highlights that link to the long-form doc for the full trust
+  model, per-provider egress surfaces, and accepted risks. The two
+  files stay in sync trivially (root = pointer; `docs/` = source of
+  truth).
 
 ### Changed
 - **Security reporting channel simplified** in both
   [`SECURITY.md`](SECURITY.md) and [`docs/SECURITY.md`](docs/SECURITY.md).
-  The prior "email the address in `CODEOWNERS`" fallback pointed at a file
-  that does not exist in the repo — a dead end for reporters who could not
-  use the private-advisory UI. Both files now point exclusively at the
-  GitHub Security Advisory (`security/advisories/new`), which any GitHub
-  account can submit against a public repo. No new dependency, no new
-  attack surface (open-advisory URLs are already public), and no spam
-  magnet from publishing a personal email in a Marketplace-facing file.
+  The prior "email the address in `CODEOWNERS`" fallback pointed at a
+  file that does not exist in the repo — a dead end for reporters who
+  could not use the private-advisory UI. Both files now point
+  exclusively at the GitHub Security Advisory
+  (`security/advisories/new`), which any GitHub account can submit
+  against a public repo. No new dependency, no new attack surface
+  (open-advisory URLs are already public), and no spam magnet from
+  publishing a personal email in a Marketplace-facing file.
 
 ### Docs
 - **CHANGELOG backfilled for [`1.3.1`](#131--2026-07-14) through
-  [`1.4.1`](#141--2026-07-14)** — the auto-release workflow cuts SemVer tags
-  on every merge to `main` but deliberately does **not** edit the changelog,
-  so five same-day releases had accumulated their bullets in `[Unreleased]`.
-  Each bullet has been redistributed to its owning tag section with headline
-  notes on the `[1.4.0]` release (vendored Dailybot skill + full-coverage
-  self-review + opt-in gate). Compare-URL footer entries added for
-  `[1.3.1]`–`[1.4.1]` so the bracket-link convention is complete for every
-  section.
+  [`1.4.1`](#141--2026-07-14)** — the auto-release workflow cuts SemVer
+  tags on every merge to `main` but deliberately does **not** edit the
+  changelog, so five same-day releases had accumulated their bullets
+  in `[Unreleased]`. Each bullet has been redistributed to its owning
+  tag section with headline notes on the `[1.4.0]` release (vendored
+  Dailybot skill + full-coverage self-review + opt-in gate).
+  Compare-URL footer entries added for `[1.3.1]`–`[1.4.1]` so the
+  bracket-link convention is complete for every section.
 
 ## [1.4.1] — 2026-07-14
 
@@ -345,7 +414,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.3.2...v1.3.3

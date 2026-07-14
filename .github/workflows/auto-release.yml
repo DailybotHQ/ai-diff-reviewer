@@ -110,15 +110,62 @@ jobs:
             echo "previous_tag=$LATEST_TAG"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Step 2.5 - 📦 Sync skill artifacts to the new version
+        # The action ships `prompts/default.md`; the local companion skill
+        # (`skills/code-review/`) ships its own byte-copy alongside a
+        # `version:` frontmatter field that must equal the action tag for
+        # `npx skills update` to detect a new release. This step keeps
+        # both invariants (byte-copy identical + version equal) true at
+        # every tag. The resulting `chore(release):` commit uses the
+        # `[skip release]` marker so this workflow does NOT re-trigger on
+        # its own push (the guard on the job's `if:` catches it).
+        id: skill_sync
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          VERSION_NO_V="${NEW_VERSION#v}"
+
+          # Bump `version:` in every SKILL.md under skills/ (today: only
+          # code-review; loop makes it work when future sibling skills land).
+          while IFS= read -r f; do
+            sed -i "s/^version: \".*\"/version: \"${VERSION_NO_V}\"/" "$f"
+          done < <(find skills -name 'SKILL.md')
+
+          # Byte-copy the shipped prompt so the vendored skill stays
+          # self-contained (Open Agent Skills convention).
+          cp prompts/default.md skills/code-review/prompt.md
+
+          if git diff --quiet -- skills/; then
+            echo "Skill artifacts already in sync with ${NEW_VERSION}; nothing to commit."
+            echo "has_commit=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add skills/
+          git commit -m "chore(release): sync skill artifacts for ${NEW_VERSION} [skip release]"
+          echo "has_commit=true" >> "$GITHUB_OUTPUT"
+
       - name: Step 3 - 🏷️ Create and push tags
         if: steps.version.outputs.skip == 'false'
         run: |
           set -euo pipefail
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           MAJOR_TAG="${{ steps.version.outputs.major_tag }}"
+          HAS_SYNC_COMMIT="${{ steps.skill_sync.outputs.has_commit }}"
 
           git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
-          git push origin "$NEW_VERSION"
+
+          # When Step 2.5 produced a `chore(release):` commit, push it to
+          # main alongside the tag via `--follow-tags` (annotated tags
+          # reachable from the pushed ref go with it). When no commit was
+          # produced, just push the tag on its own — HEAD equals origin/main
+          # in that case and a branch push would be a no-op error.
+          if [ "$HAS_SYNC_COMMIT" = "true" ]; then
+            git push origin HEAD:main --follow-tags
+          else
+            git push origin "$NEW_VERSION"
+          fi
 
           # Move the major alias tag — `--force` is correct: it's a moving
           # pointer by design so `@v1` tracks the latest v1.x.y.

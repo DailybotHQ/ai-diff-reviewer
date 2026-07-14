@@ -163,6 +163,70 @@ The action sends the system prompt with `cache_control: ephemeral` on every Anth
 
 Agent-runner providers do their own caching internally (Claude Code, Cursor Agent and Codex all cache their system prompts with the underlying model provider), so the same "long, opinionated prompt is free after the first call" principle applies — you just don't set the cache flag yourself.
 
+## Local coding-agent parity
+
+The action ships a companion **local review skill** ([`skills/code-review/`](../skills/code-review/SKILL.md)) that runs the SAME prompt against your current branch — from Cursor / Claude Code / Codex / Gemini / Copilot / Cline / Windsurf — without opening a PR. Two invariants keep the parity real:
+
+1. **The skill's `prompt.md` is a byte-identical copy of `prompts/default.md`.** [`code_check.yml`](../.github/workflows/code_check.yml) has a `Skills — prompt-sync invariant` job that fails PRs where the copy has drifted; [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy on every release cut so pinning `@v1.4.3` on both action and skill guarantees you see the same review methodology on both surfaces.
+2. **The skill auto-detects the same `prompt-extension-file` your CI uses.** By convention, put repo-specific overrides at `.review/extension.md` and reference the same path from your workflow's `prompt-extension-file:` input.
+
+### Install the skill in a consumer repo
+
+```bash
+# Latest v1.x — vendors into .agents/skills/code-review/ + adds skills-lock.json entry
+npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+
+# Or pin to a specific tag for reproducibility
+npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill code-review
+
+# Bump to latest published action tag later
+npx skills update code-review
+```
+
+### The `.review/extension.md` convention
+
+Put project-specific rules in **one file** that both surfaces read:
+
+```
+mi-repo/
+├── .review/
+│   └── extension.md              ← the extension file (recommended path)
+├── .github/
+│   └── workflows/
+│       └── pr-review.yml         ← CI workflow references the same path
+└── (project code)
+```
+
+The skill's auto-detection order (first match wins, all silent-fallback):
+
+1. `.review/extension.md` ← recommended default
+2. `.github/ai-pr-reviewer/extension.md` ← fallback for teams that prefer keeping config next to workflow files
+3. None → use base prompt alone
+
+Reference the same file from your CI workflow so both surfaces produce the same review:
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    prompt-extension-file: .review/extension.md
+```
+
+### Why `.review/` and not `.github/`?
+
+`.github/` implies "GitHub-specific configuration". The local skill has nothing to do with GitHub — it runs against `git diff origin/<base>...HEAD` on your workstation. A runtime-agnostic dotfolder (`.review/`, following the pattern of `.dwp/`, `.dailybot/`, `.claude/`, `.cursor/`) generalizes cleanly to non-GitHub setups and doesn't overload `.github/` namespace. Both paths are supported for backward compatibility with teams that already keep their prompt overrides next to workflow files.
+
+### What the skill runs
+
+- **`git diff origin/<base>...HEAD`** locally (no fetch, no push).
+- **Read / Grep / Glob** through your coding agent's tools (no separate LLM call — you're billed to whatever provider your agent is already using).
+- **Produces the review as terminal output** in the same shape the CI bot would post as a PR comment — verdict + findings table + per-finding body + notes + recommendation.
+
+Full workflow details, trust boundary, activation triggers, and step-by-step methodology: [`skills/code-review/SKILL.md`](../skills/code-review/SKILL.md).
+
+---
+
 ## Sharing prompts
 
 If your team writes a prompt that works really well, consider opening a PR to add it to `prompts/community/` in this repo. Curated, tested prompts for common stacks (Rails, Django, Next.js, Go services) are the kind of contribution that compounds across users.

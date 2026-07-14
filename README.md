@@ -398,6 +398,46 @@ For the full design, see [docs/PROVIDERS.md](docs/PROVIDERS.md), [docs/PROMPTS.m
 
 ---
 
+## Local review parity (companion skill)
+
+Run the **same review methodology** the CI action would run — locally, in your coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) — before you push. Useful for pre-flight checks, iterating on prompt-extension rules, or getting a second opinion on a WIP branch without opening a draft PR.
+
+The companion skill ships alongside the action in this repo (`skills/code-review/`) and installs into any consumer repo with one command:
+
+```bash
+npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+# Or pin to a specific action version for reproducibility:
+npx skills add DailybotHQ/ai-pr-reviewer@v1 --skill code-review
+```
+
+`npx skills` vendors the skill into `.agents/skills/code-review/` and records the source + content hash in `skills-lock.json` so teammates can restore identical bytes with `npx skills experimental_install`.
+
+Once installed, natural-language triggers activate the review:
+
+- *"Review my current branch"*
+- *"Do a pre-flight review before I push"*
+- *"What would CI say about my current commits?"*
+
+The skill uses your local agent's own tools (Read / Grep / Glob) to gather context, then produces the review in **the same output format** the CI bot would post — verdict, findings table, per-finding body, notes, recommendation. Because the skill's `prompt.md` is a byte-identical copy of the action's shipped `prompts/default.md` (kept in sync by [`auto-release.yml`](.github/workflows/auto-release.yml)), pinning the same version on both surfaces guarantees local ↔ CI parity.
+
+### Sharing repo-specific rules between CI and local
+
+Put your custom overrides in **`.review/extension.md`** at your repo root — the skill auto-detects it, and your CI workflow can reference the same file via the action's `prompt-extension-file:` input:
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    prompt-extension-file: .review/extension.md   # same file the skill auto-detects
+```
+
+**One file, two surfaces, zero drift.**
+
+Full details, extension authoring guide, and worked examples: [`skills/code-review/SKILL.md`](skills/code-review/SKILL.md) and [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md).
+
+---
+
 ## Provider roadmap
 
 | Provider | Family | Status | Notes |
