@@ -1,10 +1,16 @@
-name: 'AI PR Reviewer'
+name: 'Dailybot AI PR Reviewer'
 description: 'Run an LLM-driven code review on every pull request — inline comments, severity-based gating, no infra required.'
 author: 'DailybotHQ'
 
 # Marketplace branding. Use anything from the GitHub Octicons set; the colour
 # scopes how the listing tile renders. Purple is closest to the "review" hue
 # in the GitHub UI.
+#
+# The Marketplace listing is titled "Dailybot AI PR Reviewer" — the vendor
+# prefix is required to avoid a slug collision with an unrelated third-party
+# `ai-pr-review` action that squats on the `ai-pull-request-reviewer` slug.
+# Product copy across README, docs, and commit messages continues to use
+# "AI PR Reviewer" (see AGENTS.md § "Marketplace branding stable").
 branding:
   icon: 'check-circle'
   color: 'purple'

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-14
+
+**Headline:** the "actually-works-on-Marketplace" release — renames the Marketplace listing to unblock the first-time publish (a squatting `appchoose/ai-pr-review` action already owns the un-prefixed slug) and ships two provider-side fix batches that landed on `main` after `v1.2.0` was tagged (`claude-code` and `codex` were both broken out of the box in `v1.2.0`; this patch is what makes those providers actually usable). Consumers pinning `@v1` pick everything up automatically.
+
+### Changed
+- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name slug-ifies to `ai-pull-request-reviewer`, which is already claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern is the standard Marketplace resolution and keeps our repo slug, docs, and user-facing product copy on "AI PR Reviewer". See `AGENTS.md` § 9 (Marketplace Branding Stable). No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
+- **Default Cursor model is now `auto`** (was `composer-2.5`). `auto` is unlimited on Cursor Pro plans and is the CI recommendation in `docs/PROVIDERS.md`; the default now matches the docs. Pin `composer-2.5` (or any specific model) via `model:` if you want to force one.
+- `.github/workflows/self-review.yml` sets `collapse-previous: false` on its four-provider matrix so the legs no longer collapse each other's reviews (they share one `GITHUB_TOKEN` → one bot author). See `docs/PROVIDERS.md` § "Running more than one provider on the same PR".
+
 ### Fixed
 - **`provider: claude-code` and `provider: codex` now actually produce reviews.** Both were broken out of the box and failed on essentially every PR:
   - **Claude Code** received its review rubric + `findings.json` output contract as a literal *file path* (`--append-system-prompt <path>`) instead of text, so the instructions never reached the model — it was never told to write findings and the run failed with `FileNotFoundError`. Now the instructions are passed as text via `--append-system-prompt`.
@@ -17,10 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Claude Code MCP passthrough now takes effect.** `mcp-config-file` was copied to `~/.claude/mcp.json`, which Claude Code does not read — the passthrough silently did nothing. The CLI is now invoked with `--mcp-config <file>` pointing at the consumer's config.
 - **Codex MCP passthrough now warns instead of silently no-op'ing.** Codex configures MCP via `~/.codex/config.toml`, not a JSON file, so `mcp-config-file` never took effect for `provider: codex`. The run now logs a clear warning pointing at `agent-extra-args` / `config.toml` instead of pretending it worked. (Full Codex MCP support is a documented follow-up.)
 - **Vendor CLIs now inherit proxy and custom-endpoint config.** `_build_cli_env` forwards `HTTP(S)_PROXY` / `NO_PROXY` and `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` (non-secret network config) so agent-runner providers work on proxied / self-hosted runners and against compatible gateways.
-
-### Changed
-- **Default Cursor model is now `auto`** (was `composer-2.5`). `auto` is unlimited on Cursor Pro plans and is the CI recommendation in `docs/PROVIDERS.md`; the default now matches the docs. Pin `composer-2.5` (or any specific model) via `model:` if you want to force one.
-- `.github/workflows/self-review.yml` sets `collapse-previous: false` on its four-provider matrix so the legs no longer collapse each other's reviews (they share one `GITHUB_TOKEN` → one bot author). See `docs/PROVIDERS.md` § "Running more than one provider on the same PR".
 
 ### Security
 - **`docs/SECURITY.md`** now documents the real exfiltration surface of the agent-runner providers (vendor API key in the CLI subprocess env + `GITHUB_TOKEN` persisted by `actions/checkout` in `.git/config`, both reachable by an injected CLI) and corrects the prior blast-radius claim, which only held for `provider: anthropic`. Recommends running agent-runner providers on trusted/non-fork PRs only and setting `persist-credentials: false`.
@@ -132,6 +137,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DailybotHQ/ai-pr-reviewer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DailybotHQ/ai-pr-reviewer/releases/tag/v1.0.0
