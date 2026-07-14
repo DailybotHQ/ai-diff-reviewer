@@ -71,6 +71,11 @@ jobs:
     outputs:
       # A JSON array of matrix `include` entries — `[]` when nothing runs.
       matrix: ${{ steps.decide.outputs.matrix }}
+      # Why the matrix is empty, so the gate can print an accurate unblock hint:
+      # `no-ready-label` (apply the label) vs `no-eligible-provider` (label is on
+      # but nothing matched — needs a baseline or a critical surface). Empty when
+      # the matrix is non-empty.
+      empty_reason: ${{ steps.decide.outputs.empty_reason }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -111,7 +116,10 @@ jobs:
           esac
           if [ "$should_run" != "true" ]; then
             echo "::notice::Self-review skipped — apply the 'ready' label to run the dogfood (remove + re-add to re-run)."
-            echo 'matrix=[]' >> "$GITHUB_OUTPUT"
+            {
+              echo 'matrix=[]'
+              echo 'empty_reason=no-ready-label'
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -159,7 +167,19 @@ jobs:
           # surface to exercise the CLI legs.
           if [ "$critical" != "true" ] \
             && { [ "$HAS_CLAUDE_CODE" = "true" ] || [ "$HAS_CURSOR" = "true" ] || [ "$HAS_OPENAI" = "true" ]; }; then
-            echo "::notice::CLI provider legs (claude-code/cursor/codex) review only critical changes (runtime/action/prompt/workflow); this diff is docs/other-only. Only the always-on Anthropic baseline reviews it — configure ANTHROPIC_API_KEY for full coverage."
+            if [ "$HAS_ANTHROPIC" = "true" ]; then
+              echo "::notice::CLI provider legs (claude-code/cursor/codex) review only critical changes (runtime/action/prompt/workflow); this diff is docs/other-only, so only the always-on Anthropic baseline reviews it."
+            else
+              echo "::notice::CLI provider legs (claude-code/cursor/codex) review only critical changes (runtime/action/prompt/workflow), and no always-on Anthropic baseline is configured — so this docs/other-only diff yields an empty matrix. Set ANTHROPIC_API_KEY for full coverage, or touch a critical surface to exercise the CLI legs."
+            fi
+          fi
+          # Record WHY the matrix ended up empty (if it did) so the merge gate can
+          # print an accurate hint. Reaching here means `ready` is applied, so an
+          # empty matrix is "no eligible provider", never "no label".
+          if [ "$matrix" = "[]" ]; then
+            echo 'empty_reason=no-eligible-provider' >> "$GITHUB_OUTPUT"
+          else
+            echo 'empty_reason=' >> "$GITHUB_OUTPUT"
           fi
           echo "::notice::Self-review matrix: $matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -247,6 +267,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SCOPE_RESULT: ${{ needs.scope.result }}
           MATRIX: ${{ needs.scope.outputs.matrix }}
+          EMPTY_REASON: ${{ needs.scope.outputs.empty_reason }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -257,11 +278,17 @@ jobs:
             echo "::error::Self-review scope job did not succeed (result=$SCOPE_RESULT). Blocking merge."
             exit 1
           fi
-          # Empty matrix == no leg was eligible. Given the secrets are set, the
-          # only path to that is a missing `ready` label. Block and say how to
-          # unblock.
+          # Empty matrix == no leg was eligible. Block, but give an accurate
+          # unblock hint from the reason `scope` recorded — telling someone to
+          # "apply the 'ready' label" when they already did (CLI-only + a
+          # non-critical diff) just sends them in a loop.
           if [ "${MATRIX:-[]}" = "[]" ]; then
-            echo "::error::Self-review did not run — apply the 'ready' label (remove + re-add to re-run) so a review executes, then merge once it passes."
+            case "${EMPTY_REASON:-}" in
+              no-eligible-provider)
+                echo "::error::Self-review did not run — 'ready' is applied but no provider leg was eligible. Configure ANTHROPIC_API_KEY for an always-on baseline, or touch a critical surface (runtime/action/prompt/workflow) so the CLI legs (cursor/codex/claude-code) run. See the scope job's notice for the exact reason." ;;
+              *)
+                echo "::error::Self-review did not run — apply the 'ready' label (remove + re-add to re-run) so a review executes, then merge once it passes." ;;
+            esac
             exit 1
           fi
           # Count the `Self-review — <provider>` legs of THIS run that concluded
