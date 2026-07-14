@@ -284,6 +284,29 @@ The wizard asks six questions (provider, strictness, trigger mode, external-cont
 
 The sub-skill also doubles as the **reference manual** for every `action.yml` input — its [`reference.md`](../skills/ai-diff-reviewer/setup/reference.md) sibling documents each input with description, default, choices, and per-scenario recommendations. Any coding agent with the skill installed can answer *"what does `pr-description-mode: autocomplete` do?"* or *"how do I pin the Claude Code CLI version?"* without opening the action source. Full flow: [`skills/ai-diff-reviewer/setup/SKILL.md`](../skills/ai-diff-reviewer/setup/SKILL.md).
 
+### Author a well-documented PR with the `open-pr` sub-skill
+
+The final piece of the loop: once a local review comes back clean (and the local extension has caught the repo-specific issues before CI ever runs), the **`open-pr` sub-skill** authors a well-structured PR title + body from the current branch's diff and executes via `gh pr create` (new PR) or `gh pr edit` (refresh an existing PR that's still a one-liner).
+
+Natural-language triggers:
+
+- *"Open the PR"*, *"create a pull request for this branch"*
+- *"Draft the PR title and description"*, *"write the PR body"*
+- *"Update the PR description"*, *"the PR body is a one-liner — rewrite it properly"*
+- *"Make a draft PR for this branch"*
+
+What it does, in order:
+
+1. **Reads the branch's diff and commit trail** — infers a Conventional Commits title (`feat(scope): summary`) or the repo's native title style if a `.github/pull_request_template.md` or the commit history reveals a different convention.
+2. **Drafts a structured body** with the sections a good PR review actually needs: Summary (the *why*), Changes (the *what*, per file), Test plan (checklist), Related issues (auto-linked from `Fixes #123` / `Refs #456` in commits), Screenshots (when UI files changed), Breaking changes (when applicable), Risks (called out for architectural or security-adjacent diffs).
+3. **Merges with `.github/pull_request_template.md` when present** — never overwrites the team's template, layers the generated content into the template's placeholders.
+4. **Previews everything to the developer** with a single confirmation before executing — the sub-skill never opens a PR unattended.
+5. **Executes via `gh`** — supports `--draft`, stacked PRs against non-default bases, and forks.
+
+Full flow, quality gates, and sample dialogues: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md).
+
+Why it belongs in the AI Diff Reviewer skill pack: the diff → review → PR-authoring loop is a single developer workflow, and having all four sub-skills (review, generate-extension, setup, open-pr) share the same repo-analysis code and the same `.review/extension.md` context means the PR body it drafts already reflects the review's findings. A `warning: consider adding a regression test` becomes a `Test plan` checkbox in the PR body automatically.
+
 ---
 
 ## Sharing prompts

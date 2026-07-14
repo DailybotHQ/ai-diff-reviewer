@@ -16,7 +16,7 @@ The [`.github/workflows/code_check.yml`](../.github/workflows/code_check.yml) wo
 |---|---|---|
 | `compile-check` | `python3 -m py_compile scripts/reviewer.py` | Catches syntax errors and undefined imports before we ship. |
 | `validate-action-yml` | Runs `python3 .github/scripts/validate_action.py`, which asserts the required top-level keys, that every input the runtime reads is declared, and that every declared output matches a runtime writer. | Catches accidental key renames or forgotten `write_action_output()` calls in PRs. |
-| `unit-tests` | `python3 -m unittest discover -s tests` — the full 109-test stdlib suite. | Catches regressions in pure logic without any network dependency. |
+| `unit-tests` | `python3 -m unittest discover -s tests` — the full 242-test stdlib suite (four files: `test_reviewer.py`, `test_agent_runner_providers.py`, `test_findings_parser.py`, `test_end_to_end_roundtrip.py`). | Catches regressions in pure logic without any network dependency. |
 | `cli-install-smoke` (matrix: `claude-code`, `cursor`, `codex`) | Runs each agent-runner CLI's install command on a fresh runner, verifies `--version`, then imports `scripts/reviewer.py` and asserts `build_provider(PROVIDER_ID)` returns an `AgentRunnerProvider` instance. | Catches upstream CLI-installer breakage before it hits consumers. |
 | `actionlint` | Downloads the official actionlint binary and runs it across `.github/workflows/`. | Catches malformed workflow YAML, unsafe `${{ }}` interpolations in `run:` blocks, and shellcheck issues in inline shell. |
 
@@ -177,9 +177,9 @@ To skip the auto-release for a docs-only or infrastructure-only merge, put `[ski
 
 ## When the bar might rise
 
-We already crossed some of the thresholds from earlier versions of this doc (the runtime is past 2000 LOC, and we now have multiple runtime providers). The remaining triggers for tightening the bar further:
+We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~4000 LOC as of v1.6**, we ship four runtime providers across two families, we ship a companion local skill with its own sub-skills, and the unit suite has grown to 242 tests across four files. The remaining triggers for tightening the bar further:
 
-1. The runtime file grows past ~4000 LOC. That's the point at which single-file readability starts to lose to modularity.
+1. The runtime file grows meaningfully past ~4500 LOC. We're at the point where single-file readability starts to lose to modularity, and the next feature that adds significant surface (a raw-OpenAI/Gemini provider, a v2 findings schema) is when we open the "split into modules" conversation deliberately rather than by drift.
 2. A class of bug ships repeatedly that `py_compile` + the unit suite + dogfooding doesn't catch.
 3. We add features that aren't safely dogfoodable (e.g. `block-on-warning` exercising paths that don't fire on this repo's own PRs).
 

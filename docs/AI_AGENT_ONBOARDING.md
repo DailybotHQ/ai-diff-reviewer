@@ -12,7 +12,12 @@ You're an AI coding agent (Claude Code, Cursor, Codex, Gemini, Copilot, OpenClaw
 
 ## What this repo is
 
-A composite GitHub Action that runs an LLM-driven code review on pull requests. Single Python script (`scripts/reviewer.py`, ~2400 LOC), stdlib only. Distributed via the GitHub Marketplace.
+An LLM-driven code-review system that ships on **two surfaces from the same codebase**:
+
+1. **A GitHub Action** — composite action, `action.yml` + `scripts/reviewer.py` (~4000 LOC, stdlib only). Distributed via the GitHub Marketplace. This is what most of the runtime code implements.
+2. **A local companion skill** — `skills/ai-diff-reviewer/`, distributed via `npx skills add`. The skill runs the SAME review methodology inside the developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) using the same `prompts/default.md`. See [ARCHITECTURE.md § "Two surfaces, one methodology"](ARCHITECTURE.md#two-surfaces-one-methodology).
+
+**Both surfaces are equally important.** If you're changing the review prompt, the severity model, or anything that affects how the reviewer sees a diff, your change affects both surfaces — the `Skills — prompt-sync invariant` CI job in `code_check.yml` enforces this.
 
 As of v1.1.0 the runtime ships with **four providers across two families**:
 
@@ -21,7 +26,7 @@ As of v1.1.0 the runtime ships with **four providers across two families**:
 
 The two families converge on a shared `ReviewResult` payload before submission, so downstream behaviour (severity gating, 422 fallback, tracking comment) is identical.
 
-The product name is **"AI Diff Reviewer"** (capitalised exactly that way). The repo slug is `ai-pr-reviewer`. The internal env-var prefix is `AIPRR_`.
+The product name is **"AI Diff Reviewer"** (capitalised exactly that way). The git repo slug is `DailybotHQ/ai-diff-reviewer` (renamed 2026-07-14; the old `ai-pr-reviewer` URL still resolves via GitHub's permanent 301 redirect for existing `@v1` pins). The internal env-var prefix is `AIPRR_` (private contract, unchanged across the rename).
 
 ## What's invariant
 
@@ -66,7 +71,9 @@ You can change any of these without ceremony as long as compile-check passes and
 | Add a new tool to the agentic loop (chat-completions family) | `tools_schema()` and the `tool_*` functions in `scripts/reviewer.py` |
 | Add a new chat-completions provider (OpenAI, Gemini, Bedrock) | `Provider` class + `AnthropicProvider` + `build_provider()` in `scripts/reviewer.py`, `.agents/agents/provider-implementer.md`, then `docs/PROVIDERS.md` |
 | Add a new agent-runner provider (a new CLI) | `AgentRunnerProvider` + `ClaudeCodeProvider` (as reference) + `_invoke_cli_agent` + `_build_cli_env` in `scripts/reviewer.py`, the `AgentRunnerProviderContractTests` in `tests/test_agent_runner_providers.py`, then `docs/PROVIDERS.md#agent-runner-provider-contract-v110` |
-| Tune the default prompt | `prompts/default.md`, then `docs/PROMPTS.md` for context (note the layered-prompt semantics for the agent-runner family) |
+| Tune the default prompt | `prompts/default.md`, then `docs/PROMPTS.md` for context (note the layered-prompt semantics for the agent-runner family) — the byte-copy at `skills/ai-diff-reviewer/prompt.md` gets re-synced by CI on release, but PRs that only touch `prompts/default.md` will still be flagged by the `Skills — prompt-sync invariant` job until they update the copy too |
+| Change the local companion skill | `skills/ai-diff-reviewer/**/SKILL.md` (source of truth) — never `.agents/skills/ai-diff-reviewer/**` (that's the released-version snapshot, refreshed by `auto-release.yml` Step 3.5) |
+| Add or change an `action.yml` input's description | `action.yml`, then README's inputs table, then `skills/ai-diff-reviewer/setup/reference.md` (the reference manual the setup sub-skill uses to answer *"what does `strictness` do?"* — all three must agree) |
 | Change strictness behaviour | `evaluate_strictness()` and `overall_severity()` in `scripts/reviewer.py`, then `docs/STRICTNESS.md` |
 | Fix a bug | The function that has the bug; then look for similar patterns nearby; add a regression test under `tests/` |
 | Touch CI | The relevant file in `.github/workflows/`, then `docs/TESTING_GUIDE.md` |
@@ -99,8 +106,8 @@ The same checklist as in `AGENTS.md`:
 - [ ] `action.yml` parses.
 - [ ] If `action.yml` inputs/outputs changed: README's tables updated.
 - [ ] If runtime behaviour changed: `CHANGELOG.md` entry under `[Unreleased]`.
-- [ ] If a new input was added: there's an example in `examples/`.
-- [ ] If the default prompt changed: a before/after on a real PR linked in the PR description.
+- [ ] If a new input was added: there's an example in `examples/` **and** a row in `skills/ai-diff-reviewer/setup/reference.md`.
+- [ ] If the default prompt changed: `skills/ai-diff-reviewer/prompt.md` re-synced (else the `Skills — prompt-sync invariant` job fails), plus a before/after on a real PR linked in the PR description.
 - [ ] If a new agent-runner provider was added: `cli-install-smoke` matrix updated with a new leg.
 - [ ] No new files at `.claude/...` or `CLAUDE.md` — those are symlinks.
 - [ ] Commit follows Conventional Commits.
@@ -113,4 +120,6 @@ The pattern, when uncertain:
 1. Look for a similar pattern already in `scripts/reviewer.py` and copy it.
 2. If no pattern exists, ask in a draft PR or an issue before committing — the maintainers care about consistency more than speed for new patterns.
 
-The repo is small. You can read the entire runtime in 30 minutes. Do that before reaching for tools or asking; the answer is usually already in the code.
+The runtime is small. You can read `scripts/reviewer.py` in an hour. Do that before reaching for tools or asking; the answer is usually already in the code.
+
+The skill pack (`skills/ai-diff-reviewer/`) is smaller — four `SKILL.md` files + a `reference.md` + a `prompt.md`. Read those to understand the local-companion surface before touching it.

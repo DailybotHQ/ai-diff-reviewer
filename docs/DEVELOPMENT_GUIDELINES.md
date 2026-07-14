@@ -244,7 +244,7 @@ Use `enum.Enum` only when type-safe state machines are clearly load-bearing.
 
 ## Test discipline
 
-There's a stdlib `unittest` suite in `tests/` (109 tests as of v1.1.0) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
+There's a stdlib `unittest` suite in `tests/` (242 tests as of v1.6, across four files) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
 
 - Place at `tests/test_<area>.py` — **not** at `scripts/test_<area>.py`. The tests live in a sibling directory to keep `scripts/reviewer.py` importable as a plain module (`sys.path.insert(0, 'scripts'); import reviewer as r` — see the pattern in the existing test files).
 - Use stdlib `unittest`. No `pytest`.
@@ -254,4 +254,4 @@ There's a stdlib `unittest` suite in `tests/` (109 tests as of v1.1.0) plus dogf
 
 ## When in doubt
 
-Read `scripts/reviewer.py`. It's ~2400 LOC and follows every rule above. The patterns that exist are the patterns; new code should look like the surrounding code.
+Read `scripts/reviewer.py`. It's ~4000 LOC and follows every rule above. The patterns that exist are the patterns; new code should look like the surrounding code.
