@@ -6,6 +6,15 @@ name: Self-review
 # the diff touches runtime/action/prompt/workflow surfaces where provider
 # parity can realistically regress.
 #
+# Accepted tradeoff of the scope gate: when a CLI leg is SKIPPED on a
+# follow-up push (e.g. a docs-only push after a critical one), it doesn't run
+# `collapse-previous`, so that provider's prior review + `self-reviewed:*`
+# label stay live against the older SHA until the next critical push
+# re-runs and collapses them (collapse is provider-scoped). This is a
+# dogfood-only workflow — reviewers of this repo understand the setup — so we
+# accept the transient staleness rather than build a collapse-only cleanup
+# path. Consumers are unaffected: they typically run one always-on provider.
+#
 # The local checkout under `./` is what gets used (instead of a
 # `uses: DailybotHQ/ai-pr-reviewer@v1` pin), so the in-flight changes are what
 # review the in-flight changes.
@@ -36,12 +45,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Every leg pins an EXPLICIT, cost-efficient model — never `auto`
-          # and never an implicit default — so the dogfood cost is
+          # Every leg pins an EXPLICIT, cost-efficient model — never an
+          # implicit default, and never `auto` for the metered providers
+          # (Anthropic/Claude Code/Codex); Cursor uses `auto` deliberately
+          # because it's flat-rate/unlimited on Pro. So the dogfood cost is
           # deterministic and visible here. The always-on baseline uses the
           # cheapest capable Anthropic model (Haiku 4.5) since it's a smoke
           # review that runs on every push; the CLI legs (which run only on
-          # critical changes) also use each vendor's cheapest capable model.
+          # critical changes) also use each vendor's cheapest smoke model.
           - provider: anthropic
             api-key-secret: ANTHROPIC_API_KEY
             applied-label: 'self-reviewed:anthropic'

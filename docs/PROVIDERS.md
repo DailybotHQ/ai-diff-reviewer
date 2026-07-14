@@ -307,9 +307,9 @@ Code review's value is catching **subtle** bugs — logic errors, race condition
 | `anthropic` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot for review quality. |
 | `claude-code` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot. Never `auto` (could be Opus $5/$25). Pin `claude-haiku-4-5` for a cheaper/shallower smoke review. |
 | `cursor` | `auto` | subscription (flat) | Unlimited on Cursor Pro → ~$0 marginal. `auto` is the right choice here. |
-| `codex` | `gpt-5.4-mini` | $0.75 / $4.50 | Cheapest current OpenAI code model (replaces deprecated `gpt-5-codex`). Pin `gpt-5.6-luna` ($1/$6) for a current-gen quality step-up. |
+| `codex` | `gpt-5.6-luna` | $1 / $6 | Current-gen budget model — the OpenAI parallel of the Sonnet-class choice: strong enough for subtle bugs, far below codex-tier (`gpt-5-codex` ≈$1.75/$14, and deprecated). Pin the cheaper `gpt-5.4-mini` ($0.75/$4.50) for a shallower smoke review. |
 
-Prices are indicative (mid-2026) and change — check each vendor's pricing page. Anthropic has no separate "mini" tier: **Haiku 4.5 is the small/cheap Claude**; OpenAI's mini is `gpt-5.4-mini`.
+Prices are indicative (mid-2026) and change — check each vendor's pricing page. Anthropic has no separate "mini" tier: **Haiku 4.5 is the small/cheap Claude**; OpenAI's mini is `gpt-5.4-mini`. The consumer defaults for the metered providers are all **quality-tier** (Sonnet-class / current-gen budget) — the mini/Haiku tiers are reserved for smoke/dogfood passes (see `self-review.yml`), never a consumer default.
 
 ### Recommendations
 
@@ -318,3 +318,27 @@ Prices are indicative (mid-2026) and change — check each vendor's pricing page
 - **Cheapest if you're on Cursor Pro:** `provider: cursor`, `model: auto` (flat rate).
 - **Smoke/dogfood reviews** (backed by human review, e.g. this repo's self-review baseline): `claude-haiku-4-5` / `gpt-5.4-mini` are fine — a cheap sanity pass, with deeper providers reserved for high-risk changes.
 - **`max-turns` (chat-completions only):** the default `30` is a *safety ceiling*, not a target — the loop stops as soon as the model calls `submit_review` (usually well under 10 turns), so it rarely drives cost. It does not apply to the CLI providers. Lower it (e.g. `12`, as `self-review.yml` does for its smoke baseline) only to bound a pathological run.
+
+### Billing Claude Code against a subscription (instead of API tokens)
+
+Like Cursor's subscription model, `provider: claude-code` can bill reviews against a **Claude Pro/Max subscription** instead of metered API usage — useful if you already pay for a plan and want a flat cost.
+
+1. On a machine logged into Claude Code with your subscription, run:
+   ```bash
+   claude setup-token
+   ```
+   It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
+2. Store that token as a repository secret and pass it as the action's `api-key`:
+   ```yaml
+   - uses: DailybotHQ/ai-pr-reviewer@v1
+     with:
+       provider: claude-code
+       api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token
+       github-token: ${{ secrets.GITHUB_TOKEN }}
+   ```
+
+The action detects the `sk-ant-oat…` prefix and passes the value to Claude Code as `CLAUDE_CODE_OAUTH_TOKEN` (subscription auth); a normal `sk-ant-api…` key is passed as `ANTHROPIC_API_KEY` (metered) as before. No new input — the same `api-key` accepts either.
+
+> **Security:** a subscription OAuth token grants broader account access than a scoped API key. It lives in the CLI subprocess env like any provider credential, so the [agent-runner exfiltration controls](SECURITY.md) apply with extra force — use it only with `persist-credentials: false` and on **trusted (non-fork) PRs**, never with `pull_request_target`.
+>
+> **Codex has no clean equivalent:** its ChatGPT-subscription auth (`codex login`) is an interactive OAuth flow whose `auth.json` tokens rotate, and using a ChatGPT plan for CI automation likely violates OpenAI's terms. Keep `provider: codex` on an API key (`gpt-5.6-luna` / `gpt-5.4-mini` are already cheap).
