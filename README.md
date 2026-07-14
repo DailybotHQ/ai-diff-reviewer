@@ -1,4 +1,4 @@
-# AI PR Reviewer
+# AI Diff Reviewer
 
 > An LLM-driven pull-request reviewer as a GitHub Action — inline comments, severity-based gating, no infrastructure.
 
@@ -492,7 +492,7 @@ Bug reports, feature requests, provider implementations, and prompt improvements
 
 ## License
 
-[MIT](LICENSE) © 2026 AI PR Reviewer contributors.
+[MIT](LICENSE) © 2026 AI Diff Reviewer contributors.
 
 ---
 

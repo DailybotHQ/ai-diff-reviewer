@@ -21,7 +21,7 @@ As of v1.1.0 the runtime ships with **four providers across two families**:
 
 The two families converge on a shared `ReviewResult` payload before submission, so downstream behaviour (severity gating, 422 fallback, tracking comment) is identical.
 
-The product name is **"AI PR Reviewer"** (capitalised exactly that way). The repo slug is `ai-pr-reviewer`. The internal env-var prefix is `AIPRR_`.
+The product name is **"AI Diff Reviewer"** (capitalised exactly that way). The repo slug is `ai-pr-reviewer`. The internal env-var prefix is `AIPRR_`.
 
 ## What's invariant
 

@@ -1,6 +1,6 @@
 # `scripts/`
 
-**The runtime.** This directory holds `reviewer.py` — the *single source file* that implements the entire AI PR Reviewer action, and the module `.github/workflows/*` invoke through the composite step defined in [`../action.yml`](../action.yml).
+**The runtime.** This directory holds `reviewer.py` — the *single source file* that implements the entire AI Diff Reviewer action, and the module `.github/workflows/*` invoke through the composite step defined in [`../action.yml`](../action.yml).
 
 ## Contents
 

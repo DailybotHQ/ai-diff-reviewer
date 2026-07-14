@@ -14,7 +14,7 @@ max-loc: 50
 
 ## Objective
 
-Cut a SemVer release of AI PR Reviewer — `chore(release): vX.Y.Z` commit, tag, push, and GitHub Release publication. The `release.yml` workflow handles the moving major tag automatically.
+Cut a SemVer release of AI Diff Reviewer — `chore(release): vX.Y.Z` commit, tag, push, and GitHub Release publication. The `release.yml` workflow handles the moving major tag automatically.
 
 This skill is the canonical procedure; the slash-command entry point at `.agents/commands/release.md` is the user-facing interface.
 

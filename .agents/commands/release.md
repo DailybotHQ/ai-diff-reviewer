@@ -4,7 +4,7 @@ description: Cut a new vX.Y.Z release tag and publish a GitHub Release
 
 # Release Cutter
 
-Cut a new SemVer release of AI PR Reviewer. The `release.yml` workflow then auto-updates the moving major tag (e.g. `v1`) so consumers pinning `@v1` pick up the new version automatically.
+Cut a new SemVer release of AI Diff Reviewer. The `release.yml` workflow then auto-updates the moving major tag (e.g. `v1`) so consumers pinning `@v1` pick up the new version automatically.
 
 ## Pre-flight
 

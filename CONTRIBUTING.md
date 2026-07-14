@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving AI PR Reviewer. This is an open-source project maintained by the open-source community.
+Thanks for your interest in improving AI Diff Reviewer. This is an open-source project maintained by the open-source community.
 
 ## Ways to contribute
 

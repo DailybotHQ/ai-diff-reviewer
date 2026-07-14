@@ -4,9 +4,9 @@ Repository conventions that apply across all contributions. For Python-specific 
 
 ## Branding and naming
 
-- **Product name (user-facing):** "AI PR Reviewer". Capitalise exactly that way in user-facing copy (README, docs, marketplace listing, error messages, comments visible to users).
+- **Product name (user-facing):** "AI Diff Reviewer". Capitalise exactly that way in user-facing copy (README, docs, marketplace listing, error messages, comments visible to users).
 - **Slug:** `ai-pr-reviewer` (lowercase, hyphenated). This is the GitHub repo name and the module identifier in `uses:` lines.
-- **Env-var prefix:** `AIPRR_` (4 characters: AI PR Reviewer). Internal use only — but stable, because it's referenced in local-dev docs and `CONTRIBUTING.md`.
+- **Env-var prefix:** `AIPRR_` (4 characters: AI Diff Reviewer). Internal use only — but stable, because it's referenced in local-dev docs and `CONTRIBUTING.md`.
 - **Marker constant:** `<!-- ai-pr-reviewer-marker -->`. Embedded in the tracking comment so downstream automation can locate the most recent review.
 
 Don't invent variants like "AI-PR-reviewer", "AIPR", "AiPrReviewer", etc. The single canonical capitalisation makes search consistent across the marketplace, GitHub, and docs.

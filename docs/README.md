@@ -1,6 +1,6 @@
 # `docs/` — Documentation Index
 
-Everything an agent (or a human) needs to work on **AI PR Reviewer** beyond the entrypoint [`AGENTS.md`](../AGENTS.md).
+Everything an agent (or a human) needs to work on **AI Diff Reviewer** beyond the entrypoint [`AGENTS.md`](../AGENTS.md).
 
 The docs tree is organised by intent: *what the product is* → *how it's built* → *how to change it* → *how AI agents collaborate on it*. Every document is repo-specific — there are no generic stubs. If you find one, that's a bug: open an issue.
 

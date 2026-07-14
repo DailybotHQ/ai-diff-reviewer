@@ -1,6 +1,6 @@
 # Security
 
-This document covers the security model of AI PR Reviewer — the runtime, the supply chain, the secrets, the trust boundary with the LLM, and how to report vulnerabilities.
+This document covers the security model of AI Diff Reviewer — the runtime, the supply chain, the secrets, the trust boundary with the LLM, and how to report vulnerabilities.
 
 ## Reporting a vulnerability
 

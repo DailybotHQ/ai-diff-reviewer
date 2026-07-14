@@ -2,7 +2,7 @@
 
 **Purpose:** Single source of truth for every AI coding assistant working on this repository (Claude Code, Cursor, OpenAI Codex, Google Gemini, GitHub Copilot, OpenClaw, and others). Human contributors are also welcome readers — this file is the fastest way to get oriented.
 
-The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exactly that way). The action repository slug, the Marketplace listing slug, and the `action.yml` `name:` field all resolve to the same string: **`ai-pr-reviewer`**. Workflows reference `DailybotHQ/ai-pr-reviewer@v1`; the Marketplace URL is `github.com/marketplace/actions/ai-pr-reviewer`. Vendor attribution is handled by GitHub automatically via the `author:` field (`DailybotHQ`) — the Marketplace tile renders "by DailybotHQ" beneath the title, so we do NOT embed "Dailybot" in the `name:` field. See Rule #9 for the earlier vendor-prefix experiment that was reverted.
+The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised exactly that way). The **git repository slug** stays at `ai-pr-reviewer` (historical — consumers pin to `DailybotHQ/ai-pr-reviewer@v1` and published tags v1.0.0–v1.4.2 anchor the URL space). The **Marketplace listing slug** is `ai-diff-reviewer`, derived from the `action.yml` `name:` field. Vendor attribution is handled by GitHub automatically via the `author:` field (`DailybotHQ`) — the Marketplace tile renders "by DailybotHQ" beneath the title, so we do NOT embed "Dailybot" in the `name:` field. See Rule #9 for the full rename decision log and why repo slug and Marketplace slug diverge.
 
 ---
 
@@ -34,7 +34,7 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 
 ## Project Overview
 
-**AI PR Reviewer** is an LLM-driven pull-request reviewer packaged as a GitHub Action. It posts inline comments with severity tags, gates the GitHub check based on configurable strictness, applies a "reviewed" label, and collapses prior reviews — all from a single composite action with zero infrastructure.
+**AI Diff Reviewer** is an LLM-driven pull-request reviewer packaged as a GitHub Action. It posts inline comments with severity tags, gates the GitHub check based on configurable strictness, applies a "reviewed" label, and collapses prior reviews — all from a single composite action with zero infrastructure.
 
 **Stack constraints (load-bearing):**
 - **Python 3.10+ standard library only.** No `requirements.txt`, no `pyproject.toml`, no virtualenv. Every dependency is a supply-chain question for every consumer.
@@ -176,14 +176,21 @@ Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workfl
 `action.yml` `name`, `description`, `branding.icon`, and `branding.color` are visible in the GitHub Marketplace listing. Once published, treat them as immutable for cosmetic reasons (consumers' search results and tile UI depend on them). Editorial changes are fine; identity changes need a deliberate decision.
 
 The current values are:
-- `name: 'AI PR Reviewer'` (Marketplace tile + listing title; slugifies to `ai-pr-reviewer`, matching the repo slug exactly)
+- `name: 'AI Diff Reviewer'` (Marketplace tile + listing title; slugifies to `ai-diff-reviewer`)
 - `description: 'Run an LLM-driven code review on every pull request — inline comments, severity-based gating, no infra required.'`
 - `branding.icon: 'check-circle'`
 - `branding.color: 'purple'`
 
-There IS a related third-party listing titled "AI Pull Request Reviewer" (`appchoose/ai-pr-review`) at slug `ai-pull-request-reviewer`. Our abbreviated form ("PR" instead of "Pull Request") yields a **different** slug — `ai-pr-reviewer` — so both listings coexist and neither collides with the other. This distinction is load-bearing: renaming our listing to spell out "Pull Request" would collide and reject the publish.
+**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-pr-reviewer` (historical, with published tags v1.0.0–v1.4.2) and consumers pin against that path (`uses: DailybotHQ/ai-pr-reviewer@v1`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
 
-The `Dailybot`-prefix experiment (v1.2.1, reverted in v1.3.0): during the first publish attempt we misdiagnosed the collision as being on the abbreviated form too, so `name:` was set to `Dailybot AI PR Reviewer` (slug `dailybot-ai-pr-reviewer`) as a defensive workaround. Re-checking Marketplace slug availability showed `ai-pr-reviewer` was actually free; we reverted the prefix in v1.3.0 for cleaner branding (vendor attribution is auto-rendered by GitHub via `author: DailybotHQ` in the listing footer). Do not re-add the prefix — the current name is deliberate and matches the "MIT / BYOK / community tool" positioning of the product.
+### Rename decision log (chronological)
+
+1. **v1.0.0 – v1.2.0:** initial `name: 'AI Diff Reviewer'` (slug `ai-pr-reviewer`) — assumed free based on Marketplace search.
+2. **v1.2.1:** first publish attempt failed. Misdiagnosed the collision, set defensive `name: 'Dailybot AI Diff Reviewer'` (slug `dailybot-ai-pr-reviewer`).
+3. **v1.3.0:** re-checked Marketplace listing search — `ai-pr-reviewer` appeared free among Marketplace slugs. Reverted the prefix to `'AI Diff Reviewer'` for cleaner OSS-community positioning.
+4. **v1.5.0 (current):** second publish attempt failed with the correct diagnosis this time — GitHub's Marketplace name-uniqueness rule includes `user or organization name`, and the org `github.com/ai-pr-reviewer` (created 2024-01-12, 0 public repos, name-squatting) blocks the slug. Renamed to `'AI Diff Reviewer'` (slug `ai-diff-reviewer`, verified free) — also more accurate ("diff" > "PR" — we review `git diff origin/<base>...HEAD`, not the PR envelope). The vendor prefix stays OFF: attribution is auto-rendered by GitHub via `author: DailybotHQ` in the listing footer, and OSS positioning is stronger without a brand prefix.
+
+**Rule going forward:** do NOT rename this again unless there's a similarly load-bearing reason (Marketplace publish blocker, trademark issue). The name `'AI Diff Reviewer'` is now the stable public identity.
 
 ### 10. Dogfooding is Required
 
@@ -336,7 +343,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 10. Add a new top-level `action.yml` input "just to support a one-off use case" — every input is a long-lived public contract.
 11. Hardcode anything that should be a constant — magic numbers, paths, severity ranks. The top of `scripts/reviewer.py` is the canonical place for runtime constants.
 12. Edit content in `.claude/...` or `CLAUDE.md` — both are symlinks. Edit the canonical paths under `.agents/...` and `AGENTS.md`.
-13. Spell the action name "AI-PR-reviewer" / "AIPR" / "AI/PR Reviewer" in user-facing copy — the canonical user-facing capitalisation is **"AI PR Reviewer"**, the repo slug is `ai-pr-reviewer`, and the GitHub Marketplace listing is `AI PR Reviewer` (same slug, same title — Rule #9). All three strings match; do not introduce a variant.
+13. Spell the action name "AI-Diff-Reviewer" / "AIDR" / "AI/Diff Reviewer" / "AI Diff Reviewer" (the old name) in user-facing copy — the canonical user-facing capitalisation is **"AI Diff Reviewer"**. The git repo slug stays at `ai-pr-reviewer` (historical), and the Marketplace listing slug is `ai-diff-reviewer` (derived from `action.yml` `name:`). Rule #9 explains why they diverge and the full rename decision log.
 
 ### DO
 
@@ -350,7 +357,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 8. Add a row to the inputs table in `README.md` for any new input.
 9. Verify the change via `.github/workflows/self-review.yml` running on the PR.
 10. Edit the canonical `AGENTS.md` / `.agents/...` paths.
-11. Use **"AI PR Reviewer"** for product copy, `ai-pr-reviewer` for the slug, `AIPRR_` for env-var prefix.
+11. Use **"AI Diff Reviewer"** for product copy (Marketplace-facing), `ai-pr-reviewer` for the git repo slug (historical, stable), `ai-diff-reviewer` for the Marketplace slug (derived from `action.yml`), and `AIPRR_` for the env-var prefix (private, unchanged).
 
 ---
 

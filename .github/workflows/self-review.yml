@@ -204,7 +204,7 @@ jobs:
           # the GitHub API in-process; the CLI never needs git credentials.
           persist-credentials: false
 
-      - name: Run AI PR Reviewer (local checkout, provider=${{ matrix.provider }})
+      - name: Run AI Diff Reviewer (local checkout, provider=${{ matrix.provider }})
         # `./` resolves to this repo's checkout — i.e. we use the version of the
         # action this PR proposes, not the published one. Canonical CI setup.
         uses: ./

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AI PR reviewer — composite-action entry point.
+"""AI Diff Reviewer — composite-action entry point.
 
 Runs the full review lifecycle from a single Python process:
 
@@ -315,7 +315,7 @@ CLI_INVOCATION_TIMEOUT: int = 900
 
 def log(msg: str) -> None:
     """Print a tagged log line to stdout (the workflow log)."""
-    sys.stdout.write(f"[ai-pr-reviewer] {msg}\n")
+    sys.stdout.write(f"[ai-diff-reviewer] {msg}\n")
     sys.stdout.flush()
 
 
@@ -474,7 +474,7 @@ def gh_request(
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "ai-pr-reviewer",
+        "User-Agent": "ai-diff-reviewer",
     }
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -496,7 +496,7 @@ def gh_graphql(query: str, variables: dict[str, Any], *, token: str) -> Any:
     headers: dict[str, str] = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": "ai-pr-reviewer",
+        "User-Agent": "ai-diff-reviewer",
     }
     request = urllib.request.Request(
         GITHUB_GRAPHQL_URL, data=body, headers=headers, method="POST"
@@ -2990,7 +2990,7 @@ def parse_findings_file(
                 summary: str = (
                     recovered_summary.rstrip()
                     + "\n\n---\n\n"
-                    + "**AI PR Reviewer note:** The CLI wrote malformed "
+                    + "**AI Diff Reviewer note:** The CLI wrote malformed "
                     + "`findings.json`, so this run posted the recovered "
                     + "summary only and dropped inline findings."
                 )

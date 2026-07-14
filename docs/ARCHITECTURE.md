@@ -1,6 +1,6 @@
 # Architecture
 
-A high-level walk-through of how AI PR Reviewer is put together. For input/output configuration see the [README](../README.md); this doc is for contributors who need a mental model of the runtime.
+A high-level walk-through of how AI Diff Reviewer is put together. For input/output configuration see the [README](../README.md); this doc is for contributors who need a mental model of the runtime.
 
 ## Topology
 

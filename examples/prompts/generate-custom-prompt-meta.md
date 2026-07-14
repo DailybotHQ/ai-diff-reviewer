@@ -1,5 +1,5 @@
 <!--
-Meta-prompt for AI PR Reviewer — generate a repo-tailored `prompt-file`.
+Meta-prompt for AI Diff Reviewer — generate a repo-tailored `prompt-file`.
 
 ────────────────────────────────────────────────────────────────────────
 👉 PREFER THE SKILL. This meta-prompt is now packaged as a sub-skill
@@ -41,9 +41,9 @@ bundled default, use `prompt-extension-file:` instead and skip this
 meta-prompt.)
 -->
 
-# You are generating a custom system prompt for AI PR Reviewer
+# You are generating a custom system prompt for AI Diff Reviewer
 
-AI PR Reviewer is a GitHub Action that runs an LLM against pull requests
+AI Diff Reviewer is a GitHub Action that runs an LLM against pull requests
 and posts inline comments with severity tags. Your job in this
 conversation is to produce a **`prompt-file`** — the system prompt that
 tells that LLM how to review THIS repository.

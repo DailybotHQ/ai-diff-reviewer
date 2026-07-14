@@ -7,7 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Headline:** ship a local companion **`code-review` skill** alongside the action so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
+**Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`code-review` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
+
+### Changed
+- **Marketplace listing renamed from "AI PR Reviewer" to "AI Diff Reviewer"**
+  (`action.yml` `name:`). The v1.4.x publish attempt failed with
+  `Cannot match an existing action, user or organization name` — GitHub's
+  name-uniqueness rule includes user/org names and the org
+  `github.com/ai-pr-reviewer` (created 2024-01, 0 public repos) name-squats
+  the slug. "AI Diff Reviewer" (slug `ai-diff-reviewer`, verified free) is
+  also more precise: this action reviews the `git diff origin/<base>...HEAD`
+  specifically, not the PR envelope (labels, description, metadata).
+  Repo path stays at `DailybotHQ/ai-pr-reviewer` (historical, published
+  tags v1.0.0–v1.4.2 anchor the URL space), so **`uses:` pins are
+  unaffected** — consumers on `@v1` need no action. The `AIPRR_*` env-var
+  prefix (private contract) stays unchanged. See
+  [`AGENTS.md § 9`](AGENTS.md) for the full rename decision log.
+- **User-facing branding updated across scripts and docs.** Log prefix
+  (`[ai-pr-reviewer]` → `[ai-diff-reviewer]`), HTTP `User-Agent`
+  (`ai-pr-reviewer` → `ai-diff-reviewer`), the malformed-`findings.json`
+  fallback comment ("**AI PR Reviewer note:**" → "**AI Diff Reviewer
+  note:**"), and every occurrence of the product name in `README.md`,
+  `AGENTS.md`, `docs/`, `examples/`, `prompts/default.md`, and the
+  bundled `.agents/` catalog. **HTML marker strings kept intact**
+  (`<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`,
+  `<!-- ai-pr-reviewer-provider:… -->`,
+  `<!-- ai-pr-reviewer-description-autocompleted -->`) — these are stable
+  contracts on already-posted PR comments; renaming them would silently
+  break `collapse-previous` and state detection on every existing
+  consumer PR.
+- **Local companion skill folder renamed** to `skills/ai-diff-reviewer/`
+  (was `skills/code-review/`) to mirror the product name. Install command
+  is now `npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer`;
+  vendored path is `.agents/skills/ai-diff-reviewer/`. The router skill's
+  `name:` frontmatter changes from `code-review` to `ai-diff-reviewer`,
+  and the sub-skill's from `code-review-generate-extension` to
+  `ai-diff-reviewer-generate-extension`. Since the skill was introduced
+  in this same release, there is no pre-existing consumer install to
+  migrate.
 
 ### Added
 - **Sub-skill: [`generate-extension`](skills/code-review/generate-extension/SKILL.md)** —
@@ -293,7 +330,7 @@ Full threat model + per-value semantics: [`docs/SECURITY.md` § "Author-associat
 - **`provider: codex` no longer copies ignored MCP JSON config.** After switching Codex auth to an isolated per-run `CODEX_HOME`, the old `mcp-config-file` copy still targeted `~/.codex/mcp.json`, which the subprocess ignored and Codex does not read anyway (`config.toml` is the supported path). The Codex provider now warns without copying the ignored JSON file; use `agent-extra-args` / `config.toml` for Codex MCP setup.
 
 ### Changed
-- **Marketplace listing renamed back to "AI PR Reviewer"** (`action.yml` `name:` reverted from the v1.2.1 `Dailybot AI PR Reviewer`). The v1.2.1 vendor prefix was a defensive over-fix — the real slug collision (`ai-pull-request-reviewer`, owned by the third-party `appchoose/ai-pr-review`) was on the *full-form* title only. The *abbreviated* title "AI PR Reviewer" slugifies to `ai-pr-reviewer`, a distinct slug that was free all along and matches this repo's own slug exactly. Marketplace URL is now [`github.com/marketplace/actions/ai-pr-reviewer`](https://github.com/marketplace/actions/ai-pr-reviewer); workflow `uses:` pins are unaffected. Vendor attribution continues via the `author: 'DailybotHQ'` field, which GitHub auto-renders as "by DailybotHQ" beneath the tile. **No consumer action required.** See [`AGENTS.md § 9`](AGENTS.md) for the naming history.
+- **Marketplace listing renamed back to "AI PR Reviewer"** (`action.yml` `name:` reverted from the v1.2.1 `Dailybot AI PR Reviewer`). The v1.2.1 vendor prefix was a defensive over-fix — the real slug collision (`ai-pull-request-reviewer`, owned by the third-party `appchoose/ai-pr-review`) was on the *full-form* title only. The *abbreviated* title "AI PR Reviewer" slugifies to `ai-pr-reviewer`, a distinct slug that appeared free at the time (Marketplace listing search only — the org-level `github.com/ai-pr-reviewer` collision that later blocked the v1.5.0 publish wasn't discovered until 2026-07-14). Marketplace URL was staged at [`github.com/marketplace/actions/ai-pr-reviewer`](https://github.com/marketplace/actions/ai-pr-reviewer); workflow `uses:` pins are unaffected. Vendor attribution continues via the `author: 'DailybotHQ'` field, which GitHub auto-renders as "by DailybotHQ" beneath the tile. **No consumer action required.** See [`AGENTS.md § 9`](AGENTS.md) for the full naming history including the v1.5.0 final rename to `AI Diff Reviewer`.
 - **Default behaviour tightening (soft-breaking) — `author-association: OWNER,MEMBER,COLLABORATOR`.** External-contributor PRs (`author_association` = `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `NONE`) are **no longer reviewed automatically** after upgrading. Public-repo consumers get safer defaults for free; consumers who want v1.2.x behaviour set `author-association: ''`. The SemVer minor bump reflects that the behavioural change is opt-out. See the [Upgrade guide](#upgrade-guide) above for per-repo-type guidance.
 - **Explicit, quality-tier default models for the CLI providers.** The CLI providers no longer default to `auto` (which deferred to the account default and could silently be Opus at ≈$5/$25). The action now pins an explicit quality-tier model per provider: **`claude-code` → `claude-sonnet-4-6`** (quality/price sweet spot); **`codex` → `gpt-5.6-luna`** (≈$1/$6 per 1M tokens; current-gen budget model, replaces the now-deprecated `gpt-5-codex` at ≈$1.75/$14). The `anthropic` default stays `claude-sonnet-4-6` and Cursor stays `auto` (flat-rate/unlimited on Pro). Consumers pin a cheaper smoke model (`claude-haiku-4-5` ≈$1/$5, `gpt-5.4-mini` ≈$0.75/$4.50) via `model:`. See [`docs/PROVIDERS.md` § "Choosing a cost-efficient model"](docs/PROVIDERS.md).
 - **Label matching is now case-insensitive.** `label-gate` (and its `label-once` / `label-added-only` trigger logic) compares label names on a lowercased, whitespace-trimmed basis — `label-gate: ready` is satisfied by `ready`, `Ready`, or `READY`. Applies to `resolve_trigger_action`, `gh_pr_has_label`, and `count_label_events`; removes a foot-gun where a capitalized label silently failed to trigger.
@@ -304,7 +341,7 @@ Full threat model + per-value semantics: [`docs/SECURITY.md` § "Author-associat
 **Headline:** the "actually-works-on-Marketplace" release — renames the Marketplace listing to unblock the first-time publish (a squatting `appchoose/ai-pr-review` action already owns the un-prefixed slug) and ships two provider-side fix batches that landed on `main` after `v1.2.0` was tagged (`claude-code` and `codex` were both broken out of the box in `v1.2.0`; this patch is what makes those providers actually usable). Consumers pinning `@v1` pick everything up automatically.
 
 ### Changed
-- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name slug-ifies to `ai-pull-request-reviewer`, which is already claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern is the standard Marketplace resolution and keeps our repo slug, docs, and user-facing product copy on "AI PR Reviewer". See `AGENTS.md` § 9 (Marketplace Branding Stable). No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
+- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name was mis-diagnosed as slug-ifying to `ai-pull-request-reviewer`, which is claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern was the assumed Marketplace resolution and kept the repo slug, docs, and user-facing product copy on "AI PR Reviewer". This was reverted in v1.3.0 after re-checking Marketplace slug availability. No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
 - **Default Cursor model is now `auto`** (was `composer-2.5`). `auto` is unlimited on Cursor Pro plans and is the CI recommendation in `docs/PROVIDERS.md`; the default now matches the docs. Pin `composer-2.5` (or any specific model) via `model:` if you want to force one.
 - **`collapse-previous` is now scoped per provider.** Every review body and tracking comment carries an invisible `<!-- ai-pr-reviewer-provider: <id> -->` marker, and `collapse-previous` only minimizes *this provider's own* prior artefacts. Effects: (1) several providers can review the same PR concurrently — even sharing one `GITHUB_TOKEN` — without collapsing each other (`self-review.yml`'s four-provider matrix keeps the default `true` and relies on the scoping); (2) unrelated `github-actions[bot]` comments (coverage bots, labelers) are no longer collapsed. See `docs/PROVIDERS.md` § "Running more than one provider on the same PR". Transition: a single pre-upgrade review without the marker won't be auto-collapsed on the first run after upgrading.
 - **`agent-max-turns` now warns instead of silently doing nothing** for the CLI providers. None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag, so the input can't be forwarded; the run logs a clear warning pointing at `agent-extra-args` and noting the `CLI_INVOCATION_TIMEOUT` (900 s) as the effective bound, rather than leaving a misleading dead input.
