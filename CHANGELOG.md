@@ -65,6 +65,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ensures both refs land together or neither does. When the atomic push
   fails, Step 3 now emits a clear error message pointing at the recovery
   playbook.
+- **Auto-release Step 3 now peels the major-alias tag** with
+  `git tag -f "$MAJOR_TAG" "${NEW_VERSION}^{}"` instead of the bare
+  `git tag -f "$MAJOR_TAG" "$NEW_VERSION"`. Without the `^{}` peel,
+  `@v1` became a nested annotated tag pointing at the `v1.X.Y` tag
+  object (which then pointed at the commit), which is technically
+  valid Git but confused any tooling that reads `refs/tags/v1`'s
+  object SHA and expected a commit SHA. Now `@v1` is a lightweight
+  tag directly at the commit — matching what a consumer running
+  `git checkout v1` expects and letting the playbook's verification
+  recipes cleanly compare commit SHAs.
 
 ### Added
 - **`docs/RELEASE_RECOVERY.md`** — playbook for the partial-release
