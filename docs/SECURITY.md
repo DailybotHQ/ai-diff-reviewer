@@ -174,6 +174,55 @@ Every PR contains author-controlled text: the title, body, file paths, and code 
 
 - We don't claim the model is impossible to trick into posting a bad comment. If a malicious PR succeeds in getting the model to post wrong feedback, the maintainer reads it, ignores it, and the worst-case outcome is "one wasted review".
 
+## Author-association gate (v1.3.0+, defaults ON)
+
+Public open-source repositories are exposed to a specific abuse vector that has nothing to do with prompt injection: **someone opens N low-effort PRs to burn the maintainer's provider API budget**. A single afternoon of PR spam against a repo running `provider: anthropic` on the default `claude-sonnet-4-6` model can easily reach three-digit dollars of Anthropic billing.
+
+The `author-association` input closes this vector by default. It reads `pull_request.author_association` from the webhook payload — a server-computed field that the PR author cannot spoof — and skips the review (zero API calls, `outputs.skipped=true`) when the association is not in the configured whitelist.
+
+### Default: `OWNER,MEMBER,COLLABORATOR`
+
+The "write-tier" allow-list. It permits:
+
+- **`OWNER`** — repository owner (personal-account repos).
+- **`MEMBER`** — organisation members of the repo's org.
+- **`COLLABORATOR`** — explicit collaborator on the repo.
+
+It denies:
+
+- `CONTRIBUTOR` — has had a commit merged but no write access.
+- `FIRST_TIME_CONTRIBUTOR` — first PR to this repo.
+- `FIRST_TIMER` — first PR of their life on GitHub.
+- `NONE` — no relationship to the repo.
+- `MANNEQUIN` — GitLab-import placeholder.
+
+### Why this is a distinct threat from prompt injection
+
+The prompt-injection controls (bounded loop, inline-comment cap, `safe_repo_path`, secret scrubbing) limit what a *single* review can do. They do not limit *how many* reviews an attacker can trigger. The author-association gate is the first line of defense that runs **before** any LLM API call is made, so an attacker on an external account cannot burn tokens at all.
+
+Note that GitHub already refuses to expose secrets to workflows triggered by fork PRs on `pull_request` events — so a fork PR against a workflow using `secrets.ANTHROPIC_API_KEY` fails to authenticate anyway. But there are three cases where the built-in protection is not enough:
+
+1. **`pull_request_target` events** — get the base-branch workflow *with* secrets. The gate blocks these.
+2. **PRs from branches within the same repo** by users with `triage`/`read` (association: `COLLABORATOR` with sub-write permission) — GitHub does provide secrets, but the gate can be tightened to `OWNER,MEMBER` to exclude them.
+3. **Author-controlled compute-cost abuse via `workflow_dispatch` chains or re-runs** — the gate short-circuits before the API call regardless of how the workflow was triggered.
+
+### Configuring for your threat model
+
+| Repo type | Recommended value | Effect |
+|---|---|---|
+| Public open-source, strict | `OWNER,MEMBER` | Only org members / owner. External contributors always denied. |
+| Public open-source, standard | `OWNER,MEMBER,COLLABORATOR` **(default)** | Above + explicit repo collaborators. |
+| Public open-source, community-friendly | `OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR` | Above + returning contributors (they've had a prior commit merged). |
+| Private / internal | `''` (empty string) | Gate disabled — review every PR. Safe because there are no untrusted PR openers by construction. |
+
+The gate composes with `label-gate` and `trigger-mode` via AND — a review runs only when **all three** gates pass. Evaluation order is cheapest-first (author gate → no API call → label gate → API call for label counting), so a denied PR terminates immediately.
+
+### Edge cases
+
+- **Local runs / `workflow_dispatch`** — no `pull_request` payload in `GITHUB_EVENT_PATH`, so `author_association` is empty. The gate **fails-open** in this case: the operator running locally already has write access by definition, and forcing them to unset the gate for every debug run creates more friction than value.
+- **Case- and whitespace-tolerant** — `owner, member ,collaborator` normalises to `OWNER,MEMBER,COLLABORATOR`. Unknown values (typo, misspelling) log a warning and can never match a real association (fail-safe).
+- **The default is a soft behavioural change from v1.2.x.** Consumers whose workflows relied on reviewing every external-contributor PR need to explicitly set `author-association: ''` (or add `CONTRIBUTOR`/`FIRST_TIME_CONTRIBUTOR` to the list) after upgrading. The `[Unreleased]` CHANGELOG entry calls this out.
+
 ## PR metadata PATCH surface (v1.2.0+)
 
 Two features introduced in v1.2.0 write back to the PR: `pr-description-mode: autocomplete` PATCHes the PR body, and `complexity-labels-enabled: true` adds/removes `complexity:*` labels. Both are opt-in and share the same trust envelope as the existing "post review" and "apply label" paths.

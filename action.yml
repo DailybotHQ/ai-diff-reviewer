@@ -42,6 +42,20 @@ inputs:
     required: false
     default: ''
 
+  author-association:
+    description: >-
+      Comma-separated whitelist of GitHub `pull_request.author_association`
+      values allowed to trigger the review. Defaults to write-tier only
+      (`OWNER,MEMBER,COLLABORATOR`) — the safest baseline for public
+      open-source repos, since it prevents an external contributor from
+      opening PRs to burn the maintainer's provider API budget. Set to
+      an empty string to disable the gate (review every PR). Common
+      presets: add `CONTRIBUTOR` to include returning contributors;
+      remove `COLLABORATOR` to gate on org membership only. Case- and
+      whitespace-insensitive. See docs/SECURITY.md § "Author-association
+      gate" for the threat model.
+    required: false
+    default: 'OWNER,MEMBER,COLLABORATOR'
   label-gate:
     description: 'If non-empty, the review only runs when the PR carries this label (e.g. `ready`). Useful to keep work-in-progress noise out of the review queue. Combined with `trigger-mode`.'
     required: false
@@ -237,6 +251,7 @@ runs:
         AIPRR_MODEL: ${{ inputs.model }}
         AIPRR_PROMPT_FILE: ${{ inputs.prompt-file }}
         AIPRR_PROMPT_EXTENSION_FILE: ${{ inputs.prompt-extension-file }}
+        AIPRR_AUTHOR_ASSOCIATION: ${{ inputs.author-association }}
         AIPRR_LABEL_GATE: ${{ inputs.label-gate }}
         AIPRR_TRIGGER_MODE: ${{ inputs.trigger-mode }}
         AIPRR_APPLIED_LABEL: ${{ inputs.applied-label }}

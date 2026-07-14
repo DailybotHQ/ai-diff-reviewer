@@ -68,7 +68,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 
 - **Inline comments** anchored to specific lines, with optional GitHub suggestion blocks (one-click apply).
 - **Tracking comment** with a `<!-- ai-pr-reviewer-marker -->` marker that transitions in-place from `Working…` → `View review →`.
-- **Auto-collapse** of previous bot reviews on every new push (no comment-spam noise from older commits).
+- **Auto-collapse** of *this provider's* previous reviews on every new push, scoped by a per-provider marker — leaves other bots' comments (coverage, labelers) and other-provider reviews alone, so multi-provider dogfooding on the same PR just works.
 - **Severity-based gating**: the model assigns `critical` / `warning` / `info` to each finding; you decide what fails the check.
 - **Optional label gate**: only run when a PR carries a label (e.g. `ready`).
 - **Optional "reviewed" label**: applied automatically after a successful, non-blocked review.
@@ -86,6 +86,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 | `model` | | provider default | Model id. Anthropic → `claude-sonnet-4-6`, Cursor → `composer-2.5`, Codex → `gpt-5-codex`, Claude Code → account default. |
 | `prompt-file` | | bundled `prompts/default.md` | Path **inside the consumer checkout** to a markdown system prompt. FULLY REPLACES the base. Customising the prompt is the main lever for adapting the review to your codebase — see [docs/PROMPTS.md](docs/PROMPTS.md). |
 | `prompt-extension-file` | | _(empty)_ | Path **inside the consumer checkout** to a markdown file APPENDED to the base prompt. Use to layer overrides without copying the whole default. Combines with `prompt-file` (base + extension). Starter templates in [`examples/prompts/`](examples/prompts/). |
+| `author-association` | | `OWNER,MEMBER,COLLABORATOR` | Comma-separated whitelist of GitHub `pull_request.author_association` values allowed to trigger a review. Default is write-tier only — the safe baseline for public open-source repos (prevents external-contributor PR spam from burning your LLM budget). Add `CONTRIBUTOR` to allow returning contributors, or set to empty string to disable the gate. See [docs/SECURITY.md § "Author-association gate"](docs/SECURITY.md). |
 | `label-gate` | | `''` | If non-empty, the review only runs when the PR carries this label (e.g. `ready`). Combined with `trigger-mode`. |
 | `trigger-mode` | | _(auto)_ | `always` / `label-required` / `label-once` / `label-added-only` — see [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md). Empty picks `label-required` when `label-gate` is set, else `always`. |
 | `applied-label` | | `''` | If non-empty, this label is applied to the PR after a successful, non-blocked review (e.g. `pr-reviewed`). The label is auto-created if it doesn't exist. |
@@ -227,6 +228,21 @@ If you want the review attributed to a specific bot account (e.g. so branch prot
     github-token: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}   # PAT for your bot account
 ```
 
+### Public open-source repo (safest defaults)
+
+For a public repo, external contributors can open PRs — and each review costs real money (~50K–200K tokens per PR). The `author-association` input (default `OWNER,MEMBER,COLLABORATOR`, v1.3.0+) gates reviews on the PR author's relationship to the repo; the field comes from GitHub's payload and cannot be spoofed. Belt-and-suspenders combined with a label gate:
+
+```yaml
+- uses: DailybotHQ/ai-pr-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    author-association: 'OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR'  # optional: allow returning contributors
+    label-gate: 'ai-review'                                       # maintainer opt-in per PR
+    trigger-mode: label-once
+```
+
+Result: an outsider opening PRs cannot trigger the review at all (gate fails, zero API calls); returning contributors get a review only when a maintainer applies the `ai-review` label; the review runs exactly once per label application. See [docs/SECURITY.md § "Author-association gate"](docs/SECURITY.md) and [`examples/open-source-safe.yml`](examples/open-source-safe.yml).
+
 More recipes: [`examples/`](examples/).
 
 ---
@@ -266,12 +282,12 @@ For the full design, see [docs/PROVIDERS.md](docs/PROVIDERS.md), [docs/PROMPTS.m
 
 | Provider | Family | Status | Notes |
 |---|---|---|---|
-| Anthropic (Claude) | chat-completions | ✅ shipping | Sonnet 4.6 default. Zero CLI install. |
-| Claude Code CLI | agent-runner | 🚧 v1.1.0 (in progress) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. |
-| Cursor Agent CLI | agent-runner | 🚧 v1.1.0 (in progress) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. |
-| OpenAI Codex CLI | agent-runner | 🚧 v1.1.0 (in progress) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
-| OpenAI (raw API) | chat-completions | 🛠 roadmap (v1.2) | Direct chat-completions, no CLI install. |
-| Google Gemini | chat-completions | 🛠 roadmap (v1.2) | Function-calling translation. |
+| Anthropic (Claude) | chat-completions | ✅ shipping (v1.0.0+) | `claude-sonnet-4-6` default. Zero CLI install. |
+| Claude Code CLI | agent-runner | ✅ shipping (v1.2.1+) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. Works with subscription auth. |
+| Cursor Agent CLI | agent-runner | ✅ shipping (v1.2.1+) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. Default model `auto` — unlimited on Cursor Pro. |
+| OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
+| OpenAI (raw API) | chat-completions | 🛠 roadmap | Direct chat-completions, no CLI install. |
+| Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |
 
 **Two provider families:**

@@ -1933,5 +1933,119 @@ class AgentMaxTurnsWarningTests(unittest.TestCase):
             os.environ.update(prev)
 
 
+class ResolveAuthorAssociationGateTests(unittest.TestCase):
+    """Covers the abuse-prevention gate for public open-source repos."""
+
+    def test_empty_gate_allows_any_author(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="", actual_association="NONE"
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("no author-association gate", d.reason)
+        self.assertEqual(d.allowed_associations, ())
+
+    def test_owner_matches_default_write_tier(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR",
+            actual_association="OWNER",
+        )
+        self.assertTrue(d.should_run)
+        self.assertEqual(d.author_association, "OWNER")
+
+    def test_member_matches_default_write_tier(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR",
+            actual_association="MEMBER",
+        )
+        self.assertTrue(d.should_run)
+
+    def test_first_time_contributor_denied_by_default(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR",
+            actual_association="FIRST_TIME_CONTRIBUTOR",
+        )
+        self.assertFalse(d.should_run)
+        self.assertIn("not in gate", d.reason)
+        self.assertIn("FIRST_TIME_CONTRIBUTOR", d.reason)
+
+    def test_none_denied_by_default(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR",
+            actual_association="NONE",
+        )
+        self.assertFalse(d.should_run)
+
+    def test_contributor_allowed_when_explicitly_added(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR",
+            actual_association="CONTRIBUTOR",
+        )
+        self.assertTrue(d.should_run)
+
+    def test_case_insensitive_gate(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="owner, member ,collaborator",
+            actual_association="owner",
+        )
+        self.assertTrue(d.should_run)
+        self.assertEqual(d.author_association, "OWNER")
+        self.assertEqual(
+            d.allowed_associations, ("OWNER", "MEMBER", "COLLABORATOR")
+        )
+
+    def test_empty_actual_association_fail_open(self) -> None:
+        # Local runs and workflow_dispatch have no PR context — fail-open
+        # so the operator (who by definition has write access) is not
+        # blocked from local debugging.
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER,COLLABORATOR",
+            actual_association="",
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("fail-open", d.reason)
+
+    def test_unknown_gate_values_warn_but_dont_crash(self) -> None:
+        # Typo in the whitelist ("MAINTAINER" is not a real GitHub value)
+        # — the gate still applies, unknown values just never match.
+        logs: list[str] = []
+        original_log = reviewer.log
+        reviewer.log = lambda m: logs.append(m)  # type: ignore[assignment]
+        try:
+            d = reviewer.resolve_author_association_gate(
+                gate="OWNER,MAINTAINER,MEMBER",
+                actual_association="MAINTAINER",
+            )
+        finally:
+            reviewer.log = original_log  # type: ignore[assignment]
+        # `MAINTAINER` is in the whitelist verbatim so it does match here,
+        # but the warning must still fire.
+        self.assertTrue(any("MAINTAINER" in m for m in logs))
+        self.assertTrue(d.should_run)  # verbatim match
+
+    def test_empty_pieces_in_gate_are_ignored(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate=",,OWNER,,MEMBER,,",
+            actual_association="OWNER",
+        )
+        self.assertTrue(d.should_run)
+        self.assertEqual(d.allowed_associations, ("OWNER", "MEMBER"))
+
+    def test_strict_gate_allowing_only_owner_and_member(self) -> None:
+        # Consumer excludes COLLABORATOR because some collaborators only
+        # have read/triage access.
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER,MEMBER",
+            actual_association="COLLABORATOR",
+        )
+        self.assertFalse(d.should_run)
+
+    def test_gate_decision_is_frozen(self) -> None:
+        d = reviewer.resolve_author_association_gate(
+            gate="OWNER", actual_association="OWNER"
+        )
+        with self.assertRaises((AttributeError, Exception)):
+            d.should_run = False  # type: ignore[misc]
+
+
 if __name__ == "__main__":
     unittest.main()

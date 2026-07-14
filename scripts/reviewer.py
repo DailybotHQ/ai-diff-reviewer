@@ -33,6 +33,12 @@ Environment (set by the composite action's `env:` block; see action.yml):
     AIPRR_PROMPT_EXTENSION_FILE  Path to a markdown file APPENDED to the
                             base prompt. Layer overrides without copying
                             the whole default.
+    AIPRR_AUTHOR_ASSOCIATION Comma-separated whitelist of accepted
+                             GitHub `pull_request.author_association`
+                             values. Default `OWNER,MEMBER,COLLABORATOR`
+                             (write-tier only). Empty disables the gate.
+                             See docs/SECURITY.md § "Author-association
+                             gate" for rationale.
     AIPRR_LABEL_GATE         Required label, or empty for no gate.
     AIPRR_TRIGGER_MODE       `always` | `label-required` | `label-once` |
                             `label-added-only`. Empty = auto (label-required
@@ -66,6 +72,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -207,6 +214,35 @@ TRIGGER_MODES: tuple[str, ...] = (
 )
 TRIGGER_STATE_MARKER_OPEN: str = "<!-- ai-pr-reviewer-state: "
 TRIGGER_STATE_MARKER_CLOSE: str = " -->"
+
+# Author-association gate (v1.3.0+). GitHub attaches `author_association`
+# to every `pull_request` / `pull_request_target` payload; the field is
+# server-computed and cannot be spoofed by the PR author, which makes it
+# the primary line of defense against LLM-budget abuse on public repos
+# (an attacker opens N PRs → each burns ~50–200K tokens).
+#
+# The canonical values are the full enum accepted by GitHub. See
+# https://docs.github.com/en/graphql/reference/enums#commentauthorassociation.
+VALID_AUTHOR_ASSOCIATIONS: tuple[str, ...] = (
+    "OWNER",
+    "MEMBER",
+    "COLLABORATOR",
+    "CONTRIBUTOR",
+    "FIRST_TIME_CONTRIBUTOR",
+    "FIRST_TIMER",
+    "MANNEQUIN",
+    "NONE",
+)
+
+# The default write-tier — what `action.yml`'s `author-association` input
+# defaults to and what the runtime falls back to when the env var is
+# unset. Any consumer who wants to allow external contributors sets the
+# input explicitly (see docs/SECURITY.md § "Author-association gate").
+AUTHOR_ASSOCIATION_WRITE_TIER: tuple[str, ...] = (
+    "OWNER",
+    "MEMBER",
+    "COLLABORATOR",
+)
 
 # Severity levels — ordered low→high so `max(SEVERITY_RANK)` yields the most
 # severe finding in a review.
@@ -1128,7 +1164,9 @@ def _invoke_cli_agent(
             f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
         )
 
-    return parse_findings_file(findings_path)
+    return parse_findings_file(
+        findings_path, allow_malformed_summary_fallback=True
+    )
 
 
 class ClaudeCodeProvider(AgentRunnerProvider):
@@ -1359,7 +1397,28 @@ class CursorProvider(AgentRunnerProvider):
 class CodexProvider(AgentRunnerProvider):
     """OpenAI Codex CLI (headless) as an agent-runner provider.
 
-    Auth: `OPENAI_API_KEY` env var (from the consumer's `api-key` input).
+    Auth (Codex CLI 0.122+): Codex **no longer reads** `OPENAI_API_KEY`
+    from the environment. It now reads credentials only from
+    `$CODEX_HOME/auth.json`. Without that file (or with a ChatGPT-mode
+    file present from a prior `codex login`), `codex exec` fails with:
+
+        401 Unauthorized: Missing bearer or basic authentication in header,
+        url: https://api.openai.com/v1/responses
+
+    We materialize an apikey-mode `auth.json` in an isolated per-run
+    `CODEX_HOME` (a `tempfile.mkdtemp()`-managed directory) before each
+    invocation and remove it in a `finally` block. Doing this in an
+    isolated home rather than `~/.codex/` means:
+      - Self-hosted runners with a persistent `~/.codex/` (e.g. from a
+        prior `codex login` in ChatGPT mode) don't override our apikey
+        auth for this run.
+      - We never clobber a user's real credentials on any runner.
+      - Cleanup is fire-and-forget — `shutil.rmtree()` removes the whole
+        temp directory, no per-file backup/restore dance.
+
+    We also still forward `OPENAI_API_KEY` for back-compat with older
+    Codex versions that read it from env (cost: zero).
+
     CLI: `@openai/codex` on npm. Installed by the composite step when
     `provider: codex`.
     """
@@ -1367,6 +1426,36 @@ class CodexProvider(AgentRunnerProvider):
     CLI_NAME: str = "OpenAI Codex"
     CLI_BIN: str = "codex"
     MCP_DEST: Path = Path.home() / ".codex" / "mcp.json"
+    # apikey-mode auth.json shape — validated against Codex CLI 0.122+
+    # via the paperclipai/paperclip#5276 fix and the shell one-liner
+    # `echo '{"OPENAI_API_KEY": "..."}' > $CODEX_HOME/auth.json`
+    # that is documented in the wjduenow/clauditor#177 workaround.
+    AUTH_JSON_FILENAME: str = "auth.json"
+
+    @staticmethod
+    def _materialize_apikey_auth_json(
+        *, codex_home: Path, api_key: str
+    ) -> None:
+        """Write an apikey-mode auth.json under `codex_home`.
+
+        Sets mode `0o600` on the file so a shared runner cannot read it
+        from another process. Fails loudly on OSError — a missing
+        auth.json is exactly the bug we are here to prevent.
+        """
+        codex_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+        auth_path: Path = codex_home / CodexProvider.AUTH_JSON_FILENAME
+        auth_path.write_text(
+            json.dumps({"OPENAI_API_KEY": api_key}),
+            encoding="utf-8",
+        )
+        try:
+            os.chmod(auth_path, 0o600)
+        except OSError as e:
+            log(
+                f"WARNING: could not chmod 0600 on Codex auth.json at "
+                f"{auth_path}: {e}. Continuing — the temp CODEX_HOME "
+                f"parent directory is already 0700."
+            )
 
     def __init__(
         self,
@@ -1422,10 +1511,19 @@ class CodexProvider(AgentRunnerProvider):
                 "config.toml instead."
             )
 
-        mcp_dest, mcp_backup = _swap_mcp_config(
-            self.mcp_config_file, self.MCP_DEST
-        )
+        # Isolated per-run CODEX_HOME with an apikey-mode auth.json —
+        # see the class docstring for the 0.122+ auth breakage rationale.
+        # `mkdtemp` creates a private dir with mode 0700 by default.
+        codex_home: Path = Path(tempfile.mkdtemp(prefix="aiprr-codex-"))
         try:
+            self._materialize_apikey_auth_json(
+                codex_home=codex_home, api_key=self.api_key
+            )
+
+            # Do not copy `mcp-config-file` to `~/.codex/mcp.json`: Codex
+            # ignores that JSON file, and this run uses an isolated CODEX_HOME
+            # anyway. The warning above points users at the supported
+            # `config.toml` / `agent-extra-args` path.
             # Codex CLI headless is `codex exec`. Two CI-critical flags:
             #   --dangerously-bypass-approvals-and-sandbox: `codex exec`
             #     defaults to a READ-ONLY sandbox, so without this the agent
@@ -1450,8 +1548,14 @@ class CodexProvider(AgentRunnerProvider):
             # The stdin sentinel must be the final positional argument.
             argv.append("-")
 
+            # CODEX_HOME redirects the CLI to read our apikey auth.json
+            # (0.122+ requirement). OPENAI_API_KEY stays in the env for
+            # back-compat with < 0.122 which read it directly.
             env: dict[str, str] = _build_cli_env(
-                extra_vars={"OPENAI_API_KEY": self.api_key}
+                extra_vars={
+                    "OPENAI_API_KEY": self.api_key,
+                    "CODEX_HOME": str(codex_home),
+                }
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -1462,7 +1566,17 @@ class CodexProvider(AgentRunnerProvider):
                 stdin_input=user_prompt,
             )
         finally:
-            _restore_mcp_config(mcp_dest, mcp_backup)
+            # Best-effort cleanup of the isolated CODEX_HOME. The temp dir
+            # is 0700 so cross-process leakage during the run is bounded;
+            # unlink failures here are logged, not fatal.
+            try:
+                shutil.rmtree(codex_home)
+            except OSError as e:  # noqa: BLE001 — cleanup is best-effort
+                log(
+                    f"Could not remove Codex temp home {codex_home}: {e}. "
+                    "The runner is ephemeral; leftover files will be "
+                    "destroyed with the VM."
+                )
 
 
 def build_provider(
@@ -2172,6 +2286,109 @@ def execute_tool(name: str, args: dict[str, Any], state: ReviewState) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Author-association gate (v1.3.0+): the first / cheapest gate. Runs before
+# `trigger-mode` so a rejected PR never consumes a single API call.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AuthorAssociationDecision:
+    """Result of `resolve_author_association_gate()`.
+
+    - `should_run` — True when the PR author is allowed through the gate.
+    - `reason` — one-line explanation for the runtime log.
+    - `author_association` — the association we compared, uppercase.
+    - `allowed_associations` — the parsed whitelist, for downstream log
+      messages (`Skipping: author X not in [OWNER, MEMBER, …]`).
+    """
+
+    should_run: bool
+    reason: str
+    author_association: str
+    allowed_associations: tuple[str, ...]
+
+
+def resolve_author_association_gate(
+    *, gate: str, actual_association: str
+) -> AuthorAssociationDecision:
+    """Decide whether the review should run given the author-association
+    whitelist `gate` and the PR's actual `author_association`.
+
+    Semantics:
+
+    - **Empty `gate`** — gate disabled, every author allowed.
+    - **Empty `actual_association`** — no PR context (local run,
+      `workflow_dispatch`, malformed event payload). Fail-open: the
+      operator running locally already has write access, and CI-time
+      failures to read the payload are already logged elsewhere.
+    - **`actual_association` in whitelist** — allowed.
+    - **`actual_association` not in whitelist** — denied.
+
+    Parsing is case-insensitive and tolerates whitespace between commas.
+    Unknown values in the whitelist are logged as a warning and can
+    never match (fail-safe).
+    """
+    normalized_gate: str = gate.strip()
+    if not normalized_gate:
+        return AuthorAssociationDecision(
+            should_run=True,
+            reason="no author-association gate configured",
+            author_association=(actual_association or "").upper(),
+            allowed_associations=(),
+        )
+
+    allowed: tuple[str, ...] = tuple(
+        piece.strip().upper()
+        for piece in normalized_gate.split(",")
+        if piece.strip()
+    )
+    unknown: list[str] = [
+        a for a in allowed if a not in VALID_AUTHOR_ASSOCIATIONS
+    ]
+    if unknown:
+        log(
+            f"WARNING: author-association gate lists unknown value(s) "
+            f"{unknown}; they will never match. Valid values: "
+            f"{list(VALID_AUTHOR_ASSOCIATIONS)}."
+        )
+
+    normalized_actual: str = (actual_association or "").upper()
+
+    if not normalized_actual:
+        return AuthorAssociationDecision(
+            should_run=True,
+            reason=(
+                "author-association gate fail-open: no PR "
+                "author_association in event payload (likely a local "
+                "run, workflow_dispatch, or malformed event)"
+            ),
+            author_association="",
+            allowed_associations=allowed,
+        )
+
+    if normalized_actual in allowed:
+        return AuthorAssociationDecision(
+            should_run=True,
+            reason=(
+                f"author_association '{normalized_actual}' matches "
+                f"gate {list(allowed)}"
+            ),
+            author_association=normalized_actual,
+            allowed_associations=allowed,
+        )
+
+    return AuthorAssociationDecision(
+        should_run=False,
+        reason=(
+            f"author_association '{normalized_actual}' not in gate "
+            f"{list(allowed)}"
+        ),
+        author_association=normalized_actual,
+        allowed_associations=allowed,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Trigger modes (v1.2.0+): decide whether to run based on webhook event
 # + label state + prior-run marker generation.
 # ---------------------------------------------------------------------------
@@ -2346,6 +2563,23 @@ def _read_github_event_label() -> str:
     if not isinstance(label, dict):
         return ""
     return str(label.get("name", "") or "")
+
+
+def _read_github_event_pr_author_association() -> str:
+    """Return `pull_request.author_association` from the event payload
+    in uppercase, or `""` when unavailable.
+
+    GitHub attaches this field to every `pull_request` /
+    `pull_request_target` webhook — it is derived server-side and
+    cannot be spoofed by the PR author. When empty, the caller is
+    outside a PR-event context (local run, `workflow_dispatch`, etc.)
+    and the caller should fail-open on the author gate.
+    """
+    payload = _read_github_event_payload()
+    pr = payload.get("pull_request")
+    if not isinstance(pr, dict):
+        return ""
+    return str(pr.get("author_association", "") or "").upper()
 
 
 def _read_existing_tracking_state(
@@ -2628,7 +2862,39 @@ def state_to_review_result(state: "ReviewState") -> ReviewResult:
     )
 
 
-def parse_findings_file(path: Path) -> ReviewResult:
+def _extract_summary_from_malformed_findings(raw_text: str) -> str | None:
+    """Best-effort extraction for malformed agent-runner JSON.
+
+    Some vendor CLIs occasionally hand-write invalid JSON while still leaving
+    a valid top-level `summary` string. Recovering that summary lets the action
+    post a review instead of failing the whole check; inline findings are
+    intentionally not recovered from malformed JSON.
+    """
+    key_index: int = raw_text.find('"summary"')
+    if key_index < 0:
+        return None
+    colon_index: int = raw_text.find(":", key_index + len('"summary"'))
+    if colon_index < 0:
+        return None
+    value_start: int = colon_index + 1
+    while value_start < len(raw_text) and raw_text[value_start].isspace():
+        value_start += 1
+    if value_start >= len(raw_text) or raw_text[value_start] != '"':
+        return None
+
+    decoder = json.JSONDecoder()
+    try:
+        value, _end_index = decoder.raw_decode(raw_text[value_start:])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(value, str):
+        return None
+    return value
+
+
+def parse_findings_file(
+    path: Path, *, allow_malformed_summary_fallback: bool = False
+) -> ReviewResult:
     """Parse an agent-runner `findings.json` into a `ReviewResult`.
 
     Strict validation:
@@ -2653,10 +2919,34 @@ def parse_findings_file(path: Path) -> ReviewResult:
             "missing the write-to-file directive, or the workspace path is "
             "wrong. See docs/PROVIDERS.md for the contract."
         )
+    raw_text: str = path.read_text(encoding="utf-8")
     try:
-        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+        raw: Any = json.loads(raw_text)
     except json.JSONDecodeError as e:
-        snippet: str = path.read_text(encoding="utf-8")[:MAX_ERROR_BODY_CHARS]
+        if allow_malformed_summary_fallback:
+            recovered_summary: str | None = (
+                _extract_summary_from_malformed_findings(raw_text)
+            )
+            if recovered_summary:
+                log(
+                    "WARNING: Agent-runner provider wrote malformed "
+                    f"findings.json ({e}). Posting summary-only review; "
+                    "inline findings were dropped because the JSON could "
+                    "not be trusted."
+                )
+                summary: str = (
+                    recovered_summary.rstrip()
+                    + "\n\n---\n\n"
+                    + "**AI PR Reviewer note:** The CLI wrote malformed "
+                    + "`findings.json`, so this run posted the recovered "
+                    + "summary only and dropped inline findings."
+                )
+                return ReviewResult(
+                    summary=summary,
+                    findings=[],
+                    overall_severity=SEVERITY_NONE,
+                )
+        snippet: str = raw_text[:MAX_ERROR_BODY_CHARS]
         raise ValueError(
             f"Malformed findings.json ({e}). Content head: {snippet!r}"
         ) from e
@@ -2775,7 +3065,10 @@ def write_findings_prompt_directive(
         + "(new code); use `LEFT` for removed code.\n"
         + "- Empty `findings` is valid — it means "
         + '"no issues found; just the summary".\n'
-        + "- Only write the file once, at the end. Do NOT stream partials."
+        + "- Only write the file once, at the end. Do NOT stream partials.\n"
+        + "- The file MUST parse with Python `json.load()`. Do not hand-write "
+        + "JSON when the content contains Markdown, quotes, or code blocks; "
+        + "use a JSON serializer so strings are escaped correctly."
     )
 
 
@@ -3143,6 +3436,34 @@ def main() -> int:
         f"{provider_id}/{model} (strictness={strictness}, "
         f"trigger-mode={trigger_mode})"
     )
+
+    # ------------------------------------------------------------------
+    # Author-association gate (v1.3.0+) — cheapest gate, runs first so a
+    # denied PR never consumes an LLM API call. Defaults to write-tier
+    # only, which is the safe baseline for public open-source repos.
+    # ------------------------------------------------------------------
+    author_gate_raw: str = os.environ.get(
+        "AIPRR_AUTHOR_ASSOCIATION",
+        ",".join(AUTHOR_ASSOCIATION_WRITE_TIER),
+    )
+    pr_author_association: str = _read_github_event_pr_author_association()
+    author_decision: AuthorAssociationDecision = (
+        resolve_author_association_gate(
+            gate=author_gate_raw,
+            actual_association=pr_author_association,
+        )
+    )
+    log(f"Author-association gate: {author_decision.reason}")
+    if not author_decision.should_run:
+        log(
+            "Skipping review — this is the abuse-prevention default. To "
+            "allow this author, add their association to "
+            "`author-association` (see docs/SECURITY.md § "
+            "'Author-association gate') or set the input to an empty "
+            "string to disable the gate entirely."
+        )
+        write_all_outputs(skipped=True)
+        return 0
 
     # ------------------------------------------------------------------
     # Trigger evaluation (v1.2.0+) — subsumes the v1.x `label-gate` block

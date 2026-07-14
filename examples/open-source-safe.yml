@@ -1,0 +1,96 @@
+# Public open-source repo — safest-defaults configuration.
+#
+# Threat this defends against
+# ---------------------------
+# On a public repo, ANYONE can open a PR. If the reviewer runs on every
+# PR unconditionally, an attacker can open dozens of low-effort PRs and
+# each one burns 50–200K provider tokens against your API budget. A
+# single afternoon of PR spam against `provider: anthropic` on the
+# default `claude-sonnet-4-6` easily costs three-digit dollars.
+#
+# The `author-association` input (v1.3.0+) closes this vector by
+# reading `pull_request.author_association` from the GitHub webhook
+# payload — a server-computed field the PR author cannot spoof — and
+# skipping the review (zero API calls, `outputs.skipped=true`) when
+# the association is not in the configured whitelist.
+#
+# This example combines THREE gates in the safest configuration for a
+# public repo:
+#   1. `author-association` — write-tier only, first-line defense.
+#   2. `label-gate: ai-review` — maintainer must explicitly opt-in
+#      per PR by applying the label.
+#   3. `trigger-mode: label-once` — the review runs exactly once per
+#      label application. Removing and re-applying the label triggers
+#      a fresh review (useful for re-reviewing after major changes).
+#
+# All three gates are AND-ed. Evaluated cheapest-first: the author
+# gate is a payload read (no API call), so a rejected PR terminates
+# before spending a single token on the LLM or a GitHub API round-trip.
+#
+# Adjust the `author-association` value to match your policy:
+#   - `OWNER,MEMBER,COLLABORATOR`  — write-tier (default; recommended)
+#   - `OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR` — plus prior contributors
+#   - `OWNER,MEMBER`               — strictest (excludes even collaborators)
+#   - `''`                         — no gate (only sensible for private repos)
+#
+# See docs/SECURITY.md § "Author-association gate" for the full threat
+# model and per-value decision table.
+
+name: PR review (public repo, safest defaults)
+
+on:
+  pull_request:
+    branches: [main]
+    # `labeled` fires when a maintainer applies the gate label; the
+    # combination with `trigger-mode: label-once` means each label
+    # application triggers exactly one review.
+    types: [opened, synchronize, labeled, reopened]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Recommended for public repos — keeps GITHUB_TOKEN out of
+          # `.git/config` on disk so nothing that reads the repo can
+          # exfiltrate it. See docs/SECURITY.md § "Agent-runner
+          # providers: residual exfiltration surface".
+          persist-credentials: false
+
+      - uses: DailybotHQ/ai-pr-reviewer@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # First gate: only write-tier authors can trigger a review.
+          # External contributors' PRs get `outputs.skipped=true` before
+          # any API call. This is the DEFAULT so it can be omitted —
+          # it is spelled out here for auditability.
+          author-association: 'OWNER,MEMBER,COLLABORATOR'
+
+          # Second gate: even for write-tier authors, the review only
+          # runs when a maintainer explicitly applies the label. This
+          # lets you land internal PRs without spending tokens on trivial
+          # or WIP changes.
+          label-gate: ai-review
+          trigger-mode: label-once
+
+          # After a successful, non-blocked review, apply this label
+          # so downstream automation (branch protection, merge bots)
+          # can gate on "reviewed by AI".
+          applied-label: pr-reviewed
+
+          # Block merge on critical findings. Reviewers are informational
+          # for warnings and info (adjust to `block-on-warning` or
+          # `block-on-any` if you want a stricter gate).
+          strictness: block-on-critical

@@ -188,6 +188,35 @@ class ParseFindingsFileErrorPaths(unittest.TestCase):
                 reviewer.parse_findings_file(path)
             self.assertIn("Malformed findings.json", str(ctx.exception))
 
+    def test_malformed_json_can_recover_summary_when_opted_in(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = _write_json(
+                Path(td),
+                (
+                    '{\n'
+                    '  "summary": "Review summary with `markdown`.",\n'
+                    '  "findings": [\n'
+                    '    {"path": "a.py", "line": 1, "body": "bad "quote""}\n'
+                    "  ]\n"
+                    "}\n"
+                ),
+            )
+            result = reviewer.parse_findings_file(
+                path, allow_malformed_summary_fallback=True
+            )
+            self.assertIn("Review summary", result.summary)
+            self.assertIn("summary only", result.summary)
+            self.assertEqual(result.findings, [])
+            self.assertEqual(result.overall_severity, reviewer.SEVERITY_NONE)
+
+    def test_malformed_json_without_summary_still_raises_when_opted_in(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = _write_json(Path(td), "{ this is not JSON")
+            with self.assertRaises(ValueError):
+                reviewer.parse_findings_file(
+                    path, allow_malformed_summary_fallback=True
+                )
+
     def test_root_not_object_raises(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             path = _write_json(Path(td), ["not", "an", "object"])
@@ -302,6 +331,7 @@ class WriteFindingsPromptDirectiveTests(unittest.TestCase):
         self.assertIn("side", directive)
         self.assertIn("RIGHT", directive)
         self.assertIn("LEFT", directive)
+        self.assertIn("json.load", directive)
 
 
 class FindingsContractConstantsTests(unittest.TestCase):

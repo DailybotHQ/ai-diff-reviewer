@@ -607,10 +607,19 @@ class CodexInvocationTests(unittest.TestCase):
     """CodexProvider must escape the default read-only sandbox and pipe the
     prompt via stdin."""
 
-    def _capture(self, *, model: str = "", extra_args: str = "") -> dict[str, Any]:
+    def _capture(
+        self,
+        *,
+        model: str = "",
+        extra_args: str = "",
+        mcp_config_file: str = "",
+    ) -> dict[str, Any]:
         return _capture_provider_call(
             reviewer.CodexProvider(
-                api_key="k", model=model, extra_args=extra_args
+                api_key="k",
+                model=model,
+                extra_args=extra_args,
+                mcp_config_file=mcp_config_file,
             )
         )
 
@@ -648,6 +657,176 @@ class CodexInvocationTests(unittest.TestCase):
             argv.index("--foo"),
             argv.index("-"),
             "extra_args must come before the '-' stdin sentinel.",
+        )
+
+    def test_mcp_config_file_does_not_copy_ignored_json(self) -> None:
+        calls: list[tuple[str, Path]] = []
+
+        def fake_swap(src_file: str, dest_path: Path) -> tuple[Path | None, str | None]:
+            calls.append((src_file, dest_path))
+            return None, None
+
+        orig = reviewer._swap_mcp_config
+        reviewer._swap_mcp_config = fake_swap  # type: ignore[assignment]
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                mcp_src = Path(td) / "mcp.json"
+                mcp_src.write_text('{"mcpServers":{}}', encoding="utf-8")
+                self._capture(mcp_config_file=str(mcp_src))
+        finally:
+            reviewer._swap_mcp_config = orig  # type: ignore[assignment]
+
+        self.assertEqual(
+            calls,
+            [],
+            "Codex ignores JSON MCP files and runs with an isolated CODEX_HOME; "
+            "provider=codex must warn without copying to ~/.codex/mcp.json.",
+        )
+
+
+def _capture_codex_call_with_auth_state(
+    provider: Any,
+) -> dict[str, Any]:
+    """Capture argv/env plus the auth.json state INSIDE `_invoke_cli_agent`.
+
+    The Codex apikey-mode auth.json lives in a `mkdtemp()` directory
+    that is removed after `run_review()` returns. Anything we want to
+    assert about the file must be snapshotted from inside the
+    invocation.
+    """
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(*, argv: list[str], **kwargs: Any) -> Any:
+        captured["argv"] = list(argv)
+        captured["kwargs"] = dict(kwargs)
+        env: dict[str, str] = kwargs.get("env", {})
+        captured["env"] = dict(env)
+        codex_home_str: str = env.get("CODEX_HOME", "")
+        captured["codex_home_present_in_env"] = bool(codex_home_str)
+        if codex_home_str:
+            codex_home: Path = Path(codex_home_str)
+            captured["codex_home_path"] = codex_home
+            auth_path: Path = codex_home / "auth.json"
+            captured["auth_json_exists_at_invocation"] = auth_path.exists()
+            if auth_path.exists():
+                captured["auth_json_content"] = auth_path.read_text(
+                    encoding="utf-8"
+                )
+                captured["auth_json_mode"] = (
+                    auth_path.stat().st_mode & 0o777
+                )
+                captured["codex_home_mode"] = (
+                    codex_home.stat().st_mode & 0o777
+                )
+        return reviewer.ReviewResult(summary="ok", findings=[])
+
+    orig = reviewer._invoke_cli_agent
+    reviewer._invoke_cli_agent = fake_invoke  # type: ignore[assignment]
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            provider.MCP_DEST = workspace / "mcp.json"  # type: ignore[misc]
+            provider.run_review(
+                pr_context=_make_pr_context(),
+                review_instructions="RUBRIC",
+                workspace=workspace,
+                output_dir=workspace,
+            )
+    finally:
+        reviewer._invoke_cli_agent = orig  # type: ignore[assignment]
+    return captured
+
+
+class CodexAuthJsonTests(unittest.TestCase):
+    """Codex CLI 0.122+ ignores OPENAI_API_KEY from env and reads
+    credentials from $CODEX_HOME/auth.json. The provider must
+    materialize that file per-run in an isolated CODEX_HOME."""
+
+    def _capture(self) -> dict[str, Any]:
+        return _capture_codex_call_with_auth_state(
+            reviewer.CodexProvider(api_key="sk-test-abc", model="")
+        )
+
+    def test_codex_home_is_set_in_subprocess_env(self) -> None:
+        c = self._capture()
+        self.assertTrue(
+            c["codex_home_present_in_env"],
+            "CODEX_HOME must be forwarded to the codex subprocess or "
+            "Codex 0.122+ falls back to ~/.codex/ which may hold a "
+            "ChatGPT-mode auth.json that overrides our apikey.",
+        )
+        self.assertTrue(
+            str(c["codex_home_path"]).startswith(tempfile.gettempdir())
+            or "aiprr-codex-" in str(c["codex_home_path"]),
+            f"CODEX_HOME should be an isolated tempdir, got "
+            f"{c['codex_home_path']}.",
+        )
+
+    def test_openai_api_key_is_still_forwarded(self) -> None:
+        # Back-compat: pre-0.122 Codex still reads OPENAI_API_KEY from
+        # env. Forwarding it costs nothing.
+        c = self._capture()
+        self.assertEqual(
+            c["env"].get("OPENAI_API_KEY"),
+            "sk-test-abc",
+            "OPENAI_API_KEY must stay forwarded for back-compat with "
+            "Codex CLI versions before 0.122.",
+        )
+
+    def test_auth_json_exists_at_invocation(self) -> None:
+        c = self._capture()
+        self.assertTrue(
+            c["auth_json_exists_at_invocation"],
+            "$CODEX_HOME/auth.json must exist when codex exec is "
+            "invoked — this is exactly what fixes the 401 "
+            "'Missing bearer or basic authentication in header'.",
+        )
+
+    def test_auth_json_shape_is_apikey_mode(self) -> None:
+        c = self._capture()
+        payload: dict[str, Any] = json.loads(c["auth_json_content"])
+        self.assertIn(
+            "OPENAI_API_KEY",
+            payload,
+            "Codex apikey-mode auth.json must carry the OPENAI_API_KEY "
+            "field verbatim (per the paperclipai/paperclip#5276 fix "
+            "and the clauditor#177 workaround).",
+        )
+        self.assertEqual(
+            payload["OPENAI_API_KEY"],
+            "sk-test-abc",
+            "The materialized auth.json must contain the provider's "
+            "own api_key, not a leftover value from another test.",
+        )
+
+    def test_auth_json_permissions_are_0600(self) -> None:
+        c = self._capture()
+        self.assertEqual(
+            c["auth_json_mode"],
+            0o600,
+            "auth.json must be readable only by the runner user — a "
+            "shared runner could otherwise leak the OPENAI_API_KEY to "
+            "another job's process.",
+        )
+
+    def test_codex_home_directory_permissions_are_0700(self) -> None:
+        c = self._capture()
+        self.assertEqual(
+            c["codex_home_mode"],
+            0o700,
+            "CODEX_HOME must be private to the runner user (tempfile "
+            "already defaults to 0700 on Unix; this test locks it in "
+            "as an invariant).",
+        )
+
+    def test_codex_home_is_removed_after_run_review(self) -> None:
+        c = self._capture()
+        # After run_review returns, the finally-block cleanup must have
+        # removed the tempdir. This is the state the runner is left in.
+        self.assertFalse(
+            c["codex_home_path"].exists(),
+            "CODEX_HOME must be removed after run_review returns so "
+            "self-hosted runners don't accumulate stale api-key state.",
         )
 
 
