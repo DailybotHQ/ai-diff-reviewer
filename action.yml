@@ -1,4 +1,4 @@
-name: 'Dailybot AI PR Reviewer'
+name: 'AI PR Reviewer'
 description: 'Run an LLM-driven code review on every pull request — inline comments, severity-based gating, no infra required.'
 author: 'DailybotHQ'
 
@@ -6,11 +6,16 @@ author: 'DailybotHQ'
 # scopes how the listing tile renders. Purple is closest to the "review" hue
 # in the GitHub UI.
 #
-# The Marketplace listing is titled "Dailybot AI PR Reviewer" — the vendor
-# prefix is required to avoid a slug collision with an unrelated third-party
-# `ai-pr-review` action that squats on the `ai-pull-request-reviewer` slug.
-# Product copy across README, docs, and commit messages continues to use
-# "AI PR Reviewer" (see AGENTS.md § "Marketplace branding stable").
+# Marketplace listing title = "AI PR Reviewer" — slugifies to `ai-pr-reviewer`,
+# matching this repo's slug exactly. There IS a related-but-distinct third-party
+# incumbent titled "AI Pull Request Reviewer" (`appchoose/ai-pr-review`) at the
+# `ai-pull-request-reviewer` slug; our abbreviated form ("PR" vs "Pull Request")
+# yields a different slug, so both listings coexist without collision. Vendor
+# attribution is handled by the `author:` field above — GitHub renders it as
+# "by DailybotHQ" beneath the listing title automatically, so we do NOT prefix
+# the name with "Dailybot" (see AGENTS.md § "Marketplace branding stable" for
+# the rationale — universal / community-tool positioning matches the project
+# reality of MIT + BYOK + zero-backend).
 branding:
   icon: 'check-circle'
   color: 'purple'

@@ -59,7 +59,13 @@ jobs:
             run-policy: always
             model: 'claude-haiku-4-5'
           - provider: claude-code
-            api-key-secret: ANTHROPIC_API_KEY
+            # Dogfood the SUBSCRIPTION auth path: this secret holds a
+            # `claude setup-token` OAuth token (`sk-ant-oat…`), which the
+            # action auto-detects and forwards as CLAUDE_CODE_OAUTH_TOKEN so
+            # the review bills against a Claude Pro/Max plan instead of API
+            # tokens. If the secret is unset, this leg simply skips. Swap
+            # back to ANTHROPIC_API_KEY to exercise the metered-key path.
+            api-key-secret: CLAUDE_CODE_OAUTH_TOKEN
             applied-label: 'self-reviewed:claude-code'
             run-policy: critical
             model: 'claude-haiku-4-5'
