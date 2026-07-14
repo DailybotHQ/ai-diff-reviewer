@@ -19,18 +19,26 @@ name: Self-review
 #      simply absent from the matrix, so it never shows a misleading green
 #      Success; when nothing is eligible the whole review job reports as
 #      **Skipped** (grey). A green leg means it actually reviewed.
-#   4. MERGE GATE — a final `gate` job with a STABLE name (`Self-review gate`)
-#      is the one check you mark as *Required* in branch protection. It FAILS
-#      (red → blocks merge) unless AT LEAST ONE provider leg ran and passed — a
-#      missing `ready` label, a scope error, or every leg failing all block; a
-#      single failing provider does NOT block if another passed. This is
-#      necessary because GitHub's branch protection treats a **Skipped**
-#      required check as *passing* (mergeable) — only *failure* or *pending*
-#      blocks a merge. So the per-leg "Skipped" status (goal 3) stays honest for
-#      humans reading the checks list, while the gate turns "nothing reviewed"
-#      into a hard block. Mark ONLY `Self-review gate` required — never the
-#      dynamic `Self-review — <provider>` leg names (they vary and disappear
-#      when skipped).
+#   4. MERGE GATE (OPT-IN) — a final `gate` job with a STABLE name
+#      (`Self-review gate`) is the one check you mark as *Required* in branch
+#      protection under an opt-in review flow. It ONLY runs when `ready` is on
+#      the PR, and when it runs it FAILS (red → blocks merge) unless AT LEAST
+#      ONE provider leg ran and passed — a scope error, no eligible provider,
+#      or every leg failing all block; a single failing provider does NOT block
+#      if another passed. When `ready` isn't applied the whole gate is
+#      **Skipped** (grey) so a docs/other PR that doesn't want a review carries
+#      no red-X noise in the checks list.
+#
+#      Trade-off: GitHub treats a *skipped* required check as *passing* for
+#      branch protection, so under this opt-in design a PR without `ready`
+#      becomes mergeable without a self-review. If you want "every PR must be
+#      reviewed", pair this required check with a separate rule that enforces
+#      the `ready` label (a lightweight labeler action or a repository ruleset)
+#      — the gate itself is deliberately scoped to "review was requested".
+#
+#      Mark ONLY `Self-review gate` required — never the dynamic
+#      `Self-review — <provider>` leg names (they vary and disappear when
+#      skipped).
 #
 # Why a `scope` job + dynamic matrix instead of a per-leg `if:`? GitHub Actions
 # does not expose the `matrix` context to a job-level `if:`, so a static matrix
@@ -71,10 +79,11 @@ jobs:
     outputs:
       # A JSON array of matrix `include` entries — `[]` when nothing runs.
       matrix: ${{ steps.decide.outputs.matrix }}
-      # Why the matrix is empty, so the gate can print an accurate unblock hint:
-      # `no-ready-label` (apply the label) vs `no-eligible-provider` (label is on
-      # but nothing matched — needs a baseline or a critical surface). Empty when
-      # the matrix is non-empty.
+      # Why the matrix is empty, surfaced in the scope job's log for humans and
+      # consumed by the gate when it runs (`ready` applied path only). Values:
+      # `no-ready-label` (the gate is skipped, no error), `no-eligible-provider`
+      # (gate fails — label is on but nothing matched, needs a baseline or a
+      # critical surface). Empty when the matrix is non-empty.
       empty_reason: ${{ steps.decide.outputs.empty_reason }}
     steps:
       - uses: actions/checkout@v7
@@ -236,14 +245,27 @@ jobs:
           # than one provider on the same PR".
 
   # ---------------------------------------------------------------------------
-  # Stable-named MERGE GATE — mark THIS job (`Self-review gate`) as the required
-  # status check in branch protection. Runs with `if: always()` so it reports on
-  # every event, and FAILS (red → blocks merge) unless AT LEAST ONE provider leg
-  # ran and passed. GitHub treats a *skipped* required check as passing, so the
-  # `self-review` job's Skipped state alone would NOT block a merge — this job is
-  # what turns "no review happened" into a hard block. Its name never varies
-  # (unlike the dynamic `Self-review — <provider>` legs), so it's a reliable
-  # required-check target.
+  # Stable-named MERGE GATE — the one check with a stable name across events
+  # (unlike the dynamic `Self-review — <provider>` legs). Mark THIS job
+  # (`Self-review gate`) as the required status check in branch protection when
+  # you want "if `ready` is applied, a review must pass before merge".
+  #
+  # Runs ONLY when the `ready` label is on the PR (opt-in flow). When `ready`
+  # isn't applied the whole gate is skipped cleanly — GitHub shows a grey
+  # "Skipped" instead of a red X, so a docs/other PR that doesn't want a review
+  # doesn't carry noise in the checks list. Trade-off: GitHub treats a *skipped*
+  # required check as *passing* for branch protection, so under this opt-in
+  # design a PR without `ready` becomes mergeable without a self-review. If you
+  # want to force `ready` on every PR (i.e. every PR must be reviewed), combine
+  # this required check with a separate rule that enforces the `ready` label
+  # (e.g. a lightweight action or a ruleset) — the gate itself is deliberately
+  # scoped to "review was requested".
+  #
+  # When `ready` IS applied and the gate runs, it FAILS (red → blocks merge)
+  # unless AT LEAST ONE provider leg ran and passed. This catches two real
+  # failure modes: (a) `ready` applied but no provider eligible (config bug —
+  # e.g. no `ANTHROPIC_API_KEY` and the diff isn't critical); (b) every eligible
+  # leg failed.
   #
   # Pass condition: ≥1 leg passed — NOT "all legs passed". A single flaky or
   # failing provider must not block a merge when another provider reviewed
@@ -254,7 +276,11 @@ jobs:
   gate:
     name: 'Self-review gate'
     needs: [scope, self-review]
-    if: always()
+    # `always()` so the gate reports its own conclusion regardless of whether
+    # the upstream `self-review` job succeeded, failed, or was skipped —
+    # combined with the label check, this yields "skipped" only when `ready`
+    # isn't applied (grey), and a real pass/fail whenever `ready` is on.
+    if: always() && contains(github.event.pull_request.labels.*.name, 'ready')
     runs-on: ubuntu-latest
     # Override the workflow-wide grant: the gate only needs to read this run's
     # job conclusions; it touches neither the repo contents nor the PR.
@@ -278,17 +304,11 @@ jobs:
             echo "::error::Self-review scope job did not succeed (result=$SCOPE_RESULT). Blocking merge."
             exit 1
           fi
-          # Empty matrix == no leg was eligible. Block, but give an accurate
-          # unblock hint from the reason `scope` recorded — telling someone to
-          # "apply the 'ready' label" when they already did (CLI-only + a
-          # non-critical diff) just sends them in a loop.
+          # Empty matrix == `ready` is applied (we only run under that
+          # condition) but no provider leg was eligible. That's a real config
+          # bug worth surfacing — pediste una review y nada puede reviewearla.
           if [ "${MATRIX:-[]}" = "[]" ]; then
-            case "${EMPTY_REASON:-}" in
-              no-eligible-provider)
-                echo "::error::Self-review did not run — 'ready' is applied but no provider leg was eligible. Configure ANTHROPIC_API_KEY for an always-on baseline, or touch a critical surface (runtime/action/prompt/workflow) so the CLI legs (cursor/codex/claude-code) run. See the scope job's notice for the exact reason." ;;
-              *)
-                echo "::error::Self-review did not run — apply the 'ready' label (remove + re-add to re-run) so a review executes, then merge once it passes." ;;
-            esac
+            echo "::error::Self-review did not run — 'ready' is applied but no provider leg was eligible. Configure ANTHROPIC_API_KEY for an always-on baseline, or touch a critical surface (runtime/action/prompt/workflow) so the CLI legs (cursor/codex/claude-code) run. See the scope job's notice for the exact reason."
             exit 1
           fi
           # Count the `Self-review — <provider>` legs of THIS run that concluded

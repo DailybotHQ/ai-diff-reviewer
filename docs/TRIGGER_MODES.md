@@ -172,6 +172,19 @@ Net effect: the per-leg checks stay **honestly Skipped** for humans reading the 
 
 > **Note — this is the opposite trade-off from "Skipped is fine".** If you *want* un-reviewed PRs to stay freely mergeable (the review is advisory, not a gate), skip technique 3 entirely and don't mark anything required — the Skipped legs are exactly right. Add the gate only when a review must be a *precondition* for merge.
 
+**Variant — opt-in gate (skip when no `ready`).** The strict recipe above blocks *every* PR without `ready`. If you instead want "when a review is requested it must pass, but PRs that don't request a review shouldn't carry a red X in the checks list", add a label check to the gate's `if:` so the gate only runs when `ready` is applied:
+
+```yaml
+  gate:
+    name: 'Self-review gate'
+    needs: [gate-decision, review]
+    # Runs only when a review was requested. Without `ready` the gate is Skipped
+    # (grey) instead of red — no noise on docs/other PRs.
+    if: always() && contains(github.event.pull_request.labels.*.name, 'ready')
+```
+
+Trade-off: since GitHub treats a Skipped required check as *passing*, marking this gate `Required` under the opt-in variant means a PR without `ready` becomes mergeable **without a review**. Pair it with a separate rule that enforces the `ready` label (a lightweight labeler action or a repository ruleset) if you want to force `ready` on every PR. This repo's own [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml) uses this opt-in variant.
+
 ## Interaction with `on:` and `concurrency`
 
 - The workflow's `on:` block is the outer gate — GitHub only fires the runner when the subscribed event matches.

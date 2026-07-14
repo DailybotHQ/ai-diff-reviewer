@@ -14,13 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
-- **Self-review dogfood now has a real merge gate.** Added a stable-named
-  `Self-review gate` job to [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml)
-  that **fails (blocks merge)** when the label-gated review did not run (no
-  `ready` label) — because GitHub's branch protection treats a *Skipped*
-  required check as *passing*, so the per-leg Skipped status alone never blocked
-  a merge. Mark **only** `Self-review gate` as the required check. Documented as
-  a reusable consumer recipe in
+- **Self-review gate is now opt-in per PR** (this repo's dogfood only, no
+  runtime/action.yml change). The `Self-review gate` job in
+  [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) now
+  runs **only when the `ready` label is applied** to the PR — without `ready`
+  the gate is cleanly *Skipped* (grey) instead of red, so a docs/other PR that
+  doesn't request a review no longer carries noise in the checks list. When
+  `ready` **is** applied, the gate still fails hard if no provider leg passed
+  (missing `ANTHROPIC_API_KEY` on a non-critical diff, or every leg failing).
+  Trade-off: GitHub treats a Skipped required check as *passing*, so under this
+  opt-in flow marking the gate `Required` in branch protection lets PRs without
+  `ready` merge without a self-review — combine it with a separate rule that
+  enforces the `ready` label (a labeler action or repository ruleset) if you
+  want to force `ready` on every PR.
+  [`docs/TRIGGER_MODES.md` § "Variant — opt-in gate"](docs/TRIGGER_MODES.md)
+  documents both flavors (strict = fail without label; opt-in = skip without
+  label) so consumers can pick.
+- **Self-review dogfood has a real merge gate.** The stable-named
+  `Self-review gate` job **fails (blocks merge)** when the review ran but no
+  leg passed — because GitHub's branch protection treats a *Skipped* required
+  check as *passing*, so the per-leg Skipped status alone never blocked a
+  merge. Mark **only** `Self-review gate` as the required check (never the
+  dynamic `Self-review — <provider>` legs). Documented as a reusable consumer
+  recipe in
   [`docs/TRIGGER_MODES.md` § "Recipe: run once when labelled `ready`, block merge until it passes"](docs/TRIGGER_MODES.md).
 - **Merge gate passes when ≥1 provider leg passes** (not all). A single flaky or
   failing provider no longer blocks a merge that another provider reviewed
