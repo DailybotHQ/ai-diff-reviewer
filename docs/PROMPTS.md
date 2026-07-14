@@ -188,7 +188,7 @@ npx skills update ai-diff-reviewer
 Put project-specific rules in **one file** that both surfaces read:
 
 ```
-mi-repo/
+my-repo/
 ├── .review/
 │   └── extension.md              ← the extension file (recommended path)
 ├── .github/
