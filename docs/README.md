@@ -19,6 +19,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [STANDARDS.md](STANDARDS.md) | Repository standards: stdlib-only rule, type hints, `AIPRR_` env-var prefix, action.yml stability, commit-message shape. |
 | [DEVELOPMENT_GUIDELINES.md](DEVELOPMENT_GUIDELINES.md) | Python guidelines — style rules and anti-patterns specific to `scripts/reviewer.py`. |
 | [DEVELOPMENT_COMMANDS.md](DEVELOPMENT_COMMANDS.md) | Verbatim command reference (compile check, unittest suite, action.yml validation, local debug). |
+| [RELEASE_RECOVERY.md](RELEASE_RECOVERY.md) | Playbook for recovering from partial-release failures in `auto-release.yml` (tag pushed but sync commit rejected by branch protection, etc.). |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | How the stdlib `unittest` suite is organised, how to run it, and the dogfooding loop via `self-review.yml`. |
 | [SECURITY.md](SECURITY.md) | Secrets handling (`AIPRR_API_KEY`), tool-arg redaction, safe-path resolution, sensitive-data boundaries. |
 | [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md) | How this documentation tree is organised and the rule that keeps it in sync with runtime behaviour. |

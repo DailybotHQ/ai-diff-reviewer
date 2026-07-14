@@ -156,19 +156,34 @@ jobs:
 
           git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
 
-          # When Step 2.5 produced a `chore(release):` commit, push it to
-          # main alongside the tag via `--follow-tags` (annotated tags
-          # reachable from the pushed ref go with it). When no commit was
-          # produced, just push the tag on its own — HEAD equals origin/main
-          # in that case and a branch push would be a no-op error.
           if [ "$HAS_SYNC_COMMIT" = "true" ]; then
-            git push origin HEAD:main --follow-tags
+            # Atomic push: EITHER the sync commit lands on main AND the tag
+            # is created, OR neither happens. Without `--atomic`, a branch
+            # push blocked by branch protection can still succeed on the
+            # tag ref, leaving a partial-release state (tag exists on
+            # remote, but the commit it points to only lives on the runner).
+            # PR #26's initial release run demonstrated this exact failure
+            # (see docs/RELEASE_RECOVERY.md § "Partial release: tag pushed
+            # but sync commit rejected").
+            if ! git push origin --atomic HEAD:main "$NEW_VERSION"; then
+              echo "::error::Atomic push (main + $NEW_VERSION) rejected."
+              echo "::error::Most likely cause: branch protection blocks the automation"
+              echo "::error::token from pushing directly to main. See"
+              echo "::error::docs/RELEASE_RECOVERY.md for both the immediate recovery"
+              echo "::error::playbook and the AUTOMATION_GITHUB_TOKEN bypass configuration"
+              echo "::error::that prevents this."
+              exit 1
+            fi
           else
+            # No sync commit — HEAD equals origin/main, only the tag needs
+            # pushing. Tag pushes are typically not gated by branch
+            # protection rulesets that target branches.
             git push origin "$NEW_VERSION"
           fi
 
           # Move the major alias tag — `--force` is correct: it's a moving
-          # pointer by design so `@v1` tracks the latest v1.x.y.
+          # pointer by design so `@v1` tracks the latest v1.x.y. Tag-only
+          # push; not subject to branch protection.
           git tag -f "$MAJOR_TAG" "$NEW_VERSION"
           git push origin "$MAJOR_TAG" --force
 
