@@ -72,6 +72,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -1394,7 +1395,28 @@ class CursorProvider(AgentRunnerProvider):
 class CodexProvider(AgentRunnerProvider):
     """OpenAI Codex CLI (headless) as an agent-runner provider.
 
-    Auth: `OPENAI_API_KEY` env var (from the consumer's `api-key` input).
+    Auth (Codex CLI 0.122+): Codex **no longer reads** `OPENAI_API_KEY`
+    from the environment. It now reads credentials only from
+    `$CODEX_HOME/auth.json`. Without that file (or with a ChatGPT-mode
+    file present from a prior `codex login`), `codex exec` fails with:
+
+        401 Unauthorized: Missing bearer or basic authentication in header,
+        url: https://api.openai.com/v1/responses
+
+    We materialize an apikey-mode `auth.json` in an isolated per-run
+    `CODEX_HOME` (a `tempfile.mkdtemp()`-managed directory) before each
+    invocation and remove it in a `finally` block. Doing this in an
+    isolated home rather than `~/.codex/` means:
+      - Self-hosted runners with a persistent `~/.codex/` (e.g. from a
+        prior `codex login` in ChatGPT mode) don't override our apikey
+        auth for this run.
+      - We never clobber a user's real credentials on any runner.
+      - Cleanup is fire-and-forget — `shutil.rmtree()` removes the whole
+        temp directory, no per-file backup/restore dance.
+
+    We also still forward `OPENAI_API_KEY` for back-compat with older
+    Codex versions that read it from env (cost: zero).
+
     CLI: `@openai/codex` on npm. Installed by the composite step when
     `provider: codex`.
     """
@@ -1402,6 +1424,36 @@ class CodexProvider(AgentRunnerProvider):
     CLI_NAME: str = "OpenAI Codex"
     CLI_BIN: str = "codex"
     MCP_DEST: Path = Path.home() / ".codex" / "mcp.json"
+    # apikey-mode auth.json shape — validated against Codex CLI 0.122+
+    # via the paperclipai/paperclip#5276 fix and the shell one-liner
+    # `echo '{"OPENAI_API_KEY": "..."}' > $CODEX_HOME/auth.json`
+    # that is documented in the wjduenow/clauditor#177 workaround.
+    AUTH_JSON_FILENAME: str = "auth.json"
+
+    @staticmethod
+    def _materialize_apikey_auth_json(
+        *, codex_home: Path, api_key: str
+    ) -> None:
+        """Write an apikey-mode auth.json under `codex_home`.
+
+        Sets mode `0o600` on the file so a shared runner cannot read it
+        from another process. Fails loudly on OSError — a missing
+        auth.json is exactly the bug we are here to prevent.
+        """
+        codex_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+        auth_path: Path = codex_home / CodexProvider.AUTH_JSON_FILENAME
+        auth_path.write_text(
+            json.dumps({"OPENAI_API_KEY": api_key}),
+            encoding="utf-8",
+        )
+        try:
+            os.chmod(auth_path, 0o600)
+        except OSError as e:
+            log(
+                f"WARNING: could not chmod 0600 on Codex auth.json at "
+                f"{auth_path}: {e}. Continuing — the temp CODEX_HOME "
+                f"parent directory is already 0700."
+            )
 
     def __init__(
         self,
@@ -1457,47 +1509,74 @@ class CodexProvider(AgentRunnerProvider):
                 "config.toml instead."
             )
 
-        mcp_dest, mcp_backup = _swap_mcp_config(
-            self.mcp_config_file, self.MCP_DEST
-        )
+        # Isolated per-run CODEX_HOME with an apikey-mode auth.json —
+        # see the class docstring for the 0.122+ auth breakage rationale.
+        # `mkdtemp` creates a private dir with mode 0700 by default.
+        codex_home: Path = Path(tempfile.mkdtemp(prefix="aiprr-codex-"))
         try:
-            # Codex CLI headless is `codex exec`. Two CI-critical flags:
-            #   --dangerously-bypass-approvals-and-sandbox: `codex exec`
-            #     defaults to a READ-ONLY sandbox, so without this the agent
-            #     physically cannot write findings.json and every review
-            #     fails. This flag is documented as "intended solely for
-            #     running in environments that are externally sandboxed" —
-            #     exactly a GitHub-hosted runner. Mirrors Cursor's
-            #     `--force --trust`.
-            #   `-` positional: read the (diff-carrying, potentially >128 KB)
-            #     prompt from stdin instead of argv, avoiding the OS E2BIG
-            #     single-argument limit.
-            argv: list[str] = [
-                self.CLI_BIN,
-                "exec",
-                "--skip-git-repo-check",
-                "--dangerously-bypass-approvals-and-sandbox",
-            ]
-            if self.model:
-                argv += ["--model", self.model]
-            if self.extra_args:
-                argv += shlex.split(self.extra_args)
-            # The stdin sentinel must be the final positional argument.
-            argv.append("-")
+            self._materialize_apikey_auth_json(
+                codex_home=codex_home, api_key=self.api_key
+            )
 
-            env: dict[str, str] = _build_cli_env(
-                extra_vars={"OPENAI_API_KEY": self.api_key}
+            mcp_dest, mcp_backup = _swap_mcp_config(
+                self.mcp_config_file, self.MCP_DEST
             )
-            return _invoke_cli_agent(
-                argv=argv,
-                workspace=workspace,
-                findings_path=findings_path,
-                env=env,
-                cli_name=self.CLI_NAME,
-                stdin_input=user_prompt,
-            )
+            try:
+                # Codex CLI headless is `codex exec`. Two CI-critical flags:
+                #   --dangerously-bypass-approvals-and-sandbox: `codex exec`
+                #     defaults to a READ-ONLY sandbox, so without this the agent
+                #     physically cannot write findings.json and every review
+                #     fails. This flag is documented as "intended solely for
+                #     running in environments that are externally sandboxed" —
+                #     exactly a GitHub-hosted runner. Mirrors Cursor's
+                #     `--force --trust`.
+                #   `-` positional: read the (diff-carrying, potentially >128 KB)
+                #     prompt from stdin instead of argv, avoiding the OS E2BIG
+                #     single-argument limit.
+                argv: list[str] = [
+                    self.CLI_BIN,
+                    "exec",
+                    "--skip-git-repo-check",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                ]
+                if self.model:
+                    argv += ["--model", self.model]
+                if self.extra_args:
+                    argv += shlex.split(self.extra_args)
+                # The stdin sentinel must be the final positional argument.
+                argv.append("-")
+
+                # CODEX_HOME redirects the CLI to read our apikey auth.json
+                # (0.122+ requirement). OPENAI_API_KEY stays in the env for
+                # back-compat with < 0.122 which read it directly.
+                env: dict[str, str] = _build_cli_env(
+                    extra_vars={
+                        "OPENAI_API_KEY": self.api_key,
+                        "CODEX_HOME": str(codex_home),
+                    }
+                )
+                return _invoke_cli_agent(
+                    argv=argv,
+                    workspace=workspace,
+                    findings_path=findings_path,
+                    env=env,
+                    cli_name=self.CLI_NAME,
+                    stdin_input=user_prompt,
+                )
+            finally:
+                _restore_mcp_config(mcp_dest, mcp_backup)
         finally:
-            _restore_mcp_config(mcp_dest, mcp_backup)
+            # Best-effort cleanup of the isolated CODEX_HOME. The temp dir
+            # is 0700 so cross-process leakage during the run is bounded;
+            # unlink failures here are logged, not fatal.
+            try:
+                shutil.rmtree(codex_home)
+            except OSError as e:  # noqa: BLE001 — cleanup is best-effort
+                log(
+                    f"Could not remove Codex temp home {codex_home}: {e}. "
+                    "The runner is ephemeral; leftover files will be "
+                    "destroyed with the VM."
+                )
 
 
 def build_provider(

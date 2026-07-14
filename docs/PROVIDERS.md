@@ -183,6 +183,24 @@ Each vendor CLI needs three things to work headlessly: the review instructions d
 
 The write-permission flags are load-bearing: the runner is already an isolated ephemeral sandbox, but the CLIs default to gating file writes (Claude Code's permission prompt) or a read-only sandbox (Codex `exec`), either of which silently prevents `findings.json` from being written. See [`docs/SECURITY.md`](SECURITY.md) § "Agent-runner providers: residual exfiltration surface" for the trust-boundary implications of these flags.
 
+### Codex auth model (0.122+ requires `$CODEX_HOME/auth.json`, not `OPENAI_API_KEY`)
+
+Codex CLI 0.122 changed how it reads credentials: it **no longer honours** `OPENAI_API_KEY` from the environment and instead reads credentials **only** from `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`). Without that file — or with a ChatGPT-mode `auth.json` present from a prior interactive `codex login` — `codex exec` fails with:
+
+```
+401 Unauthorized: Missing bearer or basic authentication in header,
+url: https://api.openai.com/v1/responses
+```
+
+`ai-pr-reviewer` handles this automatically. For each Codex invocation the provider:
+
+1. Creates an isolated per-run `CODEX_HOME` via `tempfile.mkdtemp(prefix="aiprr-codex-")` (mode `0700`) — importantly *not* `~/.codex/`, so a self-hosted runner with a persistent ChatGPT-mode session file is never overridden and never clobbered.
+2. Writes an apikey-mode `auth.json` at `$CODEX_HOME/auth.json` (mode `0600`) whose content is `{"OPENAI_API_KEY": "<your key>"}`.
+3. Forwards `CODEX_HOME=<the tempdir>` in the `codex exec` subprocess env alongside `OPENAI_API_KEY` (the latter kept for back-compat with Codex < 0.122).
+4. Removes the entire `CODEX_HOME` in a `finally` block after the invocation returns — success or failure.
+
+No consumer action is required. If you need to override where `auth.json` is materialized (e.g. an air-gapped runner with a pre-seeded `CODEX_HOME`), that is a roadmap item; open an issue.
+
 ### Known limitations of the agent-runner path
 
 - **`agent-max-turns` is not enforced for the CLI providers.** None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag on their current versions, so the input can't be forwarded. When it is set, the run now logs a clear warning (rather than silently ignoring it) — the effective bound is the `CLI_INVOCATION_TIMEOUT` (900 s). For a real cap use `agent-extra-args` with a vendor-native flag (e.g. Claude Code's `--max-budget-usd`).
