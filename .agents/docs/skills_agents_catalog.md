@@ -27,7 +27,33 @@ For the philosophy of why these exist and when to use each, see [docs/AI_AGENT_C
 | [`release`](../skills/release/SKILL.md) | 2 | release | Cutting a new `vX.Y.Z` tag and publishing the GitHub Release. |
 | [`prompt-test`](../skills/prompt-test/SKILL.md) | 2 | evaluate | Producing before/after evidence for a prompt change. Required for any non-trivial `prompts/default.md` PR. |
 | [`add-provider`](../skills/add-provider/SKILL.md) | 3 | scaffold | Scaffolding a new provider — either chat-completions (`Provider`) or agent-runner (`AgentRunnerProvider`). Handles class, registry, defaults, action.yml inputs, install steps, dogfooding matrix legs, examples, docs. |
-| [`deepworkplan`](../skills/deepworkplan/SKILL.md) | 3 | methodology | Structured plan-execute-verify loop for novel/large work. Router + eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`). Backed by the `dwp-*` / `skill-create` / `agent-create` slash commands. |
+| [`deepworkplan`](../skills/deepworkplan/SKILL.md) | 3 | methodology | Structured plan-execute-verify loop for novel/large work. Router + eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`). Backed by the `dwp-*` / `skill-create` / `agent-create` slash commands. **Vendored** from `DailybotHQ/deepworkplan-skill` and pinned via [`skills-lock.json`](../../skills-lock.json). |
+| [`dailybot`](../skills/dailybot/SKILL.md) | 2 | integration | Report progress, check messages, complete check-ins, give kudos, submit forms, and send chat / email through Dailybot. Router + sub-skills (`report`, `messages`, `email`, `health`, `checkin`, `kudos`, `teams`, `forms`, `chat`, `ask`, `env`, `channels`, `conversation`, `workflow`). **Vendored** from `DailybotHQ/agent-skill` and pinned via [`skills-lock.json`](../../skills-lock.json). Wires into the DWP Dailybot addon at [`../skills/deepworkplan/addons/dailybot/`](../skills/deepworkplan/addons/dailybot/). |
+
+### Vendored skills and the lockfile
+
+Two of the skills above are **not authored in this repo** — they are vendored dogfood copies of upstream skill packs, installed and pinned via the [`skills.sh`](https://skills.sh) CLI (`npx skills`). The lockfile at repo root — [`skills-lock.json`](../../skills-lock.json) — records the source repo and a content hash for each vendored skill:
+
+```json
+{
+  "version": 1,
+  "skills": {
+    "dailybot":      { "source": "DailybotHQ/agent-skill",         "sourceType": "github", "skillPath": "skills/dailybot/SKILL.md",      "computedHash": "…" },
+    "deepworkplan":  { "source": "DailybotHQ/deepworkplan-skill",  "sourceType": "github", "skillPath": "skills/deepworkplan/SKILL.md",  "computedHash": "…" }
+  }
+}
+```
+
+Common workflows:
+
+| Task | Command |
+|---|---|
+| Restore vendored skills from the lockfile (fresh clone) | `npx skills experimental_install` |
+| Bump both vendored skills to the latest upstream releases | `npx skills update deepworkplan dailybot` |
+| Re-add a single vendored skill from scratch | `npx skills add DailybotHQ/agent-skill --skill dailybot -y` |
+| List everything currently installed for this project | `npx skills list` |
+
+The four remaining entries (`release`, `prompt-test`, `add-provider`, and the agent personas) are authored directly in this repo and **not** tracked by the lockfile — modifying them just means editing files under `.agents/`.
 
 ## Slash commands
 

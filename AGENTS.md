@@ -28,6 +28,7 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 | Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
+| Dailybot agent skill | [.agents/skills/dailybot/SKILL.md](.agents/skills/dailybot/SKILL.md) |
 
 ---
 
@@ -64,9 +65,10 @@ The product name in user-facing strings is **"AI PR Reviewer"** (capitalised exa
 │   ├── agents/                     # Sub-agent definitions
 │   ├── commands/                   # Slash commands (commit, pr, release, prompt-test, …)
 │   ├── docs/                       # Catalog + agent-targeted docs
-│   ├── skills/                     # Skill definitions (release, prompt-test, add-provider, …)
+│   ├── skills/                     # Skill definitions (release, prompt-test, add-provider, deepworkplan, dailybot, …)
 │   ├── settings.json               # Agent harness settings
 │   └── README.md
+├── skills-lock.json                # skills.sh lockfile pinning vendored skill sources + hashes
 ├── README.md                       # Marketplace-facing readme
 ├── AGENTS.md                       # ← you are here (source of truth)
 ├── CLAUDE.md                       # Symlink → AGENTS.md
@@ -289,6 +291,22 @@ Every event is emitted via the dailybot `report` sub-skill (`dailybot agent upda
 ## Skills & Agents
 
 Reusable **Skills** (slash commands and one-shot workflows) and **Agents** (specialised personas) live in [.agents/skills/](.agents/skills/) and [.agents/agents/](.agents/agents/). The full catalog with tier classification is in [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md).
+
+Two of those skills — [`deepworkplan`](.agents/skills/deepworkplan/SKILL.md) and [`dailybot`](.agents/skills/dailybot/SKILL.md) — are **vendored dogfood copies of upstream skills** (`DailybotHQ/deepworkplan-skill` and `DailybotHQ/agent-skill`), pinned via [`skills-lock.json`](skills-lock.json) at repo root. The lockfile is written by the [`skills.sh`](https://skills.sh) CLI (`npx skills`) and records the exact source repo + content hash for each vendored skill so any contributor can restore the same versions deterministically:
+
+```bash
+# Restore vendored skills from the lockfile (idempotent — no-op if already up to date)
+npx skills experimental_install
+
+# Pull the latest upstream release into the vendored copy + rewrite the hash in the lockfile
+npx skills update deepworkplan dailybot
+
+# Re-add a skill from scratch (e.g. after upstream renames the repo)
+npx skills add DailybotHQ/deepworkplan-skill --skill deepworkplan -y
+npx skills add DailybotHQ/agent-skill --skill dailybot -y
+```
+
+The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the agent personas) are **not** vendored — they're authored directly in this repo and not tracked by the lockfile.
 
 ### Tier Model
 
