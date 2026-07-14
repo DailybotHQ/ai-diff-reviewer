@@ -1,8 +1,19 @@
 # Architecture
 
-A high-level walk-through of how AI Diff Reviewer is put together. For input/output configuration see the [README](../README.md); this doc is for contributors who need a mental model of the runtime.
+A high-level walk-through of how AI Diff Reviewer is put together. For input/output configuration see the [README](../README.md); this doc is for contributors who need a mental model of the runtime and the two surfaces we ship on.
+
+## Two surfaces, one methodology
+
+The product ships on **two disjoint surfaces from the same repository**:
+
+1. **The GitHub Action** — `action.yml` + `scripts/reviewer.py`, invoked by a consumer's workflow via `uses: DailybotHQ/ai-diff-reviewer@v1`. This is the CI-time reviewer.
+2. **The local companion skill** — [`skills/ai-diff-reviewer/`](../skills/ai-diff-reviewer/SKILL.md), installed into a consumer repo via `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer`. This is the pre-push local reviewer that runs inside the developer's coding agent.
+
+Both surfaces share the same [`prompts/default.md`](../prompts/default.md) as the review methodology and the same [`.review/extension.md`](../.review/extension.md) convention for repo-specific overrides. **Two CI invariants keep the parity real**: (a) the `Skills — prompt-sync invariant` job in [`code_check.yml`](../.github/workflows/code_check.yml) fails PRs where the skill's `prompt.md` byte-copy has drifted from `prompts/default.md`; (b) [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy AND bumps the skill's frontmatter `version:` field on every release cut so `@v1.5.0` on both surfaces ships the same review methodology.
 
 ## Topology
+
+### GitHub Action surface
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -10,7 +21,7 @@ A high-level walk-through of how AI Diff Reviewer is put together. For input/out
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  jobs.review.steps:                                         │  │
 │  │    - actions/checkout (fetch-depth: 0)                      │  │
-│  │    - DailybotHQ/ai-diff-reviewer@v1                           │  │
+│  │    - DailybotHQ/ai-diff-reviewer@v1                         │  │
 │  └─────────────────────┬───────────────────────────────────────┘  │
 └────────────────────────┼─────────────────────────────────────────┘
                          │
@@ -18,34 +29,76 @@ A high-level walk-through of how AI Diff Reviewer is put together. For input/out
                          │
 ┌────────────────────────▼─────────────────────────────────────────┐
 │  action.yml                                                      │
-│  ─ Declares public inputs (api-key, prompt-file, strictness…)     │
-│  ─ Declares outputs (review-url, severity, blocked…)              │
-│  ─ Single step: invokes scripts/reviewer.py with AIPRR_* env       │
+│  ─ Declares public inputs (api-key, prompt-file, strictness…)    │
+│  ─ Declares outputs (review-url, severity, blocked…)             │
+│  ─ Modular CLI install steps, one per agent-runner provider      │
+│  ─ Final step: invokes scripts/reviewer.py with AIPRR_* env      │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
 ┌────────────────────────▼─────────────────────────────────────────┐
-│  scripts/reviewer.py  (stdlib only)                               │
+│  scripts/reviewer.py  (stdlib only)                              │
 │                                                                  │
-│   1. Label gate          ── exit 0 if missing                     │
-│   2. Collapse previous   ── GraphQL minimizeComment               │
-│   3. Tracking comment    ── post spinner with marker              │
-│   4. Fetch PR context    ── REST + git diff                       │
-│   5. Agentic loop        ── provider.complete() + tools           │
-│   6. Submit review       ── REST POST /pulls/N/reviews + 422 retry │
-│   7. Apply label         ── if not blocked                        │
-│   8. Strictness gate     ── exit 0 / 2                            │
+│   1. Label gate          ── exit 0 if missing                    │
+│   2. Author-association  ── skip fork PRs from drive-bys          │
+│   3. Collapse previous   ── GraphQL minimizeComment (per-provider)│
+│   4. Tracking comment    ── post spinner with marker             │
+│   5. Fetch PR context    ── REST + git diff                      │
+│   6. Agentic loop        ── provider.complete() + tools (or CLI) │
+│   7. Submit review       ── REST POST /pulls/N/reviews + 422 retry│
+│   8. Apply label         ── if not blocked                       │
+│   9. Strictness gate     ── exit 0 / 2                           │
 │                                                                  │
-│   Provider:  AnthropicProvider (today; OpenAI/Gemini stubs)       │
-│   Tools:     read_file, grep, glob, post_inline_comment,          │
-│              submit_review                                       │
+│   Providers: AnthropicProvider (chat-completions),               │
+│              ClaudeCodeProvider, CursorProvider, CodexProvider   │
+│              (agent-runner)                                      │
+│   Tools:     read_file, grep, glob, post_inline_comment,         │
+│              submit_review, (+ set_pr_description,               │
+│              set_pr_complexity when enabled)                     │
 └──────────────────────────────────────────────────────────────────┘
+```
+
+### Local companion skill surface
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Consumer repo (any repo, coding agent open in editor)           │
+│                                                                  │
+│  Developer: "review the current branch's diff"                   │
+│      │                                                           │
+│      ▼                                                           │
+│  Coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, …)   │
+│    routes to skills/ai-diff-reviewer/ (vendored via npx skills)  │
+│      │                                                           │
+│      ▼                                                           │
+│  skills/ai-diff-reviewer/SKILL.md  (parent skill / router)       │
+│      │                                                           │
+│      ├─ default flow  ── review the current branch's diff        │
+│      │     • load prompt.md (byte-identical to prompts/default.md)│
+│      │     • layer .review/extension.md if present                │
+│      │     • git diff origin/<base>...HEAD                       │
+│      │     • let the agent's LLM produce findings                │
+│      │     • print verdict + table in the same shape CI posts    │
+│      │                                                           │
+│      ├─ generate-extension/  ── author .review/extension.md      │
+│      │     via ≥12 Discovery calls into this repo                │
+│      │                                                           │
+│      ├─ setup/  ── author .github/workflows/pr-review.yml        │
+│      │     via 6-question wizard + setup/reference.md manual     │
+│      │                                                           │
+│      └─ open-pr/  ── author PR title + body via gh pr create     │
+│            /edit; merges with .github/pull_request_template.md   │
+└──────────────────────────────────────────────────────────────────┘
+
+  Note: the skill does NOT ship its own LLM call. Every LLM interaction
+  happens inside the developer's coding agent, using whatever provider
+  that agent is already configured with. Zero API-key round-trip.
 ```
 
 ## Components
 
 ### `action.yml`
 
-The public contract. Declares every input the consumer can set and every output the consumer can read. The composite-action `runs:` block does one thing: invoke `scripts/reviewer.py` with all inputs forwarded as `AIPRR_*` environment variables.
+The public contract. Declares every input the consumer can set and every output the consumer can read. The composite-action `runs:` block invokes `scripts/reviewer.py` with all inputs forwarded as `AIPRR_*` environment variables, preceded by one conditional install step per agent-runner CLI provider (each guarded by `if: inputs.provider == '...'` so `provider: anthropic` pays zero install cost).
 
 **Why composite, not Docker:** Docker actions add ~30s of pull time and a second supply chain (the image registry) for zero benefit — the runtime is stdlib Python, which is already on every `ubuntu-latest` runner.
 
@@ -53,7 +106,7 @@ The public contract. Declares every input the consumer can set and every output 
 
 ### `scripts/reviewer.py`
 
-The entire runtime in one file. Sections, in source order:
+The entire runtime in one file (~4000 LOC, fully type-hinted, stdlib-only). Sections, in source order:
 
 1. **Constants** — every magic number is a named module-level constant. URLs, timeouts, retry delays, severity ranks.
 2. **Logging utilities** — `log()`, `redact_for_log()`, `truncate_for_tool()`. The redaction list is the gate that prevents accidental token leakage in tool-arg logging.
@@ -68,7 +121,32 @@ The entire runtime in one file. Sections, in source order:
 
 ### `prompts/default.md`
 
-The bundled default system prompt. Technology-agnostic; opinionated about severity definitions and what *not* to comment on. Consumers can override entirely via the `prompt-file` input.
+The bundled default system prompt. Technology-agnostic; opinionated about severity definitions and what *not* to comment on. Consumers can override entirely via the `prompt-file` input, or layer stack-specific rules on top via `prompt-extension-file` (CI) / `.review/extension.md` (local skill). The **same file** drives both surfaces — the skill's [`prompt.md`](../skills/ai-diff-reviewer/prompt.md) is a byte-identical copy validated by the `Skills — prompt-sync invariant` CI job.
+
+### `skills/ai-diff-reviewer/` — the local companion skill pack
+
+Sibling deliverable to the GitHub Action. Installed into a consumer repo via `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer` — a one-liner that vendors the skill into `.agents/skills/ai-diff-reviewer/` and records the pinned version in the consumer's `skills-lock.json`.
+
+**Package layout:**
+
+| Path | Purpose |
+|---|---|
+| `SKILL.md` | Parent skill — Open Agent Skills frontmatter + activation triggers + trust boundary + router logic. Runs the default "review the current branch's diff" flow when no sub-skill is invoked. |
+| `prompt.md` | Byte-identical copy of `prompts/default.md`. Sync enforced by CI + auto-release. |
+| `generate-extension/SKILL.md` | Sub-skill that authors a tailored `.review/extension.md` after ≥12 Discovery tool calls into the target repo. |
+| `generate-extension/examples.md` | Condensed sample outputs for the extension generator. |
+| `setup/SKILL.md` | Sub-skill that installs the GitHub Action in a repo that doesn't have it yet — six-question wizard writes `.github/workflows/pr-review.yml` tailored to the repo. |
+| `setup/reference.md` | Reference manual for every `action.yml` input (description, default, choices, per-scenario recommendations) — any coding agent with the skill installed can answer input-reference questions without opening the action source. Must stay in sync with `action.yml` (pre-commit checklist item). |
+| `open-pr/SKILL.md` | Sub-skill that authors a well-documented PR title + body from the current branch's diff and executes via `gh pr create`/`edit`. Merges with `.github/pull_request_template.md` when present. |
+
+**Design constraints for the skill pack:**
+
+1. **Zero LLM calls of its own.** Every LLM interaction happens inside the developer's coding agent. This is what makes the skill zero-cost to install (no API key round-trip) and provider-agnostic.
+2. **Read-only by default.** The parent review flow only reads. Every sub-skill that writes files asks for explicit consent first.
+3. **Non-blocking on failure.** If the skill can't run (missing `gh` CLI, no git remote, corrupted diff), it prints a clear error and exits — the developer's primary work is never blocked.
+4. **Symmetric with the Action.** Same base prompt, same severity model, same `.review/extension.md` extension convention, same output format. Pinning the same version on both surfaces guarantees identical review behaviour.
+
+**Dogfooding contract:** this repo vendors its own skill copy at [`.agents/skills/ai-diff-reviewer/`](../.agents/skills/ai-diff-reviewer/), refreshed automatically by [`auto-release.yml`](../.github/workflows/auto-release.yml) Step 3.5 after every release. A skill change that ships broken `npx skills add` compatibility fails Step 3.5 of the very release that publishes it.
 
 ## Key design decisions
 
@@ -152,16 +230,18 @@ Each install step:
 | Concern | Lives in |
 |---|---|
 | Public input/output names and defaults | `action.yml` |
-| Public input documentation | `README.md` table |
-| Detailed user-facing guides | `docs/STRICTNESS.md`, `docs/PROMPTS.md`, `docs/PROVIDERS.md` |
+| Public input documentation | `README.md` table + `skills/ai-diff-reviewer/setup/reference.md` (both must stay in sync — pre-commit checklist item) |
+| Detailed user-facing guides | `docs/STRICTNESS.md`, `docs/PROMPTS.md`, `docs/PROVIDERS.md`, `docs/TRIGGER_MODES.md`, `docs/PR_METADATA_CHECKS.md` |
 | Runtime constants (limits, timeouts, ranks) | top of `scripts/reviewer.py` |
 | Internal env-var contract (`AIPRR_*`) | `action.yml` `env:` block + `scripts/reviewer.py` `main()` |
 | Provider abstraction | `Provider` + `AgentRunnerProvider` classes + `build_provider()` in `scripts/reviewer.py` |
 | Findings.json parser + schema | `parse_findings_file()` + `write_findings_prompt_directive()` in `scripts/reviewer.py`; user-facing schema in `docs/PROVIDERS.md` |
 | CLI install steps (modular, conditional) | `action.yml` `runs.steps` block, one `if:`-guarded step per CLI provider |
-| Default prompt | `prompts/default.md` |
-| CI strategy | `.github/workflows/ci.yml`, `.github/workflows/self-review.yml` |
-| Release strategy | `.github/workflows/release.yml`, `CHANGELOG.md` |
+| Default prompt (source of truth) | `prompts/default.md`; byte-copy at `skills/ai-diff-reviewer/prompt.md`; sync enforced by `code_check.yml` |
+| Local companion skill | `skills/ai-diff-reviewer/` (source of truth for consumers) + `.agents/skills/ai-diff-reviewer/` (vendored dogfood copy, refreshed by `auto-release.yml` Step 3.5) |
+| Prompt-sync + skill-install CI invariants | `code_check.yml` (`Skills — prompt-sync invariant`), `auto-release.yml` Step 3.5 (`npx skills update` smoke) |
+| CI strategy | `.github/workflows/code_check.yml`, `.github/workflows/self-review.yml` |
+| Release strategy | `.github/workflows/auto-release.yml`, `.github/workflows/release.yml`, `CHANGELOG.md` |
 | AI-agent configuration | `.agents/` (see [AGENTS.md](../AGENTS.md)) |
 
 ## What we deliberately don't have
