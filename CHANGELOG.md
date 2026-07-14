@@ -10,18 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`ai-diff-reviewer` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
 
 ### Changed
-- **Marketplace listing renamed from "AI PR Reviewer" to "AI Diff Reviewer"**
-  (`action.yml` `name:`). The v1.4.x publish attempt failed with
-  `Cannot match an existing action, user or organization name` — GitHub's
-  name-uniqueness rule includes user/org names and the org
-  `github.com/ai-pr-reviewer` (created 2024-01, 0 public repos) name-squats
-  the slug. "AI Diff Reviewer" (slug `ai-diff-reviewer`, verified free) is
-  also more precise: this action reviews the `git diff origin/<base>...HEAD`
-  specifically, not the PR envelope (labels, description, metadata).
-  Repo path stays at `DailybotHQ/ai-pr-reviewer` (historical, published
-  tags v1.0.0–v1.4.2 anchor the URL space), so **`uses:` pins are
-  unaffected** — consumers on `@v1` need no action. The `AIPRR_*` env-var
-  prefix (private contract) stays unchanged. See
+- **Coordinated rename to "AI Diff Reviewer".** Two moves in the same
+  release cycle to unblock the Marketplace publish:
+  - **`action.yml` `name:`** — `'AI PR Reviewer'` → `'AI Diff Reviewer'`
+    (Marketplace slug `ai-diff-reviewer`).
+  - **GitHub repo** — `DailybotHQ/ai-pr-reviewer` →
+    `DailybotHQ/ai-diff-reviewer` (both slugs now match exactly).
+
+  Why: the v1.4.x publish attempt failed with `Cannot match an existing
+  action, user or organization name` — GitHub's name-uniqueness rule
+  includes user/org names and the org `github.com/ai-pr-reviewer`
+  (created 2024-01, 0 public repos) name-squats the slug at the
+  org-namespace level. "AI Diff Reviewer" (verified free at both the
+  Marketplace and org-namespace levels) is also more precise: this
+  action reviews the `git diff origin/<base>...HEAD` specifically,
+  not the PR envelope (labels, description, metadata).
+
+  **Consumer impact — none.** GitHub's permanent 301 redirect on
+  renamed repos keeps every `uses: DailybotHQ/ai-pr-reviewer@v1` pin
+  working transparently. Published tags v1.0.0–v1.4.2 resolve to the
+  new URL automatically. The `AIPRR_*` env-var prefix (private
+  contract) stays unchanged. New README/example copy uses the
+  canonical `DailybotHQ/ai-diff-reviewer` path. See
   [`AGENTS.md § 9`](AGENTS.md) for the full rename decision log.
 - **User-facing branding updated across scripts and docs.** Log prefix
   (`[ai-pr-reviewer]` → `[ai-diff-reviewer]`), HTTP `User-Agent`

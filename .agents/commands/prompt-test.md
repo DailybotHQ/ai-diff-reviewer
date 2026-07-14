@@ -49,9 +49,9 @@ Run the reviewer locally:
 export AIPRR_PROVIDER=anthropic
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY
 export AIPRR_GH_TOKEN=$GITHUB_TOKEN
-export AIPRR_REPO=DailybotHQ/ai-pr-reviewer
+export AIPRR_REPO=DailybotHQ/ai-diff-reviewer
 export AIPRR_PR_NUMBER=<test-pr>
-export AIPRR_HEAD_SHA=$(gh api repos/DailybotHQ/ai-pr-reviewer/pulls/<test-pr> --jq .head.sha)
+export AIPRR_HEAD_SHA=$(gh api repos/DailybotHQ/ai-diff-reviewer/pulls/<test-pr> --jq .head.sha)
 export AIPRR_BASE_REF=main
 export AIPRR_ACTION_PATH=$PWD
 export AIPRR_STRICTNESS=lenient

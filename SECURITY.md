@@ -5,8 +5,8 @@
 **Please do not open a public GitHub issue.** Report vulnerabilities
 privately through GitHub's Security Advisory flow:
 
-**→ [Open a private advisory](https://github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new)**
-(`github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new`)
+**→ [Open a private advisory](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new)**
+(`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`)
 
 The advisory is scoped to a small circle of maintainers and lets us
 collaborate on the fix privately before a coordinated disclosure. You do

@@ -98,7 +98,7 @@ You have three levers, from least to most invasive:
 ### Example — extend the default
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     prompt-extension-file: examples/prompts/python-strict.md
 ```
@@ -106,7 +106,7 @@ You have three levers, from least to most invasive:
 ### Example — full replacement
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     prompt-file: .github/prompts/our_review_rules.md
 ```
@@ -174,10 +174,10 @@ The action ships a companion **local review skill** ([`skills/ai-diff-reviewer/`
 
 ```bash
 # Latest v1.x — vendors into .agents/skills/ai-diff-reviewer/ + adds skills-lock.json entry
-npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v1.4.2 --skill ai-diff-reviewer
 
 # Bump to latest published action tag later
 npx skills update ai-diff-reviewer
@@ -206,7 +206,7 @@ The skill's auto-detection order (first match wins, all silent-fallback):
 Reference the same file from your CI workflow so both surfaces produce the same review:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

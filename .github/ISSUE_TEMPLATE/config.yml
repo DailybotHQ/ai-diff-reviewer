@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or discussion
-    url: https://github.com/DailybotHQ/ai-pr-reviewer/discussions
+    url: https://github.com/DailybotHQ/ai-diff-reviewer/discussions
     about: Ask a question, share an idea, or discuss usage before filing an issue.
   - name: Security report
-    url: https://github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new
+    url: https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new
     about: Report a vulnerability privately (do not open a public issue).

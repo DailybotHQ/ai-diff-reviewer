@@ -38,7 +38,7 @@ python3 -m py_compile scripts/reviewer.py
 export AIPRR_PROVIDER=anthropic
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY
 export AIPRR_GH_TOKEN=$GITHUB_TOKEN
-export AIPRR_REPO=DailybotHQ/ai-pr-reviewer
+export AIPRR_REPO=DailybotHQ/ai-diff-reviewer
 export AIPRR_PR_NUMBER=42
 export AIPRR_HEAD_SHA=$(git rev-parse HEAD)
 export AIPRR_BASE_REF=main

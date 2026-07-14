@@ -5,11 +5,11 @@ Repository conventions that apply across all contributions. For Python-specific 
 ## Branding and naming
 
 - **Product name (user-facing):** "AI Diff Reviewer". Capitalise exactly that way in user-facing copy (README, docs, marketplace listing, error messages, comments visible to users).
-- **Slug:** `ai-pr-reviewer` (lowercase, hyphenated). This is the GitHub repo name and the module identifier in `uses:` lines.
-- **Env-var prefix:** `AIPRR_` (4 characters: AI Diff Reviewer). Internal use only — but stable, because it's referenced in local-dev docs and `CONTRIBUTING.md`.
-- **Marker constant:** `<!-- ai-pr-reviewer-marker -->`. Embedded in the tracking comment so downstream automation can locate the most recent review.
+- **Slug:** `ai-diff-reviewer` (lowercase, hyphenated) — matches both the GitHub repo (`DailybotHQ/ai-diff-reviewer`) and the Marketplace listing. The old `ai-pr-reviewer` slug still resolves via GitHub's permanent 301 redirect on renamed repos, so pre-rename `uses:` pins keep working; new copy-paste examples should always use the canonical slug.
+- **Env-var prefix:** `AIPRR_` (private contract, unchanged across the rename — internal only, but stable because it's referenced in local-dev docs and `CONTRIBUTING.md`).
+- **Marker constants:** `<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`, `<!-- ai-pr-reviewer-provider:… -->`, `<!-- ai-pr-reviewer-description-autocompleted -->` — deliberately preserved as-is across the rename so already-posted PR tracking comments continue to be detected by `collapse-previous` and state-lookup logic.
 
-Don't invent variants like "AI-PR-reviewer", "AIPR", "AiPrReviewer", etc. The single canonical capitalisation makes search consistent across the marketplace, GitHub, and docs.
+Don't invent variants like "AI-Diff-Reviewer", "AIDR", "AiDiffReviewer", "AI PR Reviewer" (the old name), etc. The single canonical capitalisation makes search consistent across the marketplace, GitHub, and docs.
 
 ## Commits
 
@@ -62,7 +62,7 @@ Keep branch names short. Long branches show up in `gh pr view` and break termina
 - **Default prompt:** `prompts/default.md`. Keep one. Don't fork into multiple defaults.
 - **User-facing docs:** `docs/STRICTNESS.md`, `docs/PROMPTS.md`, `docs/PROVIDERS.md`. Each ~300–500 lines max; split if longer.
 - **Contributor docs:** `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, etc.
-- **Examples:** `examples/<scenario>.yml`. One file per scenario, with comments explaining the intent. Keep them runnable as-is — they pin `DailybotHQ/ai-pr-reviewer@v1`.
+- **Examples:** `examples/<scenario>.yml`. One file per scenario, with comments explaining the intent. Keep them runnable as-is — they pin `DailybotHQ/ai-diff-reviewer@v1`.
 - **AI-agent config:** `.agents/`. Edit there, never at `.claude/...`. The `.claude` symlink is for back-compat only.
 
 ## English only

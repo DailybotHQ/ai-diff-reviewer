@@ -6,18 +6,25 @@ author: 'DailybotHQ'
 # scopes how the listing tile renders. Purple is closest to the "review" hue
 # in the GitHub UI.
 #
-# Marketplace listing title = "AI Diff Reviewer" — slugifies to `ai-diff-reviewer`.
-# The obvious slug `ai-pr-reviewer` was taken by an unrelated squatting
+# Marketplace listing title = "AI Diff Reviewer" — slugifies to `ai-diff-reviewer`,
+# which now also matches the GitHub repo slug (`DailybotHQ/ai-diff-reviewer`)
+# exactly. The v1.4.x publish attempt as "AI PR Reviewer" failed because the
+# obvious slug `ai-pr-reviewer` collides with an unrelated squatting
 # organization on GitHub (`github.com/ai-pr-reviewer`, 0 public repos since
-# 2024-01), which blocks Marketplace publish under GitHub's global namespace
-# collision rule ("Name must be unique — cannot match an existing action, user
-# or organization name"). "AI Diff Reviewer" is also more accurate: we review
-# the `git diff origin/<base>...HEAD` specifically, not the PR envelope
-# (labels/description/metadata). Vendor attribution is handled by the `author:`
-# field above — GitHub renders it as "by DailybotHQ" beneath the listing title
-# automatically, so we do NOT prefix the name with "Dailybot" (community-tool
-# positioning matches the MIT + BYOK + zero-backend project reality). See
-# AGENTS.md § "Marketplace branding stable" for the full rename decision log.
+# 2024-01) — GitHub's global namespace collision rule ("Name must be unique —
+# cannot match an existing action, user or organization name") blocks the
+# Marketplace publish. Coordinated rename on 2026-07-14: `action.yml` `name:`
+# to "AI Diff Reviewer" AND `DailybotHQ/ai-pr-reviewer` renamed to
+# `DailybotHQ/ai-diff-reviewer`. GitHub's permanent 301 redirect on renamed
+# repos keeps existing `uses: DailybotHQ/ai-pr-reviewer@v1` pins working;
+# new copy-paste examples always use the canonical URL. "AI Diff Reviewer"
+# is also more accurate: this action reviews the `git diff origin/<base>...HEAD`
+# specifically, not the PR envelope (labels/description/metadata). Vendor
+# attribution is handled by the `author:` field above — GitHub renders it as
+# "by DailybotHQ" beneath the listing title automatically, so we do NOT
+# prefix the name with "Dailybot" (community-tool positioning matches the
+# MIT + BYOK + zero-backend project reality). See AGENTS.md § "Marketplace
+# branding stable" for the full rename decision log.
 branding:
   icon: 'check-circle'
   color: 'purple'

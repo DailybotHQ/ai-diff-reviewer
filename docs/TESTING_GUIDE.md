@@ -100,7 +100,7 @@ export AIPRR_PROVIDER=anthropic             # chat-completions family
 
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY     # or the vendor's key for the family you picked
 export AIPRR_GH_TOKEN=$GITHUB_TOKEN         # PAT with pull-requests:write
-export AIPRR_REPO=DailybotHQ/ai-pr-reviewer
+export AIPRR_REPO=DailybotHQ/ai-diff-reviewer
 export AIPRR_PR_NUMBER=42                   # an existing open PR
 export AIPRR_HEAD_SHA=$(git rev-parse HEAD)
 export AIPRR_BASE_REF=main

@@ -56,7 +56,7 @@ name: Self-review
 # § "Recipe: run once when labelled `ready`, block merge until it passes".
 #
 # The local checkout under `./` is what gets used (instead of a
-# `uses: DailybotHQ/ai-pr-reviewer@v1` pin), so the in-flight changes are what
+# `uses: DailybotHQ/ai-diff-reviewer@v1` pin), so the in-flight changes are what
 # review the in-flight changes.
 
 on:

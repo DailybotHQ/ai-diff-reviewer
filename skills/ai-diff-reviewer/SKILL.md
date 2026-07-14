@@ -1,10 +1,10 @@
 ---
 name: ai-diff-reviewer
-description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-pr-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace) — runs the SAME code-review methodology (severity model, tool-use pattern, output format) against the current branch's changes without opening a pull request. Auto-detects and layers repo-specific `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) on top of the shipped default prompt for full parity with what the CI action would report. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", or is iterating on prompt-extension rules and wants to test them locally before shipping to CI.
+description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace) — runs the SAME code-review methodology (severity model, tool-use pattern, output format) against the current branch's changes without opening a pull request. Auto-detects and layers repo-specific `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) on top of the shipped default prompt for full parity with what the CI action would report. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", or is iterating on prompt-extension rules and wants to test them locally before shipping to CI.
 version: "1.4.2"
-documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
+documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
-metadata: {"openclaw":{"emoji":"🔍","homepage":"https://github.com/DailybotHQ/ai-pr-reviewer","requires":{"anyBins":["git"]}}}
+metadata: {"openclaw":{"emoji":"🔍","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git"]}}}
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -12,7 +12,7 @@ allowed-tools: Bash, Read, Grep, Glob
 
 The **official local companion** to the
 [**AI Diff Reviewer**](https://github.com/marketplace/actions/ai-diff-reviewer)
-GitHub Action (source: [`DailybotHQ/ai-pr-reviewer`](https://github.com/DailybotHQ/ai-pr-reviewer) —
+GitHub Action (source: [`DailybotHQ/ai-diff-reviewer`](https://github.com/DailybotHQ/ai-diff-reviewer) —
 historical repo slug preserved so `uses:` pins stay stable). It gives your
 local coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline,
 Windsurf) the exact same review methodology that the CI action would run
@@ -27,7 +27,7 @@ full push→CI→wait→review cycle.
 release. Pinning `@v1.4.2` for both the action and this skill guarantees
 local ↔ CI parity.
 
-**Source of truth:** <https://github.com/DailybotHQ/ai-pr-reviewer>. License: MIT.
+**Source of truth:** <https://github.com/DailybotHQ/ai-diff-reviewer>. License: MIT.
 
 ---
 
@@ -35,10 +35,10 @@ local ↔ CI parity.
 
 ```bash
 # Latest v1.x
-npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v1.4.2 --skill ai-diff-reviewer
 ```
 
 This vendors the skill into `.agents/skills/ai-diff-reviewer/` in the
@@ -47,7 +47,7 @@ any teammate can restore identical bytes with `npx skills experimental_install`.
 Bump to the latest with `npx skills update ai-diff-reviewer`.
 
 > **Note on the git repo slug.** The repo path stays at
-> `DailybotHQ/ai-pr-reviewer` (historical — published tags v1.0.0–v1.4.2
+> `DailybotHQ/ai-diff-reviewer` (historical — published tags v1.0.0–v1.4.2
 > anchor the URL space). The `--skill ai-diff-reviewer` flag matches the
 > Marketplace listing name; both refer to the same product.
 
@@ -257,7 +257,7 @@ The **same file** should be referenced from your CI workflow's
 
 ```yaml
 # .github/workflows/pr-review.yml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -280,7 +280,7 @@ Example `.review/extension.md`:
 ```
 
 Full authoring guide (structure, tips, worked examples):
-[`docs/PROMPTS.md`](https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/docs/PROMPTS.md).
+[`docs/PROMPTS.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/PROMPTS.md).
 
 ---
 
@@ -300,4 +300,4 @@ Full authoring guide (structure, tips, worked examples):
   get drift. Keep them at the same path.
 - **Bugs, feature requests, and extension patterns to add to the
   starter templates:**
-  [`github.com/DailybotHQ/ai-pr-reviewer/issues`](https://github.com/DailybotHQ/ai-pr-reviewer/issues).
+  [`github.com/DailybotHQ/ai-diff-reviewer/issues`](https://github.com/DailybotHQ/ai-diff-reviewer/issues).

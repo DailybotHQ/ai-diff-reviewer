@@ -43,10 +43,10 @@ Promote the `[Unreleased]` block to a versioned entry:
 Update the comparison links at the bottom:
 
 ```diff
-- [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...HEAD
+- [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.1.0...HEAD
 - [1.1.0]: ...
-+ [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.0...HEAD
-+ [1.2.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...v1.2.0
++ [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.2.0...HEAD
++ [1.2.0]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.1.0...v1.2.0
 + [1.1.0]: ...
 ```
 

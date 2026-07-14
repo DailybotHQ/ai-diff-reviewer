@@ -2,9 +2,9 @@
 name: ai-diff-reviewer-generate-extension
 description: Generates a repo-tailored review-configuration file (`.review/extension.md` by default, or a full replacement `prompt-file` in advanced mode) by inspecting THIS codebase — stack, architecture, security surface, existing conventions, historical pain points — and producing concrete, code-anchored severity overrides. Uses the harness's Read/Grep/Glob tools to gather evidence before writing (12+ tool calls minimum). Default output extends the bundled AI Diff Reviewer prompt with project-specific rules; advanced mode replaces it entirely. Use when the developer says "customize the review for this repo", "generate review rules", "help me write my .review/extension.md", or when the local `ai-diff-reviewer` skill activates on a repo that has no extension file yet.
 version: "1.4.2"
-documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/ai-diff-reviewer/generate-extension/SKILL.md
+documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/generate-extension/SKILL.md
 user-invocable: true
-metadata: {"openclaw":{"emoji":"🎯","homepage":"https://github.com/DailybotHQ/ai-pr-reviewer","requires":{"anyBins":["git"]}}}
+metadata: {"openclaw":{"emoji":"🎯","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git"]}}}
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -190,7 +190,7 @@ what "good review" looks like here.>
 
 Target: 200-500 lines. Follow the 7-section structure from the source
 meta-prompt (kept upstream in
-[`examples/prompts/generate-custom-prompt-meta.md`](https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/examples/prompts/generate-custom-prompt-meta.md)
+[`examples/prompts/generate-custom-prompt-meta.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/examples/prompts/generate-custom-prompt-meta.md)
 for reference):
 
 1. Role & mission (name the stack).
@@ -285,7 +285,7 @@ After writing, tell the developer:
    sync:
    ```yaml
    # .github/workflows/pr-review.yml
-   - uses: DailybotHQ/ai-pr-reviewer@v1
+   - uses: DailybotHQ/ai-diff-reviewer@v1
      with:
        api-key: ${{ secrets.ANTHROPIC_API_KEY }}
        github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -303,7 +303,7 @@ After writing, tell the developer:
 2. Reference the file in your workflow with `prompt-file:` (NOT
    `prompt-extension-file:` — this is the full replacement):
    ```yaml
-   - uses: DailybotHQ/ai-pr-reviewer@v1
+   - uses: DailybotHQ/ai-diff-reviewer@v1
      with:
        api-key: ${{ secrets.ANTHROPIC_API_KEY }}
        github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -329,7 +329,7 @@ After writing, tell the developer:
   missed. A `tune` sub-skill for this iterative refinement is on the
   roadmap.
 - **The 3 stack-flavored worked examples** in
-  [`examples/prompts/`](https://github.com/DailybotHQ/ai-pr-reviewer/tree/main/examples/prompts)
+  [`examples/prompts/`](https://github.com/DailybotHQ/ai-diff-reviewer/tree/main/examples/prompts)
   (`python-strict.md`, `security-focused.md`, `typescript-strict.md`)
   are copy-paste-ready full-replacement prompts. Reference them in
   Discovery as a smell-check: "would this override look at home in

@@ -47,7 +47,7 @@ Then set the shared context:
 
 ```bash
 export AIPRR_GH_TOKEN=$GITHUB_TOKEN
-export AIPRR_REPO=DailybotHQ/ai-pr-reviewer
+export AIPRR_REPO=DailybotHQ/ai-diff-reviewer
 export AIPRR_PR_NUMBER=<n>
 export AIPRR_HEAD_SHA=$(git rev-parse HEAD)
 export AIPRR_BASE_REF=main

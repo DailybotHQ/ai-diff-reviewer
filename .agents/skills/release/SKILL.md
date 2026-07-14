@@ -58,10 +58,10 @@ If anything is wrong, stop and surface the issue to the user. Do not proceed.
 - Update the comparison links at the bottom:
 
 ```diff
-- [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/<prev>...HEAD
+- [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/<prev>...HEAD
 - [<prev-version>]: ...
-+ [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/<new>...HEAD
-+ [<new-version>]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/<prev>...<new>
++ [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/<new>...HEAD
++ [<new-version>]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/<prev>...<new>
 + [<prev-version>]: ...
 ```
 
@@ -112,7 +112,7 @@ If `vX` didn't move to the new tag, check the `release.yml` run — it might hav
 ## Post-release
 
 - Confirm with the user whether to announce. Patch releases usually don't; minor/major usually do.
-- For a major release, double-check that `README.md`'s `uses: DailybotHQ/ai-pr-reviewer@vN` line points at the new major.
+- For a major release, double-check that `README.md`'s `uses: DailybotHQ/ai-diff-reviewer@vN` line points at the new major.
 
 ## Failure modes
 

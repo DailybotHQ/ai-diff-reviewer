@@ -31,7 +31,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: DailybotHQ/ai-pr-reviewer@v1
+      - uses: DailybotHQ/ai-diff-reviewer@v1
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}

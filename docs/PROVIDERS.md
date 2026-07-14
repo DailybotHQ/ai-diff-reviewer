@@ -192,7 +192,7 @@ Codex CLI 0.122 changed how it reads credentials: it **no longer honours** `OPEN
 url: https://api.openai.com/v1/responses
 ```
 
-`ai-pr-reviewer` handles this automatically. For each Codex invocation the provider:
+AI Diff Reviewer handles this automatically. For each Codex invocation the provider:
 
 1. Creates an isolated per-run `CODEX_HOME` via `tempfile.mkdtemp(prefix="aiprr-codex-")` (mode `0700`) — importantly *not* `~/.codex/`, so a self-hosted runner with a persistent ChatGPT-mode session file is never overridden and never clobbered.
 2. Writes an apikey-mode `auth.json` at `$CODEX_HOME/auth.json` (mode `0600`) whose content is `{"OPENAI_API_KEY": "<your key>"}`.
@@ -225,7 +225,7 @@ The `provider: cursor` leg has a materially different cost profile from the chat
 - **`auto` is the built-in default for `provider: cursor`** (empty `model:` resolves to it). You only need to set it explicitly if you want to be self-documenting:
 
   ```yaml
-  - uses: DailybotHQ/ai-pr-reviewer@v1
+  - uses: DailybotHQ/ai-diff-reviewer@v1
     with:
       provider: cursor
       api-key: ${{ secrets.CURSOR_API_KEY }}
@@ -330,7 +330,7 @@ Like Cursor's subscription model, `provider: claude-code` can bill reviews again
    It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
 2. Store that token as a repository secret and pass it as the action's `api-key`:
    ```yaml
-   - uses: DailybotHQ/ai-pr-reviewer@v1
+   - uses: DailybotHQ/ai-diff-reviewer@v1
      with:
        provider: claude-code
        api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token

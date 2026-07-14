@@ -1,7 +1,7 @@
 # Examples — condensed reference for `generate-extension`
 
 Three condensed samples adapted from the shipped worked examples in
-[`examples/prompts/`](https://github.com/DailybotHQ/ai-pr-reviewer/tree/main/examples/prompts).
+[`examples/prompts/`](https://github.com/DailybotHQ/ai-diff-reviewer/tree/main/examples/prompts).
 Use these as **inspiration for the SHAPE and TONE** of an override
 section — do NOT copy-paste the content verbatim into a real repo's
 extension. The goal of `generate-extension` is to produce overrides
@@ -15,7 +15,7 @@ Full versions with usage instructions are in the linked source files.
 ## Sample A — Python / SQLAlchemy / FastAPI extension
 
 Adapted from
-[`examples/prompts/python-strict.md`](https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/examples/prompts/python-strict.md).
+[`examples/prompts/python-strict.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/examples/prompts/python-strict.md).
 
 ```markdown
 ## Severity overrides for this codebase
@@ -59,7 +59,7 @@ Adapted from
 ## Sample B — Security-focused extension (OWASP-anchored)
 
 Adapted from
-[`examples/prompts/security-focused.md`](https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/examples/prompts/security-focused.md).
+[`examples/prompts/security-focused.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/examples/prompts/security-focused.md).
 
 ```markdown
 ## Severity overrides for this codebase (security focus)
@@ -103,7 +103,7 @@ Anchor every finding to the OWASP Top-10 category it belongs to.
 ## Sample C — TypeScript / React extension
 
 Adapted from
-[`examples/prompts/typescript-strict.md`](https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/examples/prompts/typescript-strict.md).
+[`examples/prompts/typescript-strict.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/examples/prompts/typescript-strict.md).
 
 ```markdown
 ## Severity overrides for this codebase (TS + React)

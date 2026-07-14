@@ -15,7 +15,7 @@ discovery-and-generation flow AND is smart enough to:
     `.github/prompts/pr-review.md` (no copy-paste),
   * explain the workflow-file wiring for both modes.
 
-    npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
+    npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 Then just tell your coding agent:
 

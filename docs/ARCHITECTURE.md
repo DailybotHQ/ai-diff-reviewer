@@ -10,7 +10,7 @@ A high-level walk-through of how AI Diff Reviewer is put together. For input/out
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  jobs.review.steps:                                         │  │
 │  │    - actions/checkout (fetch-depth: 0)                      │  │
-│  │    - DailybotHQ/ai-pr-reviewer@v1                           │  │
+│  │    - DailybotHQ/ai-diff-reviewer@v1                           │  │
 │  └─────────────────────┬───────────────────────────────────────┘  │
 └────────────────────────┼─────────────────────────────────────────┘
                          │

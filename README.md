@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # required: the action uses `git diff origin/<base>...HEAD`
-      - uses: DailybotHQ/ai-pr-reviewer@v1
+      - uses: DailybotHQ/ai-diff-reviewer@v1
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -96,7 +96,7 @@ The action ships **four LLM providers** in two families. Pick one with the `prov
 
 ```yaml
 # Cursor — flat-rate on Pro
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     provider: cursor
     api-key: ${{ secrets.CURSOR_API_KEY }}
@@ -105,7 +105,7 @@ The action ships **four LLM providers** in two families. Pick one with the `prov
 
 ```yaml
 # OpenAI Codex
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     provider: codex
     api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -119,7 +119,7 @@ Ready-to-copy workflows per provider: [`examples/provider-claude-code.yml`](exam
 Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. Run `claude setup-token` on a machine logged into your plan, store the resulting `sk-ant-oat…` token as a secret, and pass it as `api-key` — the action auto-detects the prefix and uses subscription auth:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     provider: claude-code
     api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… subscription token
@@ -175,7 +175,7 @@ Consume them in a later step by giving the action step an `id`:
 
 ```yaml
       - id: review
-        uses: DailybotHQ/ai-pr-reviewer@v1
+        uses: DailybotHQ/ai-diff-reviewer@v1
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -238,7 +238,7 @@ Threat model & full detail: [docs/SECURITY.md § "Author-association gate"](docs
 ### Run only on PRs labelled `ready`, apply `pr-reviewed` on success
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -249,7 +249,7 @@ Threat model & full detail: [docs/SECURITY.md § "Author-association gate"](docs
 ### Block merge on critical findings
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -282,7 +282,7 @@ A *failing* required check blocks the merge; a *skipped* one does not. With **se
 ### Custom prompt for your codebase
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -301,7 +301,7 @@ The prompt is the most powerful knob. See [docs/PROMPTS.md](docs/PROMPTS.md) for
 Run only when you signal readiness by adding a label; toggle the label off/on to re-run:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -316,7 +316,7 @@ Full guide: [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md). Want unlabeled PRs t
 Let the reviewer write a first-draft body when the current one is empty or under 50 chars. Guarded by a marker so it never overwrites your edits.
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -330,7 +330,7 @@ Full guide: [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md).
 Apply a `complexity:low/medium/high` label based on cognitive load, files touched, and security surface — not line count:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -342,7 +342,7 @@ Apply a `complexity:low/medium/high` label based on cognitive load, files touche
 If you want the review attributed to a specific bot account (e.g. so branch protection rules can require approval from "anyone except the bot"):
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}   # PAT for your bot account
@@ -353,7 +353,7 @@ If you want the review attributed to a specific bot account (e.g. so branch prot
 For a public repo, external contributors can open PRs — and each review costs real money (~50K–200K tokens per PR). The `author-association` input (default `OWNER,MEMBER,COLLABORATOR`, v1.3.0+) gates reviews on the PR author's relationship to the repo; the field comes from GitHub's payload and cannot be spoofed. Belt-and-suspenders combined with a label gate:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     author-association: 'OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR'  # optional: allow returning contributors
@@ -405,9 +405,9 @@ Run the **same review methodology** the CI action would run — locally, in your
 The companion skill ships alongside the action in this repo (`skills/ai-diff-reviewer/`) and installs into any consumer repo with one command:
 
 ```bash
-npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 # Or pin to a specific action version for reproducibility:
-npx skills add DailybotHQ/ai-pr-reviewer@v1 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v1 --skill ai-diff-reviewer
 ```
 
 `npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` and records the source + content hash in `skills-lock.json` so teammates can restore identical bytes with `npx skills experimental_install`.
@@ -433,7 +433,7 @@ The sub-skill inspects your stack, architecture, security surface, and existing 
 Put your custom overrides in **`.review/extension.md`** at your repo root — the `ai-diff-reviewer` skill auto-detects it, and your CI workflow can reference the same file via the action's `prompt-extension-file:` input:
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
