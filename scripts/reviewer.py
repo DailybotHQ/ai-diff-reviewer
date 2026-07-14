@@ -225,6 +225,18 @@ SEVERITY_RANK: dict[str, int] = {
 # the most recent review unambiguously, even if other bots also comment.
 REVIEW_MARKER: str = "<!-- ai-pr-reviewer-marker -->"
 
+# Per-provider marker embedded in both the tracking comment AND the review
+# body. It lets `collapse-previous` scope to "this provider's own prior
+# artefacts" so several providers can review the same PR concurrently (with
+# one shared GITHUB_TOKEN / bot author) without collapsing each other. See
+# docs/PROVIDERS.md § "Running more than one provider on the same PR".
+PROVIDER_MARKER_PREFIX: str = "<!-- ai-pr-reviewer-provider:"
+
+
+def provider_marker(provider_id: str) -> str:
+    """The HTML-comment marker identifying which provider produced a comment."""
+    return f"{PROVIDER_MARKER_PREFIX} {provider_id} -->"
+
 # Agent-runner findings contract (see AgentRunnerProvider docstring).
 # Each CLI provider writes its findings to `<output_dir>/<FINDINGS_JSON_REL>`
 # before exiting; `parse_findings_file` reads + validates that file.
@@ -647,12 +659,24 @@ def gh_remove_labels_by_prefix(
 
 
 def gh_collapse_previous_reviews(
-    *, token: str, repo: str, pr_number: int, bot_login: str
+    *,
+    token: str,
+    repo: str,
+    pr_number: int,
+    bot_login: str,
+    provider_marker_text: str = "",
 ) -> int:
     """Mark prior bot reviews/comments as `OUTDATED` via GraphQL.
 
     Returns the number of nodes minimized. Best-effort: failures are logged
     but the review still proceeds.
+
+    When `provider_marker_text` is non-empty, collapsing is **scoped to this
+    provider**: only bot-authored comments/reviews whose body contains that
+    marker are minimized. This lets several providers review the same PR
+    concurrently (sharing one bot author) without collapsing each other. When
+    it is empty, the legacy behaviour applies — every non-minimized comment/
+    review by `bot_login` is collapsed.
 
     `GH_CONNECTION_PAGE_SIZE` (100) is GitHub's hard limit on the `comments`
     and `reviews` connections of a PullRequest. If a PR ever exceeds that many
@@ -666,12 +690,13 @@ def gh_collapse_previous_reviews(
         "  repository(owner:$owner, name:$repo) {"
         "    pullRequest(number:$number) {"
         "      comments(first:$page) {"
-        "        nodes { id isMinimized author { login } }"
+        "        nodes { id isMinimized body author { login } }"
         "      }"
         "      reviews(first:$page) {"
         "        nodes {"
         "          id"
         "          isMinimized"
+        "          body"
         "          author { login }"
         "          comments(first:$page) { nodes { id isMinimized } }"
         "        }"
@@ -715,14 +740,26 @@ def gh_collapse_previous_reviews(
     def _matches(author_login: str) -> bool:
         return author_login in accepted_logins
 
+    def _in_scope(body: str) -> bool:
+        """Provider scoping: in scoped mode (`provider_marker_text` set),
+        only artefacts carrying this provider's marker are in scope. In
+        legacy mode (empty), every bot-authored artefact is in scope."""
+        if not provider_marker_text:
+            return True
+        return provider_marker_text in (body or "")
+
     targets: list[str] = []
     for c in issue_comments:
         author_login: str = str((c.get("author") or {}).get("login") or "")
-        if _matches(author_login) and not c.get("isMinimized", False):
+        if (
+            _matches(author_login)
+            and not c.get("isMinimized", False)
+            and _in_scope(str(c.get("body") or ""))
+        ):
             targets.append(c["id"])
     for r in reviews:
         author_login = str((r.get("author") or {}).get("login") or "")
-        if _matches(author_login):
+        if _matches(author_login) and _in_scope(str(r.get("body") or "")):
             if not r.get("isMinimized", False):
                 targets.append(r["id"])
             inline: list[dict[str, Any]] = (
@@ -1444,6 +1481,20 @@ def build_provider(
     # and mcp_config_file come from the AIPRR_* env vars set by action.yml.
     extra_args: str = os.environ.get("AIPRR_AGENT_EXTRA_ARGS", "").strip()
     mcp_config: str = os.environ.get("AIPRR_MCP_CONFIG_FILE", "").strip()
+    # `agent-max-turns` has no universal enforcement point: none of the
+    # shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag
+    # on their current versions. Rather than silently ignore the input, warn
+    # so the consumer knows the effective bound is CLI_INVOCATION_TIMEOUT and
+    # can use `agent-extra-args` for a vendor-native limit. See docs/PROVIDERS.md.
+    agent_max_turns: str = os.environ.get("AIPRR_AGENT_MAX_TURNS", "").strip()
+    if agent_max_turns:
+        log(
+            f"WARNING: agent-max-turns={agent_max_turns!r} is set but is not "
+            f"forwarded to the {provider_id} CLI — no turn-cap flag is "
+            f"available on the shipping CLI. The effective bound is the "
+            f"{CLI_INVOCATION_TIMEOUT}s invocation timeout. Use agent-extra-args "
+            "for a vendor-native limit (e.g. Claude Code's --max-budget-usd)."
+        )
     if provider_id == "claude-code":
         return ClaudeCodeProvider(
             api_key=api_key,
@@ -2883,8 +2934,17 @@ def drive_review(
 # ---------------------------------------------------------------------------
 
 
+def _tracking_marker_header(provider: str) -> str:
+    """First line(s) of every tracking comment: the review marker, plus the
+    per-provider marker when `provider` is set (enables provider-scoped
+    `collapse-previous`)."""
+    if provider:
+        return f"{REVIEW_MARKER}\n{provider_marker(provider)}"
+    return REVIEW_MARKER
+
+
 def render_tracking_body_working(
-    head_sha: str, *, collapse_previous: bool
+    head_sha: str, *, collapse_previous: bool, provider: str = ""
 ) -> str:
     """The initial 'Working…' tracking-comment body."""
     collapsed_note: str = (
@@ -2893,7 +2953,7 @@ def render_tracking_body_working(
         else ""
     )
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — _Working…_\n\n"
         f"Full SHA: `{head_sha}`\n\n"
         f"Reviewing the latest pushed changes.{collapsed_note}"
@@ -2909,6 +2969,7 @@ def render_tracking_body_done(
     severity: str,
     blocked: bool,
     block_reason: str,
+    provider: str = "",
 ) -> str:
     """The terminal 'done' tracking-comment body."""
     status_emoji: str = "✅" if not blocked else "🚫"
@@ -2928,7 +2989,7 @@ def render_tracking_body_done(
     else:
         inline_line = f"_{inline_attached} inline comment(s) attached._"
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — {status_emoji} done\n\n"
         f"[View review →]({review_url})\n\n"
         f"**Highest severity:** `{severity}`{block_line}\n\n"
@@ -2936,7 +2997,9 @@ def render_tracking_body_done(
     )
 
 
-def render_tracking_body_failed(*, head_sha: str, error: str) -> str:
+def render_tracking_body_failed(
+    *, head_sha: str, error: str, provider: str = ""
+) -> str:
     """The terminal 'failed' tracking-comment body.
 
     The error text can carry CLI stderr/stdout tails (see `_invoke_cli_agent`),
@@ -2945,7 +3008,7 @@ def render_tracking_body_failed(*, head_sha: str, error: str) -> str:
     """
     safe_error: str = scrub_secrets(error)[:MAX_TRACKING_ERROR_CHARS]
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — ❌ failed\n\n"
         f"```\n{safe_error}\n```\n\n"
         "_See the workflow logs for the full traceback._"
@@ -3162,6 +3225,9 @@ def main() -> int:
                 repo=repo,
                 pr_number=pr_number,
                 bot_login=bot_login,
+                # Scope collapsing to THIS provider's prior artefacts so
+                # concurrent multi-provider reviews don't collapse each other.
+                provider_marker_text=provider_marker(provider_id),
             )
         except Exception as e:  # noqa: BLE001
             log(f"Collapse-previous step failed (non-fatal): {e}")
@@ -3177,7 +3243,9 @@ def main() -> int:
                 repo=repo,
                 pr_number=pr_number,
                 body=render_tracking_body_working(
-                    head_sha, collapse_previous=collapse_previous
+                    head_sha,
+                    collapse_previous=collapse_previous,
+                    provider=provider_id,
                 ),
             )
             log(f"Tracking comment id: {tracking_id}")
@@ -3212,6 +3280,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not read prompt file: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3235,6 +3304,7 @@ def main() -> int:
                 body=render_tracking_body_failed(
                     head_sha=head_sha,
                     error=f"Could not read prompt extension file: {e}",
+                    provider=provider_id,
                 ),
             )
             write_all_outputs(skipped=False)
@@ -3352,6 +3422,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"{type(e).__name__}: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3396,6 +3467,11 @@ def main() -> int:
     for _finding in result.findings:
         _finding.body = scrub_secrets(_finding.body)
 
+    # Embed the provider marker (an invisible HTML comment) at the top of the
+    # review body so `collapse-previous` can scope to this provider's own
+    # prior reviews — see provider_marker / gh_collapse_previous_reviews.
+    result.summary = f"{provider_marker(provider_id)}\n\n{result.summary}"
+
     log(
         f"Submitting review: {len(result.findings)} inline comment(s), "
         f"{len(result.summary)} chars of summary"
@@ -3418,6 +3494,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not post the review: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3516,6 +3593,7 @@ def main() -> int:
         severity=severity,
         blocked=blocked,
         block_reason=block_reason,
+        provider=provider_id,
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".

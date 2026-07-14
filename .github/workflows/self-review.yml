@@ -80,15 +80,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           strictness: lenient
           applied-label: ${{ matrix.applied-label }}
-          # All four legs share one GITHUB_TOKEN → one bot author, and
-          # `collapse-previous` minimizes *every* prior comment/review by that
-          # author. With the default `true`, the four providers running in
-          # parallel would collapse each other's reviews, leaving only the
-          # last leg visible — defeating the comparative-dogfooding goal.
-          # Turn it off here so all four reviews coexist. (Single-provider
-          # consumers should keep the default `true`; see docs/PROVIDERS.md
-          # § "Running more than one provider on the same PR".)
-          collapse-previous: false
+          # `collapse-previous` is left at its default `true`. Even though all
+          # four legs share one GITHUB_TOKEN (one bot author), collapsing is
+          # now scoped per-provider (each review/tracking comment carries a
+          # provider marker), so each leg only collapses its OWN prior-push
+          # artefacts — the four providers coexist on the PR and each keeps a
+          # single live review. See docs/PROVIDERS.md § "Running more than one
+          # provider on the same PR".
           # The action's own prompt is the bundled default — no override
           # needed; that's the prompt we ship to users, so dogfooding it
           # is the right thing.

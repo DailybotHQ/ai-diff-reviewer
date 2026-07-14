@@ -185,8 +185,8 @@ The write-permission flags are load-bearing: the runner is already an isolated e
 
 ### Known limitations of the agent-runner path
 
-- **`agent-max-turns` is not yet wired for the CLI providers.** The input exists in `action.yml` but the CLI invocations do not currently pass a turn cap — the only bound on a run is the `CLI_INVOCATION_TIMEOUT` (900 s). Cap cost via PR scope / the timeout for now.
-- **`mcp-config-file` passthrough is verified for Cursor only.** For `claude-code` (needs `--mcp-config <file>`) and `codex` (configures MCP via `~/.codex/config.toml`, not a JSON file), the copied config may be ignored. Prefer `provider: cursor` if you rely on MCP passthrough, or supply the vendor-native flag via `agent-extra-args`.
+- **`agent-max-turns` is not enforced for the CLI providers.** None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag on their current versions, so the input can't be forwarded. When it is set, the run now logs a clear warning (rather than silently ignoring it) — the effective bound is the `CLI_INVOCATION_TIMEOUT` (900 s). For a real cap use `agent-extra-args` with a vendor-native flag (e.g. Claude Code's `--max-budget-usd`).
+- **`mcp-config-file` passthrough:** works for **Cursor** (`~/.cursor/mcp.json` + `--approve-mcps`) and **Claude Code** (passed via `--mcp-config <file>`). For **Codex** it does **not** take effect — Codex configures MCP via `~/.codex/config.toml`, not a JSON file — and the run warns accordingly; supply MCP config via `agent-extra-args` (`-c mcp_servers...`) or a preconfigured `config.toml`.
 
 ---
 
@@ -247,18 +247,19 @@ Every run logs the resolved model + argv (with the API key redacted). Combine th
 
 ## Running more than one provider on the same PR
 
-**In production, pick ONE provider per PR.** The action is designed for a single review per push, and running several providers against the same PR needs care because of how `collapse-previous` works.
+Most consumers run **one provider per PR** — that's the common case and needs no special setup. But you *can* run several providers side-by-side on the same PR, and it works correctly out of the box.
 
-`collapse-previous` (default `true`) minimizes **every** prior comment and review authored by the same bot identity — it keys on the author login, not on which provider produced the comment. When you run multiple provider jobs on one PR and they all use the same `github-token` (`secrets.GITHUB_TOKEN` → author `github-actions[bot]`), each job's collapse step will mark the *other* providers' reviews as `OUTDATED`. With the jobs running in parallel (as in a matrix), whichever one collapses last wins, and you end up with only one live review instead of several.
+**`collapse-previous` is scoped per-provider.** Every review body and tracking comment carries an invisible per-provider marker (`<!-- ai-pr-reviewer-provider: <id> -->`). When `collapse-previous` runs (default `true`), it only minimizes *this provider's own* prior artefacts — it will **not** collapse a different provider's review, even though all jobs share one `github-token` (author `github-actions[bot]`). So each provider keeps a single live review, and re-running a provider outdates only its own previous run.
 
-If you genuinely want several providers to comment side-by-side on the same PR, do **all** of the following:
+To run multiple providers cleanly:
 
-1. **Set `collapse-previous: false`** on every provider job so they stop collapsing each other. (Trade-off: prior-push reviews are no longer auto-outdated — they accumulate.)
+1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
 2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.
-3. Consider a distinct bot identity (a separate PAT) per provider if you also want each provider to collapse *its own* prior runs without touching the others — with a shared `GITHUB_TOKEN` that isn't possible today.
 
-This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses approach (1)+(2) to dogfood all four providers on every PR without them hiding each other.
+This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) dogfoods all four providers on every PR this way.
 
 > **Passing multiple provider API keys** (e.g. both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` as repo secrets) is fine and does **not** cause cross-contamination: each job forwards only its own provider's key to the CLI subprocess (`_build_cli_env` scrubs everything else), and a single action invocation uses exactly one `provider` + one `api-key`. There is no "both keys in one run" mode — the keys only coexist as separate secrets consumed by separate jobs.
 
-> **Per-provider collapse scoping is a known follow-up.** A future release may embed a provider tag in the review/tracking markers so `collapse-previous` can scope to "this provider's prior runs only", making multi-provider PRs work with the default `true`. Until then, use the manual steps above.
+> **Transition note.** A review posted by a version **before** per-provider scoping shipped has no provider marker, so the first run after upgrading won't auto-collapse that one pre-upgrade review (it stays live until you manually mark it outdated). Every review from the upgraded version onward collapses correctly.
+
+> **Scoping keys on the marker, not the author.** A useful side effect: `collapse-previous` no longer collapses unrelated `github-actions[bot]` comments (a coverage bot, a labeler) — only comments carrying this action's provider marker are ever minimized.
