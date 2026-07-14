@@ -11,6 +11,10 @@ The `trigger-mode` input controls whether the review fires for a given webhook e
 
 The mode + `label-gate` combination is authoritative — the workflow's own `on:` block determines which events reach the runner in the first place, so pair the two carefully.
 
+> **Label matching is case-insensitive.** `label-gate: ready` is satisfied by a `ready`, `Ready`, or `READY` label (comparison is lowercased and whitespace-trimmed), across all label-based modes — so you don't have to match the exact casing of the label as stored on GitHub.
+
+> **`author-association` runs before `trigger-mode`.** The author-association gate (default write-tier: `OWNER,MEMBER,COLLABORATOR`) is evaluated *first* — before any label/trigger logic and before the PR diff is fetched — so an author who isn't in the whitelist is skipped with **zero API cost** regardless of `trigger-mode`. See [SECURITY.md § "Author-association gate"](SECURITY.md). The two gates compose (AND): a review runs only when the author is allowed **and** the trigger fires.
+
 ## Choosing the right mode
 
 ```
