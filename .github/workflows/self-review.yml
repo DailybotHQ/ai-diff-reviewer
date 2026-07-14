@@ -56,7 +56,7 @@ name: Self-review
 # § "Recipe: run once when labelled `ready`, block merge until it passes".
 #
 # The local checkout under `./` is what gets used (instead of a
-# `uses: DailybotHQ/ai-pr-reviewer@v1` pin), so the in-flight changes are what
+# `uses: DailybotHQ/ai-diff-reviewer@v1` pin), so the in-flight changes are what
 # review the in-flight changes.
 
 on:
@@ -204,7 +204,7 @@ jobs:
           # the GitHub API in-process; the CLI never needs git credentials.
           persist-credentials: false
 
-      - name: Run AI PR Reviewer (local checkout, provider=${{ matrix.provider }})
+      - name: Run AI Diff Reviewer (local checkout, provider=${{ matrix.provider }})
         # `./` resolves to this repo's checkout — i.e. we use the version of the
         # action this PR proposes, not the published one. Canonical CI setup.
         uses: ./

@@ -1,12 +1,12 @@
 # Security
 
-This document covers the security model of AI PR Reviewer — the runtime, the supply chain, the secrets, the trust boundary with the LLM, and how to report vulnerabilities.
+This document covers the security model of AI Diff Reviewer — the runtime, the supply chain, the secrets, the trust boundary with the LLM, and how to report vulnerabilities.
 
 ## Reporting a vulnerability
 
 Please **do not** open a public GitHub issue. Report vulnerabilities privately through GitHub's Security Advisory flow — any GitHub account can submit:
 
-- Open a private advisory at [`github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new`](https://github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new).
+- Open a private advisory at [`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new).
 
 We aim to acknowledge within 48 hours and ship a fix or workaround within 14 days for high-severity issues.
 

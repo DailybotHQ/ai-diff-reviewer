@@ -1,4 +1,4 @@
-# Product Spec — AI PR Reviewer
+# Product Spec — AI Diff Reviewer
 
 ## What it is
 

@@ -4,7 +4,7 @@ description: Cut a new vX.Y.Z release tag and publish a GitHub Release
 
 # Release Cutter
 
-Cut a new SemVer release of AI PR Reviewer. The `release.yml` workflow then auto-updates the moving major tag (e.g. `v1`) so consumers pinning `@v1` pick up the new version automatically.
+Cut a new SemVer release of AI Diff Reviewer. The `release.yml` workflow then auto-updates the moving major tag (e.g. `v1`) so consumers pinning `@v1` pick up the new version automatically.
 
 ## Pre-flight
 
@@ -43,10 +43,10 @@ Promote the `[Unreleased]` block to a versioned entry:
 Update the comparison links at the bottom:
 
 ```diff
-- [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...HEAD
+- [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.1.0...HEAD
 - [1.1.0]: ...
-+ [Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.0...HEAD
-+ [1.2.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...v1.2.0
++ [Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.2.0...HEAD
++ [1.2.0]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.1.0...v1.2.0
 + [1.1.0]: ...
 ```
 

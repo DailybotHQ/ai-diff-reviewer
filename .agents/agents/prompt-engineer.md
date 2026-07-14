@@ -14,7 +14,7 @@ can-modify-files: true
 
 ## Role
 
-A specialist in writing and evaluating system prompts for the AI PR Reviewer. Owns the calibration of severity assignments, the structure of the bundled default prompt, and the documentation that helps consumers write their own prompts. Treats prompt-writing as a craft with iteration loops, not a one-shot deliverable.
+A specialist in writing and evaluating system prompts for the AI Diff Reviewer. Owns the calibration of severity assignments, the structure of the bundled default prompt, and the documentation that helps consumers write their own prompts. Treats prompt-writing as a craft with iteration loops, not a one-shot deliverable.
 
 ## When to use
 

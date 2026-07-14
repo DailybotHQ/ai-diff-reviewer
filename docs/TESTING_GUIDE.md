@@ -1,6 +1,6 @@
 # Testing Guide
 
-The testing strategy for AI PR Reviewer is deliberately pragmatic. The runtime is a single stdlib script whose meaningful surface is integration with two categories of external systems (LLM providers and the GitHub API) — neither of which can be mocked *end-to-end* without recreating the API contracts ourselves. So the bar has three tiers:
+The testing strategy for AI Diff Reviewer is deliberately pragmatic. The runtime is a single stdlib script whose meaningful surface is integration with two categories of external systems (LLM providers and the GitHub API) — neither of which can be mocked *end-to-end* without recreating the API contracts ourselves. So the bar has three tiers:
 
 1. **Static check.** Does the script parse and compile?
 2. **Unit tests.** Do the pure-logic paths (parsers, dispatch, subprocess boundary, roundtrip serialization) behave correctly on a vanilla runner with nothing installed?
@@ -100,7 +100,7 @@ export AIPRR_PROVIDER=anthropic             # chat-completions family
 
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY     # or the vendor's key for the family you picked
 export AIPRR_GH_TOKEN=$GITHUB_TOKEN         # PAT with pull-requests:write
-export AIPRR_REPO=DailybotHQ/ai-pr-reviewer
+export AIPRR_REPO=DailybotHQ/ai-diff-reviewer
 export AIPRR_PR_NUMBER=42                   # an existing open PR
 export AIPRR_HEAD_SHA=$(git rev-parse HEAD)
 export AIPRR_BASE_REF=main

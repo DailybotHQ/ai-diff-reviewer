@@ -1,6 +1,6 @@
 # Performance
 
-> Budget, caps, and cost drivers of the AI PR Reviewer runtime. Every constant referenced here is defined at the top of [`scripts/reviewer.py`](../scripts/reviewer.py) — treat that file as the source of truth; this doc explains **why** the numbers are what they are.
+> Budget, caps, and cost drivers of the AI Diff Reviewer runtime. Every constant referenced here is defined at the top of [`scripts/reviewer.py`](../scripts/reviewer.py) — treat that file as the source of truth; this doc explains **why** the numbers are what they are.
 
 ## The performance shape
 

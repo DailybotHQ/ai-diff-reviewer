@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to AI PR Reviewer! Keep PRs small and focused
+Thanks for contributing to AI Diff Reviewer! Keep PRs small and focused
 (1–3 related changes). See CONTRIBUTING.md and AGENTS.md for the full rules.
 -->
 

@@ -65,6 +65,47 @@ jobs:
       - name: Step 1 - 🧪 Run the unit-test suite (stdlib unittest)
         run: python3 -m unittest discover -s tests -v
 
+  skills-frontmatter:
+    name: 'Skills — SKILL.md frontmatter validation'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Step 0 - 🐍 Set up Python ${{ '3.10' }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Step 1 - 📦 Install validator tooling
+        # CI-only — PyYAML never enters the runtime (AGENTS.md Rule #2).
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Step 2 - ✅ Validate every skills/**/SKILL.md against the OAS contract
+        run: python3 scripts/validate-frontmatter.py
+
+  skills-prompt-sync:
+    name: 'Skills — prompt-sync invariant'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify skills/ai-diff-reviewer/prompt.md is byte-identical to prompts/default.md
+        # The action ships `prompts/default.md`; the local companion skill
+        # ships its own byte-copy at `skills/ai-diff-reviewer/prompt.md` so the
+        # skill remains self-contained per the Open Agent Skills convention
+        # (all files inside skills/<name>/). Auto-release.yml keeps them in
+        # sync on every release; this check catches drift on PRs BEFORE
+        # merge so main is never in an inconsistent state.
+        run: |
+          if ! diff -q prompts/default.md skills/ai-diff-reviewer/prompt.md; then
+            echo "::error::skills/ai-diff-reviewer/prompt.md is out of sync with prompts/default.md."
+            echo "::error::To fix locally, run: cp prompts/default.md skills/ai-diff-reviewer/prompt.md"
+            echo "::error::(auto-release.yml will re-sync on the next merge to main, but"
+            echo "::error:: main should never be published in an inconsistent state.)"
+            exit 1
+          fi
+          echo "OK: skills/ai-diff-reviewer/prompt.md matches prompts/default.md"
+
   cli-install-smoke:
     name: 'CLI install smoke — ${{ matrix.provider }}'
     needs: validate

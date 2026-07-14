@@ -192,7 +192,7 @@ Codex CLI 0.122 changed how it reads credentials: it **no longer honours** `OPEN
 url: https://api.openai.com/v1/responses
 ```
 
-`ai-pr-reviewer` handles this automatically. For each Codex invocation the provider:
+AI Diff Reviewer handles this automatically. For each Codex invocation the provider:
 
 1. Creates an isolated per-run `CODEX_HOME` via `tempfile.mkdtemp(prefix="aiprr-codex-")` (mode `0700`) — importantly *not* `~/.codex/`, so a self-hosted runner with a persistent ChatGPT-mode session file is never overridden and never clobbered.
 2. Writes an apikey-mode `auth.json` at `$CODEX_HOME/auth.json` (mode `0600`) whose content is `{"OPENAI_API_KEY": "<your key>"}`.
@@ -205,7 +205,7 @@ No consumer action is required. If you need to override where `auth.json` is mat
 
 - **`agent-max-turns` is not enforced for the CLI providers.** None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag on their current versions, so the input can't be forwarded. When it is set, the run now logs a clear warning (rather than silently ignoring it) — the effective bound is the `CLI_INVOCATION_TIMEOUT` (900 s). For a real cap use `agent-extra-args` with a vendor-native flag (e.g. Claude Code's `--max-budget-usd`).
 - **`mcp-config-file` passthrough:** works for **Cursor** (`~/.cursor/mcp.json` + `--approve-mcps`) and **Claude Code** (passed via `--mcp-config <file>`). For **Codex** it does **not** take effect — Codex configures MCP via `config.toml`, not a JSON file — and the run warns accordingly without copying the ignored JSON file into `~/.codex` or the isolated per-run `CODEX_HOME`; supply MCP config via `agent-extra-args` (`-c mcp_servers...`) or a preconfigured `config.toml`.
-- **Malformed CLI JSON fallback:** agent-runner providers are instructed to write strict JSON to `.aiprr/findings.json`. If a CLI exits successfully but writes malformed JSON with a recoverable top-level `summary`, AI PR Reviewer posts a summary-only review and logs a warning; inline findings are dropped because malformed finding objects cannot be trusted. Direct parser validation remains strict unless this fallback is explicitly enabled at the subprocess boundary.
+- **Malformed CLI JSON fallback:** agent-runner providers are instructed to write strict JSON to `.aiprr/findings.json`. If a CLI exits successfully but writes malformed JSON with a recoverable top-level `summary`, AI Diff Reviewer posts a summary-only review and logs a warning; inline findings are dropped because malformed finding objects cannot be trusted. Direct parser validation remains strict unless this fallback is explicitly enabled at the subprocess boundary.
 
 ---
 
@@ -225,7 +225,7 @@ The `provider: cursor` leg has a materially different cost profile from the chat
 - **`auto` is the built-in default for `provider: cursor`** (empty `model:` resolves to it). You only need to set it explicitly if you want to be self-documenting:
 
   ```yaml
-  - uses: DailybotHQ/ai-pr-reviewer@v1
+  - uses: DailybotHQ/ai-diff-reviewer@v1
     with:
       provider: cursor
       api-key: ${{ secrets.CURSOR_API_KEY }}
@@ -330,7 +330,7 @@ Like Cursor's subscription model, `provider: claude-code` can bill reviews again
    It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
 2. Store that token as a repository secret and pass it as the action's `api-key`:
    ```yaml
-   - uses: DailybotHQ/ai-pr-reviewer@v1
+   - uses: DailybotHQ/ai-diff-reviewer@v1
      with:
        provider: claude-code
        api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token

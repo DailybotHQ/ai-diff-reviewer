@@ -1,6 +1,6 @@
 ---
 name: provider-implementer
-description: Specialist in adding a new LLM provider to AI PR Reviewer. Knows the Provider abstraction, the Anthropic-shape contract, and the translation gotchas for OpenAI/Gemini/Azure. Use when implementing a new provider or auditing an existing one.
+description: Specialist in adding a new LLM provider to AI Diff Reviewer. Knows the Provider abstraction, the Anthropic-shape contract, and the translation gotchas for OpenAI/Gemini/Azure. Use when implementing a new provider or auditing an existing one.
 tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 permissionMode: default

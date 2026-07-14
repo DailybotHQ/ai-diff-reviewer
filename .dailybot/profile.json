@@ -1,7 +1,7 @@
 {
-  "name": "AI PR Reviewer",
+  "name": "AI Diff Reviewer",
   "default_metadata": {
-    "repo": "ai-pr-reviewer"
+    "repo": "ai-diff-reviewer"
   },
   "report": {
     "mode": "balanced",

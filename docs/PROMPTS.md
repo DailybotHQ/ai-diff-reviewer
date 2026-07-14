@@ -98,7 +98,7 @@ You have three levers, from least to most invasive:
 ### Example — extend the default
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     prompt-extension-file: examples/prompts/python-strict.md
 ```
@@ -106,7 +106,7 @@ You have three levers, from least to most invasive:
 ### Example — full replacement
 
 ```yaml
-- uses: DailybotHQ/ai-pr-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v1
   with:
     prompt-file: .github/prompts/our_review_rules.md
 ```
@@ -162,6 +162,129 @@ If you need the exact same behaviour across providers, use the chat-completions 
 The action sends the system prompt with `cache_control: ephemeral` on every Anthropic call, so a long, opinionated prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. **Don't worry about prompt length** — go as long as you need to be specific.
 
 Agent-runner providers do their own caching internally (Claude Code, Cursor Agent and Codex all cache their system prompts with the underlying model provider), so the same "long, opinionated prompt is free after the first call" principle applies — you just don't set the cache flag yourself.
+
+## Local coding-agent parity
+
+The action ships a companion **local review skill** ([`skills/ai-diff-reviewer/`](../skills/ai-diff-reviewer/SKILL.md)) that runs the SAME prompt against your current branch — from Cursor / Claude Code / Codex / Gemini / Copilot / Cline / Windsurf — without opening a PR. Two invariants keep the parity real:
+
+1. **The skill's `prompt.md` is a byte-identical copy of `prompts/default.md`.** [`code_check.yml`](../.github/workflows/code_check.yml) has a `Skills — prompt-sync invariant` job that fails PRs where the copy has drifted; [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy on every release cut so pinning `@v1.4.3` on both action and skill guarantees you see the same review methodology on both surfaces.
+2. **The skill auto-detects the same `prompt-extension-file` your CI uses.** By convention, put repo-specific overrides at `.review/extension.md` and reference the same path from your workflow's `prompt-extension-file:` input.
+
+### Install the skill in a consumer repo
+
+```bash
+# Latest v1.x — vendors into .agents/skills/ai-diff-reviewer/ + adds skills-lock.json entry
+npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
+
+# Or pin to a specific tag for reproducibility
+npx skills add DailybotHQ/ai-diff-reviewer@v1.4.2 --skill ai-diff-reviewer
+
+# Bump to latest published action tag later
+npx skills update ai-diff-reviewer
+```
+
+### The `.review/extension.md` convention
+
+Put project-specific rules in **one file** that both surfaces read:
+
+```
+mi-repo/
+├── .review/
+│   └── extension.md              ← the extension file (recommended path)
+├── .github/
+│   └── workflows/
+│       └── pr-review.yml         ← CI workflow references the same path
+└── (project code)
+```
+
+The skill's auto-detection order (first match wins):
+
+1. `.review/extension.md` ← recommended default
+2. `.github/ai-diff-reviewer/extension.md` ← fallback for teams that prefer keeping config next to workflow files (pre-v1.5 `.github/ai-pr-reviewer/extension.md` also accepted for back-compat)
+3. None found → the skill enters the **first-run bootstrap prompt** (see below) unless `.review/.skip-bootstrap` exists
+
+### First-run bootstrap prompt
+
+The first time the review flow activates on a repo without an extension file, the skill asks ONE question:
+
+> No `.review/extension.md` found. Bootstrap one now? (yes / no / never)
+
+- **yes** → invokes the `generate-extension` sub-skill (see below), then re-enters the review with the fresh extension layered on top of the base prompt.
+- **no** → runs the review this once with the base prompt only. The prompt fires again the next time the skill activates.
+- **never** → creates `.review/.skip-bootstrap` (a 0-byte tracked marker). The prompt never fires again in this repo. Commit the marker so the whole team inherits the same UX; delete it to re-enable the offer.
+
+**The base prompt alone is fully functional** — it's the same [`prompts/default.md`](../prompts/default.md) that the CI action uses when no `prompt-file`/`prompt-extension-file` are configured, and it catches the ~90% of general-purpose issues (SQL injection, unhandled promises, missing input validation, obvious perf regressions). The bootstrap prompt exists to nudge repos into the higher-value tailored-review path without blocking impatient users or forcing Discovery on repos that genuinely don't need customization.
+
+### The `.review/.skip-bootstrap` marker
+
+| Property | Value |
+|---|---|
+| **Path** | `.review/.skip-bootstrap` (relative to repo root) |
+| **Content** | 0 bytes (presence is the signal) |
+| **Created by** | The skill, when the developer answers **never** at the bootstrap prompt |
+| **Committed?** | Yes — the whole point is that the team inherits the preference. If left uncommitted, every teammate sees the prompt on their first review run. |
+| **To re-enable the offer** | `rm .review/.skip-bootstrap && git commit -am "chore(review): re-enable AI Diff Reviewer bootstrap offer"` |
+| **Interaction with extension** | Orthogonal — if you later run `generate-extension` explicitly and end up with both files, the extension is loaded normally (Step 2 wins over Step 2.5). |
+
+Reference the same file from your CI workflow so both surfaces produce the same review:
+
+```yaml
+- uses: DailybotHQ/ai-diff-reviewer@v1
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    prompt-extension-file: .review/extension.md
+```
+
+### Why `.review/` and not `.github/`?
+
+`.github/` implies "GitHub-specific configuration". The local skill has nothing to do with GitHub — it runs against `git diff origin/<base>...HEAD` on your workstation. A runtime-agnostic dotfolder (`.review/`, following the pattern of `.dwp/`, `.dailybot/`, `.claude/`, `.cursor/`) generalizes cleanly to non-GitHub setups and doesn't overload `.github/` namespace. Both paths are supported for backward compatibility with teams that already keep their prompt overrides next to workflow files.
+
+### What the skill runs
+
+- **`git diff origin/<base>...HEAD`** locally (no fetch, no push).
+- **Read / Grep / Glob** through your coding agent's tools (no separate LLM call — you're billed to whatever provider your agent is already using).
+- **Produces the review as terminal output** in the same shape the CI bot would post as a PR comment — verdict + findings table + per-finding body + notes + recommendation.
+
+Full workflow details, trust boundary, activation triggers, and step-by-step methodology: [`skills/ai-diff-reviewer/SKILL.md`](../skills/ai-diff-reviewer/SKILL.md).
+
+### Generate a repo-tailored extension automatically
+
+The skill ships a **`generate-extension` sub-skill** that inspects THIS repo (stack, architecture, security surface, existing conventions, historical pain) and writes a tailored `.review/extension.md` for you — no copy-paste, no manual authoring.
+
+Natural-language triggers:
+
+- *"Generate a `.review/extension.md` for this repo"*
+- *"Customize the code review for our project"*
+- *"Help me write repo-specific review rules"*
+- *"Set up the AI reviewer for this codebase"*
+
+The sub-skill runs a mandatory Discovery phase (≥ 12 tool calls covering package manifests, top-level source layout, security-adjacent patterns via `grep`, existing quality standards, and — if `gh` is available — recent bugs) before writing anything. This is the difference between a generic extension that could belong to any repo and one that names specific files, modules, and RFCs.
+
+**Two output modes:**
+
+| Mode | File written | Structure | When |
+|---|---|---|---|
+| **Extension** (default) | `.review/extension.md` | ~50-150 lines of overrides layered on top of the shipped default prompt | Almost always — cheap iteration, keeps benefiting from upstream default improvements |
+| **Full replacement** (advanced) | `.github/prompts/pr-review.md` | 200-500 lines standalone prompt replacing the default entirely | Rare — teams that want total control, or codebases so idiosyncratic that the default is more noise than signal |
+
+The sub-skill asks a single clarifying question ("extension or full replacement?") before generating, defaulting to extension. Full details, quality-gate checklist, and Discovery methodology: [`skills/ai-diff-reviewer/generate-extension/SKILL.md`](../skills/ai-diff-reviewer/generate-extension/SKILL.md); condensed sample outputs in [`skills/ai-diff-reviewer/generate-extension/examples.md`](../skills/ai-diff-reviewer/generate-extension/examples.md).
+
+**Zero-install alternative:** if you don't want to vendor the skill (e.g. using a web chatbot without file-system access), the same discovery-and-generation flow is still available as a copy-paste meta-prompt at [`examples/prompts/generate-custom-prompt-meta.md`](../examples/prompts/generate-custom-prompt-meta.md).
+
+### Bootstrap the GitHub Action with the `setup` sub-skill
+
+The same skill package includes a **`setup` sub-skill** that installs the CI action from scratch — for repos that don't have a `pr-review.yml` workflow yet. Natural-language triggers:
+
+- *"Set up AI Diff Reviewer for this repo"*
+- *"Install the AI Diff Reviewer GitHub Action"*
+- *"Configure the reviewer action"*
+
+The wizard asks six questions (provider, strictness, trigger mode, external-contributor policy, PR-description mode, complexity labels), uses light Discovery to pre-fill defaults from the repo's stack + visibility + default branch, writes `.github/workflows/pr-review.yml` with only the inputs that differ from defaults, and prints the exact URL to add the required GitHub Secret. At the end it offers to also invoke `generate-extension`, closing the loop from **zero setup → installed → tailored** in a single conversation.
+
+The sub-skill also doubles as the **reference manual** for every `action.yml` input — its [`reference.md`](../skills/ai-diff-reviewer/setup/reference.md) sibling documents each input with description, default, choices, and per-scenario recommendations. Any coding agent with the skill installed can answer *"what does `pr-description-mode: autocomplete` do?"* or *"how do I pin the Claude Code CLI version?"* without opening the action source. Full flow: [`skills/ai-diff-reviewer/setup/SKILL.md`](../skills/ai-diff-reviewer/setup/SKILL.md).
+
+---
 
 ## Sharing prompts
 

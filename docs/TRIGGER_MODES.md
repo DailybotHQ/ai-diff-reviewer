@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: DailybotHQ/ai-pr-reviewer@v1
+      - uses: DailybotHQ/ai-diff-reviewer@v1
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

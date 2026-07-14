@@ -7,39 +7,211 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`ai-diff-reviewer` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
+
+### Changed
+- **Coordinated rename to "AI Diff Reviewer".** Two moves in the same
+  release cycle to unblock the Marketplace publish:
+  - **`action.yml` `name:`** — `'AI PR Reviewer'` → `'AI Diff Reviewer'`
+    (Marketplace slug `ai-diff-reviewer`).
+  - **GitHub repo** — `DailybotHQ/ai-pr-reviewer` →
+    `DailybotHQ/ai-diff-reviewer` (both slugs now match exactly).
+
+  Why: the v1.4.x publish attempt failed with `Cannot match an existing
+  action, user or organization name` — GitHub's name-uniqueness rule
+  includes user/org names and the org `github.com/ai-pr-reviewer`
+  (created 2024-01, 0 public repos) name-squats the slug at the
+  org-namespace level. "AI Diff Reviewer" (verified free at both the
+  Marketplace and org-namespace levels) is also more precise: this
+  action reviews the `git diff origin/<base>...HEAD` specifically,
+  not the PR envelope (labels, description, metadata).
+
+  **Consumer impact — none.** GitHub's permanent 301 redirect on
+  renamed repos keeps every `uses: DailybotHQ/ai-pr-reviewer@v1` pin
+  working transparently. Published tags v1.0.0–v1.4.2 resolve to the
+  new URL automatically. The `AIPRR_*` env-var prefix (private
+  contract) stays unchanged. New README/example copy uses the
+  canonical `DailybotHQ/ai-diff-reviewer` path. See
+  [`AGENTS.md § 9`](AGENTS.md) for the full rename decision log.
+- **User-facing branding updated across scripts and docs.** Log prefix
+  (`[ai-pr-reviewer]` → `[ai-diff-reviewer]`), HTTP `User-Agent`
+  (`ai-pr-reviewer` → `ai-diff-reviewer`), the malformed-`findings.json`
+  fallback comment ("**AI PR Reviewer note:**" → "**AI Diff Reviewer
+  note:**"), and every occurrence of the product name in `README.md`,
+  `AGENTS.md`, `docs/`, `examples/`, `prompts/default.md`, and the
+  bundled `.agents/` catalog. **HTML marker strings kept intact**
+  (`<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`,
+  `<!-- ai-pr-reviewer-provider:… -->`,
+  `<!-- ai-pr-reviewer-description-autocompleted -->`) — these are stable
+  contracts on already-posted PR comments; renaming them would silently
+  break `collapse-previous` and state detection on every existing
+  consumer PR.
+- **Local companion skill folder renamed** to `skills/ai-diff-reviewer/`
+  (was `skills/ai-diff-reviewer/`) to mirror the product name. Install command
+  is now `npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer`;
+  vendored path is `.agents/skills/ai-diff-reviewer/`. The router skill's
+  `name:` frontmatter changes from `ai-diff-reviewer` to `ai-diff-reviewer`,
+  and the sub-skill's from `code-review-generate-extension` to
+  `ai-diff-reviewer-generate-extension`. Since the skill was introduced
+  in this same release, there is no pre-existing consumer install to
+  migrate.
+
+### Added
+- **Sub-skill: [`setup`](skills/ai-diff-reviewer/setup/SKILL.md)** —
+  interactive installer for the GitHub Action itself. Walks the
+  developer through six decisions (provider, strictness, trigger mode,
+  external-contributor policy, PR-description mode, complexity
+  labels), uses light Discovery (repo visibility, existing workflows,
+  detected stack, default branch) to pre-fill sensible defaults, then
+  writes a tailored `.github/workflows/pr-review.yml` with only the
+  inputs that differ from action defaults (so the composed workflow
+  reads like a hand-written minimal file, not a config dump). Prints
+  the exact GitHub Secrets URL for the chosen provider and the git
+  commit-and-test steps at the end. Optionally hands off to
+  `generate-extension` in Step 5 so a single conversation takes the
+  developer from **zero setup → installed → tailored**. Also serves
+  as the **reference manual** for every `action.yml` input via
+  [`setup/reference.md`](skills/ai-diff-reviewer/setup/reference.md) —
+  any coding agent with the skill installed can answer *"what does
+  `strictness` do?"* or *"how do I pin the Cursor CLI version?"*
+  without opening the action source. Wired into the parent skill's
+  router table (three capabilities now) and the natural-language
+  triggers ("set up ai diff reviewer for this repo", "install the ai
+  diff reviewer github action", "how do I configure this?"). Documented
+  in the [`README.md` § "Bootstrap the GitHub Action itself"](README.md)
+  section and [`docs/PROMPTS.md`](docs/PROMPTS.md).
+- **First-run bootstrap prompt in the `ai-diff-reviewer` skill** — when
+  the review flow activates on a repo with no `.review/extension.md`
+  (and no `.review/.skip-bootstrap` marker), the skill asks ONE
+  question — **yes / no / never** — offering to route to
+  `generate-extension` so the review is layered on repo-tailored
+  overrides from day one. Choosing **yes** invokes the sub-skill and
+  re-runs the review with the fresh extension; **no** proceeds with
+  the base prompt just this once (offer fires again next time);
+  **never** creates `.review/.skip-bootstrap` (a 0-byte tracked
+  marker) so the offer never fires again in this repo. Committing the
+  marker is the intended workflow — the whole team inherits the same
+  UX. Deletion re-enables the offer. Documented in the skill's Step
+  2.5, [`docs/PROMPTS.md` § "First-run bootstrap prompt"](docs/PROMPTS.md),
+  and the `README.md` § "First-run bootstrap prompt" section. Trust
+  boundary updated: the skill is still near read-only, but now writes
+  to `.review/` in exactly two consented cases (bootstrap → extension
+  file, opt-out → skip marker).
+- **Sub-skill: [`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** —
+  bootstraps a repo-tailored `.review/extension.md` (or, in advanced
+  mode, a full-replacement `.github/prompts/pr-review.md`) by inspecting
+  the codebase for stack, architecture, security surface, existing
+  conventions, and historical pain points. Mandatory Discovery phase
+  (≥ 12 tool calls before writing anything) keeps the output tied to
+  concrete file/module references, not generic "avoid magic numbers"
+  advice. Wraps the existing meta-prompt at
+  [`examples/prompts/generate-custom-prompt-meta.md`](examples/prompts/generate-custom-prompt-meta.md)
+  as a proper skill so consumers don't have to copy-paste it into a
+  chat window. Two output modes chosen by a single clarifying question
+  (extension by default, full-replacement as advanced). Meta-prompt
+  file kept for zero-install use cases (web chatbots without file-system
+  access) with a header redirecting to the skill. Follows the
+  `DailybotHQ/agent-skill` router-plus-sub-skills pattern used by
+  `dailybot-report`, `dailybot-kudos`, etc.
+- **Local companion skill: [`ai-diff-reviewer`](skills/ai-diff-reviewer/SKILL.md)** —
+  the same review methodology that runs on your PR in CI, now available
+  locally in every coding-agent harness. Install into any consumer repo
+  with `npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer`;
+  vendors into `.agents/skills/ai-diff-reviewer/` and pins via
+  `skills-lock.json`. Uses the harness's own Read/Grep/Glob tools to
+  gather context and produces the review as terminal output in the same
+  format the CI bot would post (verdict + findings table + severity +
+  notes + recommendation). Because `skills/ai-diff-reviewer/prompt.md` is a
+  byte-identical copy of `prompts/default.md` (kept in sync by
+  `auto-release.yml`), pinning the same version on both surfaces
+  guarantees local ↔ CI parity. Adopts the Open Agent Skills
+  conventions used by `DailybotHQ/agent-skill` and
+  `DailybotHQ/deepworkplan-skill`: YAML frontmatter with `name` /
+  `description` / `version` / `documentation_url` / `user-invocable` /
+  `metadata.openclaw` / `allowed-tools`, layout at
+  `skills/<name>/SKILL.md` in the repo root so `skills.sh` discovers
+  it, and no separate release cadence — the skill's version tracks
+  the action tag.
+- **Convention: `.review/extension.md`** for repo-specific prompt
+  overrides. The new companion skill auto-detects this path (with
+  `.github/ai-pr-reviewer/extension.md` as fallback for teams that
+  prefer `.github/` sibling to workflow files) and layers the file's
+  contents on top of the base prompt. Consumers reference the same
+  path from their CI workflow's `prompt-extension-file:` input, so
+  local and CI share ONE extension file with zero drift. Documented in
+  [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md)
+  and the [`README.md` § "Local review parity"](README.md) section.
+- **CI: [`scripts/validate-frontmatter.py`](scripts/validate-frontmatter.py)** —
+  Python + PyYAML validator that enforces the Open Agent Skills
+  contract on every `skills/**/SKILL.md`. Runs as the new
+  `Skills — SKILL.md frontmatter validation` job in
+  [`code_check.yml`](.github/workflows/code_check.yml). Adapted from
+  `DailybotHQ/agent-skill/scripts/validate-frontmatter.py` with the
+  `dailybot-` name-prefix rule dropped (this repo's skills use their
+  own slug space). Runtime remains stdlib-only per AGENTS.md Rule #2
+  — PyYAML is CI-only tooling.
+- **CI: `Skills — prompt-sync invariant`** job in
+  [`code_check.yml`](.github/workflows/code_check.yml) — fails any PR
+  where `skills/ai-diff-reviewer/prompt.md` has drifted from
+  `prompts/default.md`, with a clear fix message pointing at
+  `cp prompts/default.md skills/ai-diff-reviewer/prompt.md`. Ensures `main`
+  is never in an inconsistent state between prompt edits and the next
+  release cut.
+
+### Changed
+- **Auto-release now syncs skill artifacts on every version bump.** A
+  new step in [`auto-release.yml`](.github/workflows/auto-release.yml)
+  runs before the tag is created and (a) `sed`s the new SemVer into
+  the `version:` field of every `skills/**/SKILL.md` file, and (b)
+  copies `prompts/default.md` → `skills/ai-diff-reviewer/prompt.md`. If the
+  changes are non-empty, they're committed as
+  `chore(release): sync skill artifacts for vX.Y.Z [skip release]` and
+  pushed to `main` alongside the tag via `git push --follow-tags`. The
+  `[skip release]` marker + the existing `chore(release):` prefix
+  guard on the workflow's `if:` together prevent an infinite trigger
+  loop. Consumer impact: none — the action's public contract in
+  `action.yml` is untouched; only the skill artifacts inside `skills/`
+  move.
+
+## [1.4.2] — 2026-07-14
+
+**Headline:** Marketplace-readiness housekeeping — root-level `SECURITY.md` so GitHub's *Report a vulnerability* discovery works out of the box, simplified security reporting channel (dropped the dead-end `CODEOWNERS` email path), and the CHANGELOG backfilled for the five same-day releases (`v1.3.1` through `v1.4.1`) whose bullets had accumulated in `[Unreleased]`. Purely docs and metadata — no runtime, `action.yml`, or workflow behavior changed.
+
 ### Added
 - **Root-level [`SECURITY.md`](SECURITY.md)** — Marketplace-readiness fix.
-  GitHub's *Report a vulnerability* discovery flow prefers the file at repo
-  root (or `.github/`); until now we only had the long-form model at
-  [`docs/SECURITY.md`](docs/SECURITY.md), which is the least-discoverable of
-  the three canonical locations. The new root file is a thin pointer that
-  carries the private-advisory reporting instructions, a supported-versions
-  table (`v1.x` current major), and highlights that link to the long-form
-  doc for the full trust model, per-provider egress surfaces, and accepted
-  risks. The two files stay in sync trivially (root = pointer; `docs/` =
-  source of truth).
+  GitHub's *Report a vulnerability* discovery flow prefers the file at
+  repo root (or `.github/`); until now we only had the long-form model
+  at [`docs/SECURITY.md`](docs/SECURITY.md), which is the least-
+  discoverable of the three canonical locations. The new root file is
+  a thin pointer that carries the private-advisory reporting
+  instructions, a supported-versions table (`v1.x` current major),
+  and highlights that link to the long-form doc for the full trust
+  model, per-provider egress surfaces, and accepted risks. The two
+  files stay in sync trivially (root = pointer; `docs/` = source of
+  truth).
 
 ### Changed
 - **Security reporting channel simplified** in both
   [`SECURITY.md`](SECURITY.md) and [`docs/SECURITY.md`](docs/SECURITY.md).
-  The prior "email the address in `CODEOWNERS`" fallback pointed at a file
-  that does not exist in the repo — a dead end for reporters who could not
-  use the private-advisory UI. Both files now point exclusively at the
-  GitHub Security Advisory (`security/advisories/new`), which any GitHub
-  account can submit against a public repo. No new dependency, no new
-  attack surface (open-advisory URLs are already public), and no spam
-  magnet from publishing a personal email in a Marketplace-facing file.
+  The prior "email the address in `CODEOWNERS`" fallback pointed at a
+  file that does not exist in the repo — a dead end for reporters who
+  could not use the private-advisory UI. Both files now point
+  exclusively at the GitHub Security Advisory
+  (`security/advisories/new`), which any GitHub account can submit
+  against a public repo. No new dependency, no new attack surface
+  (open-advisory URLs are already public), and no spam magnet from
+  publishing a personal email in a Marketplace-facing file.
 
 ### Docs
 - **CHANGELOG backfilled for [`1.3.1`](#131--2026-07-14) through
-  [`1.4.1`](#141--2026-07-14)** — the auto-release workflow cuts SemVer tags
-  on every merge to `main` but deliberately does **not** edit the changelog,
-  so five same-day releases had accumulated their bullets in `[Unreleased]`.
-  Each bullet has been redistributed to its owning tag section with headline
-  notes on the `[1.4.0]` release (vendored Dailybot skill + full-coverage
-  self-review + opt-in gate). Compare-URL footer entries added for
-  `[1.3.1]`–`[1.4.1]` so the bracket-link convention is complete for every
-  section.
+  [`1.4.1`](#141--2026-07-14)** — the auto-release workflow cuts SemVer
+  tags on every merge to `main` but deliberately does **not** edit the
+  changelog, so five same-day releases had accumulated their bullets
+  in `[Unreleased]`. Each bullet has been redistributed to its owning
+  tag section with headline notes on the `[1.4.0]` release (vendored
+  Dailybot skill + full-coverage self-review + opt-in gate).
+  Compare-URL footer entries added for `[1.3.1]`–`[1.4.1]` so the
+  bracket-link convention is complete for every section.
 
 ## [1.4.1] — 2026-07-14
 
@@ -208,7 +380,7 @@ Full threat model + per-value semantics: [`docs/SECURITY.md` § "Author-associat
 - **`provider: codex` no longer copies ignored MCP JSON config.** After switching Codex auth to an isolated per-run `CODEX_HOME`, the old `mcp-config-file` copy still targeted `~/.codex/mcp.json`, which the subprocess ignored and Codex does not read anyway (`config.toml` is the supported path). The Codex provider now warns without copying the ignored JSON file; use `agent-extra-args` / `config.toml` for Codex MCP setup.
 
 ### Changed
-- **Marketplace listing renamed back to "AI PR Reviewer"** (`action.yml` `name:` reverted from the v1.2.1 `Dailybot AI PR Reviewer`). The v1.2.1 vendor prefix was a defensive over-fix — the real slug collision (`ai-pull-request-reviewer`, owned by the third-party `appchoose/ai-pr-review`) was on the *full-form* title only. The *abbreviated* title "AI PR Reviewer" slugifies to `ai-pr-reviewer`, a distinct slug that was free all along and matches this repo's own slug exactly. Marketplace URL is now [`github.com/marketplace/actions/ai-pr-reviewer`](https://github.com/marketplace/actions/ai-pr-reviewer); workflow `uses:` pins are unaffected. Vendor attribution continues via the `author: 'DailybotHQ'` field, which GitHub auto-renders as "by DailybotHQ" beneath the tile. **No consumer action required.** See [`AGENTS.md § 9`](AGENTS.md) for the naming history.
+- **Marketplace listing renamed back to "AI PR Reviewer"** (`action.yml` `name:` reverted from the v1.2.1 `Dailybot AI PR Reviewer`). The v1.2.1 vendor prefix was a defensive over-fix — the real slug collision (`ai-pull-request-reviewer`, owned by the third-party `appchoose/ai-pr-review`) was on the *full-form* title only. The *abbreviated* title "AI PR Reviewer" slugifies to `ai-pr-reviewer`, a distinct slug that appeared free at the time (Marketplace listing search only — the org-level `github.com/ai-pr-reviewer` collision that later blocked the v1.5.0 publish wasn't discovered until 2026-07-14). Marketplace URL was staged at [`github.com/marketplace/actions/ai-pr-reviewer`](https://github.com/marketplace/actions/ai-pr-reviewer); workflow `uses:` pins are unaffected. Vendor attribution continues via the `author: 'DailybotHQ'` field, which GitHub auto-renders as "by DailybotHQ" beneath the tile. **No consumer action required.** See [`AGENTS.md § 9`](AGENTS.md) for the full naming history including the v1.5.0 final rename to `AI Diff Reviewer`.
 - **Default behaviour tightening (soft-breaking) — `author-association: OWNER,MEMBER,COLLABORATOR`.** External-contributor PRs (`author_association` = `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, `FIRST_TIMER`, `NONE`) are **no longer reviewed automatically** after upgrading. Public-repo consumers get safer defaults for free; consumers who want v1.2.x behaviour set `author-association: ''`. The SemVer minor bump reflects that the behavioural change is opt-out. See the [Upgrade guide](#upgrade-guide) above for per-repo-type guidance.
 - **Explicit, quality-tier default models for the CLI providers.** The CLI providers no longer default to `auto` (which deferred to the account default and could silently be Opus at ≈$5/$25). The action now pins an explicit quality-tier model per provider: **`claude-code` → `claude-sonnet-4-6`** (quality/price sweet spot); **`codex` → `gpt-5.6-luna`** (≈$1/$6 per 1M tokens; current-gen budget model, replaces the now-deprecated `gpt-5-codex` at ≈$1.75/$14). The `anthropic` default stays `claude-sonnet-4-6` and Cursor stays `auto` (flat-rate/unlimited on Pro). Consumers pin a cheaper smoke model (`claude-haiku-4-5` ≈$1/$5, `gpt-5.4-mini` ≈$0.75/$4.50) via `model:`. See [`docs/PROVIDERS.md` § "Choosing a cost-efficient model"](docs/PROVIDERS.md).
 - **Label matching is now case-insensitive.** `label-gate` (and its `label-once` / `label-added-only` trigger logic) compares label names on a lowercased, whitespace-trimmed basis — `label-gate: ready` is satisfied by `ready`, `Ready`, or `READY`. Applies to `resolve_trigger_action`, `gh_pr_has_label`, and `count_label_events`; removes a foot-gun where a capitalized label silently failed to trigger.
@@ -219,7 +391,7 @@ Full threat model + per-value semantics: [`docs/SECURITY.md` § "Author-associat
 **Headline:** the "actually-works-on-Marketplace" release — renames the Marketplace listing to unblock the first-time publish (a squatting `appchoose/ai-pr-review` action already owns the un-prefixed slug) and ships two provider-side fix batches that landed on `main` after `v1.2.0` was tagged (`claude-code` and `codex` were both broken out of the box in `v1.2.0`; this patch is what makes those providers actually usable). Consumers pinning `@v1` pick everything up automatically.
 
 ### Changed
-- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name slug-ifies to `ai-pull-request-reviewer`, which is already claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern is the standard Marketplace resolution and keeps our repo slug, docs, and user-facing product copy on "AI PR Reviewer". See `AGENTS.md` § 9 (Marketplace Branding Stable). No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
+- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name was mis-diagnosed as slug-ifying to `ai-pull-request-reviewer`, which is claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern was the assumed Marketplace resolution and kept the repo slug, docs, and user-facing product copy on "AI PR Reviewer". This was reverted in v1.3.0 after re-checking Marketplace slug availability. No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
 - **Default Cursor model is now `auto`** (was `composer-2.5`). `auto` is unlimited on Cursor Pro plans and is the CI recommendation in `docs/PROVIDERS.md`; the default now matches the docs. Pin `composer-2.5` (or any specific model) via `model:` if you want to force one.
 - **`collapse-previous` is now scoped per provider.** Every review body and tracking comment carries an invisible `<!-- ai-pr-reviewer-provider: <id> -->` marker, and `collapse-previous` only minimizes *this provider's own* prior artefacts. Effects: (1) several providers can review the same PR concurrently — even sharing one `GITHUB_TOKEN` — without collapsing each other (`self-review.yml`'s four-provider matrix keeps the default `true` and relies on the scoping); (2) unrelated `github-actions[bot]` comments (coverage bots, labelers) are no longer collapsed. See `docs/PROVIDERS.md` § "Running more than one provider on the same PR". Transition: a single pre-upgrade review without the marker won't be auto-collapsed on the first run after upgrading.
 - **`agent-max-turns` now warns instead of silently doing nothing** for the CLI providers. None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag, so the input can't be forwarded; the run logs a clear warning pointing at `agent-extra-args` and noting the `CLI_INVOCATION_TIMEOUT` (900 s) as the effective bound, rather than leaving a misleading dead input.
@@ -345,7 +517,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.3.2...v1.3.3

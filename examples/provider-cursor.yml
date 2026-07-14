@@ -52,7 +52,7 @@ jobs:
           # in-process, so the CLI never needs git credentials.
           persist-credentials: false
 
-      - uses: DailybotHQ/ai-pr-reviewer@v1
+      - uses: DailybotHQ/ai-diff-reviewer@v1
         with:
           provider: cursor
           api-key: ${{ secrets.CURSOR_API_KEY }}
