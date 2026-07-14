@@ -485,5 +485,190 @@ class CursorHeadlessDefaultsTests(unittest.TestCase):
         self.assertIn("# PR Context", stdin_input)
 
 
+def _capture_provider_call(provider: Any) -> dict[str, Any]:
+    """Run `provider.run_review` with `_invoke_cli_agent` stubbed; return the
+    captured argv + kwargs (including stdin_input)."""
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(*, argv: list[str], **kwargs: Any) -> Any:
+        captured["argv"] = list(argv)
+        captured["kwargs"] = dict(kwargs)
+        return reviewer.ReviewResult(summary="ok", findings=[])
+
+    orig = reviewer._invoke_cli_agent
+    reviewer._invoke_cli_agent = fake_invoke  # type: ignore[assignment]
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            # Keep MCP swaps off the real ~/.<cli>/mcp.json during tests.
+            provider.MCP_DEST = workspace / "mcp.json"  # type: ignore[misc]
+            provider.run_review(
+                pr_context=_make_pr_context(),
+                review_instructions="RUBRIC_TEXT_MARKER",
+                workspace=workspace,
+                output_dir=workspace,
+            )
+    finally:
+        reviewer._invoke_cli_agent = orig  # type: ignore[assignment]
+    return captured
+
+
+class ClaudeCodeInvocationTests(unittest.TestCase):
+    """ClaudeCodeProvider must deliver the rubric as text, bypass the
+    permission gate so the Write tool can emit findings.json, and pipe the
+    diff-carrying user prompt via stdin (E2BIG safety)."""
+
+    def _capture(self, *, model: str = "", extra_args: str = "") -> dict[str, Any]:
+        return _capture_provider_call(
+            reviewer.ClaudeCodeProvider(
+                api_key="k", model=model, extra_args=extra_args
+            )
+        )
+
+    def test_append_system_prompt_is_text_not_path(self) -> None:
+        argv = self._capture()["argv"]
+        self.assertIn("--append-system-prompt", argv)
+        idx = argv.index("--append-system-prompt")
+        value = argv[idx + 1]
+        # The value must be the rubric + findings contract TEXT, never a
+        # filesystem path (the flag takes a prompt string, not a file).
+        self.assertIn("RUBRIC_TEXT_MARKER", value)
+        self.assertIn("findings.json", value)
+        self.assertNotIn(
+            "instructions.md",
+            value,
+            "--append-system-prompt must receive the instruction TEXT, not a "
+            "path — passing a path delivers the filename to the model and the "
+            "rubric/output-contract never arrive.",
+        )
+
+    def test_permission_gate_is_bypassed(self) -> None:
+        argv = self._capture()["argv"]
+        self.assertIn("--permission-mode", argv)
+        idx = argv.index("--permission-mode")
+        self.assertEqual(
+            argv[idx + 1],
+            "bypassPermissions",
+            "Headless Claude Code must bypass the permission gate or the Write "
+            "tool that emits findings.json is denied in non-interactive CI.",
+        )
+
+    def test_user_prompt_goes_via_stdin_not_argv(self) -> None:
+        captured = self._capture()
+        argv, kwargs = captured["argv"], captured["kwargs"]
+        # `-p` present with no positional prompt after it (next token is a flag).
+        self.assertIn("-p", argv)
+        p_idx = argv.index("-p")
+        self.assertTrue(argv[p_idx + 1].startswith("-"))
+        stdin_input = kwargs.get("stdin_input")
+        self.assertIsNotNone(stdin_input)
+        self.assertIn("# PR Context", stdin_input)
+
+    def test_model_and_extra_args_still_applied(self) -> None:
+        argv = self._capture(model="claude-opus-4-8", extra_args="--foo")[
+            "argv"
+        ]
+        self.assertIn("--model", argv)
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-4-8")
+        self.assertIn("--foo", argv)
+
+    def test_model_auto_is_not_forwarded(self) -> None:
+        argv = self._capture(model="auto")["argv"]
+        self.assertNotIn(
+            "--model",
+            argv,
+            "model 'auto' means 'let the CLI pick its default' — no --model.",
+        )
+
+    def test_mcp_config_flag_added_when_set(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            mcp_src = str(Path(td) / "mcp.json")
+            Path(mcp_src).write_text('{"mcpServers":{}}', encoding="utf-8")
+            captured = _capture_provider_call(
+                reviewer.ClaudeCodeProvider(
+                    api_key="k", model="", mcp_config_file=mcp_src
+                )
+            )
+            argv = captured["argv"]
+            self.assertIn(
+                "--mcp-config",
+                argv,
+                "Claude Code only loads MCP from --mcp-config; a bare copy to "
+                "~/.claude/mcp.json is ignored.",
+            )
+            self.assertEqual(argv[argv.index("--mcp-config") + 1], mcp_src)
+
+    def test_no_mcp_config_flag_when_unset(self) -> None:
+        argv = self._capture()["argv"]
+        self.assertNotIn("--mcp-config", argv)
+
+
+class CodexInvocationTests(unittest.TestCase):
+    """CodexProvider must escape the default read-only sandbox and pipe the
+    prompt via stdin."""
+
+    def _capture(self, *, model: str = "", extra_args: str = "") -> dict[str, Any]:
+        return _capture_provider_call(
+            reviewer.CodexProvider(
+                api_key="k", model=model, extra_args=extra_args
+            )
+        )
+
+    def test_sandbox_is_escaped(self) -> None:
+        argv = self._capture()["argv"]
+        self.assertIn(
+            "--dangerously-bypass-approvals-and-sandbox",
+            argv,
+            "codex exec defaults to a read-only sandbox; without escaping it "
+            "the agent cannot write findings.json and every review fails.",
+        )
+
+    def test_prompt_via_stdin_sentinel(self) -> None:
+        captured = self._capture()
+        argv, kwargs = captured["argv"], captured["kwargs"]
+        self.assertEqual(
+            argv[-1],
+            "-",
+            "codex reads the prompt from stdin when the final positional is "
+            "'-'; embedding it in argv risks E2BIG on large diffs.",
+        )
+        stdin_input = kwargs.get("stdin_input")
+        self.assertIsNotNone(stdin_input)
+        self.assertIn("# PR Context", stdin_input)
+        # No argv token should carry the large prompt body.
+        self.assertFalse(
+            any("# PR Context" in tok for tok in argv),
+            "The PR prompt must not appear in argv — it goes via stdin.",
+        )
+
+    def test_extra_args_precede_stdin_sentinel(self) -> None:
+        argv = self._capture(extra_args="--foo")["argv"]
+        self.assertIn("--foo", argv)
+        self.assertLess(
+            argv.index("--foo"),
+            argv.index("-"),
+            "extra_args must come before the '-' stdin sentinel.",
+        )
+
+
+class AgentRunnerPromptHygieneTests(unittest.TestCase):
+    """The agent-runner user prompt must NOT reference chat-completions-only
+    tools (post_inline_comment / submit_review), which don't exist for a
+    vendor CLI and would give it contradictory instructions."""
+
+    def test_agent_runner_prompt_omits_chat_tools(self) -> None:
+        text = reviewer.render_user_prompt(
+            _make_pr_context(), for_agent_runner=True
+        )
+        self.assertNotIn("post_inline_comment", text)
+        self.assertNotIn("submit_review", text)
+        self.assertIn("findings file", text)
+
+    def test_chat_prompt_still_references_tools(self) -> None:
+        text = reviewer.render_user_prompt(_make_pr_context())
+        self.assertIn("post_inline_comment", text)
+        self.assertIn("submit_review", text)
+
+
 if __name__ == "__main__":
     unittest.main()

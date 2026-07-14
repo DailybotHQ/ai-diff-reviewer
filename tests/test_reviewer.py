@@ -568,6 +568,104 @@ class GhCollapsePreviousReviewsTests(unittest.TestCase):
         finally:
             self._restore()
 
+    def test_provider_scoping_collapses_only_matching_provider(self) -> None:
+        """With `provider_marker_text` set, only artefacts carrying that
+        provider's marker are collapsed — so concurrent multi-provider
+        reviews (one shared bot author) don't collapse each other."""
+        anthropic_marker = reviewer.provider_marker("anthropic")
+        codex_marker = reviewer.provider_marker("codex")
+        query_payload = {
+            "repository": {
+                "pullRequest": {
+                    "comments": {
+                        "nodes": [
+                            {
+                                "id": "IC_anthropic",
+                                "isMinimized": False,
+                                "body": f"{reviewer.REVIEW_MARKER}\n{anthropic_marker}\ndone",
+                                "author": {"login": "github-actions"},
+                            },
+                            {
+                                "id": "IC_codex",
+                                "isMinimized": False,
+                                "body": f"{reviewer.REVIEW_MARKER}\n{codex_marker}\ndone",
+                                "author": {"login": "github-actions"},
+                            },
+                        ]
+                    },
+                    "reviews": {
+                        "nodes": [
+                            {
+                                "id": "PRR_anthropic",
+                                "isMinimized": False,
+                                "body": f"{anthropic_marker}\n\nsummary",
+                                "author": {"login": "github-actions"},
+                                "comments": {"nodes": []},
+                            },
+                            {
+                                "id": "PRR_codex",
+                                "isMinimized": False,
+                                "body": f"{codex_marker}\n\nsummary",
+                                "author": {"login": "github-actions"},
+                                "comments": {"nodes": []},
+                            },
+                        ]
+                    },
+                }
+            }
+        }
+        calls = self._install_fake_gh_graphql([query_payload, {}, {}])
+        try:
+            n = reviewer.gh_collapse_previous_reviews(
+                token="tok",
+                repo="o/r",
+                pr_number=9,
+                bot_login="github-actions[bot]",
+                provider_marker_text=codex_marker,
+            )
+            self.assertEqual(n, 2, "only the codex comment + codex review")
+            ids = sorted(c["variables"].get("id") for c in calls[1:])
+            self.assertEqual(ids, sorted(["IC_codex", "PRR_codex"]))
+            self.assertNotIn("IC_anthropic", ids)
+            self.assertNotIn("PRR_anthropic", ids)
+        finally:
+            self._restore()
+
+    def test_provider_scoping_skips_unmarked_artefacts(self) -> None:
+        """In scoped mode an unmarked bot comment (e.g. from an unrelated
+        github-actions workflow, or a pre-upgrade review) is left alone."""
+        codex_marker = reviewer.provider_marker("codex")
+        query_payload = {
+            "repository": {
+                "pullRequest": {
+                    "comments": {
+                        "nodes": [
+                            {
+                                "id": "IC_unrelated",
+                                "isMinimized": False,
+                                "body": "coverage report: 91%",
+                                "author": {"login": "github-actions"},
+                            }
+                        ]
+                    },
+                    "reviews": {"nodes": []},
+                }
+            }
+        }
+        calls = self._install_fake_gh_graphql([query_payload])
+        try:
+            n = reviewer.gh_collapse_previous_reviews(
+                token="tok",
+                repo="o/r",
+                pr_number=9,
+                bot_login="github-actions[bot]",
+                provider_marker_text=codex_marker,
+            )
+            self.assertEqual(n, 0)
+            self.assertEqual(len(calls), 1, "no mutations — nothing in scope")
+        finally:
+            self._restore()
+
 
 class GhPatchPrBodySignatureTests(unittest.TestCase):
     """Regression: `gh_patch_pr_body` uses positional method+path (matches
@@ -1682,6 +1780,157 @@ class DriveReviewPruningTests(unittest.TestCase):
             max_turns=30,
         )
         self.assertEqual(state.final_summary, "ok")
+
+
+class SecretScrubbingTests(unittest.TestCase):
+    """Registered secret VALUES must be scrubbed from any public-facing text.
+
+    Defense-in-depth for the agent-runner path (a prompt-injected vendor CLI
+    could echo its API key into a finding). See docs/SECURITY.md.
+    """
+
+    def setUp(self) -> None:
+        self._saved = set(reviewer._SECRET_VALUES)
+        reviewer._SECRET_VALUES.clear()
+
+    def tearDown(self) -> None:
+        reviewer._SECRET_VALUES.clear()
+        reviewer._SECRET_VALUES.update(self._saved)
+
+    def test_registered_secret_is_scrubbed(self) -> None:
+        reviewer.register_secret("sk-ant-supersecretvalue123")
+        out = reviewer.scrub_secrets(
+            "leaked: sk-ant-supersecretvalue123 end"
+        )
+        self.assertNotIn("sk-ant-supersecretvalue123", out)
+        self.assertIn("***", out)
+
+    def test_short_values_are_not_registered(self) -> None:
+        reviewer.register_secret("abc")  # below MIN_SCRUBBABLE_SECRET_LEN
+        self.assertEqual(reviewer.scrub_secrets("abc def"), "abc def")
+
+    def test_empty_and_none_safe(self) -> None:
+        reviewer.register_secret("")
+        self.assertEqual(reviewer.scrub_secrets(""), "")
+
+    def test_failure_tracking_body_scrubs_secret(self) -> None:
+        reviewer.register_secret("ghp_tokenvalue_1234567890")
+        body = reviewer.render_tracking_body_failed(
+            head_sha="abc1234def",
+            error="RuntimeError: leaked ghp_tokenvalue_1234567890 in stderr",
+        )
+        self.assertNotIn("ghp_tokenvalue_1234567890", body)
+        self.assertIn("***", body)
+
+
+class CliProxyEnvForwardingTests(unittest.TestCase):
+    """Proxy + base-url network config must reach the vendor CLI subprocess
+    (I3) — a CLI behind a corporate proxy can't reach its API otherwise."""
+
+    def test_proxy_and_base_url_vars_forwarded(self) -> None:
+        prev = dict(os.environ)
+        try:
+            os.environ.clear()
+            os.environ.update(
+                {
+                    "PATH": "/usr/bin",
+                    "HTTPS_PROXY": "http://proxy:8080",
+                    "NO_PROXY": "localhost",
+                    "ANTHROPIC_BASE_URL": "https://gw.internal/v1",
+                }
+            )
+            env = reviewer._build_cli_env(extra_vars={})
+            self.assertEqual(env.get("HTTPS_PROXY"), "http://proxy:8080")
+            self.assertEqual(env.get("NO_PROXY"), "localhost")
+            self.assertEqual(
+                env.get("ANTHROPIC_BASE_URL"), "https://gw.internal/v1"
+            )
+        finally:
+            os.environ.clear()
+            os.environ.update(prev)
+
+
+class CursorDefaultModelTests(unittest.TestCase):
+    """Cursor's default model should be `auto` (unlimited on Pro), matching
+    the recommendation in docs/PROVIDERS.md (I2)."""
+
+    def test_cursor_default_is_auto(self) -> None:
+        self.assertEqual(reviewer.DEFAULT_MODELS["cursor"], "auto")
+
+
+class ProviderMarkerTrackingBodyTests(unittest.TestCase):
+    """Tracking-comment bodies carry the per-provider marker (for scoped
+    collapse) when `provider` is set, and always carry the review marker."""
+
+    def test_working_body_carries_provider_marker(self) -> None:
+        body = reviewer.render_tracking_body_working(
+            "abc1234", collapse_previous=True, provider="codex"
+        )
+        self.assertIn(reviewer.REVIEW_MARKER, body)
+        self.assertIn(reviewer.provider_marker("codex"), body)
+
+    def test_done_body_carries_provider_marker(self) -> None:
+        body = reviewer.render_tracking_body_done(
+            head_sha="abc1234",
+            review_url="http://x",
+            inline_attached=0,
+            inline_dropped=0,
+            severity="none",
+            blocked=False,
+            block_reason="ok",
+            provider="cursor",
+        )
+        self.assertIn(reviewer.provider_marker("cursor"), body)
+
+    def test_omitting_provider_keeps_legacy_body(self) -> None:
+        body = reviewer.render_tracking_body_working(
+            "abc1234", collapse_previous=True
+        )
+        self.assertIn(reviewer.REVIEW_MARKER, body)
+        self.assertNotIn(reviewer.PROVIDER_MARKER_PREFIX, body)
+
+
+class AgentMaxTurnsWarningTests(unittest.TestCase):
+    """`agent-max-turns` has no CLI enforcement point today — build_provider
+    must WARN when it's set for an agent-runner rather than silently ignore
+    it (W1)."""
+
+    def _capture_logs(self) -> list[str]:
+        logs: list[str] = []
+        self._orig_log = reviewer.log
+        reviewer.log = logs.append  # type: ignore[assignment]
+        return logs
+
+    def _restore(self) -> None:
+        reviewer.log = self._orig_log  # type: ignore[assignment]
+
+    def test_warns_when_set_for_agent_runner(self) -> None:
+        prev = dict(os.environ)
+        logs = self._capture_logs()
+        try:
+            os.environ["AIPRR_AGENT_MAX_TURNS"] = "20"
+            reviewer.build_provider("cursor", api_key="k", model="")
+            self.assertTrue(
+                any("agent-max-turns" in m for m in logs),
+                "build_provider must warn that agent-max-turns is not "
+                "enforced for the CLI providers.",
+            )
+        finally:
+            self._restore()
+            os.environ.clear()
+            os.environ.update(prev)
+
+    def test_no_warning_when_unset(self) -> None:
+        prev = dict(os.environ)
+        logs = self._capture_logs()
+        try:
+            os.environ.pop("AIPRR_AGENT_MAX_TURNS", None)
+            reviewer.build_provider("cursor", api_key="k", model="")
+            self.assertFalse(any("agent-max-turns" in m for m in logs))
+        finally:
+            self._restore()
+            os.environ.clear()
+            os.environ.update(prev)
 
 
 if __name__ == "__main__":

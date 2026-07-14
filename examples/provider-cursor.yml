@@ -34,6 +34,12 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Security: the agent-runner CLIs run with broad local access and hold a
+    # vendor API key in their env. Restrict this job to trusted (non-fork)
+    # PRs so a malicious fork can't influence what the CLI reads/exfiltrates.
+    # See docs/SECURITY.md § "Agent-runner providers: residual exfiltration
+    # surface". Drop this `if:` only if you accept that risk.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
@@ -41,6 +47,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Don't leave the GITHUB_TOKEN in .git/config on disk where the
+          # headless CLI could read it. The reviewer talks to the GitHub API
+          # in-process, so the CLI never needs git credentials.
+          persist-credentials: false
 
       - uses: DailybotHQ/ai-pr-reviewer@v1
         with:

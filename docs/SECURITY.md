@@ -36,6 +36,23 @@ Auditable in `scripts/reviewer.py` via the `ANTHROPIC_API_URL`, `GITHUB_REST_BAS
 
 Agent-runner providers invoke the vendor CLI via `subprocess.run(argv, env=...)` — argv-list form, never `shell=True`. The `env` passed to the subprocess is **explicitly scrubbed** via `_build_cli_env()`: it forwards only an allowlist of variables the CLI needs (`PATH`, `HOME`, `NODE_PATH`, locale, runner metadata) plus the vendor-specific API key. `AIPRR_GH_TOKEN` and every other `AIPRR_*` env var are **not** forwarded to the CLI — the reviewer's Python runtime keeps the GitHub token in-process and calls the GitHub API directly.
 
+### Agent-runner providers: residual exfiltration surface (READ BEFORE ENABLING)
+
+The env scrub above is real, but it does **not** make agent-runner providers as isolated as the default `anthropic` path. Two facts matter:
+
+1. **The vendor API key is necessarily in the subprocess env** (`ANTHROPIC_API_KEY` / `CURSOR_API_KEY` / `OPENAI_API_KEY`), because the CLI needs it to authenticate. A prompt injection in the PR diff that convinces the CLI to write an env var into a finding body lands that value in a **public PR comment** — findings text is not redacted.
+2. **The CLI runs with broad local access.** To function headlessly in CI, the CLI is invoked with auto-approval flags (`--force --trust` for Cursor, `--permission-mode bypassPermissions` for Claude Code, `--dangerously-bypass-approvals-and-sandbox` for Codex) so it can read files and run tools without prompting. That same access lets an injected instruction read `.git/config` — where `actions/checkout` writes the `GITHUB_TOKEN` as an `http.<url>.extraheader` when `persist-credentials` is left at its default `true` — and surface it in a finding.
+
+Because a malicious **fork PR** author controls the diff, title, and body that seed the CLI, treat the agent-runner providers as running attacker-influenced input against a locally-privileged agent. Mitigations, in order of importance:
+
+- **Only run agent-runner providers on trusted (non-fork) PRs.** Gate the job with `if: github.event.pull_request.head.repo.full_name == github.repository`, or keep untrusted/fork PRs on `provider: anthropic` (which exposes no tool that can read the environment or the filesystem outside the repo).
+- **Set `persist-credentials: false` on the `actions/checkout` step** so the `GITHUB_TOKEN` is never written into `.git/config` on disk. (Note: `git diff origin/<base>...HEAD` still needs `fetch-depth: 0`.)
+- **Never use `pull_request_target`** with an agent-runner provider — it hands a write-scoped token to a job seeded by fork-controlled content.
+
+As a runtime backstop, the reviewer registers the provider API key and the GitHub token as literal secret values (`register_secret`) and scrubs any occurrence of them out of the review summary, every inline-comment body, and any failure message **before** posting to the PR (`scrub_secrets`). This is defense-in-depth, not a substitute for the trust-boundary controls above: it only catches the two secrets the runtime knows about, and a determined injection could transform a value (base64, reversed, split) to evade the literal match.
+
+The default `provider: anthropic` path is not subject to (1) or (2): its only tools are `read_file`/`grep`/`glob` (all `safe_repo_path`-scoped to the checkout), `post_inline_comment`, and `submit_review` — none can read process env or files outside the repo, so the worst case of a successful injection there is "the reviewer wrote silly comments on this one PR."
+
 ### Cursor installer supply chain
 
 The `provider: cursor` install step in `action.yml` runs `curl -fsSL https://cursor.com/install | bash`. This is the officially-supported installer path from Cursor and is used by every consumer of that CLI. Consequences:
@@ -150,8 +167,8 @@ Every PR contains author-controlled text: the title, body, file paths, and code 
 ### What we rely on
 
 - **The model.** Modern instruct-tuned models with explicit system prompts are reasonably resistant to in-PR injection. They aren't immune.
-- **Hard caps.** Even if injection succeeds, the inline-comment cap, the strictness gate, and the bounded loop limit the blast radius. The worst-case outcome of a successful injection is "the reviewer wrote silly comments on this one PR" — not data loss, not auth bypass, not exfiltration.
-- **No tool gives write access to repository state outside the PR review surface.** The model can `read_file`, `grep`, `glob`, queue inline comments (capped, scoped to the PR), and submit one review (scoped to the PR). It cannot push commits, modify branches, change repo settings, or affect anything beyond the review under way.
+- **Hard caps.** Even if injection succeeds, the inline-comment cap, the strictness gate, and the bounded loop limit the blast radius. On the default `provider: anthropic` path, the worst-case outcome of a successful injection is "the reviewer wrote silly comments on this one PR" — not data loss, not auth bypass, not exfiltration. **This bound does NOT hold for the agent-runner providers** (`claude-code`, `cursor`, `codex`): those hand the attacker-influenced diff to a locally-privileged vendor CLI that holds a vendor API key in its env and can read the filesystem, so exfiltration is a real risk on fork PRs — see [Agent-runner providers: residual exfiltration surface](#agent-runner-providers-residual-exfiltration-surface-read-before-enabling).
+- **No tool gives write access to repository state outside the PR review surface** (`provider: anthropic`). The model can `read_file`, `grep`, `glob`, queue inline comments (capped, scoped to the PR), and submit one review (scoped to the PR). It cannot push commits, modify branches, change repo settings, or affect anything beyond the review under way. Agent-runner providers deliberately relax this — their vendor CLI runs with the broad file/tool access described in the linked section above.
 
 ### What we don't claim
 

@@ -171,6 +171,23 @@ CLI providers wrap the review instructions with `write_findings_prompt_directive
 4. Add a conditional install step in `action.yml` (see the modular-install pattern in Task 07 of the DWP plan).
 5. Add a matrix entry in `.github/workflows/self-review.yml` for dogfooding.
 
+### Headless-CI invocation requirements (per CLI)
+
+Each vendor CLI needs three things to work headlessly: the review instructions delivered as **text** (not a path), the ability to **write** `findings.json` without an interactive approval prompt, and the (large) user prompt passed via **stdin** to avoid the OS `E2BIG` single-argument limit.
+
+| CLI | Instructions | Write-permission flag | Prompt input |
+|-----|--------------|-----------------------|--------------|
+| Claude Code | `--append-system-prompt <text>` | `--permission-mode bypassPermissions` | stdin (`claude -p`) |
+| Cursor | inlined into the prompt | `--force --trust` | stdin (`cursor-agent -p`) |
+| Codex | inlined into the prompt | `--dangerously-bypass-approvals-and-sandbox` | stdin (`codex exec -`) |
+
+The write-permission flags are load-bearing: the runner is already an isolated ephemeral sandbox, but the CLIs default to gating file writes (Claude Code's permission prompt) or a read-only sandbox (Codex `exec`), either of which silently prevents `findings.json` from being written. See [`docs/SECURITY.md`](SECURITY.md) § "Agent-runner providers: residual exfiltration surface" for the trust-boundary implications of these flags.
+
+### Known limitations of the agent-runner path
+
+- **`agent-max-turns` is not enforced for the CLI providers.** None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag on their current versions, so the input can't be forwarded. When it is set, the run now logs a clear warning (rather than silently ignoring it) — the effective bound is the `CLI_INVOCATION_TIMEOUT` (900 s). For a real cap use `agent-extra-args` with a vendor-native flag (e.g. Claude Code's `--max-budget-usd`).
+- **`mcp-config-file` passthrough:** works for **Cursor** (`~/.cursor/mcp.json` + `--approve-mcps`) and **Claude Code** (passed via `--mcp-config <file>`). For **Codex** it does **not** take effect — Codex configures MCP via `~/.codex/config.toml`, not a JSON file — and the run warns accordingly; supply MCP config via `agent-extra-args` (`-c mcp_servers...`) or a preconfigured `config.toml`.
+
 ---
 
 ## Cursor CLI — billing and model selection
@@ -186,7 +203,7 @@ The `provider: cursor` leg has a materially different cost profile from the chat
 ### Recommended default: `model: auto`
 
 - Cursor's `auto` selector routes to the best available model based on availability and load. On Pro plans, `auto` is **unlimited** (subject to fair-use rate limits) and is the right default for CI to avoid draining monthly credits on premium models.
-- Set it explicitly in your workflow:
+- **`auto` is the built-in default for `provider: cursor`** (empty `model:` resolves to it). You only need to set it explicitly if you want to be self-documenting:
 
   ```yaml
   - uses: DailybotHQ/ai-pr-reviewer@v1
@@ -225,3 +242,24 @@ Every run logs the resolved model + argv (with the API key redacted). Combine th
 | BYOK | ❌ Not supported | ✅ Bring your own Anthropic key | ✅ Bring your own OpenAI key | ✅ Bring your own Anthropic key |
 | Unlimited plan | ✅ `model: auto` on Pro | ❌ Metered | ❌ Metered | ❌ Metered |
 | Best for | Teams already on Cursor Pro | Teams already on Anthropic | Teams already on OpenAI | Pure API workloads |
+
+---
+
+## Running more than one provider on the same PR
+
+Most consumers run **one provider per PR** — that's the common case and needs no special setup. But you *can* run several providers side-by-side on the same PR, and it works correctly out of the box.
+
+**`collapse-previous` is scoped per-provider.** Every review body and tracking comment carries an invisible per-provider marker (`<!-- ai-pr-reviewer-provider: <id> -->`). When `collapse-previous` runs (default `true`), it only minimizes *this provider's own* prior artefacts — it will **not** collapse a different provider's review, even though all jobs share one `github-token` (author `github-actions[bot]`). So each provider keeps a single live review, and re-running a provider outdates only its own previous run.
+
+To run multiple providers cleanly:
+
+1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
+2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.
+
+This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) dogfoods all four providers on every PR this way.
+
+> **Passing multiple provider API keys** (e.g. both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` as repo secrets) is fine and does **not** cause cross-contamination: each job forwards only its own provider's key to the CLI subprocess (`_build_cli_env` scrubs everything else), and a single action invocation uses exactly one `provider` + one `api-key`. There is no "both keys in one run" mode — the keys only coexist as separate secrets consumed by separate jobs.
+
+> **Transition note.** A review posted by a version **before** per-provider scoping shipped has no provider marker, so the first run after upgrading won't auto-collapse that one pre-upgrade review (it stays live until you manually mark it outdated). Every review from the upgraded version onward collapses correctly.
+
+> **Scoping keys on the marker, not the author.** A useful side effect: `collapse-previous` no longer collapses unrelated `github-actions[bot]` comments (a coverage bot, a labeler) — only comments carrying this action's provider marker are ever minimized.

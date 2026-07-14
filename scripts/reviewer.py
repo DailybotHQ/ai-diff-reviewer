@@ -96,7 +96,11 @@ DEFAULT_MODELS: dict[str, str] = {
     # default at runtime" (usually the account-tier default for that vendor).
     # A `model:` input from the consumer overrides this.
     "claude-code": "auto",
-    "cursor": "composer-2.5",
+    # `auto` routes through Cursor's model dispatch and is unlimited on Pro
+    # plans (metered premium models like `composer-2.5` burn monthly credits).
+    # docs/PROVIDERS.md recommends `auto` as the CI default; keep the default
+    # aligned with that guidance. Consumers can still pin a specific model.
+    "cursor": "auto",
     "codex": "gpt-5-codex",
 }
 
@@ -221,6 +225,18 @@ SEVERITY_RANK: dict[str, int] = {
 # the most recent review unambiguously, even if other bots also comment.
 REVIEW_MARKER: str = "<!-- ai-pr-reviewer-marker -->"
 
+# Per-provider marker embedded in both the tracking comment AND the review
+# body. It lets `collapse-previous` scope to "this provider's own prior
+# artefacts" so several providers can review the same PR concurrently (with
+# one shared GITHUB_TOKEN / bot author) without collapsing each other. See
+# docs/PROVIDERS.md § "Running more than one provider on the same PR".
+PROVIDER_MARKER_PREFIX: str = "<!-- ai-pr-reviewer-provider:"
+
+
+def provider_marker(provider_id: str) -> str:
+    """The HTML-comment marker identifying which provider produced a comment."""
+    return f"{PROVIDER_MARKER_PREFIX} {provider_id} -->"
+
 # Agent-runner findings contract (see AgentRunnerProvider docstring).
 # Each CLI provider writes its findings to `<output_dir>/<FINDINGS_JSON_REL>`
 # before exiting; `parse_findings_file` reads + validates that file.
@@ -261,6 +277,40 @@ def redact_for_log(args: dict[str, Any]) -> dict[str, Any]:
         k: ("***" if any(s in k.lower() for s in LOG_REDACT_SUBSTRINGS) else v)
         for k, v in args.items()
     }
+
+
+# Registry of literal secret VALUES that must never reach a public surface
+# (a PR comment or review body). `redact_for_log` scrubs by key *name*; this
+# scrubs by exact value. Populated once in `main()` with the provider API key
+# and the GitHub token. Defense-in-depth for the agent-runner path, where a
+# prompt-injected vendor CLI could echo its API key into a finding body (see
+# docs/SECURITY.md § "Agent-runner providers: residual exfiltration surface").
+_SECRET_VALUES: set[str] = set()
+# Below this length a "secret" is too short to scrub without risking mangling
+# ordinary review prose. Real API keys / tokens are far longer.
+MIN_SCRUBBABLE_SECRET_LEN: int = 8
+
+
+def register_secret(value: str) -> None:
+    """Register a secret value for scrubbing from public-facing text."""
+    if value and len(value) >= MIN_SCRUBBABLE_SECRET_LEN:
+        _SECRET_VALUES.add(value)
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace every registered secret value in `text` with `***`.
+
+    Applied to review summaries, inline-comment bodies, and failure messages
+    before they are posted to the PR, so a leaked/echoed key can't surface in
+    a public comment even if the model (or a vendor CLI) was tricked into
+    embedding it.
+    """
+    if not text:
+        return text
+    for secret in _SECRET_VALUES:
+        if secret in text:
+            text = text.replace(secret, "***")
+    return text
 
 
 def truncate_for_tool(text: str, *, label: str) -> str:
@@ -609,12 +659,24 @@ def gh_remove_labels_by_prefix(
 
 
 def gh_collapse_previous_reviews(
-    *, token: str, repo: str, pr_number: int, bot_login: str
+    *,
+    token: str,
+    repo: str,
+    pr_number: int,
+    bot_login: str,
+    provider_marker_text: str = "",
 ) -> int:
     """Mark prior bot reviews/comments as `OUTDATED` via GraphQL.
 
     Returns the number of nodes minimized. Best-effort: failures are logged
     but the review still proceeds.
+
+    When `provider_marker_text` is non-empty, collapsing is **scoped to this
+    provider**: only bot-authored comments/reviews whose body contains that
+    marker are minimized. This lets several providers review the same PR
+    concurrently (sharing one bot author) without collapsing each other. When
+    it is empty, the legacy behaviour applies — every non-minimized comment/
+    review by `bot_login` is collapsed.
 
     `GH_CONNECTION_PAGE_SIZE` (100) is GitHub's hard limit on the `comments`
     and `reviews` connections of a PullRequest. If a PR ever exceeds that many
@@ -628,12 +690,13 @@ def gh_collapse_previous_reviews(
         "  repository(owner:$owner, name:$repo) {"
         "    pullRequest(number:$number) {"
         "      comments(first:$page) {"
-        "        nodes { id isMinimized author { login } }"
+        "        nodes { id isMinimized body author { login } }"
         "      }"
         "      reviews(first:$page) {"
         "        nodes {"
         "          id"
         "          isMinimized"
+        "          body"
         "          author { login }"
         "          comments(first:$page) { nodes { id isMinimized } }"
         "        }"
@@ -677,14 +740,26 @@ def gh_collapse_previous_reviews(
     def _matches(author_login: str) -> bool:
         return author_login in accepted_logins
 
+    def _in_scope(body: str) -> bool:
+        """Provider scoping: in scoped mode (`provider_marker_text` set),
+        only artefacts carrying this provider's marker are in scope. In
+        legacy mode (empty), every bot-authored artefact is in scope."""
+        if not provider_marker_text:
+            return True
+        return provider_marker_text in (body or "")
+
     targets: list[str] = []
     for c in issue_comments:
         author_login: str = str((c.get("author") or {}).get("login") or "")
-        if _matches(author_login) and not c.get("isMinimized", False):
+        if (
+            _matches(author_login)
+            and not c.get("isMinimized", False)
+            and _in_scope(str(c.get("body") or ""))
+        ):
             targets.append(c["id"])
     for r in reviews:
         author_login = str((r.get("author") or {}).get("login") or "")
-        if _matches(author_login):
+        if _matches(author_login) and _in_scope(str(r.get("body") or "")):
             if not r.get("isMinimized", False):
                 targets.append(r["id"])
             inline: list[dict[str, Any]] = (
@@ -969,6 +1044,19 @@ _CLI_ENV_ALLOWLIST: tuple[str, ...] = (
     "RUNNER_ARCH",
     "GITHUB_ACTIONS",
     "CI",
+    # Outbound-proxy configuration — a CLI on a corporate / self-hosted
+    # runner behind a proxy can't reach its vendor API without these. They
+    # are non-secret network config, not credentials.
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    # Custom / self-hosted API endpoints for the vendor CLIs (e.g. an
+    # Anthropic- or OpenAI-compatible gateway). Non-secret base URLs.
+    "ANTHROPIC_BASE_URL",
+    "OPENAI_BASE_URL",
 )
 
 
@@ -1088,29 +1176,51 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write review instructions (with findings-contract directive) to a
-        # file so we can pass it via --append-system-prompt.
-        instructions_file: Path = output_dir / ".aiprr" / "instructions.md"
-        instructions_file.write_text(
-            write_findings_prompt_directive(review_instructions, findings_path),
-            encoding="utf-8",
+        # The review instructions + findings-contract directive go into the
+        # system prompt as LITERAL TEXT via `--append-system-prompt <text>`.
+        # (The flag takes a prompt string, not a path — passing a path would
+        # deliver the literal filename to the model and the rubric/contract
+        # would never arrive.) The instructions are a few KB, well under the
+        # per-argv byte limit; only the diff-carrying user prompt is large,
+        # and that goes via stdin below.
+        enriched_instructions: str = write_findings_prompt_directive(
+            review_instructions, findings_path
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
             self.mcp_config_file, self.MCP_DEST
         )
         try:
-            user_prompt: str = render_user_prompt(pr_context)
+            # User prompt (PR metadata + full diff) is piped via stdin, not
+            # argv: the diff can exceed the OS single-argument limit (~128 KB
+            # E2BIG on Linux). `claude -p` reads the prompt from stdin when no
+            # positional prompt is given.
+            user_prompt: str = render_user_prompt(
+                pr_context, for_agent_runner=True
+            )
             argv: list[str] = [
                 self.CLI_BIN,
                 "-p",
-                user_prompt,
                 "--append-system-prompt",
-                str(instructions_file),
+                enriched_instructions,
                 "--output-format",
                 "stream-json",
                 "--verbose",
+                # Headless CI: the runner is already an isolated, ephemeral
+                # sandbox, so bypass the interactive permission gate that
+                # would otherwise block the Write tool (used to emit
+                # findings.json) in non-interactive mode. Mirrors Cursor's
+                # `--force --trust`. Consumers can override via
+                # `agent-extra-args`.
+                "--permission-mode",
+                "bypassPermissions",
             ]
+            # Claude Code only loads MCP servers from an explicit
+            # `--mcp-config <file>` (or project `.mcp.json`) — a bare copy to
+            # ~/.claude/mcp.json is NOT read. Point the flag at the consumer's
+            # file directly so the passthrough actually takes effect.
+            if self.mcp_config_file:
+                argv += ["--mcp-config", self.mcp_config_file]
             if self.model and self.model != "auto":
                 argv += ["--model", self.model]
             if self.extra_args:
@@ -1125,10 +1235,10 @@ class ClaudeCodeProvider(AgentRunnerProvider):
                 findings_path=findings_path,
                 env=env,
                 cli_name=self.CLI_NAME,
+                stdin_input=user_prompt,
             )
         finally:
             _restore_mcp_config(mcp_dest, mcp_backup)
-            instructions_file.unlink(missing_ok=True)
 
 
 class CursorProvider(AgentRunnerProvider):
@@ -1199,7 +1309,7 @@ class CursorProvider(AgentRunnerProvider):
         user_prompt: str = (
             enriched_instructions
             + "\n\n---\n\n"
-            + render_user_prompt(pr_context)
+            + render_user_prompt(pr_context, for_agent_runner=True)
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
@@ -1296,26 +1406,49 @@ class CodexProvider(AgentRunnerProvider):
         user_prompt: str = (
             enriched_instructions
             + "\n\n---\n\n"
-            + render_user_prompt(pr_context)
+            + render_user_prompt(pr_context, for_agent_runner=True)
         )
+
+        if self.mcp_config_file:
+            # Codex configures MCP servers via `~/.codex/config.toml`
+            # ([mcp_servers] TOML), NOT a JSON file — the copied mcp.json is
+            # ignored. Warn loudly rather than silently no-op so the consumer
+            # knows the passthrough didn't take effect. See docs/PROVIDERS.md.
+            log(
+                "WARNING: mcp-config-file is set but Codex does not read a JSON "
+                "MCP config (it uses ~/.codex/config.toml). The MCP passthrough "
+                "will NOT take effect for provider=codex. Configure MCP via "
+                "agent-extra-args (`-c mcp_servers...`) or a preconfigured "
+                "config.toml instead."
+            )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
             self.mcp_config_file, self.MCP_DEST
         )
         try:
-            # Codex CLI headless is `codex exec` (fully non-interactive since
-            # ~v0.2). Older versions used `--print`; the `exec` subcommand
-            # is the stable surface as of Codex CLI 0.5+.
+            # Codex CLI headless is `codex exec`. Two CI-critical flags:
+            #   --dangerously-bypass-approvals-and-sandbox: `codex exec`
+            #     defaults to a READ-ONLY sandbox, so without this the agent
+            #     physically cannot write findings.json and every review
+            #     fails. This flag is documented as "intended solely for
+            #     running in environments that are externally sandboxed" —
+            #     exactly a GitHub-hosted runner. Mirrors Cursor's
+            #     `--force --trust`.
+            #   `-` positional: read the (diff-carrying, potentially >128 KB)
+            #     prompt from stdin instead of argv, avoiding the OS E2BIG
+            #     single-argument limit.
             argv: list[str] = [
                 self.CLI_BIN,
                 "exec",
                 "--skip-git-repo-check",
-                user_prompt,
+                "--dangerously-bypass-approvals-and-sandbox",
             ]
             if self.model:
                 argv += ["--model", self.model]
             if self.extra_args:
                 argv += shlex.split(self.extra_args)
+            # The stdin sentinel must be the final positional argument.
+            argv.append("-")
 
             env: dict[str, str] = _build_cli_env(
                 extra_vars={"OPENAI_API_KEY": self.api_key}
@@ -1326,6 +1459,7 @@ class CodexProvider(AgentRunnerProvider):
                 findings_path=findings_path,
                 env=env,
                 cli_name=self.CLI_NAME,
+                stdin_input=user_prompt,
             )
         finally:
             _restore_mcp_config(mcp_dest, mcp_backup)
@@ -1347,6 +1481,20 @@ def build_provider(
     # and mcp_config_file come from the AIPRR_* env vars set by action.yml.
     extra_args: str = os.environ.get("AIPRR_AGENT_EXTRA_ARGS", "").strip()
     mcp_config: str = os.environ.get("AIPRR_MCP_CONFIG_FILE", "").strip()
+    # `agent-max-turns` has no universal enforcement point: none of the
+    # shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag
+    # on their current versions. Rather than silently ignore the input, warn
+    # so the consumer knows the effective bound is CLI_INVOCATION_TIMEOUT and
+    # can use `agent-extra-args` for a vendor-native limit. See docs/PROVIDERS.md.
+    agent_max_turns: str = os.environ.get("AIPRR_AGENT_MAX_TURNS", "").strip()
+    if agent_max_turns:
+        log(
+            f"WARNING: agent-max-turns={agent_max_turns!r} is set but is not "
+            f"forwarded to the {provider_id} CLI — no turn-cap flag is "
+            f"available on the shipping CLI. The effective bound is the "
+            f"{CLI_INVOCATION_TIMEOUT}s invocation timeout. Use agent-extra-args "
+            "for a vendor-native limit (e.g. Claude Code's --max-budget-usd)."
+        )
     if provider_id == "claude-code":
         return ClaudeCodeProvider(
             api_key=api_key,
@@ -1502,13 +1650,45 @@ def fetch_pr_context(
     )
 
 
-def render_user_prompt(ctx: PRContext) -> str:
-    """Produce the first user message — PR metadata + diff."""
+def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str:
+    """Produce the first user message — PR metadata + diff.
+
+    The closing paragraph differs by provider family:
+      - Chat-completions (`for_agent_runner=False`): references the built-in
+        `read_file`/`grep`/`glob`/`post_inline_comment`/`submit_review` tools
+        that this action owns.
+      - Agent-runner (`for_agent_runner=True`): those tools do NOT exist for a
+        vendor CLI, which uses its own file/search tools and returns findings
+        via the `findings.json` output contract (see
+        `write_findings_prompt_directive`). Emitting the chat-completions tool
+        names here would give the CLI contradictory, unfollowable instructions.
+    """
     files_block: str = "\n".join(
         f"- {f['path']} ({f['status']}) +{f['additions']}/-{f['deletions']}"
         for f in ctx.changed_files
     )
     body_block: str = ctx.body.strip() or "(no body)"
+    if for_agent_runner:
+        closing: str = (
+            "Review this PR using the rubric in the instructions above. Use "
+            "your own file-reading and search tools to verify findings "
+            "against the broader codebase before reporting them. Only comment "
+            "on lines that appear in the diff, and set each finding's "
+            "`severity` honestly — it drives the gating behaviour configured "
+            "by the consumer. When you're done, write your review to the "
+            "findings file exactly as described in the output contract."
+        )
+    else:
+        closing = (
+            "Review this PR using the system prompt's rubric. Use `read_file`, "
+            "`grep`, and `glob` to verify findings against the broader "
+            "codebase before reporting them. Queue inline comments with "
+            "`post_inline_comment` (only on lines that appear in the diff) and "
+            "set the `severity` argument honestly — it drives the gating "
+            "behaviour configured by the consumer. When you're done, call "
+            "`submit_review` exactly once with the summary markdown — that "
+            "signals the end of the session and posts the review."
+        )
     return (
         f"# PR Context\n\n"
         f"**Title:** {ctx.title}\n"
@@ -1520,14 +1700,7 @@ def render_user_prompt(ctx: PRContext) -> str:
         f"## Changed Files\n\n{files_block or '(none)'}\n\n"
         f"## Full Diff\n\n```diff\n{ctx.diff}\n```\n\n"
         "---\n\n"
-        "Review this PR using the system prompt's rubric. Use `read_file`, "
-        "`grep`, and `glob` to verify findings against the broader codebase "
-        "before reporting them. Queue inline comments with "
-        "`post_inline_comment` (only on lines that appear in the diff) and "
-        "set the `severity` argument honestly — it drives the gating "
-        "behaviour configured by the consumer. When you're done, call "
-        "`submit_review` exactly once with the summary markdown — that "
-        "signals the end of the session and posts the review."
+        + closing
     )
 
 
@@ -2761,8 +2934,17 @@ def drive_review(
 # ---------------------------------------------------------------------------
 
 
+def _tracking_marker_header(provider: str) -> str:
+    """First line(s) of every tracking comment: the review marker, plus the
+    per-provider marker when `provider` is set (enables provider-scoped
+    `collapse-previous`)."""
+    if provider:
+        return f"{REVIEW_MARKER}\n{provider_marker(provider)}"
+    return REVIEW_MARKER
+
+
 def render_tracking_body_working(
-    head_sha: str, *, collapse_previous: bool
+    head_sha: str, *, collapse_previous: bool, provider: str = ""
 ) -> str:
     """The initial 'Working…' tracking-comment body."""
     collapsed_note: str = (
@@ -2771,7 +2953,7 @@ def render_tracking_body_working(
         else ""
     )
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — _Working…_\n\n"
         f"Full SHA: `{head_sha}`\n\n"
         f"Reviewing the latest pushed changes.{collapsed_note}"
@@ -2787,6 +2969,7 @@ def render_tracking_body_done(
     severity: str,
     blocked: bool,
     block_reason: str,
+    provider: str = "",
 ) -> str:
     """The terminal 'done' tracking-comment body."""
     status_emoji: str = "✅" if not blocked else "🚫"
@@ -2806,7 +2989,7 @@ def render_tracking_body_done(
     else:
         inline_line = f"_{inline_attached} inline comment(s) attached._"
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — {status_emoji} done\n\n"
         f"[View review →]({review_url})\n\n"
         f"**Highest severity:** `{severity}`{block_line}\n\n"
@@ -2814,12 +2997,20 @@ def render_tracking_body_done(
     )
 
 
-def render_tracking_body_failed(*, head_sha: str, error: str) -> str:
-    """The terminal 'failed' tracking-comment body."""
+def render_tracking_body_failed(
+    *, head_sha: str, error: str, provider: str = ""
+) -> str:
+    """The terminal 'failed' tracking-comment body.
+
+    The error text can carry CLI stderr/stdout tails (see `_invoke_cli_agent`),
+    so it is passed through `scrub_secrets` before being embedded in this
+    public comment.
+    """
+    safe_error: str = scrub_secrets(error)[:MAX_TRACKING_ERROR_CHARS]
     return (
-        f"{REVIEW_MARKER}\n"
+        f"{_tracking_marker_header(provider)}\n"
         f"### AI review for `{head_sha[:7]}` — ❌ failed\n\n"
-        f"```\n{error[:MAX_TRACKING_ERROR_CHARS]}\n```\n\n"
+        f"```\n{safe_error}\n```\n\n"
         "_See the workflow logs for the full traceback._"
     )
 
@@ -2851,6 +3042,10 @@ def main() -> int:
         )
         write_all_outputs(skipped=False)
         return 1
+    # Register the two secrets so their literal values are scrubbed from any
+    # text that reaches a public PR comment / review body (see scrub_secrets).
+    register_secret(api_key)
+    register_secret(gh_token)
     pr_number: int = int(pr_number_raw)
 
     model: str = (
@@ -3030,6 +3225,9 @@ def main() -> int:
                 repo=repo,
                 pr_number=pr_number,
                 bot_login=bot_login,
+                # Scope collapsing to THIS provider's prior artefacts so
+                # concurrent multi-provider reviews don't collapse each other.
+                provider_marker_text=provider_marker(provider_id),
             )
         except Exception as e:  # noqa: BLE001
             log(f"Collapse-previous step failed (non-fatal): {e}")
@@ -3045,7 +3243,9 @@ def main() -> int:
                 repo=repo,
                 pr_number=pr_number,
                 body=render_tracking_body_working(
-                    head_sha, collapse_previous=collapse_previous
+                    head_sha,
+                    collapse_previous=collapse_previous,
+                    provider=provider_id,
                 ),
             )
             log(f"Tracking comment id: {tracking_id}")
@@ -3080,6 +3280,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not read prompt file: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3103,6 +3304,7 @@ def main() -> int:
                 body=render_tracking_body_failed(
                     head_sha=head_sha,
                     error=f"Could not read prompt extension file: {e}",
+                    provider=provider_id,
                 ),
             )
             write_all_outputs(skipped=False)
@@ -3220,6 +3422,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"{type(e).__name__}: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3255,6 +3458,20 @@ def main() -> int:
             )
         )
 
+    # Scrub any registered secret value out of everything that is about to be
+    # posted publicly — the summary and each inline-comment body. On the
+    # agent-runner path these strings originate from a vendor CLI that holds
+    # an API key in its env; this is the last line of defence before a leaked
+    # key could land in a public comment (see docs/SECURITY.md).
+    result.summary = scrub_secrets(result.summary)
+    for _finding in result.findings:
+        _finding.body = scrub_secrets(_finding.body)
+
+    # Embed the provider marker (an invisible HTML comment) at the top of the
+    # review body so `collapse-previous` can scope to this provider's own
+    # prior reviews — see provider_marker / gh_collapse_previous_reviews.
+    result.summary = f"{provider_marker(provider_id)}\n\n{result.summary}"
+
     log(
         f"Submitting review: {len(result.findings)} inline comment(s), "
         f"{len(result.summary)} chars of summary"
@@ -3277,6 +3494,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not post the review: {e}",
+                provider=provider_id,
             ),
         )
         write_all_outputs(skipped=False)
@@ -3375,6 +3593,7 @@ def main() -> int:
         severity=severity,
         blocked=blocked,
         block_reason=block_reason,
+        provider=provider_id,
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".

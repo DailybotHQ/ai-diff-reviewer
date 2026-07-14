@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-14
+
+**Headline:** the "actually-works-on-Marketplace" release — renames the Marketplace listing to unblock the first-time publish (a squatting `appchoose/ai-pr-review` action already owns the un-prefixed slug) and ships two provider-side fix batches that landed on `main` after `v1.2.0` was tagged (`claude-code` and `codex` were both broken out of the box in `v1.2.0`; this patch is what makes those providers actually usable). Consumers pinning `@v1` pick everything up automatically.
+
+### Changed
+- **Marketplace listing renamed to "Dailybot AI PR Reviewer"** (`action.yml` `name:`). The un-prefixed name slug-ifies to `ai-pull-request-reviewer`, which is already claimed by an unrelated third-party action (`appchoose/ai-pr-review`, v1.1.5). The vendor-prefix pattern is the standard Marketplace resolution and keeps our repo slug, docs, and user-facing product copy on "AI PR Reviewer". See `AGENTS.md` § 9 (Marketplace Branding Stable). No workflow changes required — `uses: DailybotHQ/ai-pr-reviewer@v1` is unaffected.
+- **Default Cursor model is now `auto`** (was `composer-2.5`). `auto` is unlimited on Cursor Pro plans and is the CI recommendation in `docs/PROVIDERS.md`; the default now matches the docs. Pin `composer-2.5` (or any specific model) via `model:` if you want to force one.
+- **`collapse-previous` is now scoped per provider.** Every review body and tracking comment carries an invisible `<!-- ai-pr-reviewer-provider: <id> -->` marker, and `collapse-previous` only minimizes *this provider's own* prior artefacts. Effects: (1) several providers can review the same PR concurrently — even sharing one `GITHUB_TOKEN` — without collapsing each other (`self-review.yml`'s four-provider matrix keeps the default `true` and relies on the scoping); (2) unrelated `github-actions[bot]` comments (coverage bots, labelers) are no longer collapsed. See `docs/PROVIDERS.md` § "Running more than one provider on the same PR". Transition: a single pre-upgrade review without the marker won't be auto-collapsed on the first run after upgrading.
+- **`agent-max-turns` now warns instead of silently doing nothing** for the CLI providers. None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag, so the input can't be forwarded; the run logs a clear warning pointing at `agent-extra-args` and noting the `CLI_INVOCATION_TIMEOUT` (900 s) as the effective bound, rather than leaving a misleading dead input.
+
+### Fixed
+- **`provider: claude-code` and `provider: codex` now actually produce reviews.** Both were broken out of the box and failed on essentially every PR:
+  - **Claude Code** received its review rubric + `findings.json` output contract as a literal *file path* (`--append-system-prompt <path>`) instead of text, so the instructions never reached the model — it was never told to write findings and the run failed with `FileNotFoundError`. Now the instructions are passed as text via `--append-system-prompt`.
+  - **Claude Code** ran in the default headless permission mode, which denies the `Write` tool in non-interactive CI, so it could not emit `findings.json` even when instructed. Now invoked with `--permission-mode bypassPermissions` (the runner is already an isolated ephemeral sandbox; mirrors Cursor's `--force --trust`).
+  - **Codex** ran `codex exec` in its default read-only sandbox and physically could not write `findings.json`. Now invoked with `--dangerously-bypass-approvals-and-sandbox` (documented for externally-sandboxed CI environments).
+- **Large PRs no longer crash `claude-code` / `codex` with `E2BIG`.** Both embedded the full diff (up to 200 KB) in a single argv argument, exceeding the Linux ~128 KB per-argument limit. The prompt is now piped via stdin (`claude -p` reads stdin; `codex exec -`), matching the fix Cursor already had.
+- **Agent-runner prompt hygiene.** The user prompt handed to the CLI providers referenced the chat-completions-only tools `post_inline_comment` / `submit_review`, which don't exist for a vendor CLI. Agent-runner providers now get a tailored prompt that points at the `findings.json` output contract instead of contradictory tool names.
+- **Claude Code MCP passthrough now takes effect.** `mcp-config-file` was copied to `~/.claude/mcp.json`, which Claude Code does not read — the passthrough silently did nothing. The CLI is now invoked with `--mcp-config <file>` pointing at the consumer's config.
+- **Codex MCP passthrough now warns instead of silently no-op'ing.** Codex configures MCP via `~/.codex/config.toml`, not a JSON file, so `mcp-config-file` never took effect for `provider: codex`. The run now logs a clear warning pointing at `agent-extra-args` / `config.toml` instead of pretending it worked. (Full Codex MCP support is a documented follow-up.)
+- **Vendor CLIs now inherit proxy and custom-endpoint config.** `_build_cli_env` forwards `HTTP(S)_PROXY` / `NO_PROXY` and `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` (non-secret network config) so agent-runner providers work on proxied / self-hosted runners and against compatible gateways.
+
+### Security
+- **`docs/SECURITY.md`** now documents the real exfiltration surface of the agent-runner providers (vendor API key in the CLI subprocess env + `GITHUB_TOKEN` persisted by `actions/checkout` in `.git/config`, both reachable by an injected CLI) and corrects the prior blast-radius claim, which only held for `provider: anthropic`. Recommends running agent-runner providers on trusted/non-fork PRs only and setting `persist-credentials: false`.
+- **Runtime secret scrubbing.** The provider API key and GitHub token are registered as literal secret values (`register_secret`) and scrubbed (`scrub_secrets`) from the review summary, every inline-comment body, and any failure message before it is posted to the PR — a defense-in-depth backstop against a prompt-injected vendor CLI echoing its key into a public comment.
+
 ## [1.2.0] — 2026-07-11
 
 **Headline:** the "configurable review workflow" release — five new inputs that let consumers control when the review fires, how the prompt is composed, whether the PR description is auto-completed, whether complexity labels are applied, and a fourth strictness tier for zero-tolerance stacks. Every knob is additive and opt-in; consumers on `@v1` see zero behavioural drift.
@@ -113,6 +138,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/DailybotHQ/ai-pr-reviewer/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DailybotHQ/ai-pr-reviewer/releases/tag/v1.0.0
