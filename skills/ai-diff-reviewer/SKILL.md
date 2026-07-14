@@ -357,10 +357,8 @@ Whichever path you take, the layout options are the same:
 
 **Option A — `.review/extension.md`** (recommended):
 
-**Option A — `.review/extension.md`** (recommended):
-
 ```
-mi-repo/
+my-repo/
 ├── .review/
 │   └── extension.md         ← auto-detected by this skill
 └── .github/

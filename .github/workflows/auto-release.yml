@@ -194,20 +194,55 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Give GitHub a moment to propagate the just-pushed tag through the
-          # API (git tag list on the git protocol is instant; the REST/graphql
-          # surface backing `npx skills` occasionally lags by a few seconds).
+          # `NEW_VERSION` is `vX.Y.Z`; the SKILL.md frontmatter and
+          # `npx skills add @<ref>` want the bare `X.Y.Z` form.
+          VERSION_NO_V="${NEW_VERSION#v}"
+
+          # Give GitHub a moment to propagate the just-pushed tag through
+          # the API (git tag list on the git protocol is instant; the
+          # REST/graphql surface backing `npx skills` occasionally lags a
+          # few seconds).
           sleep 5
 
-          # Refresh in place. `npx skills update <name>` respects the entry
-          # in skills-lock.json (source = DailybotHQ/ai-diff-reviewer) and
-          # pulls the newest matching tag — which is the one we just pushed.
-          echo "::group::npx skills update ai-diff-reviewer"
-          npx --yes skills update ai-diff-reviewer
+          # Pin to the exact tag we just cut instead of letting `update`
+          # pick "the newest matching tag". If the tag isn't visible yet
+          # (propagation lag, publish failure), `npx skills add @<tag>`
+          # fails loudly here — that's the whole point of the smoke test.
+          # A silent "already up to date" from `update` would let a
+          # broken release slip through, which is exactly the failure
+          # mode the finding on the previous iteration of this step
+          # flagged (PR #25 warning #1). Hard-pinning + `--force` keeps
+          # the outcome deterministic even if the vendored tree is
+          # already at some newer or equal state.
+          echo "::group::npx skills add DailybotHQ/ai-diff-reviewer@${NEW_VERSION} --skill ai-diff-reviewer --force"
+          npx --yes skills add "DailybotHQ/ai-diff-reviewer@${NEW_VERSION}" \
+            --skill ai-diff-reviewer --force
           echo "::endgroup::"
 
+          # Explicit invariant assertion: the vendored SKILL.md's
+          # `version:` field MUST equal the tag we just published. If it
+          # doesn't, `npx skills` accepted the fetch but installed the
+          # wrong content — fail hard rather than commit a
+          # misrepresented "dogfood" state.
+          VENDORED_VERSION=$(
+            sed -nE 's/^version:[[:space:]]*"([^"]+)".*/\1/p' \
+              .agents/skills/ai-diff-reviewer/SKILL.md | head -n1
+          )
+          if [ "${VENDORED_VERSION}" != "${VERSION_NO_V}" ]; then
+            echo "::error::Vendored SKILL.md version is '${VENDORED_VERSION}'"
+            echo "::error::but the just-published tag is '${NEW_VERSION}'"
+            echo "::error::(expected frontmatter '${VERSION_NO_V}')."
+            echo "::error::Refusing to commit a stale dogfood snapshot."
+            exit 1
+          fi
+          echo "OK: vendored ai-diff-reviewer at ${NEW_VERSION} (verified)"
+
+          # Empty diff after a `--force` add with a matching version
+          # assertion means the working copy was already at this tag —
+          # no commit needed (idempotent), but the smoke test PASSED
+          # (the pinned fetch + version check both succeeded).
           if git diff --quiet -- .agents/skills/ai-diff-reviewer skills-lock.json; then
-            echo "Vendored ai-diff-reviewer already at ${NEW_VERSION}; nothing to sync."
+            echo "Vendored ai-diff-reviewer already at ${NEW_VERSION}; nothing to commit."
             exit 0
           fi
 
