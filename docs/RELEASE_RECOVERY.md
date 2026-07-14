@@ -65,9 +65,12 @@ git show vX.Y.Z --stat | head -20
 git log origin/main..vX.Y.Z --oneline
 # Should show ONE commit — the `chore(release): sync skill artifacts`.
 
-# And @v1 is still on the old release.
-git rev-parse v1              # ← previous release SHA
-git rev-parse vX.Y.Z^{commit} # ← new release SHA (the sync commit)
+# And @v1 is still on the old release. Peel both refs to their
+# underlying commit SHA — v1 today is an annotated tag pointing at the
+# previous release tag object, so a bare `rev-parse v1` returns the
+# tag-object SHA and wouldn't compare cleanly against a commit SHA.
+git rev-parse v1^{commit}     # ← previous release commit SHA
+git rev-parse vX.Y.Z^{commit} # ← new release commit SHA (the sync commit)
 ```
 
 If the last commit reachable from `vX.Y.Z` matches the current `main`
@@ -180,7 +183,14 @@ Auto-release's Step 5 never ran, so no Release page exists yet. Create
 it manually with auto-generated notes:
 
 ```bash
-PREV=$(git tag --sort=-v:refname | sed -n 2p)   # e.g. v1.4.2
+# Filter to release tags (`vMAJOR.MINOR.PATCH`) only — matches the same
+# pattern auto-release.yml Step 2 uses to compute `previous_tag`.
+# Excludes major aliases (`v1`), pre-release tags, and anything else
+# that could otherwise slip in with `git tag --sort=-v:refname | sed -n 2p`.
+PREV=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
+  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+  | grep -vFx "vX.Y.Z" \
+  | head -n1)                                    # e.g. v1.4.2
 gh release create vX.Y.Z \
   --title "vX.Y.Z" \
   --generate-notes \
@@ -270,11 +280,52 @@ policy reasons.
 
 ### Step 3.5 dogfood refresh fails after a successful release
 
-If the atomic push succeeded but Step 3.5 fails (version mismatch, `npx
-skills` install error, network flake), the tag + main + `@v1` + GitHub
-Release are all correct — only the vendored `.agents/skills/` refresh
-is missing. Recovery is just section [6](#6-refresh-the-vendored-dogfood-copy)
-above.
+Step 3.5 runs after the atomic tag+main push (Step 3) succeeded but
+BEFORE the GitHub Release is created (Steps 4–5). Its own final push
+(`git push origin HEAD:main` for the `chore(release): dogfood…` commit)
+does NOT use `--atomic` because there's no accompanying tag — it's a
+lone commit push. If that push is rejected by branch protection (same
+root cause as the Step 3 failure this playbook covers) OR if the
+`npx skills add` fetch fails OR if the version-assertion check
+mismatches, the step exits non-zero AND `set -euo pipefail` aborts the
+job before Steps 4 and 5.
+
+After a Step 3.5 abort the state is:
+
+- ✅ Tag `vX.Y.Z` on remote (Step 3 succeeded)
+- ✅ `main` contains the Step 2.5 sync commit (Step 3 pushed it)
+- ✅ `@v1` was moved to `vX.Y.Z` (last line of Step 3)
+- ❌ Vendored `.agents/skills/` NOT refreshed (Step 3.5 aborted)
+- ❌ **No GitHub Release for `vX.Y.Z`** (Step 4 didn't run)
+- ❌ No Marketplace update (that trigger fires on Release creation)
+
+Recovery is TWO manual steps, not one:
+
+1. **Create the GH Release manually** — [section 5](#5-create-the-github-release)
+   above. This is the load-bearing step for Marketplace; the vendored
+   dogfood refresh is cosmetic by comparison.
+2. **Refresh the vendored copy in a follow-up PR** — [section 6](#6-refresh-the-vendored-dogfood-copy)
+   above.
+
+Step 3.5's push has the same branch-protection blind spot as Step 3
+did before the `--atomic` hardening. Two acceptable follow-up fixes,
+in order of preference:
+
+1. **Wire `AUTOMATION_GITHUB_TOKEN` bypass** (Option A above). Same
+   configuration that unblocks Step 3's push also unblocks Step 3.5's
+   commit push — one setting, both steps fixed. Preferred because it
+   also fixes any FUTURE step that needs to push to `main`.
+2. **Reorder Steps 4–5 before Step 3.5.** Publish the GitHub Release
+   FIRST (so Marketplace gets the update and consumers can pin the
+   new tag), THEN attempt the dogfood refresh. A Step 3.5 failure
+   still aborts the workflow, but the release-visible surface is
+   already complete by that point; recovery is only the vendored
+   copy PR ([section 6](#6-refresh-the-vendored-dogfood-copy)).
+
+Avoid `continue-on-error: true` on Step 3.5 as the fix — it would
+silently mask a broken skill-install smoke test (the whole point of
+Step 3.5's third purpose is to loudly catch broken `npx skills` fetches
+on the just-published tag), turning green what should be red.
 
 ### `skills-prompt-sync` CI check fires on a release PR
 
