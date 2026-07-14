@@ -57,6 +57,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migrate.
 
 ### Added
+- **Auto-release dogfooding of the vendored companion skill.** New Step 3.5
+  in [`auto-release.yml`](.github/workflows/auto-release.yml) runs
+  `npx skills update ai-diff-reviewer` immediately after each release tag
+  is pushed and commits the refreshed `.agents/skills/ai-diff-reviewer/`
+  + `skills-lock.json` as `chore(release): dogfood vendored
+  ai-diff-reviewer to vX.Y.Z [skip release]`. Three benefits:
+  - **Live smoke-test** — every release proves the just-published tag
+    installs cleanly via `npx skills` on a real consumer setup (this
+    repo IS a consumer). Broken installers fail here, before external
+    consumers ever try to update.
+  - **Cloning-parity** — anyone cloning at HEAD gets a vendored copy
+    that matches the current release, not the previous one.
+  - **Lockfile freshness** — the recorded content hash stays accurate
+    after every release, keeping `experimental_install` restore flows
+    reliable.
+  Documented as Rule #10 pillar (B) in [`AGENTS.md`](AGENTS.md) — the
+  runtime dogfooding via `self-review.yml` (pillar A) and the install-flow
+  dogfooding via this step (pillar B) are now formal invariants. Also
+  bans hand-editing `.agents/skills/ai-diff-reviewer/**` on feature
+  branches (new DON'T #14).
+- **First-time vendor of the ai-diff-reviewer skill into this repo.**
+  Ran `npx skills add DailybotHQ/ai-diff-reviewer@v1.4.2 --skill
+  ai-diff-reviewer` on `main` to establish the vendored baseline that
+  Step 3.5 will refresh going forward. Adds
+  `.agents/skills/ai-diff-reviewer/` (SKILL.md + prompt.md +
+  generate-extension/ + setup/) and an entry in `skills-lock.json`
+  alongside `dailybot` and `deepworkplan`.
 - **Sub-skill: [`setup`](skills/ai-diff-reviewer/setup/SKILL.md)** —
   interactive installer for the GitHub Action itself. Walks the
   developer through six decisions (provider, strictness, trigger mode,
