@@ -68,7 +68,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 
 - **Inline comments** anchored to specific lines, with optional GitHub suggestion blocks (one-click apply).
 - **Tracking comment** with a `<!-- ai-pr-reviewer-marker -->` marker that transitions in-place from `Working…` → `View review →`.
-- **Auto-collapse** of previous bot reviews on every new push (no comment-spam noise from older commits).
+- **Auto-collapse** of *this provider's* previous reviews on every new push, scoped by a per-provider marker — leaves other bots' comments (coverage, labelers) and other-provider reviews alone, so multi-provider dogfooding on the same PR just works.
 - **Severity-based gating**: the model assigns `critical` / `warning` / `info` to each finding; you decide what fails the check.
 - **Optional label gate**: only run when a PR carries a label (e.g. `ready`).
 - **Optional "reviewed" label**: applied automatically after a successful, non-blocked review.
@@ -266,12 +266,12 @@ For the full design, see [docs/PROVIDERS.md](docs/PROVIDERS.md), [docs/PROMPTS.m
 
 | Provider | Family | Status | Notes |
 |---|---|---|---|
-| Anthropic (Claude) | chat-completions | ✅ shipping | Sonnet 4.6 default. Zero CLI install. |
-| Claude Code CLI | agent-runner | 🚧 v1.1.0 (in progress) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. |
-| Cursor Agent CLI | agent-runner | 🚧 v1.1.0 (in progress) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. |
-| OpenAI Codex CLI | agent-runner | 🚧 v1.1.0 (in progress) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
-| OpenAI (raw API) | chat-completions | 🛠 roadmap (v1.2) | Direct chat-completions, no CLI install. |
-| Google Gemini | chat-completions | 🛠 roadmap (v1.2) | Function-calling translation. |
+| Anthropic (Claude) | chat-completions | ✅ shipping (v1.0.0+) | `claude-sonnet-4-6` default. Zero CLI install. |
+| Claude Code CLI | agent-runner | ✅ shipping (v1.2.1+) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. Works with subscription auth. |
+| Cursor Agent CLI | agent-runner | ✅ shipping (v1.2.1+) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. Default model `auto` — unlimited on Cursor Pro. |
+| OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
+| OpenAI (raw API) | chat-completions | 🛠 roadmap | Direct chat-completions, no CLI install. |
+| Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |
 
 **Two provider families:**
