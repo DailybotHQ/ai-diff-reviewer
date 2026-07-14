@@ -270,11 +270,39 @@ policy reasons.
 
 ### Step 3.5 dogfood refresh fails after a successful release
 
-If the atomic push succeeded but Step 3.5 fails (version mismatch, `npx
-skills` install error, network flake), the tag + main + `@v1` + GitHub
-Release are all correct — only the vendored `.agents/skills/` refresh
-is missing. Recovery is just section [6](#6-refresh-the-vendored-dogfood-copy)
-above.
+Step 3.5 runs after the atomic tag+main push (Step 3) succeeded but
+BEFORE the GitHub Release is created (Steps 4–5). Its own final push
+(`git push origin HEAD:main` for the `chore(release): dogfood…` commit)
+does NOT use `--atomic` because there's no accompanying tag — it's a
+lone commit push. If that push is rejected by branch protection (same
+root cause as the Step 3 failure this playbook covers) OR if the
+`npx skills add` fetch fails OR if the version-assertion check
+mismatches, the step exits non-zero AND `set -euo pipefail` aborts the
+job before Steps 4 and 5.
+
+After a Step 3.5 abort the state is:
+
+- ✅ Tag `vX.Y.Z` on remote (Step 3 succeeded)
+- ✅ `main` contains the Step 2.5 sync commit (Step 3 pushed it)
+- ✅ `@v1` was moved to `vX.Y.Z` (last line of Step 3)
+- ❌ Vendored `.agents/skills/` NOT refreshed (Step 3.5 aborted)
+- ❌ **No GitHub Release for `vX.Y.Z`** (Step 4 didn't run)
+- ❌ No Marketplace update (that trigger fires on Release creation)
+
+Recovery is TWO manual steps, not one:
+
+1. **Create the GH Release manually** — [section 5](#5-create-the-github-release)
+   above. This is the load-bearing step for Marketplace; the vendored
+   dogfood refresh is cosmetic by comparison.
+2. **Refresh the vendored copy in a follow-up PR** — [section 6](#6-refresh-the-vendored-dogfood-copy)
+   above.
+
+Step 3.5's push has the same branch-protection blind spot as Step 3
+did before the `--atomic` hardening. A follow-up PR should either
+(a) migrate Step 3.5 to `continue-on-error: true` so Steps 4–5 still
+run (accepting that the vendored copy might be one release behind
+until the next PR), or (b) wire the same `AUTOMATION_GITHUB_TOKEN`
+bypass fix that Option A above provides for Step 3.
 
 ### `skills-prompt-sync` CI check fires on a release PR
 
