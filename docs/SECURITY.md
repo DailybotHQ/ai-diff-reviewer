@@ -4,9 +4,9 @@ This document covers the security model of AI PR Reviewer — the runtime, the s
 
 ## Reporting a vulnerability
 
-Please **do not** open a public GitHub issue. Email the maintainers via the address listed in the `CODEOWNERS` file or the repository's GitHub security advisory channel:
+Please **do not** open a public GitHub issue. Report vulnerabilities privately through GitHub's Security Advisory flow — any GitHub account can submit:
 
-- GitHub: open a private advisory at `https://github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new`.
+- Open a private advisory at [`github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new`](https://github.com/DailybotHQ/ai-pr-reviewer/security/advisories/new).
 
 We aim to acknowledge within 48 hours and ship a fix or workaround within 14 days for high-severity issues.
 
