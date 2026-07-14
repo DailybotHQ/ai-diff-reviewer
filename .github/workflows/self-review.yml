@@ -21,14 +21,16 @@ name: Self-review
 #      **Skipped** (grey). A green leg means it actually reviewed.
 #   4. MERGE GATE — a final `gate` job with a STABLE name (`Self-review gate`)
 #      is the one check you mark as *Required* in branch protection. It FAILS
-#      (red → blocks merge) when the review did not actually run and pass — no
-#      `ready` label, a failed leg, or a scope error. This is necessary because
-#      GitHub's branch protection treats a **Skipped** required check as
-#      *passing* (mergeable) — only *failure* or *pending* blocks a merge. So
-#      the per-leg "Skipped" status (goal 3) stays honest for humans reading the
-#      checks list, while the gate turns "didn't review" into a hard block.
-#      Mark ONLY `Self-review gate` required — never the dynamic `Self-review —
-#      <provider>` leg names (they vary and disappear when skipped).
+#      (red → blocks merge) unless AT LEAST ONE provider leg ran and passed — a
+#      missing `ready` label, a scope error, or every leg failing all block; a
+#      single failing provider does NOT block if another passed. This is
+#      necessary because GitHub's branch protection treats a **Skipped**
+#      required check as *passing* (mergeable) — only *failure* or *pending*
+#      blocks a merge. So the per-leg "Skipped" status (goal 3) stays honest for
+#      humans reading the checks list, while the gate turns "nothing reviewed"
+#      into a hard block. Mark ONLY `Self-review gate` required — never the
+#      dynamic `Self-review — <provider>` leg names (they vary and disappear
+#      when skipped).
 #
 # Why a `scope` job + dynamic matrix instead of a per-leg `if:`? GitHub Actions
 # does not expose the `matrix` context to a job-level `if:`, so a static matrix
@@ -69,6 +71,11 @@ jobs:
     outputs:
       # A JSON array of matrix `include` entries — `[]` when nothing runs.
       matrix: ${{ steps.decide.outputs.matrix }}
+      # Why the matrix is empty, so the gate can print an accurate unblock hint:
+      # `no-ready-label` (apply the label) vs `no-eligible-provider` (label is on
+      # but nothing matched — needs a baseline or a critical surface). Empty when
+      # the matrix is non-empty.
+      empty_reason: ${{ steps.decide.outputs.empty_reason }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,7 +116,10 @@ jobs:
           esac
           if [ "$should_run" != "true" ]; then
             echo "::notice::Self-review skipped — apply the 'ready' label to run the dogfood (remove + re-add to re-run)."
-            echo 'matrix=[]' >> "$GITHUB_OUTPUT"
+            {
+              echo 'matrix=[]'
+              echo 'empty_reason=no-ready-label'
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -146,6 +156,30 @@ jobs:
             [ "$HAS_CLAUDE_CODE" = "true" ] && add claude-code CLAUDE_CODE_OAUTH_TOKEN "self-reviewed:claude-code" claude-haiku-4-5
             [ "$HAS_CURSOR" = "true" ]      && add cursor CURSOR_API_KEY "self-reviewed:cursor" auto
             [ "$HAS_OPENAI" = "true" ]      && add codex OPENAI_API_KEY "self-reviewed:codex" gpt-5.4-mini
+          fi
+          # Explain a common surprise: the CLI legs are gated to critical
+          # changes to save cost, and Anthropic is the only always-on baseline.
+          # So with ONLY a CLI provider configured (e.g. just CURSOR_API_KEY) a
+          # non-critical (docs-only) diff yields an empty matrix — which the
+          # merge gate then treats as "did not review" (red). Surface it so the
+          # empty matrix isn't a mystery: configure ANTHROPIC_API_KEY for a
+          # baseline that reviews every PR, or make the change touch a critical
+          # surface to exercise the CLI legs.
+          if [ "$critical" != "true" ] \
+            && { [ "$HAS_CLAUDE_CODE" = "true" ] || [ "$HAS_CURSOR" = "true" ] || [ "$HAS_OPENAI" = "true" ]; }; then
+            if [ "$HAS_ANTHROPIC" = "true" ]; then
+              echo "::notice::CLI provider legs (claude-code/cursor/codex) review only critical changes (runtime/action/prompt/workflow); this diff is docs/other-only, so only the always-on Anthropic baseline reviews it."
+            else
+              echo "::notice::CLI provider legs (claude-code/cursor/codex) review only critical changes (runtime/action/prompt/workflow), and no always-on Anthropic baseline is configured — so this docs/other-only diff yields an empty matrix. Set ANTHROPIC_API_KEY for full coverage, or touch a critical surface to exercise the CLI legs."
+            fi
+          fi
+          # Record WHY the matrix ended up empty (if it did) so the merge gate can
+          # print an accurate hint. Reaching here means `ready` is applied, so an
+          # empty matrix is "no eligible provider", never "no label".
+          if [ "$matrix" = "[]" ]; then
+            echo 'empty_reason=no-eligible-provider' >> "$GITHUB_OUTPUT"
+          else
+            echo 'empty_reason=' >> "$GITHUB_OUTPUT"
           fi
           echo "::notice::Self-review matrix: $matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -204,25 +238,38 @@ jobs:
   # ---------------------------------------------------------------------------
   # Stable-named MERGE GATE — mark THIS job (`Self-review gate`) as the required
   # status check in branch protection. Runs with `if: always()` so it reports on
-  # every event, and FAILS (red → blocks merge) unless the self-review actually
+  # every event, and FAILS (red → blocks merge) unless AT LEAST ONE provider leg
   # ran and passed. GitHub treats a *skipped* required check as passing, so the
   # `self-review` job's Skipped state alone would NOT block a merge — this job is
   # what turns "no review happened" into a hard block. Its name never varies
   # (unlike the dynamic `Self-review — <provider>` legs), so it's a reliable
-  # required-check target. See docs/TRIGGER_MODES.md § "Recipe: run once when
+  # required-check target.
+  #
+  # Pass condition: ≥1 leg passed — NOT "all legs passed". A single flaky or
+  # failing provider must not block a merge when another provider reviewed
+  # cleanly. The aggregate `needs.self-review.result` can't express this (it's
+  # `failure` if ANY leg fails), so we count successful legs from this run's
+  # jobs via the API. See docs/TRIGGER_MODES.md § "Recipe: run once when
   # labelled `ready`, block merge until it passes".
   gate:
     name: 'Self-review gate'
     needs: [scope, self-review]
     if: always()
     runs-on: ubuntu-latest
+    # Override the workflow-wide grant: the gate only needs to read this run's
+    # job conclusions; it touches neither the repo contents nor the PR.
+    permissions:
+      actions: read
     steps:
-      - name: Enforce that the self-review ran and passed
+      - name: Require at least one self-review leg to have passed
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           SCOPE_RESULT: ${{ needs.scope.result }}
-          REVIEW_RESULT: ${{ needs.self-review.result }}
           MATRIX: ${{ needs.scope.outputs.matrix }}
+          EMPTY_REASON: ${{ needs.scope.outputs.empty_reason }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           # The scope job itself must have succeeded — a crash there means we
@@ -231,17 +278,31 @@ jobs:
             echo "::error::Self-review scope job did not succeed (result=$SCOPE_RESULT). Blocking merge."
             exit 1
           fi
-          # Empty matrix == the review did not run. The only path to that (given
-          # the secrets are configured) is a missing `ready` label. Block and
-          # tell the maintainer exactly how to unblock.
+          # Empty matrix == no leg was eligible. Block, but give an accurate
+          # unblock hint from the reason `scope` recorded — telling someone to
+          # "apply the 'ready' label" when they already did (CLI-only + a
+          # non-critical diff) just sends them in a loop.
           if [ "${MATRIX:-[]}" = "[]" ]; then
-            echo "::error::Self-review did not run — apply the 'ready' label (remove + re-add to re-run) so the required review executes, then merge once it passes."
+            case "${EMPTY_REASON:-}" in
+              no-eligible-provider)
+                echo "::error::Self-review did not run — 'ready' is applied but no provider leg was eligible. Configure ANTHROPIC_API_KEY for an always-on baseline, or touch a critical surface (runtime/action/prompt/workflow) so the CLI legs (cursor/codex/claude-code) run. See the scope job's notice for the exact reason." ;;
+              *)
+                echo "::error::Self-review did not run — apply the 'ready' label (remove + re-add to re-run) so a review executes, then merge once it passes." ;;
+            esac
             exit 1
           fi
-          # The review ran; require every eligible leg to have passed. With
-          # fail-fast:false a single failing provider yields result=failure.
-          if [ "$REVIEW_RESULT" != "success" ]; then
-            echo "::error::Self-review ran but did not pass (result=$REVIEW_RESULT). Fix the findings / rerun before merging."
+          # Count the `Self-review — <provider>` legs of THIS run that concluded
+          # success. Match by "starts with Self-review" and exclude this gate job
+          # by name (robust to the em-dash in the leg names). `>= 1` → gate green.
+          passed=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
+            --jq '[.jobs[]
+                   | select(.name != "Self-review gate")
+                   | select(.name | startswith("Self-review"))
+                   | select(.conclusion == "success")] | length')
+          echo "Self-review legs that passed: ${passed:-0}"
+          if [ "${passed:-0}" -ge 1 ]; then
+            echo "At least one self-review leg passed — merge gate satisfied."
+          else
+            echo "::error::No self-review leg passed — at least one provider must run and pass before merge. Fix findings / rerun (toggle the 'ready' label)."
             exit 1
           fi
-          echo "Self-review ran and passed — merge gate satisfied."
