@@ -1,21 +1,22 @@
 ---
-name: code-review
-description: Local companion to the DailybotHQ/ai-pr-reviewer GitHub Action — runs the SAME code-review methodology (severity model, tool-use pattern, output format) against the current branch's changes without opening a pull request. Auto-detects and layers repo-specific `.review/extension.md` (or `.github/ai-pr-reviewer/extension.md` as fallback) on top of the shipped default prompt for full parity with what the CI action would report. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", or is iterating on prompt-extension rules and wants to test them locally before shipping to CI.
+name: ai-diff-reviewer
+description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-pr-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace) — runs the SAME code-review methodology (severity model, tool-use pattern, output format) against the current branch's changes without opening a pull request. Auto-detects and layers repo-specific `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) on top of the shipped default prompt for full parity with what the CI action would report. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", or is iterating on prompt-extension rules and wants to test them locally before shipping to CI.
 version: "1.4.2"
-documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/code-review/SKILL.md
+documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🔍","homepage":"https://github.com/DailybotHQ/ai-pr-reviewer","requires":{"anyBins":["git"]}}}
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-# Code Review — Local Companion Skill
+# AI Diff Reviewer — Local Companion Skill
 
 The **official local companion** to the
-[`DailybotHQ/ai-pr-reviewer`](https://github.com/DailybotHQ/ai-pr-reviewer)
-GitHub Action. It gives your local coding agent (Cursor, Claude Code, Codex,
-Gemini, Copilot, Cline, Windsurf) the exact same review methodology that
-the CI action would run on your PR — but on the branch you're working on
-right now, without pushing.
+[**AI Diff Reviewer**](https://github.com/marketplace/actions/ai-diff-reviewer)
+GitHub Action (source: [`DailybotHQ/ai-pr-reviewer`](https://github.com/DailybotHQ/ai-pr-reviewer) —
+historical repo slug preserved so `uses:` pins stay stable). It gives your
+local coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline,
+Windsurf) the exact same review methodology that the CI action would run
+on your PR — but on the branch you're working on right now, without pushing.
 
 **Why:** dogfood your PR review before pushing. Catch what CI would catch,
 locally, in seconds. Iterate on `prompt-extension-file` rules without a
@@ -34,16 +35,21 @@ local ↔ CI parity.
 
 ```bash
 # Latest v1.x
-npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill code-review
+npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill ai-diff-reviewer
 ```
 
-This vendors the skill into `.agents/skills/code-review/` in the consumer
-repo and records source + content hash in `skills-lock.json` so any
-teammate can restore identical bytes with `npx skills experimental_install`.
-Bump to the latest with `npx skills update code-review`.
+This vendors the skill into `.agents/skills/ai-diff-reviewer/` in the
+consumer repo and records source + content hash in `skills-lock.json` so
+any teammate can restore identical bytes with `npx skills experimental_install`.
+Bump to the latest with `npx skills update ai-diff-reviewer`.
+
+> **Note on the git repo slug.** The repo path stays at
+> `DailybotHQ/ai-pr-reviewer` (historical — published tags v1.0.0–v1.4.2
+> anchor the URL space). The `--skill ai-diff-reviewer` flag matches the
+> Marketplace listing name; both refer to the same product.
 
 ---
 
@@ -82,8 +88,8 @@ review" on a repo that has no `.review/extension.md` yet), ask ONE
 clarifying question before routing.
 
 Some harnesses (Claude Code, Cursor) also expose these as slash
-commands (`/code-review`, `/code-review-generate-extension`); check
-the harness's skill-invocation docs.
+commands (`/ai-diff-reviewer`, `/ai-diff-reviewer-generate-extension`);
+check the harness's skill-invocation docs.
 
 ---
 
@@ -146,8 +152,10 @@ Then check for a **repo-specific extension** in this order of precedence
 (first match wins; the rest are ignored):
 
 1. `.review/extension.md` (recommended convention — runtime-agnostic)
-2. `.github/ai-pr-reviewer/extension.md` (fallback for teams that prefer
-   `.github/` sibling to workflow files)
+2. `.github/ai-diff-reviewer/extension.md` (fallback for teams that
+   prefer `.github/` sibling to workflow files;
+   `.github/ai-pr-reviewer/extension.md` also accepted for back-compat
+   with the pre-v1.5 skill name)
 
 Read the matching file (if any) and append its content to the base prompt
 verbatim. If neither exists, use the base prompt alone — no error, no
@@ -239,8 +247,10 @@ mi-repo/
         └── pr-review.yml    ← CI workflow uses the same file
 ```
 
-**Option B — `.github/ai-pr-reviewer/extension.md`** (fallback if you
-prefer keeping the file next to your workflows).
+**Option B — `.github/ai-diff-reviewer/extension.md`** (fallback if you
+prefer keeping the file next to your workflows). The pre-v1.5 path
+`.github/ai-pr-reviewer/extension.md` is still recognised for
+back-compat.
 
 The **same file** should be referenced from your CI workflow's
 `prompt-extension-file:` input so local and CI stay in perfect sync:

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`code-review` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
+**Headline:** rename the Marketplace listing to **"AI Diff Reviewer"** (was "AI PR Reviewer"), which unblocks the first-time publish that had been stuck against a name-squatting org (`github.com/ai-pr-reviewer`, 0 public repos since 2024-01, blocks the slug under GitHub's global-namespace uniqueness rule). Also ships a local companion **`ai-diff-reviewer` skill** so every developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) can run the SAME review methodology locally — same prompt, same severity model, same output format — before pushing. The skill and the action share `prompts/default.md` as a single source of truth, kept in sync by a new CI invariant + an `auto-release.yml` step. Also establishes the `.review/extension.md` convention so a project's custom rules apply to both surfaces from a single file.
 
 ### Changed
 - **Marketplace listing renamed from "AI PR Reviewer" to "AI Diff Reviewer"**
@@ -37,17 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   break `collapse-previous` and state detection on every existing
   consumer PR.
 - **Local companion skill folder renamed** to `skills/ai-diff-reviewer/`
-  (was `skills/code-review/`) to mirror the product name. Install command
+  (was `skills/ai-diff-reviewer/`) to mirror the product name. Install command
   is now `npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer`;
   vendored path is `.agents/skills/ai-diff-reviewer/`. The router skill's
-  `name:` frontmatter changes from `code-review` to `ai-diff-reviewer`,
+  `name:` frontmatter changes from `ai-diff-reviewer` to `ai-diff-reviewer`,
   and the sub-skill's from `code-review-generate-extension` to
   `ai-diff-reviewer-generate-extension`. Since the skill was introduced
   in this same release, there is no pre-existing consumer install to
   migrate.
 
 ### Added
-- **Sub-skill: [`generate-extension`](skills/code-review/generate-extension/SKILL.md)** —
+- **Sub-skill: [`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** —
   bootstraps a repo-tailored `.review/extension.md` (or, in advanced
   mode, a full-replacement `.github/prompts/pr-review.md`) by inspecting
   the codebase for stack, architecture, security surface, existing
@@ -63,15 +63,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   access) with a header redirecting to the skill. Follows the
   `DailybotHQ/agent-skill` router-plus-sub-skills pattern used by
   `dailybot-report`, `dailybot-kudos`, etc.
-- **Local companion skill: [`code-review`](skills/code-review/SKILL.md)** —
+- **Local companion skill: [`ai-diff-reviewer`](skills/ai-diff-reviewer/SKILL.md)** —
   the same review methodology that runs on your PR in CI, now available
   locally in every coding-agent harness. Install into any consumer repo
-  with `npx skills add DailybotHQ/ai-pr-reviewer --skill code-review`;
-  vendors into `.agents/skills/code-review/` and pins via
+  with `npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer`;
+  vendors into `.agents/skills/ai-diff-reviewer/` and pins via
   `skills-lock.json`. Uses the harness's own Read/Grep/Glob tools to
   gather context and produces the review as terminal output in the same
   format the CI bot would post (verdict + findings table + severity +
-  notes + recommendation). Because `skills/code-review/prompt.md` is a
+  notes + recommendation). Because `skills/ai-diff-reviewer/prompt.md` is a
   byte-identical copy of `prompts/default.md` (kept in sync by
   `auto-release.yml`), pinning the same version on both surfaces
   guarantees local ↔ CI parity. Adopts the Open Agent Skills
@@ -102,9 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — PyYAML is CI-only tooling.
 - **CI: `Skills — prompt-sync invariant`** job in
   [`code_check.yml`](.github/workflows/code_check.yml) — fails any PR
-  where `skills/code-review/prompt.md` has drifted from
+  where `skills/ai-diff-reviewer/prompt.md` has drifted from
   `prompts/default.md`, with a clear fix message pointing at
-  `cp prompts/default.md skills/code-review/prompt.md`. Ensures `main`
+  `cp prompts/default.md skills/ai-diff-reviewer/prompt.md`. Ensures `main`
   is never in an inconsistent state between prompt edits and the next
   release cut.
 
@@ -113,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new step in [`auto-release.yml`](.github/workflows/auto-release.yml)
   runs before the tag is created and (a) `sed`s the new SemVer into
   the `version:` field of every `skills/**/SKILL.md` file, and (b)
-  copies `prompts/default.md` → `skills/code-review/prompt.md`. If the
+  copies `prompts/default.md` → `skills/ai-diff-reviewer/prompt.md`. If the
   changes are non-empty, they're committed as
   `chore(release): sync skill artifacts for vX.Y.Z [skip release]` and
   pushed to `main` alongside the tag via `git push --follow-tags`. The

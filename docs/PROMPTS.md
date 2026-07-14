@@ -165,7 +165,7 @@ Agent-runner providers do their own caching internally (Claude Code, Cursor Agen
 
 ## Local coding-agent parity
 
-The action ships a companion **local review skill** ([`skills/code-review/`](../skills/code-review/SKILL.md)) that runs the SAME prompt against your current branch — from Cursor / Claude Code / Codex / Gemini / Copilot / Cline / Windsurf — without opening a PR. Two invariants keep the parity real:
+The action ships a companion **local review skill** ([`skills/ai-diff-reviewer/`](../skills/ai-diff-reviewer/SKILL.md)) that runs the SAME prompt against your current branch — from Cursor / Claude Code / Codex / Gemini / Copilot / Cline / Windsurf — without opening a PR. Two invariants keep the parity real:
 
 1. **The skill's `prompt.md` is a byte-identical copy of `prompts/default.md`.** [`code_check.yml`](../.github/workflows/code_check.yml) has a `Skills — prompt-sync invariant` job that fails PRs where the copy has drifted; [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy on every release cut so pinning `@v1.4.3` on both action and skill guarantees you see the same review methodology on both surfaces.
 2. **The skill auto-detects the same `prompt-extension-file` your CI uses.** By convention, put repo-specific overrides at `.review/extension.md` and reference the same path from your workflow's `prompt-extension-file:` input.
@@ -173,14 +173,14 @@ The action ships a companion **local review skill** ([`skills/code-review/`](../
 ### Install the skill in a consumer repo
 
 ```bash
-# Latest v1.x — vendors into .agents/skills/code-review/ + adds skills-lock.json entry
-npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+# Latest v1.x — vendors into .agents/skills/ai-diff-reviewer/ + adds skills-lock.json entry
+npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill code-review
+npx skills add DailybotHQ/ai-pr-reviewer@v1.4.2 --skill ai-diff-reviewer
 
 # Bump to latest published action tag later
-npx skills update code-review
+npx skills update ai-diff-reviewer
 ```
 
 ### The `.review/extension.md` convention
@@ -223,7 +223,7 @@ Reference the same file from your CI workflow so both surfaces produce the same 
 - **Read / Grep / Glob** through your coding agent's tools (no separate LLM call — you're billed to whatever provider your agent is already using).
 - **Produces the review as terminal output** in the same shape the CI bot would post as a PR comment — verdict + findings table + per-finding body + notes + recommendation.
 
-Full workflow details, trust boundary, activation triggers, and step-by-step methodology: [`skills/code-review/SKILL.md`](../skills/code-review/SKILL.md).
+Full workflow details, trust boundary, activation triggers, and step-by-step methodology: [`skills/ai-diff-reviewer/SKILL.md`](../skills/ai-diff-reviewer/SKILL.md).
 
 ### Generate a repo-tailored extension automatically
 
@@ -245,7 +245,7 @@ The sub-skill runs a mandatory Discovery phase (≥ 12 tool calls covering packa
 | **Extension** (default) | `.review/extension.md` | ~50-150 lines of overrides layered on top of the shipped default prompt | Almost always — cheap iteration, keeps benefiting from upstream default improvements |
 | **Full replacement** (advanced) | `.github/prompts/pr-review.md` | 200-500 lines standalone prompt replacing the default entirely | Rare — teams that want total control, or codebases so idiosyncratic that the default is more noise than signal |
 
-The sub-skill asks a single clarifying question ("extension or full replacement?") before generating, defaulting to extension. Full details, quality-gate checklist, and Discovery methodology: [`skills/code-review/generate-extension/SKILL.md`](../skills/code-review/generate-extension/SKILL.md); condensed sample outputs in [`skills/code-review/generate-extension/examples.md`](../skills/code-review/generate-extension/examples.md).
+The sub-skill asks a single clarifying question ("extension or full replacement?") before generating, defaulting to extension. Full details, quality-gate checklist, and Discovery methodology: [`skills/ai-diff-reviewer/generate-extension/SKILL.md`](../skills/ai-diff-reviewer/generate-extension/SKILL.md); condensed sample outputs in [`skills/ai-diff-reviewer/generate-extension/examples.md`](../skills/ai-diff-reviewer/generate-extension/examples.md).
 
 **Zero-install alternative:** if you don't want to vendor the skill (e.g. using a web chatbot without file-system access), the same discovery-and-generation flow is still available as a copy-paste meta-prompt at [`examples/prompts/generate-custom-prompt-meta.md`](../examples/prompts/generate-custom-prompt-meta.md).
 

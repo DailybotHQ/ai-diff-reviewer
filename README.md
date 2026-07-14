@@ -402,15 +402,15 @@ For the full design, see [docs/PROVIDERS.md](docs/PROVIDERS.md), [docs/PROMPTS.m
 
 Run the **same review methodology** the CI action would run — locally, in your coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) — before you push. Useful for pre-flight checks, iterating on prompt-extension rules, or getting a second opinion on a WIP branch without opening a draft PR.
 
-The companion skill ships alongside the action in this repo (`skills/code-review/`) and installs into any consumer repo with one command:
+The companion skill ships alongside the action in this repo (`skills/ai-diff-reviewer/`) and installs into any consumer repo with one command:
 
 ```bash
-npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
 # Or pin to a specific action version for reproducibility:
-npx skills add DailybotHQ/ai-pr-reviewer@v1 --skill code-review
+npx skills add DailybotHQ/ai-pr-reviewer@v1 --skill ai-diff-reviewer
 ```
 
-`npx skills` vendors the skill into `.agents/skills/code-review/` and records the source + content hash in `skills-lock.json` so teammates can restore identical bytes with `npx skills experimental_install`.
+`npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` and records the source + content hash in `skills-lock.json` so teammates can restore identical bytes with `npx skills experimental_install`.
 
 Once installed, natural-language triggers activate the review:
 
@@ -426,11 +426,11 @@ The skill also ships a **`generate-extension` sub-skill** that bootstraps a repo
 - *"Customize the code review for our project"*
 - *"Set up the AI reviewer for this codebase"*
 
-The sub-skill inspects your stack, architecture, security surface, and existing conventions (≥ 12 tool calls minimum — real Discovery, not a guess), then writes the file directly. Two output modes: **extension** (layered on top of the default — recommended) or **full replacement** (advanced, for teams that want total control). Full details in [`skills/code-review/generate-extension/SKILL.md`](skills/code-review/generate-extension/SKILL.md).
+The sub-skill inspects your stack, architecture, security surface, and existing conventions (≥ 12 tool calls minimum — real Discovery, not a guess), then writes the file directly. Two output modes: **extension** (layered on top of the default — recommended) or **full replacement** (advanced, for teams that want total control). Full details in [`skills/ai-diff-reviewer/generate-extension/SKILL.md`](skills/ai-diff-reviewer/generate-extension/SKILL.md).
 
 ### Sharing repo-specific rules between CI and local
 
-Put your custom overrides in **`.review/extension.md`** at your repo root — the `code-review` skill auto-detects it, and your CI workflow can reference the same file via the action's `prompt-extension-file:` input:
+Put your custom overrides in **`.review/extension.md`** at your repo root — the `ai-diff-reviewer` skill auto-detects it, and your CI workflow can reference the same file via the action's `prompt-extension-file:` input:
 
 ```yaml
 - uses: DailybotHQ/ai-pr-reviewer@v1
@@ -442,7 +442,7 @@ Put your custom overrides in **`.review/extension.md`** at your repo root — th
 
 **One file, two surfaces, zero drift.**
 
-Full details, extension authoring guide, and worked examples: [`skills/code-review/SKILL.md`](skills/code-review/SKILL.md) and [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md).
+Full details, extension authoring guide, and worked examples: [`skills/ai-diff-reviewer/SKILL.md`](skills/ai-diff-reviewer/SKILL.md) and [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md).
 
 ---
 

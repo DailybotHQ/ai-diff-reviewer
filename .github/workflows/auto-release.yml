@@ -112,7 +112,7 @@ jobs:
 
       - name: Step 2.5 - 📦 Sync skill artifacts to the new version
         # The action ships `prompts/default.md`; the local companion skill
-        # (`skills/code-review/`) ships its own byte-copy alongside a
+        # (`skills/ai-diff-reviewer/`) ships its own byte-copy alongside a
         # `version:` frontmatter field that must equal the action tag for
         # `npx skills update` to detect a new release. This step keeps
         # both invariants (byte-copy identical + version equal) true at
@@ -127,14 +127,14 @@ jobs:
           VERSION_NO_V="${NEW_VERSION#v}"
 
           # Bump `version:` in every SKILL.md under skills/ (today: only
-          # code-review; loop makes it work when future sibling skills land).
+          # ai-diff-reviewer; loop makes it work when future sibling skills land).
           while IFS= read -r f; do
             sed -i "s/^version: \".*\"/version: \"${VERSION_NO_V}\"/" "$f"
           done < <(find skills -name 'SKILL.md')
 
           # Byte-copy the shipped prompt so the vendored skill stays
           # self-contained (Open Agent Skills convention).
-          cp prompts/default.md skills/code-review/prompt.md
+          cp prompts/default.md skills/ai-diff-reviewer/prompt.md
 
           if git diff --quiet -- skills/; then
             echo "Skill artifacts already in sync with ${NEW_VERSION}; nothing to commit."

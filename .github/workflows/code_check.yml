@@ -89,22 +89,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Verify skills/code-review/prompt.md is byte-identical to prompts/default.md
+      - name: Verify skills/ai-diff-reviewer/prompt.md is byte-identical to prompts/default.md
         # The action ships `prompts/default.md`; the local companion skill
-        # ships its own byte-copy at `skills/code-review/prompt.md` so the
+        # ships its own byte-copy at `skills/ai-diff-reviewer/prompt.md` so the
         # skill remains self-contained per the Open Agent Skills convention
         # (all files inside skills/<name>/). Auto-release.yml keeps them in
         # sync on every release; this check catches drift on PRs BEFORE
         # merge so main is never in an inconsistent state.
         run: |
-          if ! diff -q prompts/default.md skills/code-review/prompt.md; then
-            echo "::error::skills/code-review/prompt.md is out of sync with prompts/default.md."
-            echo "::error::To fix locally, run: cp prompts/default.md skills/code-review/prompt.md"
+          if ! diff -q prompts/default.md skills/ai-diff-reviewer/prompt.md; then
+            echo "::error::skills/ai-diff-reviewer/prompt.md is out of sync with prompts/default.md."
+            echo "::error::To fix locally, run: cp prompts/default.md skills/ai-diff-reviewer/prompt.md"
             echo "::error::(auto-release.yml will re-sync on the next merge to main, but"
             echo "::error:: main should never be published in an inconsistent state.)"
             exit 1
           fi
-          echo "OK: skills/code-review/prompt.md matches prompts/default.md"
+          echo "OK: skills/ai-diff-reviewer/prompt.md matches prompts/default.md"
 
   cli-install-smoke:
     name: 'CLI install smoke — ${{ matrix.provider }}'

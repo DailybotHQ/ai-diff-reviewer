@@ -5,7 +5,7 @@ Meta-prompt for AI Diff Reviewer — generate a repo-tailored `prompt-file`.
 👉 PREFER THE SKILL. This meta-prompt is now packaged as a sub-skill
 ────────────────────────────────────────────────────────────────────────
 
-Install the code-review skill in your repo — it wraps this whole
+Install the ai-diff-reviewer skill in your repo — it wraps this whole
 discovery-and-generation flow AND is smart enough to:
 
   * ask whether you want an EXTENSION file (default, layered) or a
@@ -15,14 +15,14 @@ discovery-and-generation flow AND is smart enough to:
     `.github/prompts/pr-review.md` (no copy-paste),
   * explain the workflow-file wiring for both modes.
 
-    npx skills add DailybotHQ/ai-pr-reviewer --skill code-review
+    npx skills add DailybotHQ/ai-pr-reviewer --skill ai-diff-reviewer
 
 Then just tell your coding agent:
 
     > "Generate a .review/extension.md for this repo"
     > "Customize the code review for our project"
 
-Full docs: skills/code-review/generate-extension/SKILL.md
+Full docs: skills/ai-diff-reviewer/generate-extension/SKILL.md
 ────────────────────────────────────────────────────────────────────────
 
 STILL USEFUL FOR:  zero-install (you don't want to vendor a skill),

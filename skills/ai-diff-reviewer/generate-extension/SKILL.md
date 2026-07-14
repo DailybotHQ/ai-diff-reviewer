@@ -1,19 +1,20 @@
 ---
-name: code-review-generate-extension
-description: Generates a repo-tailored review-configuration file (`.review/extension.md` by default, or a full replacement `prompt-file` in advanced mode) by inspecting THIS codebase — stack, architecture, security surface, existing conventions, historical pain points — and producing concrete, code-anchored severity overrides. Uses the harness's Read/Grep/Glob tools to gather evidence before writing (12+ tool calls minimum). Default output extends the bundled AI Diff Reviewer prompt with project-specific rules; advanced mode replaces it entirely. Use when the developer says "customize the review for this repo", "generate review rules", "help me write my .review/extension.md", or when the local `code-review` skill activates on a repo that has no extension file yet.
+name: ai-diff-reviewer-generate-extension
+description: Generates a repo-tailored review-configuration file (`.review/extension.md` by default, or a full replacement `prompt-file` in advanced mode) by inspecting THIS codebase — stack, architecture, security surface, existing conventions, historical pain points — and producing concrete, code-anchored severity overrides. Uses the harness's Read/Grep/Glob tools to gather evidence before writing (12+ tool calls minimum). Default output extends the bundled AI Diff Reviewer prompt with project-specific rules; advanced mode replaces it entirely. Use when the developer says "customize the review for this repo", "generate review rules", "help me write my .review/extension.md", or when the local `ai-diff-reviewer` skill activates on a repo that has no extension file yet.
 version: "1.4.2"
-documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/code-review/generate-extension/SKILL.md
+documentation_url: https://github.com/DailybotHQ/ai-pr-reviewer/blob/main/skills/ai-diff-reviewer/generate-extension/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🎯","homepage":"https://github.com/DailybotHQ/ai-pr-reviewer","requires":{"anyBins":["git"]}}}
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-# Code Review — Generate Extension (sub-skill)
+# AI Diff Reviewer — Generate Extension (sub-skill)
 
-Companion to the [`code-review`](../SKILL.md) skill. Where `code-review`
-**runs** the review, this sub-skill **bootstraps the configuration** —
-turning "here's the default reviewer" into "here's a reviewer that
-understands OUR stack, OUR conventions, and OUR history of bugs."
+Companion to the [`ai-diff-reviewer`](../SKILL.md) skill. Where
+`ai-diff-reviewer` **runs** the review, this sub-skill **bootstraps the
+configuration** — turning "here's the default reviewer" into "here's a
+reviewer that understands OUR stack, OUR conventions, and OUR history of
+bugs."
 
 **Two output modes:**
 
@@ -33,7 +34,7 @@ understands OUR stack, OUR conventions, and OUR history of bugs."
 - "Tailor the reviewer to our stack"
 - "Bootstrap the extension file"
 
-The parent [`code-review`](../SKILL.md) skill routes to this sub-skill
+The parent [`ai-diff-reviewer`](../SKILL.md) skill routes to this sub-skill
 automatically when the developer asks for setup/customization instead
 of running a review.
 
@@ -290,7 +291,7 @@ After writing, tell the developer:
        github-token: ${{ secrets.GITHUB_TOKEN }}
        prompt-extension-file: .review/extension.md
    ```
-3. Test the extension locally by running the `code-review` skill
+3. Test the extension locally by running the `ai-diff-reviewer` skill
    ("review my current branch") on a PR-shaped diff. If a rule fires
    too aggressively or misses a case, come back and refine.
 4. Commit with a message like:
