@@ -198,7 +198,13 @@ The current values are:
 
 ### 10. Dogfooding is Required
 
-Any change that affects the agentic loop, the prompt, or the review-submission path MUST be verified by `.github/workflows/self-review.yml` running successfully on the PR that introduces the change. If the change can't be verified by self-review (e.g. it only fires on the `block-on-warning` strictness path), describe the manual verification you did in the PR description.
+Two independent dogfooding surfaces enforce that we consume our own product the way our users do:
+
+**A. The CI action reviews its own PRs.** Any change that affects the agentic loop, the prompt, or the review-submission path MUST be verified by `.github/workflows/self-review.yml` running successfully on the PR that introduces the change. If the change can't be verified by self-review (e.g. it only fires on the `block-on-warning` strictness path), describe the manual verification you did in the PR description.
+
+**B. The local companion skill is vendored into this repo.** `.agents/skills/ai-diff-reviewer/` is a vendored copy of the same skill package we ship, pinned via [`skills-lock.json`](skills-lock.json) — installed exactly the way any consumer would install it (`npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer`). Refreshing that copy after every release is handled automatically by [`auto-release.yml` Step 3.5](.github/workflows/auto-release.yml): it runs `npx skills update ai-diff-reviewer` right after the new tag is pushed, commits the diff as `chore(release): dogfood vendored ai-diff-reviewer to vX.Y.Z [skip release]`, and fails loudly if the just-published tag doesn't install cleanly. **Do not manually edit `.agents/skills/ai-diff-reviewer/` on a feature branch** — that's the released-version snapshot; work on `skills/ai-diff-reviewer/` (the source-of-truth copy that ships to consumers) and the vendored copy refreshes itself at the next release.
+
+Together, (A) is the runtime-behavior gate; (B) is the install-flow gate. A skill change that ships broken `npx skills add` compatibility will fail Step 3.5 of the very release that publishes it.
 
 ---
 
@@ -348,6 +354,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 11. Hardcode anything that should be a constant — magic numbers, paths, severity ranks. The top of `scripts/reviewer.py` is the canonical place for runtime constants.
 12. Edit content in `.claude/...` or `CLAUDE.md` — both are symlinks. Edit the canonical paths under `.agents/...` and `AGENTS.md`.
 13. Spell the action name "AI-Diff-Reviewer" / "AIDR" / "AI/Diff Reviewer" / "AI PR Reviewer" (the old name) in user-facing copy — the canonical user-facing capitalisation is **"AI Diff Reviewer"**. The git repo slug is `ai-diff-reviewer` (renamed 2026-07-14; the old `ai-pr-reviewer` URL still resolves via GitHub's permanent 301 redirect), and the Marketplace listing slug is `ai-diff-reviewer` (derived from `action.yml` `name:`) — they match exactly. Rule #9 has the full rename decision log.
+14. Hand-edit `.agents/skills/ai-diff-reviewer/**` on a feature branch — that's the vendored snapshot of the released version, refreshed automatically by `auto-release.yml` Step 3.5 after each release. Work on the source-of-truth copy at `skills/ai-diff-reviewer/**` instead. Rule #10 has the two-layer dogfooding model.
 
 ### DO
 

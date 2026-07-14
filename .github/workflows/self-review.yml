@@ -224,6 +224,12 @@ jobs:
           # months and the false-positive rate on `critical` is near zero).
           strictness: block-on-critical
           applied-label: ${{ matrix.label }}
+          # Layer THIS repo's own review overrides on top of the shipped
+          # default prompt so self-review sees the repo-specific rules
+          # (stdlib-only, no `shell=True`, marker preservation, symlink
+          # hygiene, etc.). Same file the local `ai-diff-reviewer` skill
+          # auto-detects — one source of truth for local + CI.
+          prompt-extension-file: .review/extension.md
           # Smoke review — keep the chat-completions turn ceiling tight.
           max-turns: 12
           # `collapse-previous` stays at its default `true`; collapsing is
