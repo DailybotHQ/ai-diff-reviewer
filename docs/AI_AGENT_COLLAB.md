@@ -5,7 +5,7 @@ How AI coding agents — running on this repo, possibly across multiple agents a
 ## Principles
 
 1. **One change per PR.** Don't bundle a provider addition with a prompt rewrite with a CI refactor. Three PRs are easier to review and revert than one.
-2. **Read before writing.** The repo is ~2400 LOC of runtime + ~300 lines of `action.yml` + ~500 lines of unit tests + a handful of docs. You can read the whole thing in a couple of hours. Do.
+2. **Read before writing.** The repo is ~4000 LOC of runtime + ~300 lines of `action.yml` + a stdlib-`unittest` suite in `tests/` + a handful of docs + the local companion skill pack under `skills/ai-diff-reviewer/`. You can read the runtime in an hour and the skill pack in another 30 minutes. Do.
 3. **Match existing patterns.** This repo's consistency is a feature. New code should look like the surrounding code unless there's a deliberate reason to break the pattern.
 4. **Update docs in the same PR as the code.** Out-of-sync docs are worse than no docs.
 5. **Self-review before requesting human review.** The action runs on every PR with an always-on Anthropic baseline and scoped CLI-provider legs for provider-sensitive changes; it's the first reviewer you need to satisfy.
@@ -135,6 +135,7 @@ Each of those is a real cost. We've decided the cost outweighs the benefit at th
 
 What we **do** have (post v1.1.0) that earlier versions of this doc claimed we didn't:
 
-- A stdlib `unittest` suite (109 tests in `tests/`) that runs in CI.
+- A stdlib `unittest` suite (242 tests across four files in `tests/`) that runs in CI.
 - A CLI-installer smoke matrix (`cli-install-smoke` in `code_check.yml`).
 - Automated releases from Conventional Commits (`auto-release.yml`), so no manual tag-and-push step.
+- A local companion skill (`skills/ai-diff-reviewer/`) shipped alongside the Action, with two CI invariants (`Skills — prompt-sync invariant` in `code_check.yml`; `npx skills update` smoke in `auto-release.yml` Step 3.5) keeping the two surfaces in lock-step.

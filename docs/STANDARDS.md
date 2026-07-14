@@ -71,7 +71,7 @@ All code, comments, documentation, commit messages, and PR descriptions are in E
 
 ## File size
 
-- `scripts/reviewer.py` — soft ceiling ~4000 LOC. We're at ~2400 today (up from ~1500 pre-v1.1.0). The v1.1.0 growth was all in one place: the two provider families plus the three CLI provider impls. If the file approaches the limit, the conversation is "should we split into multiple files" — make that decision deliberately, not by drift.
+- `scripts/reviewer.py` — soft ceiling ~4500 LOC. We're at ~4000 today (up from ~1500 pre-v1.1.0; the v1.1.0 growth was the two provider families plus the three CLI provider impls, and v1.3–v1.4 added the author-association gate + PR-metadata check tools + PR-description autocomplete + complexity-labeling paths). If the file approaches the limit, the conversation is "should we split into multiple files" — make that decision deliberately, not by drift. The next feature that would push us past the ceiling (a raw-OpenAI/Gemini provider, `.aiprr/findings.json` v2) is likely the trigger for that conversation.
 - Doc files — under 500 lines. Long docs are signal that they need to be split.
 - Examples — under 50 lines each. They're showcase, not reference.
 - Test files — under 500 lines. Split by concern rather than growing an existing file (the current four-file split is the model).
@@ -99,7 +99,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md). The summary:
 
 - `py_compile` is the static gate.
 - `actionlint` is the workflow gate.
-- The stdlib `unittest` suite in `tests/` is the unit gate (109 tests, no third-party deps).
+- The stdlib `unittest` suite in `tests/` is the unit gate (242 tests across four files, no third-party deps).
 - `cli-install-smoke` is the CLI-installer gate (matrix over the three agent-runner providers).
 - `self-review.yml` is the integration gate (always-on Anthropic baseline plus scoped CLI-provider dogfooding for provider-sensitive changes).
 
