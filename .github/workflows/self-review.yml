@@ -216,7 +216,13 @@ jobs:
           # label, but pass it through so the action's own gate agrees.
           label-gate: ready
           model: ${{ matrix.model }}
-          strictness: lenient
+          # `block-on-critical` — the check fails only on `critical` findings
+          # (security, data loss, breaking API), while `warning`/`info` still
+          # post inline but don't gate the merge. This is the calibrated
+          # default recommended in docs/STRICTNESS.md once the prompt has
+          # been observed for a couple of weeks (we've been on `lenient` for
+          # months and the false-positive rate on `critical` is near zero).
+          strictness: block-on-critical
           applied-label: ${{ matrix.label }}
           # Smoke review — keep the chat-completions turn ceiling tight.
           max-turns: 12

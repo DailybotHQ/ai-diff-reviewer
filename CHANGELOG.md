@@ -36,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Self-review dogfood promoted from `lenient` to `block-on-critical`**
+  (dogfood-only, no product change). Every provider leg in
+  [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml)
+  now passes `strictness: block-on-critical` to the action, so a `critical`
+  finding on a self-review'd PR turns the check red and blocks the merge
+  gate. `warning` and `info` still post inline but don't gate. This is the
+  calibrated default recommended in [`docs/STRICTNESS.md`](docs/STRICTNESS.md)
+  once a repo has run in `lenient` long enough to trust the model's
+  severity assignments. Consumers are unaffected — the action's own
+  default remains `lenient` (safe rollout) and `action.yml` is unchanged.
 - **Self-review dogfood now runs on EVERY `ready`-labeled PR** — no more
   critical-surface filter. Previously the three CLI provider legs
   (`claude-code`, `cursor`, `codex`) only ran when the diff touched a small
