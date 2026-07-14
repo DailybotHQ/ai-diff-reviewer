@@ -7,15 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **README recipe: "Require a passing review before merge (branch protection)"** —
+  documents the merge-gate pattern (a stable-named job that *fails* rather than
+  *skips* so a required check actually blocks the merge), cross-linked to
+  [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
+
 ### Changed
 - **Self-review dogfood now has a real merge gate.** Added a stable-named
   `Self-review gate` job to [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml)
   that **fails (blocks merge)** when the label-gated review did not run (no
-  `ready` label) or a leg failed — because GitHub's branch protection treats a
-  *Skipped* required check as *passing*, so the per-leg Skipped status alone
-  never blocked a merge. Mark **only** `Self-review gate` as the required check.
-  Documented as a reusable consumer recipe in
+  `ready` label) — because GitHub's branch protection treats a *Skipped*
+  required check as *passing*, so the per-leg Skipped status alone never blocked
+  a merge. Mark **only** `Self-review gate` as the required check. Documented as
+  a reusable consumer recipe in
   [`docs/TRIGGER_MODES.md` § "Recipe: run once when labelled `ready`, block merge until it passes"](docs/TRIGGER_MODES.md).
+- **Merge gate passes when ≥1 provider leg passes** (not all). A single flaky or
+  failing provider no longer blocks a merge that another provider reviewed
+  cleanly — the gate counts successful `Self-review — <provider>` legs from the
+  run's jobs API rather than trusting the all-or-nothing aggregate result.
+- **`scope` job explains an empty matrix.** When only a CLI provider is
+  configured (e.g. just `CURSOR_API_KEY`) and the diff is non-critical, it emits
+  a `::notice::` clarifying that CLI legs review only critical changes and
+  Anthropic is the always-on baseline — so the resulting empty matrix (and red
+  merge gate) isn't a mystery.
 
 ## [1.3.0] — 2026-07-14
 

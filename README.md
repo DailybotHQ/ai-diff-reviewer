@@ -258,6 +258,27 @@ Threat model & full detail: [docs/SECURITY.md § "Author-association gate"](docs
 
 Pair with a branch protection rule that requires the PR-review check to pass.
 
+### Require a passing review before merge (branch protection)
+
+Marking the review job **Required** in branch protection is *not enough* on its own: GitHub treats a required check in the **Skipped** state as **passing**, so a label-gated PR that never triggered a review still merges freely. To make "no review ⇒ no merge" real, gate the merge on a small **stable-named** job that *fails* (rather than skips) when the review didn't run — then require only that job:
+
+```yaml
+jobs:
+  # … your review job (may be skipped when no label / non-critical diff) …
+  review-gate:
+    name: 'Review gate'          # ← mark ONLY this as the required check
+    needs: [review]
+    if: always()                 # report even when `review` was skipped
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash
+        run: |
+          [ "${{ needs.review.result }}" = "success" ] || {
+            echo "::error::No passing review — apply the label to trigger it, then merge."; exit 1; }
+```
+
+A *failing* required check blocks the merge; a *skipped* one does not. With **several** review legs (a provider matrix), the reference implementation passes the gate when **at least one** leg ran and passed — so one flaky provider can't block a merge another provider approved. Full walkthrough (single-provider + dynamic matrix + the "≥1 passed" count): [docs/TRIGGER_MODES.md § "Recipe: run once when labelled `ready`, block merge until it passes"](docs/TRIGGER_MODES.md). This repo's own [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) is the reference implementation.
+
 ### Custom prompt for your codebase
 
 ```yaml

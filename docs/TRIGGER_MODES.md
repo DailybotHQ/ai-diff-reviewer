@@ -112,7 +112,9 @@ jobs:
 
 **3. Gate the *merge* with a stable-named job — because a Skipped required check does NOT block.** This is the subtle part. GitHub's branch protection treats a required check whose conclusion is **Skipped** as *passing* — the PR stays mergeable. (Only *failure* or a never-reported *pending* check blocks a merge.) So marking the `review` / `Self-review — <provider>` legs as "Required" does **not** stop someone from merging a PR that was never reviewed — GitHub will happily say *"All checks have passed — 1 skipped"* and enable the merge button. It is also a mistake to require the dynamic leg names directly: they vary per run and vanish when skipped.
 
-The fix is a final job with a **fixed name** that you mark as the required check. It runs with `if: always()` and **fails** (red → blocks merge) unless the review actually ran and passed:
+The fix is a final job with a **fixed name** that you mark as the required check. It runs with `if: always()` and **fails** (red → blocks merge) unless the review actually ran and passed.
+
+For a **single review job**, checking its result is enough:
 
 ```yaml
   gate:
@@ -136,7 +138,37 @@ The fix is a final job with a **fixed name** that you mark as the required check
           echo "Merge gate satisfied."
 ```
 
-Net effect: the per-leg checks stay **honestly Skipped** for humans reading the list (technique 2), while the single `Self-review gate` check is **red until a `ready`-triggered review passes** — so `Required` on that one check actually blocks the merge. In branch protection, require **only** `Self-review gate`, not the individual legs.
+For a **provider matrix**, you usually want "**at least one** provider passed" — one flaky provider shouldn't block a merge another approved. The aggregate `needs.review.result` can't express this (it's `failure` if *any* leg fails), so count the successful legs from the run's jobs via the API (`permissions: actions: read`):
+
+```yaml
+  gate:
+    name: 'Self-review gate'
+    needs: [gate-decision, review]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read                   # read this run's job conclusions
+    steps:
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ needs.gate-decision.outputs.matrix }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          [ "${MATRIX:-[]}" != "[]" ] || {
+            echo "::error::Review did not run — apply the 'ready' label."; exit 1; }
+          passed=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
+            --jq '[.jobs[] | select(.name != "Self-review gate")
+                   | select(.name | startswith("Self-review"))
+                   | select(.conclusion == "success")] | length')
+          [ "${passed:-0}" -ge 1 ] || {
+            echo "::error::No provider leg passed — at least one must run and pass."; exit 1; }
+          echo "Merge gate satisfied ($passed leg(s) passed)."
+```
+
+Net effect: the per-leg checks stay **honestly Skipped** for humans reading the list (technique 2), while the single `Self-review gate` check is **red until at least one `ready`-triggered review passes** — so `Required` on that one check actually blocks the merge. In branch protection, require **only** `Self-review gate`, not the individual legs.
 
 > **Note — this is the opposite trade-off from "Skipped is fine".** If you *want* un-reviewed PRs to stay freely mergeable (the review is advisory, not a gate), skip technique 3 entirely and don't mark anything required — the Skipped legs are exactly right. Add the gate only when a review must be a *precondition* for merge.
 
