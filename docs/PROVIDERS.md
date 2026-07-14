@@ -282,3 +282,39 @@ This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses t
 > **Transition note.** A review posted by a version **before** per-provider scoping shipped has no provider marker, so the first run after upgrading won't auto-collapse that one pre-upgrade review (it stays live until you manually mark it outdated). Every review from the upgraded version onward collapses correctly.
 
 > **Scoping keys on the marker, not the author.** A useful side effect: `collapse-previous` no longer collapses unrelated `github-actions[bot]` comments (a coverage bot, a labeler) — only comments carrying this action's provider marker are ever minimized.
+
+---
+
+## Choosing a cost-efficient model
+
+Two things drive review cost: **how often it runs** and **which model it uses**.
+
+- **Frequency** is the biggest lever. Running several providers on every push is N× the reviews. Pick one provider for routine use, or gate the expensive legs (this repo's `self-review.yml` runs a cheap Anthropic baseline on every PR and only invokes the CLI providers when the diff touches runtime/action/prompt surfaces).
+- **Model** matters most for the agent-runner CLIs (`claude-code`, `codex`), which are autonomous agents that explore the repo and spend far more tokens than the bounded chat-completions path — and whose turn count can't be capped from the action (only the 900 s timeout bounds them).
+
+### Quality is not optional for review
+
+Code review's value is catching **subtle** bugs — logic errors, race conditions, security issues. That's exactly where model capability pays off, so the cheapest model is not always the best *value*:
+
+- **Haiku 4.5 / mini-tier models** are great for obvious bugs, style, and fast smoke passes, but noticeably weaker at the subtle bugs that justify running a reviewer. A cheap review that misses real issues can be worse than none (false confidence).
+- **Sonnet-class** models are the sweet spot for real review — strong bug-finding at roughly 1/5th of Opus cost.
+- **Opus-class** is best but usually overkill for routine PRs.
+
+### Default models (chosen for quality/cost balance)
+
+| Provider | Default model | Approx. API price (in / out per 1M) | Rationale |
+|---|---|---|---|
+| `anthropic` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot for review quality. |
+| `claude-code` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot. Never `auto` (could be Opus $5/$25). Pin `claude-haiku-4-5` for a cheaper/shallower smoke review. |
+| `cursor` | `auto` | subscription (flat) | Unlimited on Cursor Pro → ~$0 marginal. `auto` is the right choice here. |
+| `codex` | `gpt-5.4-mini` | $0.75 / $4.50 | Cheapest current OpenAI code model (replaces deprecated `gpt-5-codex`). Pin `gpt-5.6-luna` ($1/$6) for a current-gen quality step-up. |
+
+Prices are indicative (mid-2026) and change — check each vendor's pricing page. Anthropic has no separate "mini" tier: **Haiku 4.5 is the small/cheap Claude**; OpenAI's mini is `gpt-5.4-mini`.
+
+### Recommendations
+
+- **Real reviews (consumers):** keep the Sonnet-class defaults — the quality is the point.
+- **Cheapest predictable setup:** `provider: anthropic` (bounded loop + prompt caching keep it low and stable).
+- **Cheapest if you're on Cursor Pro:** `provider: cursor`, `model: auto` (flat rate).
+- **Smoke/dogfood reviews** (backed by human review, e.g. this repo's self-review baseline): `claude-haiku-4-5` / `gpt-5.4-mini` are fine — a cheap sanity pass, with deeper providers reserved for high-risk changes.
+- **`max-turns` (chat-completions only):** the default `30` is a *safety ceiling*, not a target — the loop stops as soon as the model calls `submit_review` (usually well under 10 turns), so it rarely drives cost. It does not apply to the CLI providers. Lower it (e.g. `12`, as `self-review.yml` does for its smoke baseline) only to bound a pathological run.

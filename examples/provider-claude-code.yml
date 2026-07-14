@@ -47,6 +47,13 @@ jobs:
           provider: claude-code
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Cost/quality: the default is `claude-sonnet-4-6` — the quality/
+          # price sweet spot for code review (finds subtle bugs at ~1/5th of
+          # Opus cost). The action never uses `auto` (which defers to the
+          # account default and can silently be Opus at ≈$5/$25). For a
+          # cheaper but shallower smoke review, pin `claude-haiku-4-5`
+          # (≈$1/$5) — good for obvious issues, weaker on subtle bugs.
+          # model: claude-haiku-4-5
           # Optional: pin the CLI so a mid-week vendor release doesn't
           # change review behaviour under you.
           # claude-code-version: '2.0.4'

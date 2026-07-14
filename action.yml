@@ -28,7 +28,7 @@ inputs:
     required: false
     default: 'anthropic'
   model:
-    description: 'Model id for the chosen provider. Empty = provider default (Anthropic → `claude-sonnet-4-6`, Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model), Codex → `gpt-5-codex`, Claude Code → account default).'
+    description: 'Model id for the chosen provider. Empty = provider default. Defaults balance review quality against cost: Anthropic → `claude-sonnet-4-6`; Claude Code → `claude-sonnet-4-6` (the quality/price sweet spot for code review; never `auto`, which can silently be Opus; pin `claude-haiku-4-5` for a cheaper/shallower smoke review); Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model); Codex → `gpt-5.4-mini` (cheapest current code-review model — `gpt-5-codex` is deprecated; pin `gpt-5.6-luna` for a quality step-up). See docs/PROVIDERS.md § "Choosing a cost-efficient model".'
     required: false
     default: ''
 

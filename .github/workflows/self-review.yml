@@ -36,22 +36,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Every leg pins an EXPLICIT, cost-efficient model — never `auto`
+          # and never an implicit default — so the dogfood cost is
+          # deterministic and visible here. The always-on baseline uses the
+          # cheapest capable Anthropic model (Haiku 4.5) since it's a smoke
+          # review that runs on every push; the CLI legs (which run only on
+          # critical changes) also use each vendor's cheapest capable model.
           - provider: anthropic
             api-key-secret: ANTHROPIC_API_KEY
             applied-label: 'self-reviewed:anthropic'
             run-policy: always
+            model: 'claude-haiku-4-5'
           - provider: claude-code
             api-key-secret: ANTHROPIC_API_KEY
             applied-label: 'self-reviewed:claude-code'
             run-policy: critical
+            model: 'claude-haiku-4-5'
           - provider: cursor
             api-key-secret: CURSOR_API_KEY
             applied-label: 'self-reviewed:cursor'
             run-policy: critical
+            # `auto` is unlimited/flat on Cursor Pro — cheapest marginal cost.
+            model: 'auto'
           - provider: codex
             api-key-secret: OPENAI_API_KEY
             applied-label: 'self-reviewed:codex'
             run-policy: critical
+            model: 'gpt-5.4-mini'
     steps:
       - name: Skip when provider secret is unset
         id: gate
@@ -117,6 +128,12 @@ jobs:
           provider: ${{ matrix.provider }}
           api-key: ${{ secrets[matrix.api-key-secret] }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Explicit cost-efficient model per leg (see the matrix above) —
+          # never `auto`/implicit for the metered providers, so the dogfood
+          # spend is deterministic. Anthropic + Claude Code → Haiku 4.5
+          # (cheapest capable Claude), Codex → gpt-5.4-mini (cheapest current
+          # OpenAI code model), Cursor → auto (flat-rate on Pro).
+          model: ${{ matrix.model }}
           strictness: lenient
           applied-label: ${{ matrix.applied-label }}
           # Cost guard: the direct Anthropic path owns a turn loop and the

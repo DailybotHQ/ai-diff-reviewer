@@ -106,9 +106,9 @@ class ProviderConstructionTests(unittest.TestCase):
 
     def test_codex_stores_all_fields(self) -> None:
         p = reviewer.CodexProvider(
-            api_key="AK", model="gpt-5-codex", extra_args="", mcp_config_file=""
+            api_key="AK", model="gpt-5.4-mini", extra_args="", mcp_config_file=""
         )
-        self.assertEqual(p.model, "gpt-5-codex")
+        self.assertEqual(p.model, "gpt-5.4-mini")
 
     def test_default_extras_are_empty(self) -> None:
         p = reviewer.ClaudeCodeProvider(api_key="k", model="m")

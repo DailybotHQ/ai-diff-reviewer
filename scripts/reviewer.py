@@ -99,16 +99,23 @@ GITHUB_GRAPHQL_URL: str = "https://api.github.com/graphql"
 #   3. New branch in `build_provider()`.
 DEFAULT_MODELS: dict[str, str] = {
     "anthropic": "claude-sonnet-4-6",
-    # Agent-runner (CLI) providers — empty means "let the CLI pick its own
-    # default at runtime" (usually the account-tier default for that vendor).
-    # A `model:` input from the consumer overrides this.
-    "claude-code": "auto",
+    # Agent-runner (CLI) providers. A `model:` input from the consumer
+    # overrides these. We ALWAYS pin an explicit model — never `auto`, which
+    # defers to the account default and can silently be Opus (≈$5/$25).
+    # Claude Code: `claude-sonnet-4-6` is the quality/price sweet spot for
+    # code review — it reliably finds the subtle bugs (logic, concurrency,
+    # security) that make a review worth running, at ~1/5th of Opus cost.
+    # Haiku 4.5 (≈$1/$5) is cheaper but a real step down at bug-finding; use
+    # it only for smoke/dogfood reviews (see .github/workflows/self-review.yml).
+    "claude-code": "claude-sonnet-4-6",
     # `auto` routes through Cursor's model dispatch and is unlimited on Pro
     # plans (metered premium models like `composer-2.5` burn monthly credits).
-    # docs/PROVIDERS.md recommends `auto` as the CI default; keep the default
-    # aligned with that guidance. Consumers can still pin a specific model.
     "cursor": "auto",
-    "codex": "gpt-5-codex",
+    # `gpt-5-codex` is deprecated on the Codex CLI. `gpt-5.4-mini` is the
+    # cheapest current model suited to code review (≈$0.75/$4.50 per 1M
+    # tokens vs ≈$1.75/$14 for codex-tier models); pin `gpt-5.6-luna`
+    # (≈$1/$6, current-gen) for a quality step-up on subtle-bug-heavy code.
+    "codex": "gpt-5.4-mini",
 }
 
 DEFAULT_MAX_TURNS: int = 30
