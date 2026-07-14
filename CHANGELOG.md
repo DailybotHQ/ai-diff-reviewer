@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-14
+
+**Headline:** ships a new **`open-pr` sub-skill** in the local `ai-diff-reviewer` skill pack — turns the current branch's diff into a well-documented pull request (Conventional-Commits title inference, structured body with mandatory + conditional sections, PR-template merge, `gh pr create`/`edit`) — plus a **comprehensive `docs/` audit** that corrects stale metrics across 10 files and adds dual-surface framing (GitHub Action + local companion skill) throughout the product spec, architecture, and prompts guide.
+
 ### Added
 - **New `open-pr` sub-skill for the local `ai-diff-reviewer` skill
   pack** (`skills/ai-diff-reviewer/open-pr/SKILL.md`). Authors a
@@ -37,6 +41,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same diff" under `## Local review parity (companion skill)`,
   documenting the triggers, the three-mandatory / six-conditional
   section model, and the PR-template merge behavior.
+
+### Changed
+- **Comprehensive `docs/` audit for the dual-surface reality** (10
+  files, +252 −66 lines, all content-only). Corrects stale metrics
+  that had drifted across five minor versions and adds the local
+  companion skill as a first-class architectural component:
+  - **`docs/PRODUCT_SPEC.md`** — full rewrite. "What it is" names
+    both surfaces (Action + skill) upfront. Core capabilities split
+    into Shared / Action-only / Skill-only groups. New "Local
+    companion skill" distribution section covers `npx skills add`.
+    Roadmap replaced with an accurate v1.0.0–v1.6.0 history table +
+    honest `v1.x` outlook (removed the "v1.2 raw OpenAI, v1.3
+    Gemini" predictions that never landed).
+  - **`docs/ARCHITECTURE.md`** — new "Two surfaces, one methodology"
+    intro. Two topology diagrams (Action + Skill). New "The local
+    companion skill pack" component section. Fixed the
+    "AnthropicProvider (today; OpenAI/Gemini stubs)" obsolete note
+    to reflect the four shipping providers.
+  - **`docs/README.md`** — new "Local companion skill" section with
+    pointers to all six skill-pack files.
+  - **`docs/PROMPTS.md`** — added "Author a well-documented PR with
+    the open-pr sub-skill" section, closing the sub-skill coverage.
+  - **`docs/AI_AGENT_ONBOARDING.md`** — reframed "What this repo is"
+    as dual-surface; local-companion-skill task rows; hardened
+    pre-PR checklist for the prompt-sync invariant and reference.md
+    sync.
+  - **Stale metrics corrected across 6 files:** `~2400 LOC` →
+    **~4000 LOC** (`4018` exact in `scripts/reviewer.py`); `109
+    tests` → **242 tests** across 4 files; repo slug
+    `ai-pr-reviewer` → **`ai-diff-reviewer`** (with 301 redirect
+    for back-compat pins); soft ceiling raised to `~4500 LOC` with
+    "next feature triggers split" note.
 
 ## [1.5.0] — 2026-07-14
 
@@ -638,7 +674,8 @@ Initial public release.
 - Self-review workflow dogfooding the action on its own PRs.
 - Repo hygiene: issue/PR templates and Dependabot for GitHub Actions.
 
-[Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/DailybotHQ/ai-diff-reviewer/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/DailybotHQ/ai-pr-reviewer/compare/v1.4.0...v1.4.1
