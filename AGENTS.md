@@ -15,6 +15,7 @@ The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised e
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Testing | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) |
 | Development Commands | [docs/DEVELOPMENT_COMMANDS.md](docs/DEVELOPMENT_COMMANDS.md) |
+| Release Recovery Playbook | [docs/RELEASE_RECOVERY.md](docs/RELEASE_RECOVERY.md) |
 | Python Guidelines | [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md) |
 | Repository Standards | [docs/STANDARDS.md](docs/STANDARDS.md) |
 | Documentation Guide | [docs/DOCUMENTATION_GUIDE.md](docs/DOCUMENTATION_GUIDE.md) |
