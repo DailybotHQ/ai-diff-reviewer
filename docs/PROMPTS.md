@@ -305,7 +305,7 @@ What it does, in order:
 
 Full flow, quality gates, and sample dialogues: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md).
 
-Why it belongs in the AI Diff Reviewer skill pack: the diff → review → PR-authoring loop is a single developer workflow, and having all five sub-skills (review, generate-extension, setup, open-pr, apply-review) share the same repo-analysis code and the same `.review/extension.md` context means the PR body it drafts already reflects the review's findings. A `warning: consider adding a regression test` becomes a `Test plan` checkbox in the PR body automatically.
+Why it belongs in the AI Diff Reviewer skill pack: the diff → review → PR-authoring loop is a single developer workflow. The four sub-skills that operate on the local repo (`review`, `generate-extension`, `setup`, `open-pr`) share the same repo-analysis code and the same `.review/extension.md` context, so the PR body `open-pr` drafts already reflects the review's findings — a `warning: consider adding a regression test` becomes a `Test plan` checkbox in the PR body automatically. `apply-review` (the fifth sub-skill) is different in shape: its input is the **CI review posted back on the PR**, not the local diff, so it doesn't participate in the shared repo-analysis pass — but it uses the same trust boundary, the same severity model, and the same `.review/extension.md` context to interpret findings in the walkthrough. Same skill pack, same conventions; just a different entry point in the loop.
 
 ### Close the loop from CI back to local with the `apply-review` sub-skill
 

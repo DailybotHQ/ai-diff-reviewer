@@ -99,10 +99,12 @@ happens.**
 **Reads (always allowed, no consent needed):**
 
 - `git`: `git branch --show-current`, `git rev-parse HEAD`,
-  `git status`, and — only inside Step 6b's empty-`diffHunk` fallback —
-  `git show <marker-sha>:<path>` to read a specific file's content at
-  the reviewed commit (write-free, streamed to stdout, never touches
-  the working tree).
+  `git status`, and `git show <marker-sha>:<path>` — the latter is
+  Step 6b's **primary** pre-image source (used on every `apply`, not
+  just the empty-`diffHunk` case) and is safe by construction:
+  write-free, streamed to stdout, never touches the working tree,
+  never creates or modifies a ref. Use it whenever the sub-skill
+  needs SHA-pinned file content.
 - `gh`: `gh pr view` for PR metadata, `gh api graphql` for reviews +
   comments. **Not** `gh pr diff` — it always emits current tip vs
   base with no way to pin a historical SHA, so it can't be used for
@@ -293,8 +295,11 @@ field on `PullRequestReviewComment` — side-of-diff lives on
 reading the reviewed-commit file content directly, which is
 independent of hunk sides. In practice this is safe because
 `findings_to_gh_inline_comments()` in `scripts/reviewer.py` posts
-anchors with `side: RIGHT` by default (line 3143), so `line` /
-`startLine` refer to post-image file positions that resolve cleanly
+anchors with `side: RIGHT` by default (the `"side": f.side or
+"RIGHT"` line inside that function is the authoritative reference —
+cite the function name, not a raw line number that will drift on
+the next edit), so `line` / `startLine` refer to post-image file
+positions that resolve cleanly
 via `git show`. A rare `side: LEFT` anchor (removed-line comment)
 will fail the `git show`-slice consistency check in Step 6b and
 route to `skip / discuss`.
@@ -352,10 +357,17 @@ Compare the resolved SHA against `HEAD_SHA`:
 | Marker SHA | HEAD SHA | Interpretation |
 |---|---|---|
 | Matches HEAD | Matches | Review is for the current commit — proceed normally. |
-| Matches HEAD's parent | Matches | Nothing new since the review; still authoritative. Proceed. |
+| Matches HEAD's parent (marker == `HEAD~1`) | Matches | The developer has made **one commit locally** since the review; HEAD itself is a commit CI never saw. Warn: *"The review is for `<marker-sha>`, but you've committed `<HEAD>` since then. Findings may already be resolved by your local commit; CI will re-review once you push. Continue anyway?"* — proceed only after ack. Pre-image checks in Step 6b will still refuse silently-clobbering an already-edited line. |
 | Older than HEAD's parent | New commits landed since the review | Warn: *"The review is for `<sha>`, but HEAD is `<newer>`. Reading anyway, but the findings may be stale — CI will likely re-review. Continue?"* |
 | Newer than HEAD | Local branch is behind origin | Warn: *"Origin has `<sha>`, your local HEAD is `<older>`. Consider `git pull` before applying."* — proceed only after ack. |
 | Missing (no marker found) | — | CI hasn't run yet OR the label-gate is missing OR all matrix legs' secrets are unset. See [`docs/PR_REVIEW_WORKFLOW.md` § "I don't see any live review"](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/PR_REVIEW_WORKFLOW.md#i-dont-see-any-live-review) for the diagnosis table. Stop; do not proceed with an empty review. |
+
+Only exact-HEAD is fully authoritative; every other row above
+(including `marker == HEAD~1`) requires an explicit developer
+acknowledgement before Step 4 presents findings or Step 6b applies
+anything. This closes the "silent green light" case where a single
+uncommitted-since-CI commit would otherwise be treated as
+authoritative.
 
 Never fabricate findings when the review is missing or stale.
 
@@ -398,8 +410,27 @@ table by matching on `path:line`:
    on `:`** — otherwise the join against the GraphQL `path` field
    (unquoted) misses every row and every finding falls to the `info`
    fallback below.
-3. For each inline comment, look up a row where the parsed `path` +
-   `line` match exactly. On match, set `comment.severity = row.severity`.
+3. For each inline comment, look up a matching row. Because a
+   multi-line inline comment carries a `startLine` (range start) and
+   `line` (range end), while a summary table's `File` cell almost
+   always cites a single line — usually the range **start** (e.g.
+   `` `src/auth.ts:55` `` for a 55–58 suggestion), occasionally the
+   end, occasionally an arbitrary line inside the range — the join
+   must be range-aware, not exact-scalar:
+
+   - Compute the comment's covered range as `[startLine or line, line]`.
+     (For single-line comments where `startLine` is null, that
+     collapses to `[line, line]`.)
+   - A summary row matches when `row.path == comment.path` **and**
+     `row.line ∈ [startLine or line, line]` (i.e. the row's cell
+     falls anywhere inside the comment's covered range).
+   - On match, set `comment.severity = row.severity`.
+
+   The exact-scalar version this originally shipped with (matching
+   only `row.line == comment.line`) silently downgrades every
+   multi-line critical to `info` when the summary table cites
+   `startLine`, and those findings then disappear from a
+   `critical only` walkthrough — quiet severity downgrade.
 4. On **no match** (the model posted an inline anchor the summary
    table doesn't reflect, a stale/reordered table, or no matching
    table found at all), default to `info` **and record that fact** —
@@ -653,7 +684,8 @@ path + line range is reachable in the current working tree.
    index into it, or pipe through `sed -n "${start},${end}p"`) —
    that is the expected pre-image. This works for every RIGHT-side
    comment (the default `findings_to_gh_inline_comments()` posts,
-   line 3143 of `scripts/reviewer.py`), which is the ~100% case for
+   per the `"side": f.side or "RIGHT"` fallback inside that function
+   in `scripts/reviewer.py`), which is the ~100% case for
    AI Diff Reviewer output: the `line` / `startLine` fields refer to
    post-image file positions, so slicing the reviewed-commit file at
    those line numbers gives the anchor's actual pre-image content.
