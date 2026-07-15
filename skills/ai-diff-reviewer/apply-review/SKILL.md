@@ -177,12 +177,15 @@ scrape the PR page via a browser — the sub-skill is designed for
 
 ## Step 2 — Fetch the review
 
-This is the mechanical heart of the sub-skill. It's the exact GraphQL
-query from [`docs/PR_REVIEW_WORKFLOW.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/PR_REVIEW_WORKFLOW.md#ready-to-copy-graphql-query),
-verbatim. The single source of truth for the filter rules is that
-document — if it says *"skip `isMinimized == true`"*, this sub-skill
-does. If it says *"anchor on the most recent marker"*, this sub-skill
-does.
+This is the mechanical heart of the sub-skill. The GraphQL query below
+is **adapted from** [`docs/PR_REVIEW_WORKFLOW.md`](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/PR_REVIEW_WORKFLOW.md#ready-to-copy-graphql-query)
+— the selection set is extended (`createdAt`, `submittedAt`,
+`startLine` for multi-line-suggestion apply) but the **filter rules
+are the shared contract**: if the doc says *"skip `isMinimized ==
+true`"*, this sub-skill does. If it says *"anchor on the most recent
+marker"*, this sub-skill does. Divergence in the selection set is
+allowed and expected as this sub-skill's needs evolve; divergence in
+the filter rules is a bug — fix the doc, then re-sync here.
 
 ### 2a. Identify the bot login
 
@@ -233,7 +236,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
               body
               path
               line
-              originalLine
+              startLine
               isMinimized
             }
           }
@@ -243,6 +246,15 @@ query($owner: String!, $repo: String!, $number: Int!) {
   }
 }'
 ```
+
+`startLine` is `null` for single-line inline comments and non-null for
+multi-line ones (e.g. a `\`\`\`suggestion\`\`\` block covering several
+lines). When you later need the apply range for Step 6b, derive it as
+`start = startLine or line`, `end = line` — the reviewer's `line`
+field is the range end for multi-line comments and the anchor for
+single-line ones. `originalLine` is the outdated-position field
+(diff-relative for reviews that no longer point at the current file
+state) and is **not** the multi-line-range start — do not use it here.
 
 ### 2c. Filter to live bot artefacts
 
@@ -262,9 +274,19 @@ Emit the filtered set to your working context as a list of
 
 ### 2d. Anchor + freshness check
 
-For each live tracking marker, extract its `commit.oid` (or the SHA
-embedded in the marker body if the review commented on that field).
-Compare against `HEAD_SHA`:
+Tracking markers are top-level **issue comments** — they have no
+`commit.oid`. Extract the SHA from the marker body's `Full SHA: \`<sha>\``
+line (rendered by `render_tracking_body_working()` /
+`render_tracking_body_done()` / `render_tracking_body_failed()` in
+`scripts/reviewer.py`). As a secondary check, join the marker to its
+matching non-minimized review (same provider marker + same SHA)
+and read that review's `commit.oid` — reviews DO have `commit.oid`.
+If the two disagree (marker body `Full SHA:` says X but the joined
+review's `commit.oid` says Y), surface both to the developer as a
+diagnostic — it usually means a mid-flight failure between marker
+transition and review submission.
+
+Compare the resolved SHA against `HEAD_SHA`:
 
 | Marker SHA | HEAD SHA | Interpretation |
 |---|---|---|
@@ -275,6 +297,49 @@ Compare against `HEAD_SHA`:
 | Missing (no marker found) | — | CI hasn't run yet OR the label-gate is missing OR all matrix legs' secrets are unset. See [`docs/PR_REVIEW_WORKFLOW.md` § "I don't see any live review"](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/PR_REVIEW_WORKFLOW.md#i-dont-see-any-live-review) for the diagnosis table. Stop; do not proceed with an empty review. |
 
 Never fabricate findings when the review is missing or stale.
+
+### 2e. Extract per-finding severity
+
+GitHub inline review comments carry `body` only —
+`findings_to_gh_inline_comments()` in `scripts/reviewer.py` does
+**not** prefix severity into the comment body, so severity is **not**
+recoverable from the inline comment itself. The authoritative
+per-finding severity lives in the **review summary body's findings
+table**:
+
+```markdown
+## Findings
+
+| # | Severity   | File               | Summary        |
+|---|------------|--------------------|----------------|
+| 1 | 🚨 critical | src/auth.ts:55   | SQL injection… |
+| 2 | ⚠️ warning  | src/cache.ts:120 | Unbounded key… |
+```
+
+For each inline comment produced by the leg, join to the summary
+table by matching on `path:line`:
+
+1. Extract the summary's findings table from `review_body` — the
+   Markdown table between `## Findings` and the next `##` heading.
+2. Parse each row into `{severity, path, line, summary}`. The severity
+   cell is `<emoji> <label>` (`🚨 critical`, `⚠️ warning`, `ℹ️ info`);
+   normalise to the bare label.
+3. For each inline comment, look up a row where the parsed `path` +
+   `line` match exactly. On match, set `comment.severity = row.severity`.
+4. On **no match** (the model posted an inline anchor the summary
+   table doesn't reflect, or a stale/reordered table), default to
+   `info` **and record that fact** — the walkthrough banner in Step 6a
+   surfaces the finding as `[ℹ️ info (assumed — no summary row)]` so
+   the developer knows the tier is a fallback, not a model call.
+
+The tracking comment's *Highest severity: <tier>* line is an
+**aggregate** across the whole review — useful for the review-level
+headline but never a per-finding value. Do not infer severity from
+inline-body tone or keywords ("this is critical because…"); use the
+summary table join or the `info` fallback.
+
+The severity attached here is what Step 4's presentation table shows
+and what Step 5's `critical only` / `warnings and up` filters gate on.
 
 ---
 
@@ -295,8 +360,12 @@ gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' \
 ```
 
 Map each live tracking marker to its leg. The marker + review body
-contain provider-specific hints (e.g. a `_provider: cursor_` footer);
-the label list confirms which legs completed. When 3 live reviews are
+contain provider-specific hints emitted by `provider_marker()` in
+`scripts/reviewer.py` — an HTML marker of the form
+`<!-- ai-pr-reviewer-provider: <provider-id> -->` (`cursor`,
+`claude-code`, `codex`, or `anthropic`) — grep for the marker prefix
+`<!-- ai-pr-reviewer-provider:` and read the value on the same line.
+The `self-reviewed:*` label list confirms which legs completed. When 3 live reviews are
 present and only 2 `self-reviewed:*` labels are set, the third leg is
 either mid-flight or its post-review label step raced — surface this
 as a note, don't refuse.
@@ -455,7 +524,9 @@ minimally-disruptive choice) — do not silently open a walkthrough.
 
 For each finding in the filtered set, in severity order (critical
 first, then warning, then info), present it in isolation with a
-four-option prompt.
+five-option prompt (`apply` is only shown when the finding carries a
+`\`\`\`suggestion\`\`\`` block, so on findings without one the visible
+menu collapses to four options).
 
 ### 6a. Per-finding presentation
 
@@ -523,8 +594,10 @@ path + line range is reachable in the current working tree.
 If `.review/deferred.md` does not exist, ask before creating it:
 
 > *"I'll add this to `.review/deferred.md` so you can track it later.
-> That file is git-ignored by default; add it to `.gitignore` or commit
-> it based on your team's preference. Create? (yes / no)"*
+> Heads-up: this file is **not** git-ignored by default in this repo —
+> decide whether to commit it (deferrals shared with the team) or keep
+> it private (personal notes). I can add `.review/deferred.md` to
+> `.gitignore` if you'd like. Create? (yes / no)"*
 
 If **yes**, `mkdir -p .review` and append a single line:
 
@@ -532,8 +605,23 @@ If **yes**, `mkdir -p .review` and append a single line:
 - PR #<n> · <path>:<line> · <severity> · <one-line summary> · reviewed at <marker sha>
 ```
 
-If **no**, note the deferral in the sub-skill's working memory only
-(ephemeral — lost when the session ends). Continue.
+Then, **only the first time the file is created in this repo**, offer
+the ignore follow-up:
+
+> *"Add `.review/deferred.md` to `.gitignore` so this file stays
+> private? (yes / no)"*
+
+On **yes** — check the repo's `.gitignore`; if `.review/deferred.md`
+(or a `.review/` block covering it) isn't already there, append
+`.review/deferred.md` on a new line with a preceding
+`# Personal PR-review deferrals (managed by ai-diff-reviewer apply-review sub-skill)`
+comment for future readers. Never modify existing `.gitignore` rules.
+On **no** — proceed; the file stays tracked, and re-asking on future
+deferrals is skipped.
+
+If **no** (to the original create prompt), note the deferral in the
+sub-skill's working memory only (ephemeral — lost when the session
+ends). Continue.
 
 ### 6d. Handling `discuss`
 
