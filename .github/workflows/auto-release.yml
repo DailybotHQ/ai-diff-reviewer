@@ -240,9 +240,21 @@ jobs:
           # flagged (PR #25 warning #1). Hard-pinning + `--force` keeps
           # the outcome deterministic even if the vendored tree is
           # already at some newer or equal state.
-          echo "::group::npx skills add DailybotHQ/ai-diff-reviewer@${NEW_VERSION} --skill ai-diff-reviewer --force"
+          #
+          # Two separate `--yes` flags below — they mean different things
+          # and both are required in a non-TTY (Actions) environment:
+          #   * `npx --yes` — auto-installs the `skills` npm package
+          #     without the "Ok to proceed?" download prompt.
+          #   * `skills add ... -y` — auto-selects the default install
+          #     targets (Claude Code, Codex, OpenCode) without the
+          #     "Which agents do you want to install to?" interactive
+          #     picker. Missing this flag caused the v1.6.1 release
+          #     failure — the picker hung, `skills add` never wrote to
+          #     `.agents/`, and the sanity check below correctly refused
+          #     to commit the stale 1.6.0 snapshot.
+          echo "::group::npx skills add DailybotHQ/ai-diff-reviewer@${NEW_VERSION} --skill ai-diff-reviewer --force -y"
           npx --yes skills add "DailybotHQ/ai-diff-reviewer@${NEW_VERSION}" \
-            --skill ai-diff-reviewer --force
+            --skill ai-diff-reviewer --force -y
           echo "::endgroup::"
 
           # Explicit invariant assertion: the vendored SKILL.md's

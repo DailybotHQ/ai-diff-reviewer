@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CI: `auto-release.yml` Step 3.5 now passes `-y` to `skills add`.**
+  The vendored dogfood-refresh step ran the `skills` CLI without a
+  non-interactive flag on the subcommand itself (`npx --yes` only
+  covers npm's own "Ok to proceed?" prompt), so it hit the
+  interactive *"Which agents do you want to install to?"* picker in
+  a non-TTY environment, hung, and never actually refreshed
+  `.agents/skills/ai-diff-reviewer/`. The subsequent sanity check
+  correctly refused to commit a stale snapshot, but the whole
+  release job failed after the tag was already pushed — leaving
+  v1.6.1 in a partially-published state (see v1.6.1 recovery entry
+  below). Fix adds the missing `-y` and a comment explaining why
+  both flags are required.
+
 ### Changed
 - **Parent `ai-diff-reviewer` skill (`skills/ai-diff-reviewer/SKILL.md`)
   clarifies the two supported flows.** Added a new "Two supported
