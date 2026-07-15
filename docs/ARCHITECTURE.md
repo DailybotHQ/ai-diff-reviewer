@@ -85,8 +85,13 @@ Both surfaces share the same [`prompts/default.md`](../prompts/default.md) as th
 │      ├─ setup/  ── author .github/workflows/pr-review.yml        │
 │      │     via 6-question wizard + setup/reference.md manual     │
 │      │                                                           │
-│      └─ open-pr/  ── author PR title + body via gh pr create     │
-│            /edit; merges with .github/pull_request_template.md   │
+│      ├─ open-pr/  ── author PR title + body via gh pr create     │
+│      │     /edit; merges with .github/pull_request_template.md   │
+│      │                                                           │
+│      └─ apply-review/  ── read the CI AI review on the PR        │
+│            (isMinimized filter) + walk through apply/defer/skip  │
+│            per finding under per-finding consent + pre-image     │
+│            safety; never commits, never pushes                   │
 └──────────────────────────────────────────────────────────────────┘
 
   Note: the skill does NOT ship its own LLM call. Every LLM interaction
@@ -138,6 +143,7 @@ Sibling deliverable to the GitHub Action. Installed into a consumer repo via `np
 | `setup/SKILL.md` | Sub-skill that installs the GitHub Action in a repo that doesn't have it yet — six-question wizard writes `.github/workflows/pr-review.yml` tailored to the repo. |
 | `setup/reference.md` | Reference manual for every `action.yml` input (description, default, choices, per-scenario recommendations) — any coding agent with the skill installed can answer input-reference questions without opening the action source. Must stay in sync with `action.yml` (pre-commit checklist item). |
 | `open-pr/SKILL.md` | Sub-skill that authors a well-documented PR title + body from the current branch's diff and executes via `gh pr create`/`edit`. Merges with `.github/pull_request_template.md` when present. |
+| `apply-review/SKILL.md` | Sub-skill that closes the CI-back-to-local loop — reads the live AI review on the PR (filters `isMinimized: true` collapsed history + non-bot noise via a GraphQL query documented in [`docs/PR_REVIEW_WORKFLOW.md`](PR_REVIEW_WORKFLOW.md)), presents findings in the same shape a local review would print, and walks apply / defer / skip per finding. Never commits, never pushes; edits source files only under per-finding *"apply"* consent with pre-image safety derived from `diffHunk` + `side` (RIGHT-side default per `findings_to_gh_inline_comments`). |
 
 **Design constraints for the skill pack:**
 

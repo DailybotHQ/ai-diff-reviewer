@@ -305,7 +305,11 @@ What it does, in order:
 
 Full flow, quality gates, and sample dialogues: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md).
 
-Why it belongs in the AI Diff Reviewer skill pack: the diff → review → PR-authoring loop is a single developer workflow, and having all four sub-skills (review, generate-extension, setup, open-pr) share the same repo-analysis code and the same `.review/extension.md` context means the PR body it drafts already reflects the review's findings. A `warning: consider adding a regression test` becomes a `Test plan` checkbox in the PR body automatically.
+Why it belongs in the AI Diff Reviewer skill pack: the diff → review → PR-authoring loop is a single developer workflow, and having all five sub-skills (review, generate-extension, setup, open-pr, apply-review) share the same repo-analysis code and the same `.review/extension.md` context means the PR body it drafts already reflects the review's findings. A `warning: consider adding a regression test` becomes a `Test plan` checkbox in the PR body automatically.
+
+### Close the loop from CI back to local with the `apply-review` sub-skill
+
+Once `open-pr` has posted the PR and the CI action has reviewed it, the **`apply-review` sub-skill** reads the live review comments off the PR (filtering the `isMinimized: true` collapsed history), presents the findings in the same shape as a local review, and walks the developer through applying, deferring, or skipping each one. It reuses the same trust boundary as the parent skill (never commits, never pushes; edits source files only under per-finding *"apply"* consent) and honors the pre-image safety contract so an apply against a stale review never silently clobbers already-edited lines. Natural-language triggers include *"read the review on this PR"*, *"apply the AI review comments"*, *"walk me through the CI feedback"*. Full flow, GraphQL query, and Sample Dialogues: [`skills/ai-diff-reviewer/apply-review/SKILL.md`](../skills/ai-diff-reviewer/apply-review/SKILL.md).
 
 ---
 

@@ -98,9 +98,17 @@ happens.**
 
 **Reads (always allowed, no consent needed):**
 
-- `git`: `git branch --show-current`, `git rev-parse HEAD`, `git status`.
+- `git`: `git branch --show-current`, `git rev-parse HEAD`,
+  `git status`, and — only inside Step 6b's empty-`diffHunk` fallback —
+  `git show <marker-sha>:<path>` to read a specific file's content at
+  the reviewed commit (write-free, streamed to stdout, never touches
+  the working tree).
 - `gh`: `gh pr view` for PR metadata, `gh api graphql` for reviews +
-  comments, `gh pr diff` when a finding needs diff context.
+  comments. **Not** `gh pr diff` — it always emits current tip vs
+  base with no way to pin a historical SHA, so it can't be used for
+  pre-image or freshness checks (Step 6b covers this in detail); if
+  the sub-skill needs SHA-pinned file content, use `git show`
+  instead.
 - Local files under the current git checkout, via `Read` / `Grep` /
   `Glob` — only for files a finding references.
 
@@ -657,16 +665,21 @@ path + line range is reachable in the current working tree.
 
    Fallback when `diffHunk` is empty (rare — the review posted
    without one): reconstruct the reviewed-commit file state with
-   `git show <marker-sha>:<path>` (or, when `<path>` needs to be
-   checked out on disk, `git checkout <marker-sha> -- <path>` into a
-   temp path) and read lines `start`–`end` from that snapshot. **Do
-   not** use `gh pr diff` — it always emits the PR's current tip vs
-   base and cannot be pinned to a specific SHA, so it would silently
-   compare against today's tip instead of the reviewed commit and
-   produce false matches. If `git show` also can't resolve the
-   reviewed content (e.g. the marker SHA has been force-pushed
-   away), refuse the apply and route to `skip / discuss` — never
-   silently overwrite.
+   `git show <marker-sha>:<path>` — this streams the historical blob
+   to stdout without touching the working tree; you can either read
+   it directly or redirect to a temp file for line-slicing. **Do
+   not** use `git checkout <marker-sha> -- <path>`: that overwrites
+   `<path>` in the working tree with the historical blob, which
+   silently clobbers the developer's current file, defeats the
+   pre-image safety check (the tree then trivially "matches" by
+   construction), and contradicts Step 0's ban on `git checkout`.
+   **Also do not** use `gh pr diff` — it always emits the PR's
+   current tip vs base and cannot be pinned to a specific SHA, so it
+   would silently compare against today's tip instead of the
+   reviewed commit and produce false matches. If `git show` also
+   can't resolve the reviewed content (e.g. the marker SHA has been
+   force-pushed away), refuse the apply and route to `skip /
+   discuss` — never silently overwrite.
 3. **Preview the change**. Show a compact 3-way diff:
    ```
    <path>:<start>–<end>
