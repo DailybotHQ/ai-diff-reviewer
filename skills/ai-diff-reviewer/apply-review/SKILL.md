@@ -115,6 +115,13 @@ happens.**
   single-line-per-deferral list) — only when the developer answers
   *"defer"* on any finding AND is prompted-and-agrees to persist. If
   the developer prefers ephemeral deferrals, the file is not created.
+- **Append `.review/deferred.md` to `.gitignore`** — only as a
+  one-time follow-up the very first time `.review/deferred.md` is
+  created in this repo, AND only when the developer accepts the
+  separate consent prompt in Step 6c. Never modifies existing
+  `.gitignore` rules; only appends one line (plus a labeled comment
+  identifying this sub-skill as the source) after the existing
+  content.
 
 **It does not:**
 
@@ -156,7 +163,13 @@ REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || ech
 
 # PR for the current branch (if any)
 PR_JSON="$(gh pr view --json number,url,state,headRefOid,labels,isDraft 2>/dev/null || true)"
+PR_NUMBER="$(printf '%s' "$PR_JSON" | jq -r '.number // empty')"
 ```
+
+`PR_NUMBER` is consumed by every subsequent `gh` / `gh api graphql`
+invocation (Steps 2b, 3, 7). If `PR_JSON` is empty (no open PR on this
+branch) `PR_NUMBER` is empty too — that's the signal the mode table
+below uses to route to `refuse-soft`.
 
 Decide the mode from the state:
 
@@ -209,7 +222,7 @@ override the heuristic.
 ```bash
 gh api graphql -F owner="${REPO%%/*}" -F repo="${REPO##*/}" \
   -F number="$PR_NUMBER" -F bot="$BOT_LOGIN" -f query='
-query($owner: String!, $repo: String!, $number: Int!) {
+query($owner: String!, $repo: String!, $number: Int!, $bot: String!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       comments(first: 100) {
@@ -319,18 +332,27 @@ table**:
 For each inline comment produced by the leg, join to the summary
 table by matching on `path:line`:
 
-1. Extract the summary's findings table from `review_body` — the
-   Markdown table between `## Findings` and the next `##` heading.
+1. **Locate the findings table heading-agnostically.** Scan
+   `review_body` for a Markdown table whose header row contains all
+   of `Severity`, `File`, and `Summary` (case-insensitive, in any
+   column order). The heading right above the table varies —
+   `prompts/default.md` instructs models to emit it under
+   `### 2. Findings table`, while the local review flow uses
+   `## Findings`, and consumers with custom prompts may use anything —
+   so anchoring on the header row (not the heading text) is the only
+   reliable strategy.
 2. Parse each row into `{severity, path, line, summary}`. The severity
    cell is `<emoji> <label>` (`🚨 critical`, `⚠️ warning`, `ℹ️ info`);
-   normalise to the bare label.
+   normalise to the bare label. The `File` cell is `path:line` (or
+   `path` for path-only findings).
 3. For each inline comment, look up a row where the parsed `path` +
    `line` match exactly. On match, set `comment.severity = row.severity`.
 4. On **no match** (the model posted an inline anchor the summary
-   table doesn't reflect, or a stale/reordered table), default to
-   `info` **and record that fact** — the walkthrough banner in Step 6a
-   surfaces the finding as `[ℹ️ info (assumed — no summary row)]` so
-   the developer knows the tier is a fallback, not a model call.
+   table doesn't reflect, a stale/reordered table, or no matching
+   table found at all), default to `info` **and record that fact** —
+   the walkthrough banner in Step 6a surfaces the finding as
+   `[ℹ️ info (assumed — no summary row)]` so the developer knows the
+   tier is a fallback, not a model call.
 
 The tracking comment's *Highest severity: <tier>* line is an
 **aggregate** across the whole review — useful for the review-level
@@ -642,9 +664,15 @@ sub-skill's territory.
 ### 6f. Cost discipline
 
 Cap the walkthrough at the same inline-comment cap the CI Action uses
-(default 20). If the review has more than 20 findings, present the
-first 20 and offer: *"20 more findings not shown. `next 20` /
-`stop`?"*
+(default 10 — see `max-inline-comments` in `action.yml` and
+`DEFAULT_MAX_INLINE_COMMENTS` in `scripts/reviewer.py`). If the review
+has more than 10 findings, present the first 10 and offer: *"10 more
+findings not shown. `next 10` / `stop`?"*
+
+Consumer repos that raised `max-inline-comments` above 10 in their
+workflow will legitimately have more inline comments on a single
+review — the "10" here is the default; when the actual review has
+more, present in batches of 10 regardless of the CI cap.
 
 ---
 
@@ -932,8 +960,9 @@ Developer: "yes"
      - Skipped:  0
      - Unaddressed: 3 findings (1 warning, 2 info — didn't walk them)
 
-     Note: no critical findings deferred as "unresolved". The next CI
-     re-review should come back with only the warning + info findings.
+     Note: 1 critical finding deferred, not applied. The CI Action will
+     re-flag it on the next push unless addressed or marked as accepted
+     in your review conversation.
 
      Next steps:
        - Review what got applied:   git diff src/auth.ts
