@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **New "Security audit alignment" section in `.review/extension.md`.**
+  Codifies the review rules that keep the two external security
+  surfaces at 100% pass — (1) [skills.sh badges](https://www.skills.sh/dailybothq/ai-diff-reviewer/ai-diff-reviewer)
+  (Gen Agent Trust Hub, Socket, Snyk) for the vendored skill package,
+  and (2) the [GitHub Marketplace listing](https://github.com/marketplace/actions/ai-diff-reviewer)
+  posture for the CI Action. Existing rules covered runtime code
+  security (subprocess, path safety, env-var allowlist, secret
+  redaction, marker contracts); the new section extends coverage to
+  the three surfaces the audits actually inspect: **skill files**
+  (`curl … | sh` in examples, `allowed-tools:` without a Step 0 Trust
+  boundary, prompt-injection language, leaked-looking token
+  substrings), **workflows AND shipped `examples/*.yml`**
+  (`pull_request_target` without an `if:` guard, missing job-level
+  `permissions:` block, third-party actions pinned by tag instead of
+  SHA, `actions/checkout` on untrusted code without
+  `persist-credentials: false`, unmasked secret echo, `curl`/`wget`
+  to untrusted domains), and **documentation sync** (`action.yml`
+  input adding a new attack surface without a matching
+  `docs/SECURITY.md` update; new workflow file added without a
+  matching entry in `.github/dependabot.yml`). No runtime behaviour
+  change — this file only affects what the LLM reviewer flags on this
+  repo's own PRs.
+- **New `apply-review` sub-skill in the `ai-diff-reviewer` skill
+  family.** Closes the post-CI-run loop: reads the AI Diff Reviewer
+  review the CI Action posted back on the current branch's open PR,
+  presents the findings in the **same format as the parent skill's
+  local review** (verdict → findings table → per-finding body →
+  recommendation), and — with explicit per-finding consent — walks
+  the developer through each finding to apply, defer, or skip.
+  Multi-provider aware: when the repo runs a matrix of self-review
+  legs (`self-reviewed:anthropic`, `-cursor`, `-codex`, `-claude-code`),
+  the sub-skill attributes each finding to its leg and surfaces
+  cross-leg consensus (*"agreed by 3/3 legs → strong signal"*).
+  Anchors on the latest `<!-- ai-pr-reviewer-marker -->` and filters
+  `isMinimized: true` comments per the mandatory rules in
+  [`docs/PR_REVIEW_WORKFLOW.md`](docs/PR_REVIEW_WORKFLOW.md) — that
+  doc is now executable via this sub-skill instead of only readable.
+  Read-only by default; source-file edits happen only under the
+  Step 6 per-finding consent contract (never `git add`, never commit,
+  never push). Fifth capability added to the parent
+  `skills/ai-diff-reviewer/SKILL.md` router; cross-referenced from
+  the `open-pr` sub-skill's "Coordinating with other skills"
+  section (natural successor after CI reviews the PR).
+
 ### Fixed
 - **CI: `auto-release.yml` Step 3.5 now passes `-y` to `skills add`.**
   The vendored dogfood-refresh step ran the `skills` CLI without a

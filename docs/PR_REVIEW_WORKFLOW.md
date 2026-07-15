@@ -39,7 +39,7 @@ When applying bot feedback on a PR, the only source of truth is the **most recen
 To list non-minimized bot comments and review summaries on a PR:
 
 ```graphql
-query($owner: String!, $repo: String!, $number: Int!, $bot: String!) {
+query($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
       comments(first: 100) {

@@ -579,9 +579,19 @@ preview.
 Next steps:
   - Review it in the browser:  gh pr view <n> --web
   - Watch CI as it runs:       gh pr checks <n> --watch
+  - Read the CI review once it lands:  (see the `apply-review` sub-skill,
+                                        or the trigger "read the CI review
+                                        on my PR")
   - When CI is green:          gh pr merge <n> --squash --delete-branch
                                (or use the merge button on the PR page)
 ```
+
+If the repo has the AI Diff Reviewer CI Action installed (detectable by
+grepping `.github/workflows/` for `DailybotHQ/ai-diff-reviewer`), the
+`apply-review` sub-skill is the natural next step after this PR is open:
+CI will post its review within a few minutes, and `apply-review` will
+read it back, present the findings in the same format as the local
+review, and — with per-finding consent — help apply the fixes.
 
 If the parent `ai-diff-reviewer` skill's local review flow ran earlier
 in the same session and produced any 🚨 critical or ⚠️ warning findings,
@@ -647,6 +657,13 @@ append a soft nudge:
   review, (2) act on the findings, (3) open the PR.* The parent's Step
   4 output ("Verdict + Findings table + Recommendation") is exactly the
   input a developer needs to draft a good Summary + Test plan here.
+- **[`../apply-review/SKILL.md`](../apply-review/SKILL.md) (sibling —
+  read + apply the CI review on the PR)** — natural successor. Once
+  this sub-skill has opened the PR and CI has posted its review, the
+  `apply-review` sub-skill reads that review back locally and walks
+  the developer through the findings. After they apply fixes and
+  push, come back here in **edit mode** if the PR scope changed
+  enough to warrant a body refresh.
 - **[`../setup/SKILL.md`](../setup/SKILL.md) (sibling — install the CI
   action)** — different phase of the lifecycle. Runs once per repo when
   the reviewer is being introduced; this sub-skill runs once per PR.

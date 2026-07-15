@@ -1,6 +1,6 @@
 ---
 name: ai-diff-reviewer
-description: Local & CI companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace). Router for four capabilities — (1) run a local review of the current branch's diff using the SAME methodology as the CI action, (2) generate a repo-tailored `.review/extension.md` via the `generate-extension` sub-skill, (3) install and configure the GitHub Action itself in a repo that doesn't have it yet via the `setup` sub-skill (also doubles as the reference manual for every `action.yml` input), (4) author a well-documented pull request from the current branch's diff (Conventional-Commits title inference, structured body, PR-template merge, `gh pr create`/`edit`) via the `open-pr` sub-skill. Auto-detects `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) and layers it on top of the shipped default prompt for full local↔CI parity. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", wants to customize the reviewer to this repo, asks "how do I set up ai diff reviewer?", asks a reference-style question about any of the action's inputs, or asks to "open a PR", "create the pull request", or "write the PR body" for the current branch.
+description: Local & CI companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace). Router for five capabilities — (1) run a local review of the current branch's diff using the SAME methodology as the CI action, (2) generate a repo-tailored `.review/extension.md` via the `generate-extension` sub-skill, (3) install and configure the GitHub Action itself in a repo that doesn't have it yet via the `setup` sub-skill (also doubles as the reference manual for every `action.yml` input), (4) author a well-documented pull request from the current branch's diff (Conventional-Commits title inference, structured body, PR-template merge, `gh pr create`/`edit`) via the `open-pr` sub-skill, (5) read the AI review the CI Action posted back on the current branch's open PR, present findings in the same format as the local review, and optionally walk the developer through each finding to apply/defer/skip (multi-leg-aware, per-finding consent, no commits/pushes) via the `apply-review` sub-skill. Auto-detects `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) and layers it on top of the shipped default prompt for full local↔CI parity. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", wants to customize the reviewer to this repo, asks "how do I set up ai diff reviewer?", asks a reference-style question about any of the action's inputs, asks to "open a PR", "create the pull request", or "write the PR body" for the current branch, or asks "what did the CI review say?", "apply the AI review's fixes", or "walk me through the review findings".
 version: "1.6.3"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
@@ -31,7 +31,7 @@ doesn't have it yet.
   you're ready — helps you install the Action in CI with sensible
   defaults for strictness, triggers, and external-contributor policy.
 
-**Four coordinated capabilities**, routed by intent:
+**Five coordinated capabilities**, routed by intent:
 
 | # | Capability | Sub-skill | Surface |
 |---|---|---|---|
@@ -39,6 +39,7 @@ doesn't have it yet.
 | 2 | Author repo-specific overrides (`.review/extension.md`) | [`generate-extension`](generate-extension/SKILL.md) | 🖥️ Local **+** ☁️ CI (shared file) |
 | 3 | Install the GitHub Action + write `pr-review.yml` | [`setup`](setup/SKILL.md) | ☁️ CI |
 | 4 | Draft the PR title + body from the diff | [`open-pr`](open-pr/SKILL.md) | 🖥️ Local → GitHub |
+| 5 | Read the CI review on the PR + walk through findings to apply/defer/skip | [`apply-review`](apply-review/SKILL.md) | ☁️ CI → 🖥️ Local |
 
 Sub-skill 3 (`setup`) also doubles as the **reference manual** for
 every `action.yml` input via [`setup/reference.md`](setup/reference.md)
@@ -56,15 +57,15 @@ Source: <https://github.com/DailybotHQ/ai-diff-reviewer> · License: MIT
 
 ## Two supported flows: local-only or dual-surface
 
-The four sub-skills are **independent**. There is no ordering
+The five sub-skills are **independent**. There is no ordering
 requirement, and installing the CI GitHub Action is **NOT** a
 prerequisite for using this skill locally. Every consumer repo falls
 into one of two flows — pick the one that matches the repo's use case:
 
 | Flow | Use when | Sub-skills to run | Sub-skills to skip |
 |---|---|---|---|
-| **A. Local-only** | You want your coding agent to run the same review methodology on the branch you're working on right now, but you do NOT want the review to fire in CI on every PR. Common for personal repos, experimental repos, repos where the team hasn't opted into automated PR review yet. | **Optional but recommended:** `generate-extension` (once, to tailor `.review/extension.md`). Then the parent `run a local review` flow on every branch — works with or without an extension file (falls back to the shipped base prompt if Step 2.5 is declined). Optionally `open-pr` at the end. | `setup` — do NOT run it. It writes `.github/workflows/pr-review.yml`, which activates the CI Action. |
-| **B. Dual-surface** | You want both: pre-flight local review before pushing AND a full CI review on every PR, with identical rules on both surfaces. Recommended for team repos and anything production-facing. | `setup` (once, installs the CI Action + accepts the Step 5 handoff to `generate-extension`), then the parent `run a local review` flow on every branch. Optionally `open-pr` at the end. | Nothing — all four capabilities are used across the lifecycle. |
+| **A. Local-only** | You want your coding agent to run the same review methodology on the branch you're working on right now, but you do NOT want the review to fire in CI on every PR. Common for personal repos, experimental repos, repos where the team hasn't opted into automated PR review yet. | **Optional but recommended:** `generate-extension` (once, to tailor `.review/extension.md`). Then the parent `run a local review` flow on every branch — works with or without an extension file (falls back to the shipped base prompt if Step 2.5 is declined). Optionally `open-pr` at the end. | `setup` — do NOT run it. It writes `.github/workflows/pr-review.yml`, which activates the CI Action. `apply-review` — nothing to apply (no CI review posts back to the PR without the Action installed). |
+| **B. Dual-surface** | You want both: pre-flight local review before pushing AND a full CI review on every PR, with identical rules on both surfaces. Recommended for team repos and anything production-facing. | `setup` (once, installs the CI Action + accepts the Step 5 handoff to `generate-extension`), then the parent `run a local review` flow on every branch. `open-pr` when the PR is ready. After push, once CI has posted its review, `apply-review` closes the loop (read the CI findings, walk through them, apply fixes). | Nothing — all five capabilities are used across the lifecycle. |
 
 **Parity guarantee (Flow B).** When `setup` writes the workflow with
 `prompt-extension-file: .review/extension.md` wired in (default when
@@ -146,6 +147,15 @@ Bump to the latest with `npx skills update ai-diff-reviewer`.
 - "Update the PR description", "rewrite the PR body in the proper format"
 - "Make a draft PR" (adds `--draft`)
 
+**Apply-review flow (read + apply the CI review on the PR) — triggers:**
+
+- "What did the CI review say?"
+- "Read the review on this PR", "show me the review findings"
+- "Apply the AI review's fixes", "walk me through the findings"
+- "Help me address the critical findings", "critical only"
+- "Which findings blocked the merge?"
+- "The bot posted a review — help me address it"
+
 If the trigger is ambiguous (e.g. developer says "help me with the
 review" on a repo that has no `.review/extension.md` yet, or says
 "handle the PR" on a repo where a PR both needs a review AND has a
@@ -167,14 +177,25 @@ that help disambiguate:
   unrelated workflows (CI tests, deploy pipelines, dependency bots)
   is NOT evidence of Flow B; only an ai-diff-reviewer workflow is.
 - Developer just finished a session of code changes and hasn't asked for
-  a review yet → default review flow.
-- Developer just accepted a review's findings and applied fixes →
-  probably the open-pr flow (natural next step).
+  a review yet → default review flow (local).
+- The word *"review"* is ambiguous when a PR already exists for the
+  current branch AND has live `<!-- ai-pr-reviewer-marker -->` comments
+  from a recent CI run. In that case, *"read the review"* usually means
+  the CI review on the PR (apply-review flow), not a fresh local one.
+  Ask once: *"Read the CI review that just landed on PR #N, or run a
+  new local review on your working tree?"*
+- Developer just accepted a local review's findings and applied fixes
+  → probably the open-pr flow (natural next step, first PR of the
+  session).
+- Developer just applied fixes from the CI review → probably `open-pr`
+  in edit mode (to refresh the PR body if the scope changed), then
+  `git commit + git push` (they'll do it themselves).
 
 Some harnesses (Claude Code, Cursor) also expose these as slash
 commands (`/ai-diff-reviewer`, `/ai-diff-reviewer-generate-extension`,
-`/ai-diff-reviewer-setup`, `/ai-diff-reviewer-open-pr`); check the
-harness's skill-invocation docs.
+`/ai-diff-reviewer-setup`, `/ai-diff-reviewer-open-pr`,
+`/ai-diff-reviewer-apply-review`); check the harness's
+skill-invocation docs.
 
 ---
 
@@ -182,12 +203,13 @@ harness's skill-invocation docs.
 
 Everything below (Steps 0 through 5) describes **only capability #1**
 from the table above — running the review on the current branch. The
-three sibling sub-skills have their own procedures in their respective
+four sibling sub-skills have their own procedures in their respective
 `SKILL.md` files:
 
 - [`generate-extension/SKILL.md`](generate-extension/SKILL.md) — author `.review/extension.md`
 - [`setup/SKILL.md`](setup/SKILL.md) — install the GitHub Action
 - [`open-pr/SKILL.md`](open-pr/SKILL.md) — author the PR title + body
+- [`apply-review/SKILL.md`](apply-review/SKILL.md) — read + apply the CI review posted on the PR
 
 ---
 
