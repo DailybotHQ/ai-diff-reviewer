@@ -217,18 +217,52 @@ the filter rules is a bug — fix the doc, then re-sync here.
 
 The Action collapses prior artefacts belonging to the user its
 `github-token` authenticates as. For consumers using
-`secrets.GITHUB_TOKEN` (default), that's `github-actions[bot]`. For
-consumers using a PAT, it's the PAT owner's login. Ask `gh` for the
-current authenticated user only as a fallback; prefer the value from
-the PR's own tracking comment when available.
+`secrets.GITHUB_TOKEN` (default), that's `github-actions[bot]`; for
+consumers using a PAT / automation account, it's the PAT owner's
+login. Hardcoding `github-actions[bot]` silently mis-filters every
+PAT consumer — Step 2c drops the real review author and Step 2d
+then fires the *"Missing (no marker found)"* branch even though a
+live review exists on the PR.
+
+Resolve the login in this order (first non-empty wins):
+
+1. **`AIPRR_BOT_LOGIN` env var** — explicit override; always respected.
+2. **The most recent non-minimized `<!-- ai-pr-reviewer-marker -->`
+   comment's `author.login`** — authoritative and self-configuring
+   across `github-actions[bot]`, PATs, and automation accounts. Read
+   it from the `comments` collection you already fetch in Step 2b;
+   pick the newest comment whose body starts with
+   `<!-- ai-pr-reviewer-marker -->`.
+3. **`gh api user --jq .login`** — a last-resort fallback only when
+   no marker exists on the PR (a first-run install where CI hasn't
+   posted anything yet).
+4. **The literal string `github-actions[bot]`** — final default when
+   even step 3 fails; a warning should be surfaced to the developer
+   since this is almost always wrong for PAT consumers.
+
+The Step 2b query already returns the top-level `comments` nodes
+with `author.login`, so no extra API call is needed for step 2 above.
+Concretely, after running the GraphQL query, do:
 
 ```bash
-BOT_LOGIN="${AIPRR_BOT_LOGIN:-github-actions[bot]}"
+BOT_LOGIN="${AIPRR_BOT_LOGIN:-}"
+if [ -z "$BOT_LOGIN" ]; then
+  # Preferred: read from the most recent marker comment in the query response.
+  BOT_LOGIN="$(printf '%s\n' "$GRAPHQL_RESPONSE" \
+    | jq -r '[.data.repository.pullRequest.comments.nodes[]
+             | select((.isMinimized|not) and (.body | startswith("<!-- ai-pr-reviewer-marker -->")))]
+             | sort_by(.createdAt) | reverse | .[0].author.login // empty')"
+fi
+if [ -z "$BOT_LOGIN" ]; then
+  BOT_LOGIN="$(gh api user --jq .login 2>/dev/null || echo 'github-actions[bot]')"
+fi
 ```
 
-The `AIPRR_BOT_LOGIN` env var is the escape hatch when a repo runs a
-non-default token (PAT / automation account) and the caller wants to
-override the heuristic.
+(If `jq` isn't available, use `gh api graphql --jq '…'` on the
+follow-up read of the same data; the point is that `AIPRR_BOT_LOGIN`
+→ marker author → `gh api user` is the mandated priority, and the
+snippet must reflect it — do NOT ship a bash line that hardcodes
+`github-actions[bot]` as the primary source.)
 
 ### 2b. Run the GraphQL query
 
@@ -283,12 +317,38 @@ single-line ones. `originalLine` is the outdated-position field
 (diff-relative for reviews that no longer point at the current file
 state) and is **not** the multi-line-range start — do not use it here.
 
+**`line: null` is a distinct case.** GitHub returns `line: null` (and
+`startLine: null`) when the comment is anchored on a hunk that is no
+longer present in the diff — the review was posted, the developer
+force-pushed or rebased, and the anchor became orphaned. This shows
+up precisely on the stale-review paths Step 2d allows after
+acknowledgement. Because `[startLine or line, line]` would collapse
+to `[null, null]` and every downstream comparison would either crash
+or produce a bogus apply range, treat `line: null` as a **read-only**
+finding:
+
+- Include the finding in Step 4's presentation with a marker like
+  `[⚠️ outdated anchor — apply disabled]`.
+- In Step 6a's walkthrough, present the body normally.
+- In Step 6's menu, **never offer `apply`** — only `defer`, `skip`,
+  `discuss`, `stop`. Do not attempt to reconstruct a range from
+  `originalLine` (it's diff-relative to a hunk that no longer
+  exists; the numbers won't map cleanly onto today's file).
+- In Step 3a's consensus scoring, group `line: null` findings only
+  with other `line: null` findings on the same `path` — the range-
+  overlap predicate is undefined for null ranges.
+
 The `diffHunk` field carries the raw diff hunk the comment was
 anchored on (the `-`, `+`, and context lines around the anchor). It
-is used in Step 5's display so the developer sees the surrounding
-patch, and as an optional consistency check in Step 6b — but it is
-**not** the primary source of the expected pre-image; that role
-belongs to `git show <marker-sha>:<path>` (see Step 6b for the full
+is used to render the surrounding patch when the developer needs
+context — that display belongs in **Step 4's presentation table**
+(next to the file/line) and/or **Step 6a's walkthrough banner** for
+the current finding, NOT in Step 5 (which is only the top-level
+routing menu: `done` / `walk through` / `filter to critical only` /
+`export unresolved`). `diffHunk` also serves as an optional
+consistency check inside Step 6b — but it is **not** the primary
+source of the expected pre-image; that role belongs to
+`git show <marker-sha>:<path>` (see Step 6b for the full
 derivation). Note the GraphQL schema does **not** expose a `side`
 field on `PullRequestReviewComment` — side-of-diff lives on
 `PullRequestReviewThread.diffSide`. Step 6b sidesteps this by
@@ -478,14 +538,25 @@ as a note, don't refuse.
 
 ### 3a. Consensus scoring
 
-Group the findings by their `(path, line)` tuple:
+Group findings by overlapping `(path, range)` — where each finding's
+range is `[startLine or line, line]` (the same range predicate Step
+2e uses for the severity join). Two findings belong to the same group
+when their paths match AND their ranges overlap at all — i.e.
+`f1.start <= f2.end AND f2.start <= f1.end`. Exact scalar `(path,
+line)` grouping silently misses multi-leg consensus when three legs
+flag the same multi-line issue with slightly different anchors (e.g.
+`55–58` from one leg, `line:55` from another, `56–59` from a third)
+— those surface as three "single-leg" findings instead of the strong
+signal the multi-leg design is built to expose. Keep the predicate
+symmetric with Step 2e so the two flows agree on what "the same
+finding" means.
 
-| Findings at same `(path, line)` | Interpretation |
+| Findings grouped by overlapping `(path, range)` | Interpretation |
 |---|---|
 | All active legs called it | **Strong signal** — high confidence, agreed across legs. |
 | Majority of active legs called it | **Consensus** — likely real, one leg missed it or filtered by extension. |
 | Single leg called it | **Provider-specific** — could be a real finding one provider's training caught, or a leg-specific false positive. Present at nominal severity but note the single-leg source. |
-| Two legs disagree on severity (`critical` vs. `info` at same anchor) | **Split call** — surface both severities and both bodies; let the developer decide. |
+| Two legs disagree on severity (`critical` vs. `info` at overlapping anchors) | **Split call** — surface both severities and both bodies; let the developer decide. |
 
 Findings not shared across legs are still valid — they're just
 weaker signal than the ones every leg agreed on. Do not silently

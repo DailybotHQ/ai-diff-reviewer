@@ -70,7 +70,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **Multi-PR or repo-wide reasoning.** Both surfaces review one diff at a time. Cross-PR refactoring suggestions are out of scope.
 - **Replacing branch protection.** Strictness gating *complements* branch protection (require the action's check to pass); it doesn't replace required-reviewer rules.
 - **Auto-merging.** The action posts review feedback; merge decisions are the maintainer's. Pair with a separate auto-merge action if that's your workflow.
-- **Generating code or fixing issues.** It comments and suggests; it doesn't push fixes. (Suggestion blocks let the maintainer one-click apply in the GitHub UI.)
+- **Generating code or auto-pushing fixes from CI.** The GitHub Action comments and suggests; it never pushes fixes on the developer's behalf, and never commits from CI. (Suggestion blocks let the maintainer one-click apply in the GitHub UI.) The local companion skill's `apply-review` sub-skill can walk the developer through applying suggestions **locally with per-finding consent** — it uses the `Edit` tool to rewrite lines only after the developer says *"apply"* for that specific finding, and never runs `git commit` / `git push`. Consent-gated local edits are a different contract from unattended CI writes; the "no auto-push" boundary holds on both surfaces.
 - **Hosting any infrastructure.** Inputs go to the configured provider; outputs go to GitHub. No third party between.
 - **The skill wrapping its own LLM call.** The skill runs *inside* the developer's coding agent; it doesn't ship its own model or its own API key path. That's a deliberate architectural choice — it's what makes the skill zero-cost to install.
 
