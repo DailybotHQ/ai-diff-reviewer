@@ -84,6 +84,40 @@ the base prompt from day one. Declining once (`no`) or forever
 prompt still catches ~90% of general-purpose issues. Full flow in Step
 2.5 below.
 
+---
+
+## Two supported flows: local-only or dual-surface
+
+The four sub-skills are **independent**. There is no ordering
+requirement, and installing the CI GitHub Action is **NOT** a
+prerequisite for using this skill locally. Every consumer repo falls
+into one of two flows — pick the one that matches the repo's use case:
+
+| Flow | Use when | Sub-skills to run | Sub-skills to skip |
+|---|---|---|---|
+| **A. Local-only** | You want your coding agent to run the same review methodology on the branch you're working on right now, but you do NOT want the review to fire in CI on every PR. Common for personal repos, experimental repos, repos where the team hasn't opted into automated PR review yet. | `generate-extension` (once, to tailor `.review/extension.md`), then the parent `run a local review` flow on every branch. Optionally `open-pr` at the end. | `setup` — do NOT run it. It writes `.github/workflows/pr-review.yml`, which activates the CI Action. |
+| **B. Dual-surface** | You want both: pre-flight local review before pushing AND a full CI review on every PR, with identical rules on both surfaces. Recommended for team repos and anything production-facing. | `setup` (once, installs the CI Action + accepts the Step 5 handoff to `generate-extension`), then the parent `run a local review` flow on every branch. Optionally `open-pr` at the end. | Nothing — all four capabilities are used across the lifecycle. |
+
+**Parity guarantee (Flow B).** When `setup` installs the CI workflow,
+it wires `prompt-extension-file: .review/extension.md` so the Action
+reads the exact same overrides your local agent uses. `prompt.md` in
+this skill is byte-identical to the Action's shipped default
+(enforced by CI's `Skills — prompt-sync invariant` job). Same base +
+same extension = same review, locally and in CI.
+
+**Signalling the flow to your agent.** If the ambiguous request "set
+up the reviewer" could mean either flow, the agent will ask. To skip
+that question, be explicit the first time in each repo:
+
+- Flow A: *"Set up ai-diff-reviewer for local-only use — do NOT install the GitHub Action."*
+- Flow B: *"Full ai-diff-reviewer setup — install the Action workflow AND generate the extension file."*
+
+Every subsequent request in the repo (`"review my branch"`,
+`"open the PR"`, etc.) works identically across both flows — the flow
+distinction only matters at first-time setup.
+
+---
+
 ## Activation
 
 **Default flow (run a review) — triggers:**
@@ -128,8 +162,13 @@ that help disambiguate:
 
 - Repo already has `.github/workflows/pr-review.yml` (or similar) →
   probably NOT the setup flow.
-- Repo has NO workflows and the developer just installed the skill →
-  probably the setup flow.
+- Repo has NO workflows AND no `.review/extension.md` and the developer
+  just installed the skill → **ask** which of the two flows they want
+  ("Flow A local-only" vs "Flow B dual-surface"; see the "Two
+  supported flows" section above). Do NOT default to `setup` — Flow A
+  (local-only) is a first-class use case, and running `setup`
+  unrequested would write `.github/workflows/pr-review.yml` and force
+  the CI Action into a repo where the developer may not want it.
 - Developer just finished a session of code changes and hasn't asked for
   a review yet → default review flow.
 - Developer just accepted a review's findings and applied fixes →
