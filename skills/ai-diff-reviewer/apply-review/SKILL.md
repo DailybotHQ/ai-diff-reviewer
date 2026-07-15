@@ -261,7 +261,6 @@ query($owner: String!, $repo: String!, $number: Int!) {
               path
               line
               startLine
-              side
               diffHunk
               isMinimized
             }
@@ -283,17 +282,22 @@ single-line ones. `originalLine` is the outdated-position field
 state) and is **not** the multi-line-range start — do not use it here.
 
 The `diffHunk` field carries the raw diff hunk the comment was
-anchored on (the `-`, `+`, and context lines around the anchor); the
-`side` field says whether the anchor is on the pre-image (`LEFT`) or
-post-image (`RIGHT`) of the diff. Step 6b's pre-image verification
-uses `side` to decide which hunk lines to compare against the
-working tree — `+` and context lines for `RIGHT`, `-` and context
-for `LEFT`. `findings_to_gh_inline_comments()` in
-`scripts/reviewer.py` posts anchors with `side: RIGHT` by default,
-so most comments will match against the post-image; `LEFT` shows up
-only when a finding explicitly targets a removed line. Without
-`diffHunk` **and** `side`, the pre-image contract is not
-enforceable.
+anchored on (the `-`, `+`, and context lines around the anchor). It
+is used in Step 5's display so the developer sees the surrounding
+patch, and as an optional consistency check in Step 6b — but it is
+**not** the primary source of the expected pre-image; that role
+belongs to `git show <marker-sha>:<path>` (see Step 6b for the full
+derivation). Note the GraphQL schema does **not** expose a `side`
+field on `PullRequestReviewComment` — side-of-diff lives on
+`PullRequestReviewThread.diffSide`. Step 6b sidesteps this by
+reading the reviewed-commit file content directly, which is
+independent of hunk sides. In practice this is safe because
+`findings_to_gh_inline_comments()` in `scripts/reviewer.py` posts
+anchors with `side: RIGHT` by default (line 3143), so `line` /
+`startLine` refer to post-image file positions that resolve cleanly
+via `git show`. A rare `side: LEFT` anchor (removed-line comment)
+will fail the `git show`-slice consistency check in Step 6b and
+route to `skip / discuss`.
 
 `BOT_LOGIN` is **not** a GraphQL variable — it's applied client-side
 in Step 2c's filter. GitHub's GraphQL API rejects unused declared
@@ -638,48 +642,54 @@ path + line range is reachable in the current working tree.
    back to `skip`."*
 2. **Verify the pre-image**. A GitHub `\`\`\`suggestion\`\`\`` block
    carries **only the replacement text** — not the lines it replaces.
-   Derive the expected pre-image from the inline comment's `diffHunk`
-   and `side` fields (fetched in Step 2b), then compare against the
-   working-tree file's lines `start`–`end`. The rule differs by
-   anchor side:
-   - **`side == "RIGHT"` (the default `findings_to_gh_inline_comments()`
-     posts)** — the comment anchors on a line that exists in the
-     post-image (working tree, if unchanged since the review). Build
-     the expected pre-image from the hunk's `+` and context (` `)
-     lines, stripping the leading `+` / ` ` character. These are the
-     lines that make up the anchor's file state; `-` lines represent
-     what was removed and must NOT be included.
-   - **`side == "LEFT"`** — the comment anchors on a line the review
-     already saw as removed. Build expected pre-image from the hunk's
-     `-` and context (` `) lines. RIGHT-side is the common case; a
-     RIGHT-side comment reviewed against `+`/context and then written
-     up correctly is what the apply step guards.
+   The apply step guards against silent-overwrite by first
+   reconstructing what the reviewer actually saw, then comparing
+   that to the current working tree.
 
-   Trim the derived pre-image to the `start`–`end` window and
-   compare line-for-line against the working tree. If they match,
-   proceed. If they diverge (developer's already edited nearby, or a
+   **Primary source: `git show <marker-sha>:<path>`.** This streams
+   the file's exact content at the reviewed commit to stdout
+   (write-free — never touches the working tree). Slice lines
+   `start`–`end` from that stream (either read the whole stream and
+   index into it, or pipe through `sed -n "${start},${end}p"`) —
+   that is the expected pre-image. This works for every RIGHT-side
+   comment (the default `findings_to_gh_inline_comments()` posts,
+   line 3143 of `scripts/reviewer.py`), which is the ~100% case for
+   AI Diff Reviewer output: the `line` / `startLine` fields refer to
+   post-image file positions, so slicing the reviewed-commit file at
+   those line numbers gives the anchor's actual pre-image content.
+
+   Then compare that slice line-for-line against the working tree's
+   `<path>` at lines `start`–`end`. If they match, proceed to
+   preview. If they diverge (developer's already edited nearby, or a
    different SHA than the review anchored on), warn: *"Lines
-   `<start>`–`<end>` in `<path>` no longer match the diff hunk the
-   suggestion was written against. Applying anyway may produce
-   incorrect output. Options: force / skip / discuss."*
+   `<start>`–`<end>` in `<path>` no longer match the file at the
+   reviewed commit. Applying anyway may produce incorrect output.
+   Options: force / skip / discuss."*
 
-   Fallback when `diffHunk` is empty (rare — the review posted
-   without one): reconstruct the reviewed-commit file state with
-   `git show <marker-sha>:<path>` — this streams the historical blob
-   to stdout without touching the working tree; you can either read
-   it directly or redirect to a temp file for line-slicing. **Do
-   not** use `git checkout <marker-sha> -- <path>`: that overwrites
-   `<path>` in the working tree with the historical blob, which
-   silently clobbers the developer's current file, defeats the
+   **Secondary consistency signal: `diffHunk`.** When present, cross-
+   check the sliced pre-image against the `diffHunk`'s post-image
+   side (`+` and context lines). If the slice does not appear inside
+   the hunk's `+`/context region at all, the anchor is likely a rare
+   LEFT-side (removed-line) comment, or the hunk header has drifted;
+   refuse the apply and route to `skip / discuss` rather than
+   attempt to reconstruct the LEFT-side pre-image via `@@` header
+   arithmetic (out of scope for this sub-skill).
+
+   **Failure modes and forbidden fallbacks.** If `git show
+   <marker-sha>:<path>` fails (the marker SHA has been force-pushed
+   away, the path was renamed in that commit, or the reviewed
+   commit was garbage-collected), refuse the apply and route to
+   `skip / discuss` — never silently overwrite. **Do not** use
+   `git checkout <marker-sha> -- <path>` as a workaround: that
+   overwrites `<path>` in the working tree with the historical blob,
+   silently clobbering the developer's current file, defeating the
    pre-image safety check (the tree then trivially "matches" by
-   construction), and contradicts Step 0's ban on `git checkout`.
-   **Also do not** use `gh pr diff` — it always emits the PR's
-   current tip vs base and cannot be pinned to a specific SHA, so it
-   would silently compare against today's tip instead of the
-   reviewed commit and produce false matches. If `git show` also
-   can't resolve the reviewed content (e.g. the marker SHA has been
-   force-pushed away), refuse the apply and route to `skip /
-   discuss` — never silently overwrite.
+   construction), and contradicting Step 0's ban on `git checkout`.
+   **Also do not** use `gh pr diff` as a fallback source of "expected
+   content" — it always emits the PR's current tip vs base with no
+   way to pin a specific SHA, so it would silently compare against
+   today's tip instead of the reviewed commit and produce false
+   matches. `git show` is the only SHA-pinned read-only path.
 3. **Preview the change**. Show a compact 3-way diff:
    ```
    <path>:<start>–<end>
