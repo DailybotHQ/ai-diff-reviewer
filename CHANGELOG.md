@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Parent `ai-diff-reviewer` skill (`skills/ai-diff-reviewer/SKILL.md`)
+  clarifies the two supported flows.** Added a new "Two supported
+  flows: local-only or dual-surface" section that names each flow
+  explicitly (Flow A = local-only, no CI Action; Flow B = dual-surface,
+  local + CI), spells out which sub-skills to run and which to skip for
+  each, documents the parity guarantee that makes dual-surface
+  worthwhile, and gives copy-paste signalling phrases so an agent
+  doesn't have to guess. Motivation: the four sub-skills were already
+  independent by design, but the parent SKILL.md read as a single
+  lifecycle where every consumer runs all four — masking the fact that
+  `setup` is entirely optional for repos that want local-only review.
+- **Ambiguity tie-break no longer defaults to `setup`.** Previously,
+  when a repo had no workflows and the developer had just installed the
+  skill, the parent SKILL.md's disambiguation heuristic guessed
+  "probably the setup flow." That biased agents toward writing
+  `.github/workflows/pr-review.yml` on repos where the developer only
+  wanted a local reviewer. The heuristic now instructs the agent to
+  ASK ("Flow A local-only vs Flow B dual-surface") before routing, so
+  the CI Action is never installed unrequested.
+
+### Fixed (self-review of the above)
+- **Ask-heuristic now scopes on the ai-diff-reviewer workflow
+  specifically, not "no workflows at all".** Original wording gated
+  on "Repo has NO workflows" — but almost every real repo already
+  has some `.github/workflows/` file (tests, deploys, Dependabot), so
+  the heuristic silently didn't fire and the routing fix was
+  bypassed. Now scoped to "no `.github/workflows/pr-review.yml` (or
+  similarly-named AI Diff Reviewer workflow) AND no
+  `.review/extension.md`", with an explicit note that unrelated
+  workflows are NOT evidence of Flow B. (self-review finding, warning)
+- **Parity paragraph now correctly says the CI workflow only wires
+  `prompt-extension-file` when the Step 5 handoff to
+  `generate-extension` is accepted.** Original wording implied
+  `setup` always wired it, which overstated Flow B's out-of-the-box
+  behavior. (self-review finding, info)
+- **Flow A row softened from "must run generate-extension" to
+  "optional but recommended".** Reading the original cell literally,
+  an agent might refuse to run a local review until an extension
+  file exists — but Step 2.5 allows declining, and the base prompt
+  alone is a supported local-only setup. (self-review finding, info)
+- **Lifecycle framing above the "Two supported flows" section
+  reworked to be flow-neutral.** Previously the paragraph opened
+  "The four sub-skills form a lifecycle: setup installs the CI
+  action…" which set a dual-surface-only mental model before an
+  agent even reached the Two-supported-flows section. Now splits
+  into "Dual-surface lifecycle" and "Local-only lifecycle" bullets
+  so both flows are named as first-class from the top. (self-review
+  note)
+- **"This skill does not replace the CI action" note reframed for
+  Flow A compatibility.** Original wording read as Flow-B-only and
+  conflicted with the local-only flow. Now scoped explicitly: when
+  paired with the CI Action (Flow B), the skill doesn't replace it;
+  in Flow A the local skill IS the entire reviewer. (self-review
+  note)
+
+Content-only change to `skills/ai-diff-reviewer/SKILL.md` — no runtime
+behavior touched, `prompt.md` unchanged, no `action.yml` surface
+impact, all four sub-skills' frontmatter unchanged.
+
 ## [1.6.0] — 2026-07-14
 
 **Headline:** ships a new **`open-pr` sub-skill** in the local `ai-diff-reviewer` skill pack — turns the current branch's diff into a well-documented pull request (Conventional-Commits title inference, structured body with mandatory + conditional sections, PR-template merge, `gh pr create`/`edit`) — plus a **comprehensive `docs/` audit** that corrects stale metrics across 10 files and adds dual-surface framing (GitHub Action + local companion skill) throughout the product spec, architecture, and prompts guide.
