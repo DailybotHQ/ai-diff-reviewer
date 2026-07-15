@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **New "Security audit alignment" section in `.review/extension.md`.**
+  Codifies the review rules that keep the two external security
+  surfaces at 100% pass — (1) [skills.sh badges](https://www.skills.sh/dailybothq/ai-diff-reviewer/ai-diff-reviewer)
+  (Gen Agent Trust Hub, Socket, Snyk) for the vendored skill package,
+  and (2) the [GitHub Marketplace listing](https://github.com/marketplace/actions/ai-diff-reviewer)
+  posture for the CI Action. Existing rules covered runtime code
+  security (subprocess, path safety, env-var allowlist, secret
+  redaction, marker contracts); the new section extends coverage to
+  the three surfaces the audits actually inspect: **skill files**
+  (`curl … | sh` in examples, `allowed-tools:` without a Step 0 Trust
+  boundary, prompt-injection language, leaked-looking token
+  substrings), **workflows AND shipped `examples/*.yml`**
+  (`pull_request_target` without an `if:` guard, missing job-level
+  `permissions:` block, third-party actions pinned by tag instead of
+  SHA, `actions/checkout` on untrusted code without
+  `persist-credentials: false`, unmasked secret echo, `curl`/`wget`
+  to untrusted domains), and **documentation sync** (`action.yml`
+  input adding a new attack surface without a matching
+  `docs/SECURITY.md` update; new workflow file added without a
+  matching entry in `.github/dependabot.yml`). No runtime behaviour
+  change — this file only affects what the LLM reviewer flags on this
+  repo's own PRs.
 - **New `apply-review` sub-skill in the `ai-diff-reviewer` skill
   family.** Closes the post-CI-run loop: reads the AI Diff Reviewer
   review the CI Action posted back on the current branch's open PR,

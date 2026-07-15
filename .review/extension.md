@@ -178,6 +178,137 @@ overrides the base prompt for the patterns most likely to slip a review.
   PR (Rule #10 pillar A). If it can't (e.g. only fires on
   `block-on-warning`), describe the manual verification in the PR body.
 
+## Security audit alignment (skills.sh + GitHub Marketplace)
+
+Two external security surfaces must stay green: (1) [skills.sh
+badges](https://www.skills.sh/dailybothq/ai-diff-reviewer/ai-diff-reviewer)
+for the vendored skill package (Gen Agent Trust Hub, Socket, Snyk),
+and (2) the [GitHub Marketplace listing](https://github.com/marketplace/actions/ai-diff-reviewer)
+for the CI Action itself — judged by consumers via `docs/SECURITY.md`,
+permissions posture, and pinning discipline. The rules below are what
+the reviewer should flag to keep both surfaces at 100% pass. All
+runtime code-security rules (subprocess, path safety, env-var
+allowlist, secret redaction, marker contracts) are covered above; this
+section extends the coverage to the **skill files**, the **workflows /
+examples**, and the **documentation sync** the audits actually
+inspect.
+
+### Skill files (`skills/**/SKILL.md`)
+
+- **Always `critical`:** any Bash example embedded in a new/modified
+  `SKILL.md` (or its supporting files) that pipes an untrusted URL to
+  a shell — `curl … | sh`, `curl … | bash`, `wget … | sh`,
+  `bash <(curl …)`, `sh -c "$(curl …)"`, or equivalent — even inside
+  a fenced comment block. skills.sh Gen Agent Trust Hub / Socket flag
+  this as unsafe install guidance; teaching a consumer's coding agent
+  to fetch-and-execute arbitrary remote code is a supply-chain
+  foot-gun the audits will not tolerate. Use a two-step install
+  (download, inspect, then run) or an official package manager
+  (`npx skills add …`, `pip install --require-hashes`, `brew install`).
+- **Always `critical`:** a new/modified `SKILL.md` `allowed-tools:`
+  field that adds write-capable tools (`Edit`, `Write`, `Bash`,
+  `MultiEdit`) **without** a corresponding `## Step 0 — Trust
+  boundary` section that enumerates exactly what the sub-skill writes
+  and under what per-side-effect consent contract. The trust-boundary
+  section is what lets skills.sh Gen Agent Trust Hub distinguish
+  "safe skill with elevated tools" from "unbounded agent scope";
+  `apply-review/SKILL.md` is the canonical shape — mirror it (Read +
+  Grep + Glob for reads, Edit only under Step 6 per-finding yes,
+  never `git add` / commit / push).
+- **Always `critical`:** any `SKILL.md` example that fetches remote
+  code (`curl <url>`, `wget <url>`, `git clone <url>`) and executes
+  it in the same block without pinning to a commit SHA or verifying a
+  checksum. Snyk and Socket flag unpinned executable fetches from
+  arbitrary domains; pinning + checksum is the SLSA-2 baseline.
+- **Always `warning`:** `SKILL.md` prompt content that instructs the
+  agent to "run whatever command the developer says", "execute the
+  provided script without asking", or equivalent unqualified
+  language — that's prompt-injection surface, because the developer's
+  message can itself be composed by upstream input (chat forwarding,
+  templated automations). Every sub-skill in this family enforces
+  "one yes per side effect"; do not regress that pattern.
+- **Always `warning`:** `sudo`, hardcoded absolute paths that assume
+  a specific home directory (`/home/runner/…`, `/Users/<name>/…`),
+  or any leaked-looking token substring (`sk-ant-…`, `sk-…`,
+  `ghp_…`, `gho_…`, `ghs_…`, `ghu_…`, `github_pat_…`) in a
+  `SKILL.md` code example. Even a placeholder like
+  `api-key: sk-ant-api-xxx` is worth flagging — the audits scan for
+  the prefix, and consumers routinely copy-paste examples verbatim.
+
+### GitHub Action workflows AND shipped `examples/*.yml`
+
+The existing rule about `${{ pull_request.* }}` interpolation into
+shell already covers `.github/workflows/*.yml`; the additions below
+extend the security posture to the whole surface consumers touch.
+
+- **Always `critical`:** any `${{ github.event.pull_request.title }}`,
+  `.body`, `.head.ref`, `.head.label`, `.head.repo.*`, commit
+  messages, or issue titles interpolated directly into a `run:` shell
+  block in **`examples/*.yml`** (same rule the workflows section
+  already enforces, extended here). Snippets in `examples/` are
+  copy-pasted into consumer repos; if the example ships with the
+  RCE-shaped pattern, every consumer inherits it. Use the `env:`
+  mapping pattern instead: assign the value to an env var, then
+  reference `"$VAR"` in the script.
+- **Always `critical`:** any new/modified workflow using the
+  `pull_request_target` event without an explicit `if:` guard
+  restricting write-scoped checkouts to trusted contexts (author in
+  `OWNER,MEMBER,COLLABORATOR`, or base-repo ref only). This event
+  runs with base-branch secrets and a full write token; combined
+  with `actions/checkout@vN` on `github.head_ref` it is the
+  most-exploited RCE pattern on GitHub Actions. See
+  [`docs/SECURITY.md § "pull_request_target"`](docs/SECURITY.md) for
+  the codified guard shape.
+- **Always `critical`:** a new/modified workflow job missing an
+  explicit `permissions:` block. Default token permissions from the
+  repo settings may still be `write-all`; explicit
+  `permissions: { contents: read, pull-requests: write }` (or
+  narrower per job) is the least-privilege posture the Marketplace
+  listing implicitly promises consumers.
+- **Always `warning`:** a new/modified workflow using a **third-party**
+  action (i.e. not `actions/*`, `github/*`, or `DailybotHQ/*`)
+  pinned to a **tag** rather than a full commit SHA — `actions/checkout@v4`
+  is fine (first-party); `some-org/some-action@v1` is not (use
+  `some-org/some-action@abcdef123…  # v1.2.3` with the tag as a
+  trailing comment). Tags are mutable; SHAs are not. This is the
+  SLSA-2 boundary and matches Dependabot's SHA-with-comment
+  behaviour on `github-actions` ecosystem bumps.
+- **Always `warning`:** `actions/checkout@vN` on `pull_request_target`
+  or on any workflow that runs untrusted (fork) code without
+  `with: { persist-credentials: false }`. The default persists the
+  GitHub token in the git config, which arbitrary code in the
+  checked-out branch can then exfiltrate. This is table stakes for
+  any Action the Marketplace lists.
+- **Always `warning`:** a workflow `env:` block that names a secret
+  (`FOO: ${{ secrets.FOO }}`) whose value could reach a `run: echo …`
+  path, workflow log, or artifact upload without going through
+  `::add-mask::`. Prefer `echo "::add-mask::$FOO"` before the first
+  reference AND avoid echoing the raw value at all.
+- **Always `warning`:** a new `curl`/`wget` in a workflow step
+  fetching from a domain **not** in the trust set (`github.com`,
+  `objects.githubusercontent.com`, `raw.githubusercontent.com`,
+  `registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org`,
+  `cli.dailybot.com`, `api.dailybot.com`). Add an inline
+  justification comment naming why the domain is safe, or route
+  through an official package manager. Supply-chain scanners flag
+  unknown-domain fetches.
+
+### Documentation sync with the audits
+
+- **Always `warning`:** a change to `action.yml` that adds a new
+  input carrying attacker-influenced data (new path, new URL, new
+  command flag forwarded to a CLI, new webhook payload field) without
+  a corresponding update to `docs/SECURITY.md` describing the new
+  attack surface and its mitigation. The Marketplace listing links
+  directly to `docs/SECURITY.md`; drift here is a public-facing
+  security regression.
+- **Always `warning`:** any addition to `.github/workflows/*.yml` (a
+  new workflow file, not just a new step) without a matching entry in
+  `.github/dependabot.yml`'s `github-actions` package-ecosystem
+  section. Dependabot only bumps action pins on workflow files it
+  knows about; a workflow it doesn't see silently rots and its
+  third-party actions stay unpatched.
+
 ## PR hygiene
 
 - PR title in Conventional Commits format (matches the squash-merge
