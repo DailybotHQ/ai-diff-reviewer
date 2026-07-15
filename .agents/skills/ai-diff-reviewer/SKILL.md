@@ -1,7 +1,7 @@
 ---
 name: ai-diff-reviewer
 description: Local companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer on GitHub, "AI Diff Reviewer" on the Marketplace). Router for four capabilities — (1) run a local review of the current branch's diff using the SAME methodology as the CI action, (2) generate a repo-tailored `.review/extension.md` via the `generate-extension` sub-skill, (3) install and configure the GitHub Action itself in a repo that doesn't have it yet via the `setup` sub-skill (also doubles as the reference manual for every `action.yml` input), (4) author a well-documented pull request from the current branch's diff (Conventional-Commits title inference, structured body, PR-template merge, `gh pr create`/`edit`) via the `open-pr` sub-skill. Auto-detects `.review/extension.md` (or `.github/ai-diff-reviewer/extension.md` as fallback) and layers it on top of the shipped default prompt for full local↔CI parity. Use when the developer wants a local pre-flight review before pushing, asks "run a code review on my current changes", wants to customize the reviewer to this repo, asks "how do I set up ai diff reviewer?", asks a reference-style question about any of the action's inputs, or asks to "open a PR", "create the pull request", or "write the PR body" for the current branch.
-version: "1.6.0"
+version: "1.6.1"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🔍","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git"]}}}
@@ -64,16 +64,24 @@ Four coordinated capabilities, routed by intent:
 | **Set up the GitHub Action** | [`setup`](setup/SKILL.md) | Developer wants to install and configure the AI Diff Reviewer action in a repo that doesn't have it yet — "set up ai diff reviewer for this repo" |
 | **Open a well-documented pull request** | [`open-pr`](open-pr/SKILL.md) | Developer wants to author the PR title + body from the current branch's diff — "open the PR", "create a pull request", "write the PR body", "update the PR description" |
 
-The four sub-skills form a lifecycle: **setup** installs the CI action
-once per repo; **generate-extension** tailors the review prompt once
-per repo; the parent **run a local review** flow catches issues before
-pushing on every branch; and **open-pr** authors the PR that ships the
-change to reviewers. The `setup` sub-skill also serves as the
-**reference manual** for every `action.yml` input via
-[`setup/reference.md`](setup/reference.md) — any coding agent can
-answer *"what does `strictness` do?"* without opening the action
-source. All four share the same shipped [`prompt.md`](prompt.md) as
-the review base.
+Two typical lifecycles depending on the flow (full details in the
+"Two supported flows" section below):
+
+- **Dual-surface lifecycle:** **setup** installs the CI Action once
+  per repo; **generate-extension** tailors the review prompt once per
+  repo; the parent **run a local review** catches issues before
+  pushing on every branch; **open-pr** authors the PR that ships the
+  change to reviewers.
+- **Local-only lifecycle:** skip **setup** entirely; run
+  **generate-extension** once per repo (optional — the base prompt
+  alone still works); use the parent **run a local review** on every
+  branch; use **open-pr** at the end.
+
+The `setup` sub-skill also serves as the **reference manual** for
+every `action.yml` input via [`setup/reference.md`](setup/reference.md)
+— any coding agent can answer *"what does `strictness` do?"* without
+opening the action source. All four share the same shipped
+[`prompt.md`](prompt.md) as the review base.
 
 **First-time bootstrap.** The first time the review flow runs on a repo
 with no `.review/extension.md`, the skill asks a single question
@@ -83,6 +91,44 @@ the base prompt from day one. Declining once (`no`) or forever
 (`never`, persists as `.review/.skip-bootstrap`) is fine — the base
 prompt still catches ~90% of general-purpose issues. Full flow in Step
 2.5 below.
+
+---
+
+## Two supported flows: local-only or dual-surface
+
+The four sub-skills are **independent**. There is no ordering
+requirement, and installing the CI GitHub Action is **NOT** a
+prerequisite for using this skill locally. Every consumer repo falls
+into one of two flows — pick the one that matches the repo's use case:
+
+| Flow | Use when | Sub-skills to run | Sub-skills to skip |
+|---|---|---|---|
+| **A. Local-only** | You want your coding agent to run the same review methodology on the branch you're working on right now, but you do NOT want the review to fire in CI on every PR. Common for personal repos, experimental repos, repos where the team hasn't opted into automated PR review yet. | **Optional but recommended:** `generate-extension` (once, to tailor `.review/extension.md`). Then the parent `run a local review` flow on every branch — works with or without an extension file (falls back to the shipped base prompt if Step 2.5 is declined). Optionally `open-pr` at the end. | `setup` — do NOT run it. It writes `.github/workflows/pr-review.yml`, which activates the CI Action. |
+| **B. Dual-surface** | You want both: pre-flight local review before pushing AND a full CI review on every PR, with identical rules on both surfaces. Recommended for team repos and anything production-facing. | `setup` (once, installs the CI Action + accepts the Step 5 handoff to `generate-extension`), then the parent `run a local review` flow on every branch. Optionally `open-pr` at the end. | Nothing — all four capabilities are used across the lifecycle. |
+
+**Parity guarantee (Flow B).** When Flow B completes `setup` **and**
+accepts the Step 5 handoff to `generate-extension`, the CI workflow
+gets `prompt-extension-file: .review/extension.md` wired in — so the
+Action reads the exact same overrides your local agent uses. (If the
+Step 5 handoff is declined, `setup` writes a workflow WITHOUT
+`prompt-extension-file` and you get base-prompt parity only — you can
+add the input manually later, or re-run `setup` and accept the
+handoff.) `prompt.md` in this skill is byte-identical to the Action's
+shipped default (enforced by CI's `Skills — prompt-sync invariant`
+job). Same base + same extension = same review, locally and in CI.
+
+**Signalling the flow to your agent.** If the ambiguous request "set
+up the reviewer" could mean either flow, the agent will ask. To skip
+that question, be explicit the first time in each repo:
+
+- Flow A: *"Set up ai-diff-reviewer for local-only use — do NOT install the GitHub Action."*
+- Flow B: *"Full ai-diff-reviewer setup — install the Action workflow AND generate the extension file."*
+
+Every subsequent request in the repo (`"review my branch"`,
+`"open the PR"`, etc.) works identically across both flows — the flow
+distinction only matters at first-time setup.
+
+---
 
 ## Activation
 
@@ -128,8 +174,18 @@ that help disambiguate:
 
 - Repo already has `.github/workflows/pr-review.yml` (or similar) →
   probably NOT the setup flow.
-- Repo has NO workflows and the developer just installed the skill →
-  probably the setup flow.
+- Repo has no `.github/workflows/pr-review.yml` (or similarly-named
+  AI Diff Reviewer workflow — grep the `.github/workflows/` tree for
+  `DailybotHQ/ai-diff-reviewer` or `ai-diff-reviewer` action refs)
+  AND no `.review/extension.md`, and the developer just installed the
+  skill → **ask** which of the two flows they want ("Flow A
+  local-only" vs "Flow B dual-surface"; see the "Two supported flows"
+  section above). Do NOT default to `setup` — Flow A (local-only) is
+  a first-class use case, and running `setup` unrequested would
+  write `.github/workflows/pr-review.yml` and force the CI Action
+  into a repo where the developer may not want it. The presence of
+  unrelated workflows (CI tests, deploy pipelines, dependency bots)
+  is NOT evidence of Flow B; only an ai-diff-reviewer workflow is.
 - Developer just finished a session of code changes and hasn't asked for
   a review yet → default review flow.
 - Developer just accepted a review's findings and applied fixes →
@@ -442,9 +498,13 @@ Full authoring guide (structure, tips, worked examples):
   are billed to your Cursor Pro subscription. If your harness is Claude
   Code with an API key, it's Anthropic tokens. Either way the local
   review is a "free bonus" if you were going to use the agent anyway.
-- **This skill does not replace the CI action.** CI still runs on every
-  PR and posts the authoritative review (inline comments, severity
-  gating, merge-blocking). The skill is for the "before pushing" moment.
+- **When paired with the CI Action (Flow B), this skill does not
+  replace it.** The CI Action still runs on every PR and posts the
+  authoritative review (inline comments, severity gating,
+  merge-blocking); the skill is for the "before pushing" moment. In
+  Flow A (local-only), the local skill IS the entire reviewer — no CI
+  leg, no post-push authority; findings live only in your terminal
+  and you decide what to act on before opening the PR.
 - **Extension parity is guaranteed on your side, not enforced by
   tooling.** If your `.review/extension.md` says something different
   from what your CI workflow's `prompt-extension-file:` points at, you
