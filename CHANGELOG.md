@@ -270,6 +270,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (doc-sweep after three-dot landing)
+
+Self-review of the three-dot generation-hash fix surfaced doc /
+docstring stragglers that still described the old two-dot behaviour,
+plus a copy-paste example missing `github-token`. All are content-only
+changes; no runtime code touched:
+
+- `examples/iteration-aware.yml` now passes `github-token: ${{ secrets.GITHUB_TOKEN }}`
+  and updates the `fetch-depth` comment to reference three-dot diffs.
+- `docs/ITERATION_AWARENESS.md § 12.1` schema cell for
+  `generation_range_hash` now shows three-dot and links back to § 4.3.
+  Same section's `reviewed_label_applied` cell rewritten to describe
+  the three-signal OR write logic (was still describing the pre-fix
+  intent-only bit).
+- `docs/SECURITY.md` IAR subprocess-boundary section now enumerates
+  three-dot for both `git diff` call sites (generation hash + safety
+  net `--numstat`), matching the runtime.
+- `scripts/reviewer.py` — `IterationState.generation_range_hash`
+  docstring rewritten to say "three-dot" explicitly and reference
+  § 4.3; stale "when IAR is off" wording in the chat-completions
+  tools-schema comment reframed for the unconditional runtime.
+- `tests/test_iar_state_layer.py` module docstring reframed for the
+  unconditional runtime (was still describing IAR as opt-in via a
+  "master switch").
+
 - **New "Security audit alignment" section in `.review/extension.md`.**
   Codifies the review rules that keep the two external security
   surfaces at 100% pass — (1) [skills.sh badges](https://www.skills.sh/dailybothq/ai-diff-reviewer/ai-diff-reviewer)

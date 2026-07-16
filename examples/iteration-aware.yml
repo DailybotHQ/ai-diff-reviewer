@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Full history is required so IAR's generation-tracking can
-          # `git diff base..head` correctly across force-pushes and rebases.
+          # `git diff base...head` correctly across force-pushes and rebases.
           fetch-depth: 0
 
       - id: review
@@ -44,6 +44,7 @@ jobs:
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           strictness: block-on-critical
 
           # Iteration-Aware Review tuning knobs — every input below

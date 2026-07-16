@@ -4,11 +4,13 @@
 `_fetch_latest_marker_body`, `_parse_state_from_marker_body`, and
 `embed_iteration_state`.
 
-Every function under test lives in `scripts/reviewer.py` and is opt-in
-via the master switch — but the state-layer helpers themselves must be
-robust to malformed markers even when IAR is disabled (defensive
-programming: they might be called from a code path that reads a marker
-authored by an IAR-enabled run for other reasons).
+Every function under test lives in `scripts/reviewer.py`. IAR is
+unconditional, but the state-layer helpers themselves must be robust
+to malformed markers written by prior runs (schema drift, truncated
+JSON, missing fields, unknown versions) — parse failures MUST return
+`None` cleanly so the reviewer treats the run as a first-review
+instead of crashing. Failure-fallback tests live in
+`test_iar_failure_fallback.py`.
 
 Stdlib `unittest` only.
 """

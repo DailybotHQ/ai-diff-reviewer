@@ -1908,11 +1908,14 @@ class IterationState:
     - `generation`: monotonic counter; increments on new commits or rebase.
     - `generation_range_hash`: 16-char SHA256 hex slice of the diff
       *content* between `base_sha` and `head_sha` (i.e. the output of
-      `git diff base..HEAD`, not the commit-SHA list). Two commits
-      producing byte-identical diffs produce byte-identical hashes so
-      cosmetic rebases that don't change what the reviewer would see
-      don't advance the generation. Detecting a change advances the
-      generation.
+      `git diff base_sha...head_sha` — THREE-dot, matching
+      `fetch_pr_context`'s `origin/<base>...HEAD` PR payload — not
+      the commit-SHA list, and NEVER two-dot; see
+      docs/ITERATION_AWARENESS.md § 4.3 for the rationale). Two
+      commits producing byte-identical diffs produce byte-identical
+      hashes so cosmetic rebases that don't change what the reviewer
+      would see don't advance the generation. Detecting a change
+      advances the generation.
     - `round_in_generation`: how many reviews have run in this generation.
       Resets to 1 on generation change.
     - `policy_applied`: which policy actually fired on the last review
@@ -6066,8 +6069,12 @@ def main() -> int:
             # Expose set_pr_description only in autocomplete mode; expose
             # set_pr_complexity only when complexity labeling is enabled.
             # `effective_max_inline_comments` == `max_inline_comments` when
-            # IAR is off; when on, it may be raised for round 1 of a new
-            # generation (first-pass-exhaustive / safety net).
+            # the IAR pre-LLM step didn't amplify the cap (i.e. NOT round 1
+            # of a new generation under first-pass-exhaustive / safety net,
+            # OR the pre-LLM step crashed and the try/except fell back to
+            # the baseline cap — see docs/ITERATION_AWARENESS.md § 2).
+            # On round 1 of a new generation the multiplier raises the cap
+            # so the LLM can surface an exhaustive initial pass.
             tools: list[dict[str, Any]] = tools_schema(
                 effective_max_inline_comments,
                 allow_set_pr_description=(
