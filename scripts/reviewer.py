@@ -1887,8 +1887,13 @@ class IterationState:
     Field notes:
     - `version`: schema version; matches IAR_STATE_SCHEMA_VERSION.
     - `generation`: monotonic counter; increments on new commits or rebase.
-    - `generation_range_hash`: SHA256(hex) of the sorted commit-SHA list
-      for this generation. Detecting a change advances the generation.
+    - `generation_range_hash`: 16-char SHA256 hex slice of the diff
+      *content* between `base_sha` and `head_sha` (i.e. the output of
+      `git diff base..HEAD`, not the commit-SHA list). Two commits
+      producing byte-identical diffs produce byte-identical hashes so
+      cosmetic rebases that don't change what the reviewer would see
+      don't advance the generation. Detecting a change advances the
+      generation.
     - `round_in_generation`: how many reviews have run in this generation.
       Resets to 1 on generation change.
     - `policy_applied`: which policy actually fired on the last review
@@ -2864,6 +2869,7 @@ def apply_round_capped_policy(
     code_contexts: dict[str, "CodeContext | None"],
     base_max_inline_comments: int,
     max_rounds: int,
+    is_round_1_of_generation: bool,
 ) -> PolicyResult:
     """After N rounds in the current generation, only critical findings
     surface — non-critical warnings/infos are silenced with a "cap
@@ -2875,13 +2881,34 @@ def apply_round_capped_policy(
     path so the rail cannot be bypassed).
 
     `max_rounds == 0` means unlimited (post-cap never triggers).
+
+    `is_round_1_of_generation` is load-bearing when transitions happen:
+    on `NEW_COMMITS`, `REBASED`, `USER_FORCED_RESET`, or `FIRST_REVIEW`,
+    the round counter resets to 1 for the new generation. Without this
+    parameter, `current_round` would be computed from the prior gen's
+    counter (`prior_state.round_in_generation + 1`) and a consumer with
+    e.g. `max_rounds=3` who pushed new commits after a converged
+    generation would land in the post-cap path on run 1 of the new
+    generation and see all non-critical findings silenced. `dispatch_policy`
+    computes and passes the flag exactly as it does to
+    `apply_first_pass_exhaustive_policy` — the two policies must agree
+    on when a round-1 restart is happening.
     """
-    # +1 because this run IS a round in the current generation; if
-    # prior_state.round_in_generation == max_rounds, THIS run is the
-    # first one past the cap.
-    current_round: int = (
-        1 if prior_state is None else prior_state.round_in_generation + 1
-    )
+    if is_round_1_of_generation:
+        # New generation → round counter restarts at 1, regardless of
+        # the prior state's counter. Never lands in post-cap on the
+        # first round of a fresh generation.
+        current_round: int = 1
+    else:
+        # +1 because this run IS a round in the current generation; if
+        # prior_state.round_in_generation == max_rounds, THIS run is the
+        # first one past the cap. `prior_state is None` is impossible
+        # here (would have set is_round_1_of_generation=True upstream)
+        # but keep the defensive guard so a future refactor can't
+        # silently reintroduce a NoneType access.
+        current_round = (
+            1 if prior_state is None else prior_state.round_in_generation + 1
+        )
     if max_rounds > 0 and current_round > max_rounds:
         critical_only: list[Finding] = [
             f for f in findings if f.severity == SEVERITY_CRITICAL
@@ -3162,6 +3189,7 @@ def dispatch_policy(
             code_contexts=code_contexts,
             base_max_inline_comments=base_max_inline_comments,
             max_rounds=iar_config.max_review_rounds,
+            is_round_1_of_generation=is_round_1_of_generation,
         )
     if iar_config.policy == IAR_POLICY_CRITICAL_GATE:
         return apply_critical_gate_policy(

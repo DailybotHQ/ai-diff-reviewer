@@ -194,7 +194,7 @@ outputs:
     description: 'Whether the strictness gate decided to fail the check (`true`/`false`). When `true`, the action exits with code 2 so the GitHub check turns red.'
     value: ${{ steps.review.outputs.blocked }}
   skipped:
-    description: 'Whether the run was skipped by the label gate (`true`/`false`).'
+    description: 'Whether the run was skipped without invoking the LLM (`true`/`false`). Set to `true` when EITHER (a) the label gate suppressed the run (missing `label-gate` label, `author-association` filter, `trigger-mode: label-once` already reviewed this label toggle, etc.) OR (b) the configured `skip-review-label` was present on the PR at trigger time (the emergency-bypass short-circuit).'
     value: ${{ steps.review.outputs.skipped }}
 
   # ---------------- Iteration-Aware Review (IAR) outputs ----------------

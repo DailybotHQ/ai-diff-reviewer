@@ -240,13 +240,22 @@ Iteration-Aware Review (IAR) is a subsystem that wraps the reviewer's main loop 
 ```
 main()
 ├── (pre-LLM) run_iar_pre_llm()
-│   ├── read_prior_iteration_state()  ← GraphQL: last non-minimized marker
+│   ├── read_prior_iteration_state()  ← GraphQL: latest marker with state
+│   │                                     (visible > minimized > any — the tier-2
+│   │                                      fallback rescues state across the
+│   │                                      collapse-previous boundary)
 │   ├── _resolve_base_sha() + compute_generation_range_hash()
 │   ├── detect_generation_change()    ← FIRST_REVIEW / SAME_GEN / NEW_COMMITS / REBASED
 │   ├── compute_new_lines_pct()       ← for safety net
-│   ├── _fetch_pr_labels()            ← for escape label
+│   ├── _fetch_pr_labels()            ← for escape label + USER_FORCED_RESET
+│   ├── (USER_FORCED_RESET override) ← only when applied_label configured AND
+│   │                                    prior state records the label was
+│   │                                    previously stamped AND the label is
+│   │                                    absent from the PR now — deliberate reset
+│   │                                    gesture. Clears prior_state to None and
+│   │                                    forces new_lines_pct=0.0.
 │   └── dispatch_policy(findings=[])  ← extract prompt_addendum + effective cap
-│                                       └─ Precedence: escape label > safety net > configured policy
+│                                       └─ Precedence: USER_FORCED_RESET > escape label > safety net > configured policy
 │
 ├── (LLM turn loop — unchanged)       ← consumes effective cap + system_prompt with optional addendum
 │

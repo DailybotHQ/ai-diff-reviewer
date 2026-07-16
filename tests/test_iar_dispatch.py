@@ -81,6 +81,7 @@ class RoundCappedPolicyTests(unittest.TestCase):
             code_contexts={},
             base_max_inline_comments=10,
             max_rounds=5,
+            is_round_1_of_generation=True,
         )
         self.assertEqual(len(got.findings_to_surface), 5)
         self.assertEqual(
@@ -102,6 +103,7 @@ class RoundCappedPolicyTests(unittest.TestCase):
             code_contexts={},
             base_max_inline_comments=10,
             max_rounds=2,
+            is_round_1_of_generation=False,
         )
         self.assertEqual(len(got.findings_to_surface), 1)
         self.assertEqual(got.findings_to_surface[0].severity, "critical")
@@ -127,6 +129,7 @@ class RoundCappedPolicyTests(unittest.TestCase):
             code_contexts={},
             base_max_inline_comments=10,
             max_rounds=0,
+            is_round_1_of_generation=False,
         )
         self.assertEqual(len(got.findings_to_surface), 10)
         self.assertEqual(
@@ -144,8 +147,57 @@ class RoundCappedPolicyTests(unittest.TestCase):
             code_contexts={},
             base_max_inline_comments=10,
             max_rounds=2,
+            is_round_1_of_generation=False,
         )
         self.assertEqual(got.findings_to_surface, [crit])
+
+    def test_new_generation_resets_round_counter_even_if_prior_past_cap(
+        self,
+    ) -> None:
+        """Regression test: when a transition fires (NEW_COMMITS,
+        REBASED, USER_FORCED_RESET, or FIRST_REVIEW),
+        `is_round_1_of_generation=True` MUST force the round counter to
+        restart at 1 for the new generation — otherwise a consumer with
+        e.g. `max_rounds=3` who pushed new commits after a converged
+        generation would land in the post-cap path on run 1 of the new
+        generation and see all non-critical findings silenced.
+
+        Pre-fix behaviour: `current_round = prior_state.round_in_generation + 1
+        = 5 + 1 = 6 > 3 = max_rounds` → post-cap fires, warnings
+        silenced. New-fix behaviour: `is_round_1_of_generation=True` →
+        `current_round = 1` → pre-cap fires, warnings surface.
+        """
+        findings: list[reviewer.Finding] = [
+            _finding(line=1, severity="warning"),
+            _finding(line=2, severity="info"),
+            _finding(line=3, severity="warning"),
+        ]
+        # Simulate a converged generation past the cap (round 5, max 3).
+        prior_past_cap: reviewer.IterationState = _state(
+            round_in_generation=5,
+        )
+        got: reviewer.PolicyResult = reviewer.apply_round_capped_policy(
+            findings=findings,
+            prior_state=prior_past_cap,
+            code_contexts={},
+            base_max_inline_comments=10,
+            max_rounds=3,
+            is_round_1_of_generation=True,  # NEW_COMMITS transition
+        )
+        self.assertEqual(
+            got.policy_applied,
+            reviewer.IAR_POLICY_ROUND_CAPPED_PRE_CAP,
+            msg="is_round_1_of_generation=True must reset the round "
+                "counter and land in pre-cap, not post-cap, on the "
+                "first round of the new generation.",
+        )
+        self.assertEqual(
+            len(got.findings_to_surface), 3,
+            msg="All findings must surface on the round-1 restart "
+                "(subject to dedup, which is a no-op here since "
+                "prior_state has no fingerprints from the new gen).",
+        )
+        self.assertEqual(len(got.findings_silenced), 0)
 
 
 class CriticalGatePolicyTests(unittest.TestCase):

@@ -207,7 +207,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `inline-attached` | int | Inline comments actually attached. |
 | `inline-dropped` | int | Inline comments dropped because GitHub returned 422. |
 | `blocked` | bool | Whether strictness blocked the check. When `true`, the action exits with code 2. |
-| `skipped` | bool | Whether the run was skipped (label/author gate). |
+| `skipped` | bool | Whether the run was skipped without invoking the LLM (label/author gate OR `skip-review-label` emergency bypass). |
 | `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every successful IAR pipeline run; empty if the pipeline crashed mid-flight (caught by the try/except safety net). |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which IAR policy actually fired (usually matches `convergence-policy`; safety net or escape label can override). Empty if the IAR pipeline crashed. |
