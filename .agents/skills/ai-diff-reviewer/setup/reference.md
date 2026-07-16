@@ -3,7 +3,7 @@
 Every input the [AI Diff Reviewer](https://github.com/DailybotHQ/ai-diff-reviewer)
 GitHub Action accepts, in one place. Adapted from `action.yml` in the
 canonical repository; this file is regenerated alongside skill releases,
-so it always matches the `@v1` behavior.
+so it always matches the `@v2` behavior.
 
 **When to read this file:** the developer asks a specific question about
 an input — *"what does `strictness` do?"*, *"how do I pin the Claude
@@ -461,7 +461,7 @@ downstream steps to consume.
 | `inline-attached` | Number of inline comments actually attached to the review. |
 | `inline-dropped` | Number of inline comments dropped because GitHub rejected the review with HTTP 422 (the action retries summary-only on 422). |
 | `blocked` | Whether the strictness gate decided to fail the check (`true`/`false`). When `true`, the action exits with code 2 so the GitHub check turns red. |
-| `skipped` | Whether the run was skipped by the label gate (`true`/`false`). |
+| `skipped` | Whether the run was skipped without invoking the LLM (`true`/`false`) — label/author/`trigger-mode` gate **or** configured `skip-review-label` emergency bypass. |
 | `iteration-round` | IAR round number within the current generation. Populated on every successful IAR pipeline run. Empty string if the pipeline crashed (caught by the try/except safety net). |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
@@ -475,15 +475,19 @@ downstream steps to consume.
 - `README.md` — quick-start, provider overview, feature matrix.
 - `docs/PROMPTS.md` — how prompts and extensions interact; local review
   parity.
-- `docs/STRICTNESS.md` — when to graduate through the strictness levels.
-- `docs/TRIGGER_MODES.md` — full trigger-mode decision matrix and
-  recipes.
+- `docs/STRICTNESS.md` — when to graduate through the strictness levels
+  (includes § Strictness × IAR).
+- `docs/TRIGGER_MODES.md` — full trigger-mode decision matrix, recipes,
+  and § Emergency-bypass label (`skip-review-label`).
+- `docs/ITERATION_AWARENESS.md` — IAR policies, escape label,
+  USER_FORCED_RESET, outputs, failure fallback.
+- `docs/PERFORMANCE.md` — turn budgets plus the IAR cost/latency model.
 - `docs/PR_METADATA_CHECKS.md` — description-mode and complexity-label
   details, including the autocomplete marker.
 - `docs/PROVIDERS.md` — provider-by-provider setup, model choices, and
   cost tradeoffs.
-- `docs/SECURITY.md` — the author-association gate's threat model, and
-  responsible-disclosure flow.
+- `docs/SECURITY.md` — author-association gate, IAR trust boundary,
+  `skip-review-label` threat model, responsible-disclosure flow.
 
 ---
 
@@ -494,4 +498,4 @@ by the auto-release workflow's skill-sync step. If you spot a drift
 (a new input in `action.yml` that's missing here, or a description
 mismatch), file an issue at
 https://github.com/DailybotHQ/ai-diff-reviewer/issues — this file
-should always be a truthful summary of the `@v1` contract.
+should always be a truthful summary of the `@v2` contract.
