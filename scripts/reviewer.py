@@ -2105,7 +2105,7 @@ def _fetch_latest_marker_body(
         "query($owner: String!, $name: String!, $pr: Int!) {\n"
         "  repository(owner: $owner, name: $name) {\n"
         "    pullRequest(number: $pr) {\n"
-        "      comments(last: 250) {\n"
+        "      comments(last: 100) {\n"
         "        nodes {\n"
         "          body\n"
         "          isMinimized\n"
@@ -2116,18 +2116,16 @@ def _fetch_latest_marker_body(
         "  }\n"
         "}"
     )
-    # `last: 250` (GraphQL `first`/`last` cap is 100 per docs but the
-    # v4 endpoint accepts up to 250 for issue comments in practice — see
-    # docs/ITERATION_AWARENESS.md § 7.3 for the ceiling discussion).
-    # This is a soft ceiling: on very busy PRs (250+ comments accumulated
-    # after the tracking marker was posted), IAR can fail to find a
-    # state-bearing marker in the window and will treat the run as
-    # `first_review`. Failure mode is SAFE (over-review, never
+    # `last: 100` is the GraphQL v4 hard cap on the `pullRequest.comments`
+    # connection (server returns `EXCESSIVE_PAGINATION` for anything
+    # higher). On very busy PRs where 100+ human/bot comments accumulate
+    # AFTER the last state-bearing marker was minimized, IAR can fail
+    # to find a state-bearing marker in the window and treat the run
+    # as `first_review`. Failure mode is SAFE (over-review, never
     # under-surface) — the reviewer re-fires round-1 exhaustive rather
-    # than silencing findings. If this becomes a real problem for a
-    # long-lived PR, the fix is proper cursor pagination via
-    # `pageInfo.hasPreviousPage`; deliberately deferred here to keep
-    # the runtime stdlib-only and the code path simple.
+    # than silencing findings. See docs/ITERATION_AWARENESS.md § 7.3
+    # for the follow-up cursor-pagination path; deliberately deferred
+    # here to keep the runtime stdlib-only and the code path simple.
     try:
         data: Any = gh_graphql(
             query,
@@ -3143,6 +3141,31 @@ def compute_new_lines_pct(
     return (new_added / float(total)) * 100.0
 
 
+def _labels_contain_ci(*, needle: str, haystack: list[str]) -> bool:
+    """Case-insensitive, whitespace-trimmed label membership check.
+
+    GitHub labels preserve the case they were created with but the
+    reviewer's public contract (like `label-gate`) treats them
+    case-insensitively — see `resolve_trigger_action` (`gating on
+    exact case is a foot-gun`). This helper centralises the same
+    normalisation for the three OTHER label comparisons that
+    influence review behaviour: `iteration-escape-label`,
+    `skip-review-label`, and the reviewed-label-based
+    USER_FORCED_RESET / `compute_reviewed_label_applied` path.
+
+    Consistency here matters most for USER_FORCED_RESET: a casing
+    mismatch between the configured `applied-label` and the label
+    GitHub returns on the PR would look identical to "reviewed
+    label deliberately removed" and silently wipe fingerprint
+    memory on the next run — the opposite of what the developer
+    intended (round-8 F3).
+    """
+    needle_norm: str = needle.strip().lower()
+    if not needle_norm:
+        return False
+    return any(lbl.strip().lower() == needle_norm for lbl in haystack)
+
+
 def check_escape_label(
     *, pr_labels: list[str], escape_label: str
 ) -> bool:
@@ -3150,10 +3173,9 @@ def check_escape_label(
     PR. When True, the dispatcher short-circuits dedup for THIS run
     only — persisted state is NOT mutated so subsequent normal runs
     resume from where they left off. Removing the label restores
-    normal IAR behavior."""
-    if not escape_label:
-        return False
-    return escape_label in pr_labels
+    normal IAR behavior. Match is case-insensitive (see
+    `_labels_contain_ci`)."""
+    return _labels_contain_ci(needle=escape_label, haystack=pr_labels)
 
 
 def dispatch_policy(
@@ -3506,7 +3528,9 @@ def compute_reviewed_label_applied(
     prior_bit: bool = (
         prior_state is not None and prior_state.reviewed_label_applied
     )
-    label_currently_on_pr: bool = applied_label in current_labels
+    label_currently_on_pr: bool = _labels_contain_ci(
+        needle=applied_label, haystack=current_labels
+    )
     return label_stamped or label_currently_on_pr or prior_bit
 
 
@@ -3561,8 +3585,17 @@ def write_iar_outputs_populated(
     """
     write_action_output("iteration-round", str(state.round_in_generation))
     write_action_output("iteration-generation", str(state.generation))
+    # Same rule as _render_iar_marker_annotation (see round-7 fix):
+    # emit the current run's `policy_result.policy_applied`, NOT the
+    # preserved-state's `state.policy_applied`. On an escape-label run
+    # `run_iar_post_llm` returns the prior state unchanged (contract:
+    # no mutation) while `policy_result.policy_applied` carries the
+    # override (`escape-label-forced-full-review` or a `safety-net-*`
+    # variant). Consumers keying downstream steps on this output MUST
+    # see the current run's actual effective policy, or they will
+    # miss escape / safety-net firings entirely.
     write_action_output(
-        "iteration-policy-applied", state.policy_applied
+        "iteration-policy-applied", policy_result.policy_applied
     )
     write_action_output("iteration-tokens-used", str(telemetry.tokens_used))
     write_action_output(
@@ -3657,7 +3690,9 @@ def run_iar_pre_llm(
         applied_label
         and prior_state is not None
         and prior_state.reviewed_label_applied
-        and applied_label not in pr_labels
+        and not _labels_contain_ci(
+            needle=applied_label, haystack=pr_labels
+        )
     ):
         log(
             f"IAR: user-forced reset detected — reviewed label "
@@ -5832,7 +5867,9 @@ def main() -> int:
     # SECURITY NOTE: anyone who can label a PR can bypass code review via
     # this gesture. Consumers who care must combine this input with a
     # ruleset / CODEOWNERS rule restricting who can apply the label.
-    if skip_review_label and skip_review_label in current_labels:
+    if _labels_contain_ci(
+        needle=skip_review_label, haystack=current_labels
+    ):
         log(
             f"Skip-review-label {skip_review_label!r} present on PR — "
             "short-circuiting to success without invoking the LLM. No "

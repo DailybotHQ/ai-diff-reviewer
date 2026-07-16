@@ -208,7 +208,7 @@ outputs:
     description: 'IAR generation counter. Increments when new commits or a rebase are detected via the range hash. Empty string if the IAR pipeline crashed before populating outputs.'
     value: ${{ steps.review.outputs.iteration-generation }}
   iteration-policy-applied:
-    description: 'Which IAR policy actually fired this run. Usually matches `convergence-policy`, but the 30% new-lines safety net can override it to `first-pass-exhaustive`, and the escape label overrides to `escape-label-forced-full-review`. Empty string if the IAR pipeline crashed before populating outputs.'
+    description: 'Which IAR policy actually fired this run. Usually matches `convergence-policy`, but the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive`, and the escape label overrides to `escape-label-forced-full-review`. Grep marker chains for `policy=\`safety-net-forced-` / `policy=\`escape-label-forced-` to audit either override. Empty string if the IAR pipeline crashed before populating outputs.'
     value: ${{ steps.review.outputs.iteration-policy-applied }}
   iteration-tokens-used:
     description: 'Total input + output tokens consumed by the LLM in this run (cost telemetry). Empty string if the IAR pipeline crashed before populating outputs.'

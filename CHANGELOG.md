@@ -270,6 +270,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (round-8 self-review: pagination revert + escape-label output + label case-insensitivity)
+
+Round-8 found the **regression I introduced in round-7 (F1 critical)**
+plus two more polish items and completed the round-7 escape-label
+observability fix I only did halfway:
+
+- **`_fetch_latest_marker_body` GraphQL `last: 250` was invalid — the
+  hard cap on `pullRequest.comments` is 100.** Reverted to
+  `last: 100`; server was raising `EXCESSIVE_PAGINATION` on every
+  call, so IAR classified every run as `first_review` and burned
+  round-1 exhaustive forever, which is exactly the symptom the
+  round-7 patch was supposed to prevent. Updated
+  `docs/ITERATION_AWARENESS.md § 7.3` to honestly document the
+  100-comment ceiling (still safe failure mode; the cursor-pagination
+  follow-up is unchanged).
+- **`iteration-policy-applied` action output was reading
+  `state.policy_applied` instead of `policy_result.policy_applied`
+  — the exact bug pattern round-7 fixed for the marker footer,
+  but only fixed one of the two consumers.** On an escape-label run
+  the output would report the preserved-state's prior policy
+  (e.g. `first-pass-exhaustive`) instead of the current run's
+  effective policy (`escape-label-forced-full-review`), silently
+  defeating workflow greps / dashboards keying on the output. Fixed
+  by rendering `policy_result.policy_applied`; new regression test
+  `test_iteration_policy_applied_reads_from_policy_result_not_state`.
+- **Case-sensitive label matching was inconsistent with `label-gate`
+  (which is case-insensitive).** `check_escape_label`, the skip-review
+  short-circuit, and USER_FORCED_RESET detection were all using exact
+  `in` membership, so a casing mismatch could either silently fail to
+  fire (escape / skip) or — worst case — falsely register "reviewed
+  label removed" and wipe fingerprint memory (USER_FORCED_RESET).
+  Fixed by introducing `_labels_contain_ci` (whitespace-trimmed,
+  case-insensitive membership) and routing all three sensitive
+  comparisons through it. `compute_reviewed_label_applied` also uses
+  the helper for the "label currently on PR" signal.
+- **`action.yml` / README / `setup/reference.md` /
+  `docs/ITERATION_AWARENESS.md § 3.2` `iteration-policy-applied`
+  descriptions all claimed the safety-net override string was
+  `first-pass-exhaustive`.** The runtime actually emits
+  `safety-net-forced-first-pass-exhaustive` (via
+  `IAR_POLICY_SAFETY_NET_FORCED`), so operators grepping for the
+  short name miss every safety-net firing. Aligned all four surfaces
+  with the shipping string and added a "grep this to audit" note.
+
 ### Fixed (round-7 self-review: escape-label footer bug + observability polish)
 
 Round-7 caught a **real runtime bug** on the escape-label observability

@@ -498,6 +498,53 @@ class WriteIarOutputsPopulatedTests(unittest.TestCase):
             outputs["iteration-cost-vs-baseline-estimate"], "+50%"
         )
 
+    def test_iteration_policy_applied_reads_from_policy_result_not_state(
+        self,
+    ) -> None:
+        """Regression guard for round-8 F2: the `iteration-policy-applied`
+        action output MUST come from `policy_result.policy_applied`
+        (the run's actual effective policy) — NOT from
+        `state.policy_applied` (which on an escape-label run is the
+        preserved-state's PRIOR policy). Same rule as
+        `_render_iar_marker_annotation` (round-7 F1). Consumers keying
+        downstream steps on this output would otherwise miss escape /
+        safety-net firings entirely."""
+        state: IterationState = new_iteration_state(
+            generation=2, round_in_generation=3,
+            policy_applied=IAR_POLICY_FIRST_PASS_EXHAUSTIVE,
+        )
+        pr: PolicyResult = PolicyResult(
+            findings_to_surface=[],
+            findings_silenced=[],
+            effective_max_inline_comments=10,
+            prompt_addendum="",
+            policy_applied="escape-label-forced-full-review",
+        )
+        rt: RunTelemetry = RunTelemetry(
+            start_time_monotonic=time.monotonic() - 1.0,
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".txt"
+        ) as fh:
+            output_path: str = fh.name
+        try:
+            with patch.dict(os.environ, {"GITHUB_OUTPUT": output_path}):
+                write_iar_outputs_populated(
+                    state=state, policy_result=pr, telemetry=rt,
+                    effective_cap=10, base_cap=10,
+                )
+            outputs: dict[str, str] = _parse_github_outputs(output_path)
+        finally:
+            os.unlink(output_path)
+        self.assertEqual(
+            outputs["iteration-policy-applied"],
+            "escape-label-forced-full-review",
+        )
+        self.assertNotEqual(
+            outputs["iteration-policy-applied"],
+            IAR_POLICY_FIRST_PASS_EXHAUSTIVE,
+        )
+
     def test_last_write_wins_over_write_all_outputs(self) -> None:
         # write_all_outputs writes empty defaults for all 5 IAR outputs;
         # write_iar_outputs_populated writes real values LATER, so the
