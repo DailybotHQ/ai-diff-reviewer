@@ -211,7 +211,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every successful IAR pipeline run; empty if the pipeline crashed mid-flight (caught by the try/except safety net). |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | int (as string) | Total LLM input+output tokens for this run (cost telemetry). Empty if the IAR pipeline crashed. |
+| `iteration-tokens-used` | int (as string) | Cost-telemetry counter. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata; see [`docs/ITERATION_AWARENESS.md § 13.2`](docs/ITERATION_AWARENESS.md) for the follow-up plan. Empty ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | string | Coarse cost-delta heuristic derived from cap expansion + a small addendum flag. Always `"0%"` or `"+N%"` today (silenced-finding savings not yet modelled — see [`docs/ITERATION_AWARENESS.md § 9.5`](docs/ITERATION_AWARENESS.md)). Empty if the IAR pipeline crashed. |
 
 Consume them in a later step by giving the action step an `id`:

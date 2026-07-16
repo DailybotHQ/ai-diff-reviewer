@@ -267,14 +267,20 @@ jobs:
           #      the PR's label state.
           #   2. Remove the `ready` label. Same — no workflow trigger.
           #   3. Re-add `ready`. The workflow fires (`types: [labeled]`);
-          #      IAR checks all four USER_FORCED_RESET conditions:
+          #      IAR checks all FIVE USER_FORCED_RESET conditions:
           #        (a) `applied-label` configured (yes: `self-reviewed:*`),
-          #        (b) that label absent from PR now (yes: step 1),
-          #        (c) `prior_state is not None` (yes: marker chain has
+          #        (b) `prior_state is not None` (yes: marker chain has
           #            state from the earlier successful run),
-          #        (d) `prior_state.reviewed_label_applied == True` (yes:
+          #        (c) `prior_state.reviewed_label_applied == True` (yes:
           #            recorded by the earlier successful run's marker).
-          #      All four true → transition = USER_FORCED_RESET, prior
+          #        (d) `label_fetch_ok == True` (round-14 F1: the
+          #            `_fetch_pr_labels` REST call actually succeeded;
+          #            a transient GH 5xx returning an empty list
+          #            MUST NOT be misread as "label absent" — that
+          #            path silently wipes fingerprint memory).
+          #        (e) `applied-label` absent from the returned PR-labels
+          #            list (yes: step 1 removed it).
+          #      All five true → transition = USER_FORCED_RESET, prior
           #      state discarded, round 1 exhaustive on a clean slate.
           # Verification signals to look for on the completed review comment:
           #   - Marker annotation reads `(user_forced_reset)` (not `(new_commits)`).
@@ -282,12 +288,17 @@ jobs:
           #   - No prior findings are silenced as dedup — the dedup memory is gone.
           # NO-OP CASES (the reset silently does not fire — this is by design):
           #   - If the previous run was blocked (critical finding under
-          #     `block-on-critical`), condition (d) fails because the
+          #     `block-on-critical`), condition (c) fails because the
           #     reviewer didn't stamp the label, so `reviewed_label_applied`
           #     stayed `False`. The re-trigger looks like a normal
           #     `(new_commits)` / `(same_generation)` run, not a reset.
           #   - If no prior IAR state exists (first-ever review of the PR),
-          #     condition (c) fails.
+          #     condition (b) fails.
+          #   - If the `_fetch_pr_labels` REST call fails (transient
+          #     GitHub 5xx or rate-limit) condition (d) fails and the
+          #     reset is deferred to the next successful fetch.
+          #     Prior state is preserved intact so dedup memory is not
+          #     wiped on outages.
           # Scope: each provider maintains its own marker + IAR state, so
           # the reset is scoped to whichever `self-reviewed:*` label you
           # removed. Removing all four resets every provider's timeline

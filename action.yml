@@ -211,7 +211,7 @@ outputs:
     description: 'Which IAR policy actually fired this run. Usually matches `convergence-policy`, but the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive`, and the escape label overrides to `escape-label-forced-full-review`. Grep marker chains for `policy=\`safety-net-forced-` / `policy=\`escape-label-forced-` to audit either override. Empty string if the IAR pipeline crashed before populating outputs.'
     value: ${{ steps.review.outputs.iteration-policy-applied }}
   iteration-tokens-used:
-    description: 'Total input + output tokens consumed by the LLM in this run (cost telemetry). Empty string if the IAR pipeline crashed before populating outputs.'
+    description: 'Cost-telemetry counter. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata from LLM responses into `RunTelemetry.tokens_used`, so the output is a stable placeholder that consumers can safely surface without gating on it. See `docs/ITERATION_AWARENESS.md § 13.2` for the follow-up plan. Empty string ONLY when the IAR pipeline crashed before populating outputs.'
     value: ${{ steps.review.outputs.iteration-tokens-used }}
   iteration-cost-vs-baseline-estimate:
     description: 'Coarse heuristic estimate of this run''s LLM-call cost vs a projected no-dedup baseline, derived from cap expansion (`effective_cap / base_cap`) plus a small addendum-overhead flag. Always non-negative: `"0%"` when no cap expansion fires, `"+N%"` when round 1 of first-pass-exhaustive or the safety net raises the cap. Silenced-finding savings are not yet modelled (see docs/ITERATION_AWARENESS.md § 9.5). Empty string if the IAR pipeline crashed before populating outputs.'

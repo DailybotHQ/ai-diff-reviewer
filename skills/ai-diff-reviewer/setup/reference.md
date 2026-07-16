@@ -465,7 +465,7 @@ downstream steps to consume.
 | `iteration-round` | IAR round number within the current generation. Populated on every successful IAR pipeline run. Empty string if the pipeline crashed (caught by the try/except safety net). |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | Total LLM input+output tokens consumed this run (cost telemetry). Empty if the IAR pipeline crashed. |
+| `iteration-tokens-used` | Cost-telemetry counter. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata into `RunTelemetry.tokens_used`; safe placeholder that consumers can surface without gating on. Empty ONLY if the IAR pipeline crashed. See `docs/ITERATION_AWARENESS.md § 13.2`. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic (cap expansion + addendum flag). Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled. Empty if the IAR pipeline crashed. |
 
 ---

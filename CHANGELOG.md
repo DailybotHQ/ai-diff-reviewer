@@ -273,6 +273,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (round-15 self-review: label_fetch_ok doc drift + tokens_used truth in labeling)
+
+Round-15 self-review **passed** (PR green, label stamped). 3 warnings,
+all pure doc drift — no runtime changes:
+
+- **`iteration-tokens-used` documentation aligned with reality.**
+  `action.yml`, `README.md`, and
+  `skills/ai-diff-reviewer/setup/reference.md` all claimed the
+  output was "Total input + output tokens consumed by the LLM in
+  this run", but `RunTelemetry.tokens_used` is never populated from
+  provider usage metadata — successful IAR runs always emit `"0"`.
+  Consumers building cost dashboards on the output were being lied
+  to. Updated all three surfaces to describe it as a stable
+  placeholder that emits `"0"` today and cross-reference
+  `docs/ITERATION_AWARENESS.md § 13.2` for the follow-up plan.
+- **`.github/workflows/self-review.yml`** smoke-test comment for
+  the USER_FORCED_RESET verification procedure still described a
+  "four-condition" guard and (a)–(d). Round-14 added the fifth
+  guard (`label_fetch_ok`); comment now lists all five with
+  their round-14 semantics, plus a new NO-OP case for the
+  transient-fetch-failure deferral.
+- **`docs/ITERATION_AWARENESS.md` § 4.2** trailing paragraph
+  attributed blocked-run prevention to "the fourth condition" —
+  correct in the pre-round-14 numbering (when
+  `reviewed_label_applied` was condition 4), but stale after
+  round-14 inserted `label_fetch_ok` as condition 4 and pushed
+  `reviewed_label_applied` back to condition 3. Reworded to name
+  BOTH load-bearing safety guards by condition number and
+  purpose, so a future reader can't miss either.
+- `docs/ITERATION_AWARENESS.md § 13.2` (per-generation telemetry
+  known-limitation) expanded to describe the coordinated two-piece
+  follow-up: capture per-provider usage metadata AT the LLM-response
+  boundary (currently missing) + accumulate telemetry across a
+  generation's rounds (currently mis-attributes on `advance_
+  generation`). Both matter most when cost dashboards get built
+  on the outputs.
+
 ### Fixed (round-14 self-review: label-fetch failure guard for USER_FORCED_RESET)
 
 Round-14 self-review **passed** (PR green, label stamped). One warning
