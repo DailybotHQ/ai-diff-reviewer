@@ -2603,6 +2603,129 @@ def resolve_finding_status(
 
 
 # ---------------------------------------------------------------------------
+# Iteration-Aware Review (IAR) — convergence policies (Tasks 6 + 7)
+# ---------------------------------------------------------------------------
+# Every policy returns a `PolicyResult` — a small typed struct that
+# carries the two things a policy can influence:
+# * `effective_max_inline_comments` + `prompt_addendum` (consumed BEFORE
+#   the LLM call, to shape the prompt + cap).
+# * `findings_to_surface` + `findings_silenced` (consumed AFTER the LLM
+#   call, to filter its output).
+#
+# All policies flow through `dedupe_findings_against_prior` (Task 5) so
+# the hardcoded critical-always-surfaces safety rail is respected — no
+# policy can bypass or weaken it.
+#
+# Cap multiplication raises the tool-call ceiling (max-inline-comments),
+# not `max_tokens` or `MAX_TURNS`. See AGENTS.md DON'T #9.
+
+
+@dataclass(frozen=True)
+class PolicyResult:
+    """Return type of every `apply_*_policy` function. Consumed by
+    Task 8's `main()` integration — the two `prompt_*` / `effective_*`
+    fields shape the LLM call, the two `findings_*` fields shape the
+    submission."""
+
+    findings_to_surface: list[Finding]
+    findings_silenced: list[SilencedFinding]
+    effective_max_inline_comments: int
+    prompt_addendum: str
+    policy_applied: str
+
+
+def apply_iterative_policy(
+    *,
+    findings: list[Finding],
+    prior_state: IterationState | None,
+    code_contexts: dict[str, "CodeContext | None"],
+    base_max_inline_comments: int,
+) -> PolicyResult:
+    """The default IAR policy: dedup only. Findings whose fingerprint
+    matches `prior_state.open_fingerprints_this_gen` are silenced;
+    everything else surfaces. `severity == critical` always surfaces
+    (Task 5's safety rail).
+
+    Steady-state cost is close to the pre-IAR baseline: the LLM produces
+    the same set of findings, but the reviewer only submits deltas —
+    saving tokens on the GitHub API submission side (small) and reducing
+    developer noise (large)."""
+    dedup: DedupResult = dedupe_findings_against_prior(
+        new_findings=findings,
+        prior_state=prior_state,
+        code_contexts=code_contexts,
+    )
+    return PolicyResult(
+        findings_to_surface=list(dedup.surfaced),
+        findings_silenced=list(dedup.silenced),
+        effective_max_inline_comments=base_max_inline_comments,
+        prompt_addendum="",
+        policy_applied=IAR_POLICY_ITERATIVE,
+    )
+
+
+def apply_first_pass_exhaustive_policy(
+    *,
+    findings: list[Finding],
+    prior_state: IterationState | None,
+    code_contexts: dict[str, "CodeContext | None"],
+    base_max_inline_comments: int,
+    cap_multiplier: int,
+    is_round_1_of_generation: bool,
+) -> PolicyResult:
+    """Round 1 of each generation: exhaustive prompt splicing + cap
+    multiplication. Rounds 2+: delegate to `apply_iterative_policy`
+    (dedup only).
+
+    "Round 1 of each generation" means either:
+    - First-ever review of the PR (FIRST_REVIEW), OR
+    - First review after `advance_generation()` was called for a
+      NEW_COMMITS / REBASED transition.
+
+    On round 1, the caller MUST also splice `PolicyResult.prompt_addendum`
+    into the system prompt AND raise the LLM's max-inline-comments to
+    `PolicyResult.effective_max_inline_comments` BEFORE invoking the
+    model. This function's post-LLM job is to truncate the model's
+    output at the increased cap — nothing more. (Critical-always-
+    surfaces still applies via dedup path on rounds 2+.)
+    """
+    if is_round_1_of_generation:
+        # Round-1 exhaustive: raise the inline-comments ceiling and
+        # splice the addendum. `findings` at this point is already the
+        # LLM's output (produced with the raised cap upstream); we
+        # truncate defensively in case the model produced more.
+        effective_cap: int = base_max_inline_comments * cap_multiplier
+        return PolicyResult(
+            findings_to_surface=list(findings[:effective_cap]),
+            findings_silenced=[],
+            effective_max_inline_comments=effective_cap,
+            prompt_addendum=IAR_EXHAUSTIVE_PROMPT_ADDENDUM,
+            policy_applied=IAR_POLICY_FIRST_PASS_EXHAUSTIVE,
+        )
+    # Rounds 2+ of the same generation: iterative dedup takes over.
+    # The critical-always-surfaces safety rail lives inside the dedup
+    # engine, so it applies transparently here.
+    iterative_result: PolicyResult = apply_iterative_policy(
+        findings=findings,
+        prior_state=prior_state,
+        code_contexts=code_contexts,
+        base_max_inline_comments=base_max_inline_comments,
+    )
+    # Preserve the policy name for observability — on rounds 2+ the
+    # user configured `first-pass-exhaustive` even though today's run
+    # applied iterative internally. Marker state records what actually
+    # ran, so we return "first-pass-exhaustive" for the audit trail
+    # while the behavior is identical to iterative.
+    return PolicyResult(
+        findings_to_surface=iterative_result.findings_to_surface,
+        findings_silenced=iterative_result.findings_silenced,
+        effective_max_inline_comments=iterative_result.effective_max_inline_comments,
+        prompt_addendum="",
+        policy_applied=IAR_POLICY_FIRST_PASS_EXHAUSTIVE,
+    )
+
+
+# ---------------------------------------------------------------------------
 # PR context (the user message the model sees first)
 # ---------------------------------------------------------------------------
 
