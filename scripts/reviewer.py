@@ -2066,7 +2066,11 @@ def _parse_state_from_marker_body(
 
 
 def _fetch_latest_marker_body(
-    *, repo: str, pr_number: int, token: str
+    *,
+    repo: str,
+    pr_number: int,
+    token: str,
+    provider_id: str = "",
 ) -> str | None:
     """Fetch the most recent tracking-marker issue comment on the PR that
     carries an embedded IAR state block, and return its body. Returns
@@ -2074,6 +2078,17 @@ def _fetch_latest_marker_body(
 
     Uses GraphQL because REST issue comments do not expose `isMinimized`,
     which the ordering fallback below reads.
+
+    When `provider_id` is non-empty, filters markers to those carrying
+    the matching `<!-- ai-pr-reviewer-provider: <provider_id> -->` tag
+    (see `PROVIDER_MARKER_PREFIX`). This is load-bearing for
+    multi-provider setups (e.g. a self-review matrix running both
+    `cursor` and `anthropic` legs on the same PR): without the filter,
+    each provider would read the OTHER provider's IAR state, cross-
+    poisoning fingerprint memory, generation hashes, and round
+    counters. Untagged legacy markers (posted before the provider
+    marker was introduced, or by callers that omit it) match every
+    provider — preserves back-compat.
 
     Ordering rule (load-bearing — see docs/ITERATION_AWARENESS.md § 7):
 
@@ -2095,6 +2110,11 @@ def _fetch_latest_marker_body(
     generation-tracking / dedup engine actually engages on the default
     config. Tier (3) preserves back-compat for the non-IAR call sites
     that just want "the last marker we posted."
+
+    Provider filtering is applied BEFORE the three-tier ordering rule,
+    so provider isolation composes cleanly with the collapse-previous
+    fallback (each provider gets its own three-tier search over its
+    own marker chain).
     """
     if not repo or "/" not in repo or pr_number <= 0:
         return None
@@ -2145,6 +2165,27 @@ def _fetch_latest_marker_body(
         )
     except AttributeError:
         return None
+    # Provider-isolation predicate. When `provider_id` is set, only
+    # markers whose body carries the exact provider marker for that
+    # id (or has NO provider marker at all — the untagged legacy
+    # case) participate in the three-tier search. Multiple providers
+    # running the same PR (e.g. self-review matrix) therefore each
+    # read only their OWN state chain — no cross-poisoning of
+    # fingerprints, generation hashes, or round counters.
+    expected_provider_marker: str = (
+        provider_marker(provider_id) if provider_id else ""
+    )
+
+    def _provider_matches(body_: str) -> bool:
+        if not expected_provider_marker:
+            return True
+        if expected_provider_marker in body_:
+            return True
+        # Untagged legacy markers (posted before the provider marker
+        # was introduced, or by callers that omit it) match every
+        # provider — preserves back-compat.
+        return PROVIDER_MARKER_PREFIX not in body_
+
     non_minimized_with_state: list[dict[str, Any]] = []
     minimized_with_state: list[dict[str, Any]] = []
     any_marker: list[dict[str, Any]] = []
@@ -2153,6 +2194,8 @@ def _fetch_latest_marker_body(
             continue
         body: str = str(node.get("body") or "")
         if REVIEW_MARKER not in body:
+            continue
+        if not _provider_matches(body):
             continue
         any_marker.append(node)
         has_state_block: bool = IAR_STATE_TAG_OPEN in body
@@ -2181,7 +2224,11 @@ def _fetch_latest_marker_body(
 
 
 def read_prior_iteration_state(
-    *, repo: str, pr_number: int, token: str
+    *,
+    repo: str,
+    pr_number: int,
+    token: str,
+    provider_id: str = "",
 ) -> IterationState | None:
     """Public entry point: fetch the last marker on the PR that carries
     an IAR state block and extract it. Returns `None` on any failure —
@@ -2190,9 +2237,18 @@ def read_prior_iteration_state(
     Reads MINIMIZED markers too when no visible marker carries state, so
     IAR persistence survives `collapse-previous: true` (the shipped
     default). See `_fetch_latest_marker_body` for the full ordering rule.
+
+    Pass `provider_id` in multi-provider setups (e.g. a self-review
+    matrix running `cursor` + `anthropic` legs on the same PR) so each
+    provider's IAR state chain stays isolated — otherwise the two
+    providers would cross-poison each other's fingerprint memory,
+    generation hashes, and round counters.
     """
     marker_body: str | None = _fetch_latest_marker_body(
-        repo=repo, pr_number=pr_number, token=token
+        repo=repo,
+        pr_number=pr_number,
+        token=token,
+        provider_id=provider_id,
     )
     if marker_body is None:
         log("IAR: no prior marker found; treating as first review.")
@@ -2269,14 +2325,20 @@ class GenerationTransition(str, Enum):
     through the marker annotation (e.g. `(user_forced_reset)` after the
     round/policy tags); consumers never see them in action outputs.
 
-    `USER_FORCED_RESET` fires when the consumer's `applied-label`
-    (the "reviewed" label the action stamps on a successful review) is
-    absent from the PR at review time AND a prior IAR state exists in
-    the tracking marker. Semantically identical to `FIRST_REVIEW`
-    downstream (fresh state, no dedup memory, round-1 exhaustive under
-    the default policy) — separated out only so the log + marker can
-    tell developers that the reset was a deliberate gesture, not the
-    first-ever review of the PR.
+    `USER_FORCED_RESET` fires ONLY when ALL FOUR conditions hold:
+    (1) the consumer's `applied-label` (the "reviewed" label the
+    action stamps on a successful review) is configured; (2) a prior
+    IAR state exists in the tracking marker; (3) that prior state's
+    `reviewed_label_applied` bit is `True` (recording that the
+    reviewer previously stamped the label successfully — this is
+    the load-bearing guard that prevents a blocked review's natural
+    re-trigger from being misclassified as a deliberate reset); and
+    (4) the label is absent from the PR now. Semantically identical
+    to `FIRST_REVIEW` downstream (fresh state, no dedup memory,
+    round-1 exhaustive under the default policy) — separated out
+    only so the log + marker can tell developers that the reset was
+    a deliberate gesture, not the first-ever review of the PR. Full
+    contract in docs/ITERATION_AWARENESS.md § 8.5.
     """
 
     FIRST_REVIEW = "first_review"
@@ -3620,6 +3682,7 @@ def run_iar_pre_llm(
     head_sha: str,
     base_max_inline_comments: int,
     applied_label: str = "",
+    provider_id: str = "",
 ) -> IARPreLLMContext:
     """Prepare IAR context BEFORE the LLM call.
 
@@ -3654,7 +3717,10 @@ def run_iar_pre_llm(
     review path (IAR outputs stay empty, review still ships).
     """
     prior_state: IterationState | None = read_prior_iteration_state(
-        repo=repo, pr_number=pr_number, token=gh_token
+        repo=repo,
+        pr_number=pr_number,
+        token=gh_token,
+        provider_id=provider_id,
     )
     base_sha: str = _resolve_base_sha(base_ref=base_ref)
     range_hash: str = compute_generation_range_hash(
@@ -6024,6 +6090,7 @@ def main() -> int:
             head_sha=head_sha,
             base_max_inline_comments=max_inline_comments,
             applied_label=applied_label,
+            provider_id=provider_id,
         )
         effective_max_inline_comments = (
             iar_pre_context.pre_policy_result.effective_max_inline_comments

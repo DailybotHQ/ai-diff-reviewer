@@ -270,6 +270,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (round-9 self-review: multi-provider IAR state isolation + enum docstring)
+
+- **`_fetch_latest_marker_body` / `read_prior_iteration_state` now
+  optionally filter marker chains by `provider_id`.** Multi-provider
+  setups — e.g. this repo's own self-review matrix if it grew a second
+  provider — were reading each other's IAR state, cross-poisoning
+  fingerprint memory, generation hashes, and round counters
+  (round-9 F1 critical). The filter matches markers carrying the
+  exact `<!-- ai-pr-reviewer-provider: <id> -->` tag; untagged legacy
+  markers (posted before the provider marker was introduced) match
+  every provider, preserving back-compat for upgrades. `main()` now
+  passes the current run's `provider_id` through the IAR pre-LLM
+  pipeline. Three new regression tests in
+  `tests/test_iar_state_layer.py` cover the three cases: isolated
+  reads, legacy-untagged back-compat, and empty-`provider_id`
+  filter-disabled semantics.
+- **`GenerationTransition.USER_FORCED_RESET` enum docstring** now
+  lists all four gating conditions (including the load-bearing
+  `reviewed_label_applied` guard) so the enum-level documentation
+  matches the runtime + `docs/ITERATION_AWARENESS.md § 8.5`.
+  Round-9 F2 caught the drift; contract itself was already correct.
+
 ### Fixed (round-8 self-review: pagination revert + escape-label output + label case-insensitivity)
 
 Round-8 found the **regression I introduced in round-7 (F1 critical)**

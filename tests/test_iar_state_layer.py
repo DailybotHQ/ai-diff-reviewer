@@ -378,6 +378,136 @@ class FetchLatestMarkerTests(unittest.TestCase):
         self.assertIsNotNone(got)
         self.assertIn("NEWER", got)
 
+    def test_provider_isolation_reads_only_matching_provider_markers(
+        self,
+    ) -> None:
+        """Round-9 F1 (critical) regression guard: in a multi-provider
+        setup (e.g. self-review matrix running cursor + anthropic on
+        the same PR) each provider's IAR state chain MUST stay isolated
+        — otherwise providers cross-poison each other's fingerprint
+        memory, generation hashes, and round counters. When
+        `provider_id` is passed, `_fetch_latest_marker_body` skips
+        markers tagged with a DIFFERENT provider and returns the
+        newest marker tagged with the matching (or untagged legacy)
+        provider marker."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        cursor_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " CURSOR-BODY\n"
+                + reviewer.provider_marker("cursor")
+                + state_block
+            ),
+            "isMinimized": False,
+            "createdAt": "2026-07-15T10:00:00Z",
+        }
+        anthropic_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " ANTHROPIC-BODY\n"
+                + reviewer.provider_marker("anthropic")
+                + state_block
+            ),
+            "isMinimized": False,
+            "createdAt": "2026-07-15T20:00:00Z",  # newer
+        }
+        # With provider_id="cursor", the newer anthropic marker MUST
+        # be skipped even though it's newer.
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([cursor_marker, anthropic_marker]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                provider_id="cursor",
+            )
+        self.assertIsNotNone(got)
+        self.assertIn("CURSOR-BODY", got)
+        self.assertNotIn("ANTHROPIC-BODY", got)
+        # With provider_id="anthropic", the anthropic marker wins.
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([cursor_marker, anthropic_marker]),
+        ):
+            got_anthropic: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                provider_id="anthropic",
+            )
+        self.assertIsNotNone(got_anthropic)
+        self.assertIn("ANTHROPIC-BODY", got_anthropic)
+
+    def test_untagged_legacy_markers_match_every_provider(self) -> None:
+        """Round-9 F1 back-compat: markers posted BEFORE the provider
+        marker was introduced (or by callers that omit it) carry no
+        `<!-- ai-pr-reviewer-provider: -->` tag. Those legacy markers
+        MUST match every provider filter so consumers upgrading from
+        an older version don't experience a one-off `first_review`
+        classification on their first post-upgrade run."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        legacy_marker: dict[str, Any] = {
+            "body": reviewer.REVIEW_MARKER + " LEGACY-NO-PROVIDER" + state_block,
+            "isMinimized": False,
+            "createdAt": "2026-07-15T10:00:00Z",
+        }
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([legacy_marker]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                provider_id="cursor",
+            )
+        self.assertIsNotNone(got)
+        self.assertIn("LEGACY-NO-PROVIDER", got)
+
+    def test_no_provider_id_matches_every_marker(self) -> None:
+        """Round-9 F1: back-compat for callers that don't pass a
+        provider_id (older test suites, non-IAR callers). When
+        `provider_id` is empty, filtering is disabled and behaviour
+        reverts to the pre-round-9 semantics — the caller gets
+        whichever marker matches the three-tier priority regardless
+        of provider tag."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        cursor_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " CURSOR"
+                + reviewer.provider_marker("cursor")
+                + state_block
+            ),
+            "isMinimized": False,
+            "createdAt": "2026-07-15T20:00:00Z",  # newest
+        }
+        anthropic_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " ANTHROPIC"
+                + reviewer.provider_marker("anthropic")
+                + state_block
+            ),
+            "isMinimized": False,
+            "createdAt": "2026-07-15T10:00:00Z",
+        }
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([cursor_marker, anthropic_marker]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                # No provider_id — filter disabled.
+            )
+        # Newest wins (cursor).
+        self.assertIsNotNone(got)
+        self.assertIn("CURSOR", got)
+
     def test_falls_back_to_any_marker_when_none_carry_state(self) -> None:
         """Tier 3 rule: when no marker carries an IAR state block at all
         (fresh PR, or state predates IAR), return the newest marker
