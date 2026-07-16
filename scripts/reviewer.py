@@ -1911,6 +1911,13 @@ class IterationState:
     # _change` to fall back to NEW_COMMITS on any hash mismatch (safe: extra
     # exhaustive review, never silent silencing).
     base_sha: str = ""
+    # Optional in v1 schema — populated by Task 8 (observability). Stores
+    # the head SHA of the last review so `compute_new_lines_pct` can measure
+    # what has been added since. Empty string means "unknown prior head" →
+    # safety net degrades to no-op (compute_new_lines_pct returns 0.0), which
+    # is the safe conservative fallback (never silences a review that would
+    # have benefited from an exhaustive pass; just skips the boost).
+    head_sha: str = ""
 
 
 # Cap on `history` list length. 20 generations is plenty for the lifetime
@@ -1926,6 +1933,7 @@ def new_iteration_state(
     round_in_generation: int = 1,
     policy_applied: str = IAR_POLICY_ITERATIVE,
     base_sha: str = "",
+    head_sha: str = "",
 ) -> IterationState:
     """Construct a fresh IterationState with schema version + empty lists.
     Used on first review of a PR (no prior marker found)."""
@@ -1939,6 +1947,7 @@ def new_iteration_state(
         open_fingerprints_this_gen=[],
         history=[],
         base_sha=base_sha,
+        head_sha=head_sha,
     )
 
 
@@ -1993,6 +2002,7 @@ def _parse_state_from_marker_body(
             ),
             history=list(data.get("history", []) or []),
             base_sha=str(data.get("base_sha", "")),
+            head_sha=str(data.get("head_sha", "")),
         )
     except IterationStateParseError as exc:
         log(f"IAR: state parse failed: {exc}; treating as first review.")
@@ -2114,6 +2124,7 @@ def embed_iteration_state(
         open_fingerprints_this_gen=list(state.open_fingerprints_this_gen),
         history=bounded_history,
         base_sha=state.base_sha,
+        head_sha=state.head_sha,
     )
     state_json: str = json.dumps(
         asdict(bounded_state), indent=2, sort_keys=True
@@ -2232,6 +2243,7 @@ def advance_generation(
     new_range_hash: str,
     new_base_sha: str,
     policy: str,
+    new_head_sha: str = "",
 ) -> IterationState:
     """Return a fresh `IterationState` reflecting a generation change.
 
@@ -2255,6 +2267,7 @@ def advance_generation(
             round_in_generation=1,
             policy_applied=policy,
             base_sha=new_base_sha,
+            head_sha=new_head_sha,
         )
     closed_gen_entry: dict[str, Any] = {
         "gen": prior_state.generation,
@@ -2290,14 +2303,23 @@ def advance_generation(
         open_fingerprints_this_gen=[],
         history=new_history,
         base_sha=new_base_sha,
+        head_sha=new_head_sha,
     )
 
 
 def increment_round_in_generation(
-    *, prior_state: IterationState, policy: str
+    *,
+    prior_state: IterationState,
+    policy: str,
+    new_head_sha: str = "",
 ) -> IterationState:
     """For `SAME_GENERATION` transitions: bump `round_in_generation` and
-    refresh `policy_applied` without touching fingerprints or history."""
+    refresh `policy_applied` without touching fingerprints or history.
+
+    `new_head_sha` refreshes the persisted head_sha so subsequent runs
+    measure new-lines-pct against the most recent reviewed head, not the
+    first one in the generation. When empty, the prior head is preserved.
+    """
     log(
         f"IAR: SAME_GENERATION — advancing round "
         f"{prior_state.round_in_generation} → "
@@ -2316,6 +2338,7 @@ def increment_round_in_generation(
         ),
         history=list(prior_state.history),
         base_sha=prior_state.base_sha,
+        head_sha=new_head_sha or prior_state.head_sha,
     )
 
 
@@ -3068,6 +3091,471 @@ def dispatch_policy(
         code_contexts=code_contexts,
         base_max_inline_comments=base_max_inline_comments,
     )
+
+
+# ---------------------------------------------------------------------------
+# Iteration-Aware Review (IAR) — observability + main() integration (Task 8)
+# ---------------------------------------------------------------------------
+# Wires the engine (Tasks 1–7) into the reviewer's `main()`. Two touchpoints:
+#
+#   1. Pre-LLM: `run_iar_pre_llm()` reads prior state, computes the
+#      generation transition, calls `dispatch_policy` with empty findings
+#      to extract `effective_max_inline_comments` + `prompt_addendum`, and
+#      returns a bundle the caller uses to shape the LLM call.
+#
+#   2. Post-LLM: `run_iar_post_llm()` re-runs `dispatch_policy` with the
+#      LLM's actual findings to get the surfacing decision, mutates
+#      `result.findings` in place, and returns the new IterationState to
+#      embed in the tracking marker + telemetry to write to outputs.
+#
+# Every code path is gated on `iar_config.enabled` at the CALL SITE — this
+# module never runs when IAR is off, preserving the byte-identical
+# backward-compat contract in tests/test_backward_compat_iar_off.py.
+#
+# `tokens_used` is a best-effort field. Populating it accurately requires
+# per-provider instrumentation (Anthropic's `usage.input_tokens`/`output_tokens`,
+# OpenAI's `usage.prompt_tokens`/`completion_tokens`, etc.), which is out of
+# scope for Task 8 — the field ships as `0` for now with the schema pinned
+# so a future provider-hook PR can populate it without changing the
+# public output contract. `wall_clock_ms` is always populated (monotonic).
+
+
+@dataclass
+class RunTelemetry:
+    """Mutable telemetry populated across a single run. Consumed by the
+    IAR post-LLM step to write action outputs and the `history` entry.
+
+    - `start_time_monotonic`: seconds from `time.monotonic()` at run start.
+      `wall_clock_ms` is computed at write-time so the caller doesn't have
+      to remember to call `.finalize()`.
+    - `tokens_used`: best-effort token estimate. See module comment.
+    - `estimated_baseline_tokens`: what the LLM would have consumed WITHOUT
+      IAR (i.e. with the baseline `max_inline_comments` cap and no prompt
+      addendum). Used to compute the cost-vs-baseline output.
+    """
+
+    start_time_monotonic: float = 0.0
+    tokens_used: int = 0
+    estimated_baseline_tokens: int = 0
+
+    def wall_clock_ms(self) -> int:
+        """Elapsed wall-clock ms since `start_time_monotonic` was set."""
+        if not self.start_time_monotonic:
+            return 0
+        return int((time.monotonic() - self.start_time_monotonic) * 1000)
+
+
+@dataclass(frozen=True)
+class IARPreLLMContext:
+    """Bundle returned by `run_iar_pre_llm()`. Carries everything the
+    caller needs to (a) shape the LLM call and (b) hand back to
+    `run_iar_post_llm()` for the surfacing decision.
+
+    `pre_policy_result` is produced by `dispatch_policy` with
+    `findings=[]` so its `findings_to_surface`/`findings_silenced` are
+    always empty; only `effective_max_inline_comments`, `prompt_addendum`,
+    and `policy_applied` are meaningful at this stage.
+    """
+
+    prior_state: IterationState | None
+    transition: GenerationTransition
+    base_sha: str
+    head_sha: str
+    range_hash: str
+    new_lines_pct: float
+    pr_labels: list[str]
+    pre_policy_result: PolicyResult
+
+
+def _resolve_base_sha(*, base_ref: str, repo_root: str | None = None) -> str:
+    """Best-effort `git rev-parse origin/<base_ref>`. Returns empty
+    string on any failure (missing remote, unresolved ref, sparse
+    checkout). Empty base_sha degrades `detect_generation_change` to
+    NEW_COMMITS on any hash mismatch — safe conservative fallback."""
+    if not base_ref:
+        return ""
+    for ref_candidate in (f"origin/{base_ref}", base_ref):
+        try:
+            result: subprocess.CompletedProcess[str] = subprocess.run(
+                ["git", "rev-parse", ref_candidate],
+                capture_output=True,
+                check=True,
+                text=True,
+                cwd=repo_root,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+        sha: str = result.stdout.strip()
+        if sha:
+            return sha
+    log(
+        f"IAR: could not resolve base SHA for ref {base_ref!r} "
+        "(tried origin/<ref> and <ref>). Range hash + rebase detection "
+        "will fall back to conservative defaults."
+    )
+    return ""
+
+
+def _fetch_pr_labels(
+    *, token: str, repo: str, pr_number: int
+) -> list[str]:
+    """Fetch PR labels via REST. Returns empty list on any failure —
+    escape-label detection then degrades to "not applied" (no override)."""
+    if "/" not in repo or pr_number <= 0:
+        return []
+    owner: str
+    name: str
+    owner, name = repo.split("/", 1)
+    try:
+        pr: Any = gh_request(
+            "GET", f"/repos/{owner}/{name}/pulls/{pr_number}", token=token
+        )
+    except Exception as exc:  # noqa: BLE001 — best-effort GH API call
+        log(f"IAR: _fetch_pr_labels failed: {exc!r}. Returning empty list.")
+        return []
+    raw: list[dict[str, Any]] = pr.get("labels", []) or []
+    return [str(lbl.get("name") or "") for lbl in raw if lbl.get("name")]
+
+
+def _load_code_contexts_for_findings(
+    *, findings: list[Finding], review_sha: str
+) -> dict[str, "CodeContext | None"]:
+    """Load one CodeContext per unique file path. Missing / read-error
+    files map to `None` — `finding_fingerprint` handles that by falling
+    back to a context-less hash (still deterministic; just less resilient
+    to nearby refactors)."""
+    unique_paths: set[str] = {f.path for f in findings if f.path}
+    contexts: dict[str, "CodeContext | None"] = {}
+    for path in unique_paths:
+        contexts[path] = load_code_context(path=path, review_sha=review_sha)
+    return contexts
+
+
+def _estimate_cost_vs_baseline(
+    *,
+    effective_cap: int,
+    base_cap: int,
+    prompt_addendum: str,
+    silenced_count: int,
+    surfaced_count: int,
+) -> str:
+    """Return a short human-readable cost-vs-baseline estimate string
+    (e.g. `"+25%"`, `"-10%"`, `"0%"`). Best-effort heuristic — the true
+    number requires per-provider token accounting.
+
+    The estimate is a rough sum of two effects:
+    - Cap expansion (`effective_cap / base_cap - 1`) increases LLM
+      generation cost roughly proportionally (more tool calls, more
+      output tokens per call).
+    - Prompt addendum adds a small fixed overhead per turn (a few
+      hundred tokens).
+    - Silenced findings are a NET SAVE on the submission side (fewer
+      GitHub API calls, less user noise) but do not affect LLM cost.
+      They are surfaced separately in the marker annotation.
+
+    Returned string is safe to embed in a workflow log or output. Never
+    raises; unknown inputs collapse to `"0%"`.
+    """
+    if base_cap <= 0:
+        return "0%"
+    cap_delta: float = (effective_cap / base_cap) - 1.0
+    addendum_delta: float = 0.05 if prompt_addendum else 0.0
+    total_delta: float = cap_delta + addendum_delta
+    pct: int = int(round(total_delta * 100))
+    sign: str = "+" if pct > 0 else ""
+    return f"{sign}{pct}%"
+
+
+def _render_iar_marker_annotation(
+    *,
+    state: IterationState,
+    policy_result: PolicyResult,
+    transition: GenerationTransition,
+) -> str:
+    """Short human-readable line appended to the tracking marker body so a
+    developer glancing at the comment sees the iteration status without
+    having to inspect the embedded JSON state block. Kept to one line +
+    optional detail line so the marker stays scannable."""
+    surfaced: int = len(policy_result.findings_to_surface)
+    silenced: int = len(policy_result.findings_silenced)
+    critical_silenced: int = sum(
+        1 for sf in policy_result.findings_silenced
+        if sf.finding.severity == SEVERITY_CRITICAL
+    )
+    # This should always be 0 — the safety rail guarantees it. Log if
+    # not, and expose the count as a visible red flag in the marker.
+    critical_note: str = ""
+    if critical_silenced > 0:
+        critical_note = (
+            f" ⚠️ **{critical_silenced} critical finding(s) silenced — "
+            "this violates the IAR safety rail; please file a bug.**"
+        )
+    detail: str = ""
+    if silenced > 0:
+        detail = f", {silenced} deduplicated from prior rounds"
+    return (
+        f"\n\n_Iteration-Aware Review: gen {state.generation}, "
+        f"round {state.round_in_generation}, policy=`{state.policy_applied}` "
+        f"({transition.value}) — {surfaced} surfaced{detail}._"
+        f"{critical_note}"
+    )
+
+
+def write_iar_outputs_populated(
+    *,
+    state: IterationState,
+    policy_result: PolicyResult,
+    telemetry: RunTelemetry,
+    effective_cap: int,
+    base_cap: int,
+) -> None:
+    """Overwrite the five IAR action outputs with real values. Called
+    after `write_all_outputs` (which writes empty strings) so the
+    last-write-wins semantics of `$GITHUB_OUTPUT` land the populated
+    values on the downstream step.
+    """
+    write_action_output("iteration-round", str(state.round_in_generation))
+    write_action_output("iteration-generation", str(state.generation))
+    write_action_output(
+        "iteration-policy-applied", state.policy_applied
+    )
+    write_action_output("iteration-tokens-used", str(telemetry.tokens_used))
+    write_action_output(
+        "iteration-cost-vs-baseline-estimate",
+        _estimate_cost_vs_baseline(
+            effective_cap=effective_cap,
+            base_cap=base_cap,
+            prompt_addendum=policy_result.prompt_addendum,
+            silenced_count=len(policy_result.findings_silenced),
+            surfaced_count=len(policy_result.findings_to_surface),
+        ),
+    )
+
+
+def run_iar_pre_llm(
+    *,
+    iar_config: IARConfig,
+    repo: str,
+    pr_number: int,
+    gh_token: str,
+    base_ref: str,
+    head_sha: str,
+    base_max_inline_comments: int,
+) -> IARPreLLMContext:
+    """Prepare IAR context BEFORE the LLM call.
+
+    Computes prior state, detects generation transition, loads PR labels
+    for escape-label check, computes new-lines-pct for safety net, and
+    runs `dispatch_policy` with an empty findings list to extract the
+    prompt addendum + effective cap the caller will use to shape the
+    LLM call.
+
+    Caller MUST gate on `iar_config.enabled` before calling this — the
+    function assumes IAR is enabled and does full GH API + git work.
+    """
+    prior_state: IterationState | None = read_prior_iteration_state(
+        repo=repo, pr_number=pr_number, token=gh_token
+    )
+    base_sha: str = _resolve_base_sha(base_ref=base_ref)
+    range_hash: str = compute_generation_range_hash(
+        base_sha=base_sha, head_sha=head_sha
+    )
+    transition: GenerationTransition = detect_generation_change(
+        prior_state=prior_state,
+        current_range_hash=range_hash,
+        current_base_sha=base_sha,
+    )
+    new_lines_pct: float = 0.0
+    if transition in (
+        GenerationTransition.NEW_COMMITS,
+        GenerationTransition.REBASED,
+    ) and prior_state is not None:
+        new_lines_pct = compute_new_lines_pct(
+            prior_base_sha=prior_state.base_sha,
+            prior_head_sha=prior_state.head_sha,
+            current_base_sha=base_sha,
+            current_head_sha=head_sha,
+        )
+    pr_labels: list[str] = _fetch_pr_labels(
+        token=gh_token, repo=repo, pr_number=pr_number
+    )
+    # Dispatch with empty findings — extracts cap + addendum only.
+    pre_policy_result: PolicyResult = dispatch_policy(
+        iar_config=iar_config,
+        findings=[],
+        prior_state=prior_state,
+        code_contexts={},
+        base_max_inline_comments=base_max_inline_comments,
+        transition=transition,
+        new_lines_pct=new_lines_pct,
+        pr_labels=pr_labels,
+    )
+    log(
+        f"IAR pre-LLM: transition={transition.value}, "
+        f"gen={prior_state.generation if prior_state else 0}, "
+        f"prior_round={prior_state.round_in_generation if prior_state else 0}, "
+        f"policy={pre_policy_result.policy_applied}, "
+        f"effective_cap={pre_policy_result.effective_max_inline_comments} "
+        f"(base={base_max_inline_comments}), "
+        f"prompt_addendum={'yes' if pre_policy_result.prompt_addendum else 'no'}, "
+        f"new_lines_pct={new_lines_pct:.1f}%."
+    )
+    return IARPreLLMContext(
+        prior_state=prior_state,
+        transition=transition,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        range_hash=range_hash,
+        new_lines_pct=new_lines_pct,
+        pr_labels=pr_labels,
+        pre_policy_result=pre_policy_result,
+    )
+
+
+def run_iar_post_llm(
+    *,
+    iar_config: IARConfig,
+    pre_context: IARPreLLMContext,
+    result: ReviewResult,
+    base_max_inline_comments: int,
+    telemetry: RunTelemetry,
+) -> tuple[IterationState, PolicyResult]:
+    """Apply IAR filtering AFTER the LLM call and return the state to
+    embed + the surfacing decision.
+
+    Side effects:
+    - Mutates `result.findings` in place to the surfaced subset.
+    - Recomputes `result.overall_severity` if any findings were dropped.
+
+    Escape-label runs return the prior state unchanged (Task 7 contract:
+    persisted state is NOT mutated for escape-label runs so the next
+    normal run resumes where it left off). Everything else advances or
+    increments the state and populates telemetry.
+    """
+    # Load code contexts only for finding paths — one git-show per unique
+    # file; a warmup penalty scoped to the number of findings, not the
+    # size of the diff.
+    code_contexts: dict[str, "CodeContext | None"] = (
+        _load_code_contexts_for_findings(
+            findings=result.findings, review_sha=pre_context.head_sha
+        )
+    )
+    policy_result: PolicyResult = dispatch_policy(
+        iar_config=iar_config,
+        findings=result.findings,
+        prior_state=pre_context.prior_state,
+        code_contexts=code_contexts,
+        base_max_inline_comments=base_max_inline_comments,
+        transition=pre_context.transition,
+        new_lines_pct=pre_context.new_lines_pct,
+        pr_labels=pre_context.pr_labels,
+    )
+    original_finding_count: int = len(result.findings)
+    result.findings = list(policy_result.findings_to_surface)
+    # Recompute severity when the filter dropped findings — the strictness
+    # gate downstream reads `overall_severity`, so a silenced warning
+    # would otherwise still block the check.
+    if len(result.findings) != original_finding_count:
+        result.overall_severity = overall_severity(
+            [f.severity for f in result.findings]
+        )
+    # Escape-label short-circuit: preserve prior state exactly, no
+    # mutations. This is the contract from Task 7 — persisted state must
+    # survive an escape-label run so the next normal run resumes the
+    # dedup timeline as if the escape never happened.
+    if policy_result.policy_applied == IAR_POLICY_ESCAPE_LABEL_FORCED:
+        log(
+            "IAR post-LLM: escape-label run — persisted state unchanged. "
+            f"Surfaced {len(policy_result.findings_to_surface)} "
+            f"(silenced {len(policy_result.findings_silenced)})."
+        )
+        return (
+            pre_context.prior_state
+            or new_iteration_state(
+                generation_range_hash=pre_context.range_hash,
+                base_sha=pre_context.base_sha,
+                head_sha=pre_context.head_sha,
+                policy_applied=policy_result.policy_applied,
+            ),
+            policy_result,
+        )
+    # Compute the state for the NEXT round based on transition.
+    state_before_fp_update: IterationState
+    if pre_context.transition == GenerationTransition.SAME_GENERATION:
+        assert pre_context.prior_state is not None  # transition guarantees it
+        state_before_fp_update = increment_round_in_generation(
+            prior_state=pre_context.prior_state,
+            policy=policy_result.policy_applied,
+            new_head_sha=pre_context.head_sha,
+        )
+    else:
+        state_before_fp_update = advance_generation(
+            prior_state=pre_context.prior_state,
+            transition=pre_context.transition,
+            new_range_hash=pre_context.range_hash,
+            new_base_sha=pre_context.base_sha,
+            new_head_sha=pre_context.head_sha,
+            policy=policy_result.policy_applied,
+        )
+    # Update open + resolved fingerprint sets. Re-fingerprint on the
+    # ORIGINAL LLM findings (surfaced + silenced) — a silenced finding
+    # is still "open in reality"; only findings the LLM stopped producing
+    # count as resolved.
+    all_original_findings: list[Finding] = list(
+        policy_result.findings_to_surface
+    ) + [sf.finding for sf in policy_result.findings_silenced]
+    current_fps: dict[int, str] = {}
+    for i, finding in enumerate(all_original_findings):
+        current_fps[i] = finding_fingerprint(
+            finding=finding, code_context=code_contexts.get(finding.path)
+        )
+    current_fp_set: set[str] = set(current_fps.values())
+    next_open: list[str] = sorted(current_fp_set)
+    # `newly_resolved` = prior open that are no longer in the current run.
+    _still_open: list[str]
+    newly_resolved: list[str]
+    if pre_context.prior_state is not None:
+        _still_open, newly_resolved = resolve_finding_status(
+            prior_open_fingerprints=pre_context.prior_state.open_fingerprints_this_gen,
+            current_fps=current_fps,
+        )
+    else:
+        newly_resolved = []
+    next_resolved: list[str] = sorted(
+        set(state_before_fp_update.resolved_fingerprints) | set(newly_resolved)
+    )
+    state_final: IterationState = IterationState(
+        version=state_before_fp_update.version,
+        generation=state_before_fp_update.generation,
+        generation_range_hash=state_before_fp_update.generation_range_hash,
+        round_in_generation=state_before_fp_update.round_in_generation,
+        policy_applied=state_before_fp_update.policy_applied,
+        resolved_fingerprints=next_resolved,
+        open_fingerprints_this_gen=next_open,
+        history=list(state_before_fp_update.history),
+        base_sha=state_before_fp_update.base_sha,
+        head_sha=state_before_fp_update.head_sha,
+    )
+    # Backfill telemetry into the last closed-generation history entry,
+    # which `advance_generation` created for the PRIOR generation with
+    # tokens_used=0 + wall_clock_ms=0 placeholders.
+    if (
+        pre_context.transition
+        in (GenerationTransition.NEW_COMMITS, GenerationTransition.REBASED)
+        and state_final.history
+    ):
+        state_final.history[-1]["tokens_used"] = telemetry.tokens_used
+        state_final.history[-1]["wall_clock_ms"] = telemetry.wall_clock_ms()
+    log(
+        f"IAR post-LLM: policy={policy_result.policy_applied}, "
+        f"surfaced={len(policy_result.findings_to_surface)}, "
+        f"silenced={len(policy_result.findings_silenced)}, "
+        f"newly_resolved={len(newly_resolved)}, "
+        f"open_next={len(next_open)}, "
+        f"tokens={telemetry.tokens_used}, "
+        f"wall_clock_ms={telemetry.wall_clock_ms()}."
+    )
+    return state_final, policy_result
 
 
 # ---------------------------------------------------------------------------
@@ -4789,9 +5277,16 @@ def main() -> int:
 
     # Iteration-Aware Review (IAR) — opt-in subsystem. When
     # `iar_config.enabled` is False (default), the runtime path is
-    # byte-identical to prior releases; downstream Task 3+ integrations
-    # early-return on the master switch. See docs/ITERATION_AWARENESS.md.
+    # byte-identical to prior releases; every IAR call site below is
+    # explicitly gated on `iar_config.enabled`. See docs/ITERATION_AWARENESS.md.
     iar_config: IARConfig = build_iar_config(dict(os.environ))
+    iar_telemetry: RunTelemetry = RunTelemetry(
+        start_time_monotonic=time.monotonic()
+    )
+    iar_pre_context: IARPreLLMContext | None = None
+    iar_state_final: IterationState | None = None
+    iar_policy_final: PolicyResult | None = None
+    iar_effective_cap: int = 0  # populated pre-LLM; used by cost estimate
     if iar_config.enabled:
         # Detect silently-fallback-corrected policy inputs so miswiring is
         # visible in the workflow log rather than swallowed. The build_iar_config
@@ -5070,9 +5565,53 @@ def main() -> int:
     system_prompt: str = compose_system_prompt(base_prompt, extension_text)
 
     # ------------------------------------------------------------------
+    # IAR pre-LLM: shape the LLM call.
+    #
+    # Reads the prior state, detects generation transition, and dispatches
+    # to the configured policy with empty findings to extract the effective
+    # cap + optional prompt addendum. When IAR is disabled, this block is
+    # a no-op (`effective_max_inline_comments == max_inline_comments`,
+    # `system_prompt` unchanged), preserving the byte-identical backward-
+    # compat contract in tests/test_backward_compat_iar_off.py.
+    # ------------------------------------------------------------------
+    effective_max_inline_comments: int = max_inline_comments
+    if iar_config.enabled:
+        try:
+            iar_pre_context = run_iar_pre_llm(
+                iar_config=iar_config,
+                repo=repo,
+                pr_number=pr_number,
+                gh_token=gh_token,
+                base_ref=base_ref,
+                head_sha=head_sha,
+                base_max_inline_comments=max_inline_comments,
+            )
+            effective_max_inline_comments = (
+                iar_pre_context.pre_policy_result.effective_max_inline_comments
+            )
+            iar_effective_cap = effective_max_inline_comments
+            if iar_pre_context.pre_policy_result.prompt_addendum:
+                system_prompt = compose_system_prompt(
+                    system_prompt,
+                    iar_pre_context.pre_policy_result.prompt_addendum,
+                )
+        except Exception as exc:  # noqa: BLE001 — best-effort IAR wrap
+            # IAR must never crash the reviewer. On any pre-LLM error we
+            # log and continue with baseline behavior — the review still
+            # runs (IAR simply won't populate outputs or state this run).
+            log(
+                f"IAR pre-LLM crashed: {type(exc).__name__}: {exc}. "
+                "Continuing with baseline (non-IAR) review path."
+            )
+            iar_pre_context = None
+            effective_max_inline_comments = max_inline_comments
+
+    # ------------------------------------------------------------------
     # Fetch PR + run agentic loop, all wrapped so failures hit the spinner
     # ------------------------------------------------------------------
-    state: ReviewState = ReviewState(max_inline_comments=max_inline_comments)
+    state: ReviewState = ReviewState(
+        max_inline_comments=effective_max_inline_comments
+    )
     try:
         pr_ctx: PRContext = fetch_pr_context(
             repo=repo, pr_number=pr_number, base_ref=base_ref, token=gh_token
@@ -5132,15 +5671,21 @@ def main() -> int:
             # Enforce max_inline_comments on the agent-runner path too. The
             # tool handler enforces this for chat-completions providers; the
             # cap is a documented safety control (docs/SECURITY.md) that
-            # applies to every provider family.
-            if len(result.findings) > max_inline_comments:
-                dropped: int = len(result.findings) - max_inline_comments
+            # applies to every provider family. When IAR is enabled, the
+            # effective cap may be raised on round 1 of a new generation
+            # (first-pass-exhaustive / safety net) so the LLM can surface
+            # a more complete initial pass; subsequent rounds converge
+            # back to the baseline cap.
+            if len(result.findings) > effective_max_inline_comments:
+                dropped: int = (
+                    len(result.findings) - effective_max_inline_comments
+                )
                 log(
                     f"Agent-runner provider produced {len(result.findings)} "
-                    f"findings; capping to max-inline-comments="
-                    f"{max_inline_comments} ({dropped} dropped)"
+                    f"findings; capping to effective-max-inline-comments="
+                    f"{effective_max_inline_comments} ({dropped} dropped)"
                 )
-                result.findings = result.findings[:max_inline_comments]
+                result.findings = result.findings[:effective_max_inline_comments]
                 # Recompute overall_severity — dropping the tail may lower it.
                 result.overall_severity = overall_severity(
                     [f.severity for f in result.findings]
@@ -5152,8 +5697,11 @@ def main() -> int:
             ]
             # Expose set_pr_description only in autocomplete mode; expose
             # set_pr_complexity only when complexity labeling is enabled.
+            # `effective_max_inline_comments` == `max_inline_comments` when
+            # IAR is off; when on, it may be raised for round 1 of a new
+            # generation (first-pass-exhaustive / safety net).
             tools: list[dict[str, Any]] = tools_schema(
-                max_inline_comments,
+                effective_max_inline_comments,
                 allow_set_pr_description=(
                     pr_desc_mode == PR_DESC_MODE_AUTOCOMPLETE
                     and not description_verdict.is_adequate
@@ -5185,6 +5733,32 @@ def main() -> int:
         )
         write_all_outputs(skipped=False)
         return 1
+
+    # ------------------------------------------------------------------
+    # IAR post-LLM: filter findings + build the state to persist.
+    #
+    # When IAR is disabled or the pre-LLM step failed (`iar_pre_context is
+    # None`), this block is a no-op — the submission path sees exactly
+    # what the LLM produced. When enabled, we mutate `result.findings` to
+    # the surfaced subset and stash the new state + policy result for
+    # marker embedding + output writing further down.
+    # ------------------------------------------------------------------
+    if iar_config.enabled and iar_pre_context is not None:
+        try:
+            iar_state_final, iar_policy_final = run_iar_post_llm(
+                iar_config=iar_config,
+                pre_context=iar_pre_context,
+                result=result,
+                base_max_inline_comments=max_inline_comments,
+                telemetry=iar_telemetry,
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort IAR wrap
+            log(
+                f"IAR post-LLM crashed: {type(exc).__name__}: {exc}. "
+                "Submitting the review as if IAR were disabled for this run."
+            )
+            iar_state_final = None
+            iar_policy_final = None
 
     # ------------------------------------------------------------------
     # Post the review (with 422 fallback)
@@ -5360,6 +5934,21 @@ def main() -> int:
             tracking_body,
             {"label_toggle_generation": label_toggle_generation},
         )
+    # IAR marker embed: append a one-line annotation for developers who
+    # skim the marker + embed the machine-readable state block that the
+    # next run will parse. Both are no-ops when IAR is disabled.
+    if (
+        iar_config.enabled
+        and iar_state_final is not None
+        and iar_policy_final is not None
+        and iar_pre_context is not None
+    ):
+        tracking_body = tracking_body + _render_iar_marker_annotation(
+            state=iar_state_final,
+            policy_result=iar_policy_final,
+            transition=iar_pre_context.transition,
+        )
+        tracking_body = embed_iteration_state(tracking_body, iar_state_final)
     gh_update_issue_comment(
         token=gh_token,
         repo=repo,
@@ -5392,6 +5981,23 @@ def main() -> int:
         blocked=blocked,
         review_url=review_url,
     )
+    # IAR outputs: overwrite the five empty defaults from write_all_outputs
+    # with real values ($GITHUB_OUTPUT is append-only; last write wins).
+    # Only fires when the full IAR pipeline succeeded — a mid-flight
+    # crash leaves the empty defaults in place so downstream steps still
+    # see defined values.
+    if (
+        iar_config.enabled
+        and iar_state_final is not None
+        and iar_policy_final is not None
+    ):
+        write_iar_outputs_populated(
+            state=iar_state_final,
+            policy_result=iar_policy_final,
+            telemetry=iar_telemetry,
+            effective_cap=iar_effective_cap or max_inline_comments,
+            base_cap=max_inline_comments,
+        )
 
     # Exit code 2 = blocked, so the GitHub check turns red but we keep
     # exit code 1 reserved for hard failures.
