@@ -270,6 +270,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (round-10 self-review: marker author filter + parser trust boundary)
+
+- **Marker fetch now filters by comment author (SECURITY, critical).**
+  `_fetch_latest_marker_body` accepts an optional `bot_login: str`
+  and drops every marker whose `author.login` doesn't match — using
+  the same `[bot]` / no-suffix normalisation
+  `gh_collapse_previous_reviews` uses. Without this filter, any PR
+  participant who could comment on the PR could forge a marker
+  carrying fabricated `open_fingerprints_this_gen` values, and —
+  under the shipped default `collapse-previous: true` — the real
+  bot marker is minimized while the attacker's fresh forgery is
+  visible, winning tier 1 and silencing genuine non-critical
+  findings on the next run. (The critical-always-surfaces rail
+  would still surface `critical` findings, but warnings and infos
+  could be suppressed.) `main()` resolves `bot_login` via
+  `gh_get_authenticated_login` (as it already does for
+  `gh_collapse_previous_reviews`) and threads it through
+  `run_iar_pre_llm` → `read_prior_iteration_state` →
+  `_fetch_latest_marker_body`. Regression tests:
+  `test_author_filter_rejects_non_bot_forged_marker`,
+  `test_author_filter_normalizes_bot_suffix`,
+  `test_author_filter_disabled_when_no_bot_login`.
+- **`reviewed_label_applied` now only accepts JSON `true`/`false`
+  (or `0`/`1`).** Naive `bool()` on a JSON string is a foot-gun
+  (`bool("false") is True`), so a poisoned marker with
+  `"reviewed_label_applied": "false"` would spuriously arm
+  `USER_FORCED_RESET`. Non-boolean values fall back to `False`
+  (safe default — reset stays disarmed). Regression tests:
+  `test_reviewed_label_applied_rejects_string_false`,
+  `test_reviewed_label_applied_accepts_json_true`.
+- **Fingerprint lists are now element-coerced at parse time.**
+  Without this, a poisoned marker with
+  `"resolved_fingerprints": [{"x": 1}]` would parse fine but crash
+  `dedupe_findings_against_prior`'s `set(...)` with
+  `TypeError: unhashable type: 'dict'`. Since IAR runs on every
+  round, this would trigger the `try/except` fallback on every
+  subsequent run — a sticky DoS on convergence until the poisoned
+  marker aged out of the fetch window. Non-string elements are
+  now dropped silently at parse time (over-review is the safe
+  direction). Same coercion applied to `history` (list of dicts
+  only; scalars would blow up the `history[-1]` mutation in
+  `run_iar_post_llm`). Regression tests:
+  `test_fingerprint_list_drops_non_string_elements`,
+  `test_history_drops_non_dict_elements`.
+- **`docs/SECURITY.md § IAR — Marker-embedded state block`
+  restructured** to describe both controls (source authenticity
+  via author filter + field-level trust boundary in parser) with
+  concrete failure modes for each. Round-10 F4 caught the drift
+  before the code fix landed — updated in the same commit.
+- **`docs/ITERATION_AWARENESS.md § 12` schema example** now
+  includes `head_sha` and `reviewed_label_applied` fields so
+  the copyable JSON matches what the runtime actually embeds
+  via `asdict(IterationState)`.
+
 ### Fixed (round-9 self-review: multi-provider IAR state isolation + enum docstring)
 
 - **`_fetch_latest_marker_body` / `read_prior_iteration_state` now

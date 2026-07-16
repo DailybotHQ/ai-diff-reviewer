@@ -2033,6 +2033,42 @@ def _parse_state_from_marker_body(
                 f"unknown schema version {version!r} "
                 f"(runtime supports {IAR_STATE_SCHEMA_VERSION})"
             )
+        # Fingerprint lists MUST contain only strings — anything else
+        # crashes IAR into a sticky DoS on convergence. `set(prior_state
+        # .resolved_fingerprints)` in `dedupe_findings_against_prior`
+        # raises `TypeError: unhashable type: 'dict'` on a poisoned
+        # marker containing e.g. `[{"x": 1}]`, so `run_iar_pre_llm`
+        # crashes → `main()`'s try/except falls back to baseline →
+        # every subsequent run keeps failing until the poisoned marker
+        # ages out of the fetch window. Coerce here (drop non-string
+        # entries silently — over-review is the safe direction).
+        def _coerce_fingerprints(raw: Any) -> list[str]:
+            if not isinstance(raw, list):
+                return []
+            return [x for x in raw if isinstance(x, str)]
+
+        # `history` MUST contain only dicts — the accumulator writer
+        # in `run_iar_post_llm` mutates `state.history[-1]`, which
+        # blows up if the entry is a scalar. Coerce here too.
+        def _coerce_history(raw: Any) -> list[dict[str, Any]]:
+            if not isinstance(raw, list):
+                return []
+            return [x for x in raw if isinstance(x, dict)]
+
+        # `bool()` on JSON is a foot-gun: `bool("false") is True`,
+        # `bool("no") is True`, `bool("0") is True`. Only accept the
+        # actual JSON booleans (or, for lenient upgrades, integer 0/1);
+        # everything else falls back to `False` (the safe default —
+        # missing bit disarms USER_FORCED_RESET rather than firing it
+        # spuriously). Trust-boundary rule per docs/SECURITY.md § IAR.
+        raw_rla: Any = data.get("reviewed_label_applied", False)
+        if isinstance(raw_rla, bool):
+            reviewed_label_applied: bool = raw_rla
+        elif isinstance(raw_rla, int) and raw_rla in (0, 1):
+            reviewed_label_applied = bool(raw_rla)
+        else:
+            reviewed_label_applied = False
+
         return IterationState(
             version=int(version),
             generation=int(data.get("generation", 1)),
@@ -2041,18 +2077,16 @@ def _parse_state_from_marker_body(
             policy_applied=str(
                 data.get("policy_applied", IAR_POLICY_ITERATIVE)
             ),
-            resolved_fingerprints=list(
-                data.get("resolved_fingerprints", []) or []
+            resolved_fingerprints=_coerce_fingerprints(
+                data.get("resolved_fingerprints", [])
             ),
-            open_fingerprints_this_gen=list(
-                data.get("open_fingerprints_this_gen", []) or []
+            open_fingerprints_this_gen=_coerce_fingerprints(
+                data.get("open_fingerprints_this_gen", [])
             ),
-            history=list(data.get("history", []) or []),
+            history=_coerce_history(data.get("history", [])),
             base_sha=str(data.get("base_sha", "")),
             head_sha=str(data.get("head_sha", "")),
-            reviewed_label_applied=bool(
-                data.get("reviewed_label_applied", False)
-            ),
+            reviewed_label_applied=reviewed_label_applied,
         )
     except IterationStateParseError as exc:
         log(f"IAR: state parse failed: {exc}; treating as first review.")
@@ -2071,6 +2105,7 @@ def _fetch_latest_marker_body(
     pr_number: int,
     token: str,
     provider_id: str = "",
+    bot_login: str = "",
 ) -> str | None:
     """Fetch the most recent tracking-marker issue comment on the PR that
     carries an embedded IAR state block, and return its body. Returns
@@ -2078,6 +2113,23 @@ def _fetch_latest_marker_body(
 
     Uses GraphQL because REST issue comments do not expose `isMinimized`,
     which the ordering fallback below reads.
+
+    When `bot_login` is non-empty, filters markers to those authored by
+    that GitHub identity (matching the same `[bot]` / no-suffix
+    normalisation used by `gh_collapse_previous_reviews`). This is a
+    **load-bearing security control**: without the author filter, ANY
+    PR participant who can comment could forge a marker carrying
+    fabricated `open_fingerprints_this_gen` values, and — under the
+    shipped default `collapse-previous: true` — the real bot marker
+    is minimized while the attacker's fresh forgery is visible,
+    winning tier 1 and silencing genuine non-critical findings on the
+    next run. Author filtering closes that trust-boundary hole (the
+    critical-always-surfaces rail continues to make sure `critical`
+    findings surface regardless, but IAR would still lose warnings
+    and infos). When `bot_login` is empty, filtering is skipped —
+    kept as an escape hatch for tests and unusual callers, and for
+    the rare case where `gh_get_authenticated_login` fails to resolve
+    an identity at all.
 
     When `provider_id` is non-empty, filters markers to those carrying
     the matching `<!-- ai-pr-reviewer-provider: <provider_id> -->` tag
@@ -2130,6 +2182,7 @@ def _fetch_latest_marker_body(
         "          body\n"
         "          isMinimized\n"
         "          createdAt\n"
+        "          author { login }\n"
         "        }\n"
         "      }\n"
         "    }\n"
@@ -2165,6 +2218,27 @@ def _fetch_latest_marker_body(
         )
     except AttributeError:
         return None
+    # Author-isolation predicate (SECURITY — see docstring).
+    # Match the same `[bot]` / no-suffix normalisation
+    # `gh_collapse_previous_reviews` applies so `github-actions[bot]`
+    # and `github-actions` both count as the same identity.
+    accepted_logins: set[str] = set()
+    if bot_login:
+        accepted_logins.add(bot_login)
+        if bot_login.endswith("[bot]"):
+            accepted_logins.add(bot_login[: -len("[bot]")])
+
+    def _author_matches(node_: dict[str, Any]) -> bool:
+        if not accepted_logins:
+            return True
+        author: Any = node_.get("author")
+        if not isinstance(author, dict):
+            # `author` is null when the commenter's GitHub account
+            # was deleted — never our bot; drop.
+            return False
+        login: str = str(author.get("login") or "")
+        return login in accepted_logins
+
     # Provider-isolation predicate. When `provider_id` is set, only
     # markers whose body carries the exact provider marker for that
     # id (or has NO provider marker at all — the untagged legacy
@@ -2194,6 +2268,8 @@ def _fetch_latest_marker_body(
             continue
         body: str = str(node.get("body") or "")
         if REVIEW_MARKER not in body:
+            continue
+        if not _author_matches(node):
             continue
         if not _provider_matches(body):
             continue
@@ -2229,6 +2305,7 @@ def read_prior_iteration_state(
     pr_number: int,
     token: str,
     provider_id: str = "",
+    bot_login: str = "",
 ) -> IterationState | None:
     """Public entry point: fetch the last marker on the PR that carries
     an IAR state block and extract it. Returns `None` on any failure —
@@ -2237,6 +2314,12 @@ def read_prior_iteration_state(
     Reads MINIMIZED markers too when no visible marker carries state, so
     IAR persistence survives `collapse-previous: true` (the shipped
     default). See `_fetch_latest_marker_body` for the full ordering rule.
+
+    Pass `bot_login` to enforce marker-author isolation (SECURITY —
+    prevents PR participants from forging state markers that silence
+    non-critical findings by supplying fake `open_fingerprints_this_gen`
+    lists). Callers SHOULD always pass a resolved bot login;
+    `_fetch_latest_marker_body` treats empty as "filter disabled".
 
     Pass `provider_id` in multi-provider setups (e.g. a self-review
     matrix running `cursor` + `anthropic` legs on the same PR) so each
@@ -2249,6 +2332,7 @@ def read_prior_iteration_state(
         pr_number=pr_number,
         token=token,
         provider_id=provider_id,
+        bot_login=bot_login,
     )
     if marker_body is None:
         log("IAR: no prior marker found; treating as first review.")
@@ -3683,6 +3767,7 @@ def run_iar_pre_llm(
     base_max_inline_comments: int,
     applied_label: str = "",
     provider_id: str = "",
+    bot_login: str = "",
 ) -> IARPreLLMContext:
     """Prepare IAR context BEFORE the LLM call.
 
@@ -3721,6 +3806,7 @@ def run_iar_pre_llm(
         pr_number=pr_number,
         token=gh_token,
         provider_id=provider_id,
+        bot_login=bot_login,
     )
     base_sha: str = _resolve_base_sha(base_ref=base_ref)
     range_hash: str = compute_generation_range_hash(
@@ -6091,6 +6177,7 @@ def main() -> int:
             base_max_inline_comments=max_inline_comments,
             applied_label=applied_label,
             provider_id=provider_id,
+            bot_login=bot_login,
         )
         effective_max_inline_comments = (
             iar_pre_context.pre_policy_result.effective_max_inline_comments

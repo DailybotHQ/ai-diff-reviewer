@@ -283,14 +283,21 @@ IAR shells out to `git` (never `shell=True`, always argv-list) for four purposes
 
 On round 1 of a new generation under `first-pass-exhaustive`, IAR appends a **hardcoded** string constant to the system prompt to instruct the model to be exhaustive. The constant lives at module scope in `scripts/reviewer.py` and is never sourced from user input, env, or config. No `iar_config.*` field is interpolated into the prompt. There is no user-controllable prompt-splicing surface.
 
-### Marker-embedded state block — untrusted JSON from PR body
+### Marker-embedded state block — untrusted JSON, bot-only source
 
-IAR persists per-PR iteration state as a JSON block inside the tracking marker comment (embedded between HTML comment markers). Because anyone with write access to the PR body — or a compromised bot account — could edit that block, the parser (`_parse_state_from_marker_body`) treats every field as untrusted string data:
+IAR persists per-PR iteration state as a JSON block inside the tracking marker comment (embedded between HTML comment markers). Two independent controls make this safe:
+
+**Source authenticity (author filter).** `_fetch_latest_marker_body` resolves the reviewer's own GitHub identity via `gh_get_authenticated_login` (falling back through `/user` → `/app` → marker-scan → `github-actions[bot]`) and drops every comment whose `author.login` does not match — using the same `[bot]` / no-suffix normalisation `gh_collapse_previous_reviews` uses. Without this filter, any PR participant who can comment could forge a marker carrying fabricated `open_fingerprints_this_gen` values, and — under the shipped default `collapse-previous: true` — the real bot marker is minimized while the attacker's fresh forgery is visible, winning tier 1 and silencing genuine non-critical findings on the next run. Author filtering closes that trust-boundary hole. (`critical` findings would still surface via the § 7.1 always-surfaces rail even without the filter, but warnings and infos could be suppressed. Author filtering makes the suppression path unavailable to non-bot commenters too.)
+
+**Field-level trust boundary (parser).** Because a compromised bot account or a workflow re-run editing the same comment could still change the block, `_parse_state_from_marker_body` treats every field as untrusted:
 
 - Validates `data["version"] == IAR_STATE_SCHEMA_VERSION` **before** reading any other field. Unknown versions log + return `None` (which is handled downstream as "first review").
-- Wraps all numeric fields in `int()` and all string/list fields in `str()`/`list()` so type-confusion attacks (e.g. `"generation": [1, 2, 3]`) fail with a caught `TypeError`/`ValueError` rather than propagating.
+- Wraps all numeric fields in `int()` and all string fields in `str()` so type-confusion attacks (e.g. `"generation": [1, 2, 3]`) fail with a caught `TypeError`/`ValueError` rather than propagating.
+- Fingerprint lists (`resolved_fingerprints`, `open_fingerprints_this_gen`) are coerced element-by-element via a predicate that keeps only `str` entries — anything else (dict, list, int, null) is dropped silently. Without this, a poisoned marker containing `[{"x": 1}]` would crash `dedupe_findings_against_prior`'s `set(...)` conversion with `TypeError: unhashable type: 'dict'`, taking IAR into baseline mode on every subsequent run until the marker ages out — a sticky DoS on convergence.
+- `history` is likewise coerced to a list of dicts only; scalars would blow up the `state.history[-1]` write path in `run_iar_post_llm`.
+- `reviewed_label_applied` is only trusted when it parses as an actual JSON `true`/`false` (or `0`/`1`). Non-empty strings like `"false"` / `"no"` / `"0"` fall back to `False` (the safe default — missing bit disarms `USER_FORCED_RESET` rather than firing it spuriously). Without this, `bool("false") is True` in Python would falsely arm the reset guard.
 - Catches `JSONDecodeError`, `ValueError`, `TypeError`, and the internal `IterationStateParseError` — never raises. On any failure, the run degrades to a fresh first review (safe default).
-- Fingerprint strings stored in `resolved_fingerprints` / `open_fingerprints_this_gen` are used only in `==` and `in` comparisons against newly-computed fingerprints — never as subprocess args, HTTP URLs, path components, or shell strings.
+- Fingerprint strings are used only in `==` and `in` comparisons against newly-computed fingerprints — never as subprocess args, HTTP URLs, path components, or shell strings.
 - Convergence policy strings pulled from the block are used only to populate `state.policy_applied` (rendered in the marker annotation); the policy that governs the current run's behavior always comes from `iar_config.policy` (via `build_iar_config` with a whitelist), not from the parsed state.
 
 ### User-controllable inputs

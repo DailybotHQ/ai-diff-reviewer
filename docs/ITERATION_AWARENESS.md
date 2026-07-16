@@ -664,7 +664,9 @@ Embedded in the tracking marker comment as an HTML-comment block:
       "wall_clock_ms": 128000
     }
   ],
-  "base_sha": "deadbeef00112233"
+  "base_sha": "deadbeef00112233",
+  "head_sha": "cafef00d55667788",
+  "reviewed_label_applied": true
 }
 -->
 ```

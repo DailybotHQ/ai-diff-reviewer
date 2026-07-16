@@ -261,6 +261,118 @@ class ParseFailureTests(unittest.TestCase):
         self.assertIsNone(reviewer._parse_state_from_marker_body(body))
 
 
+class TrustBoundaryHardeningTests(unittest.TestCase):
+    """Round-10 F2/F3 regression: parser MUST NOT trust untyped JSON.
+    Poisoned markers (from a compromised bot account or a workflow
+    re-run that edits the same comment — the author filter still
+    keeps random PR participants out) should degrade to safe defaults,
+    not crash the runtime or spuriously arm USER_FORCED_RESET.
+    """
+
+    def _wrap(self, payload: dict[str, Any]) -> str:
+        return (
+            f"marker\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + json.dumps(payload)
+            + f"\n{reviewer.IAR_STATE_TAG_CLOSE}"
+        )
+
+    def test_reviewed_label_applied_rejects_string_false(self) -> None:
+        """`bool("false")` is `True` in Python — the parser must NOT
+        naively `bool()` the JSON value. String `"false"` / `"no"` /
+        `"0"` all fall back to `False` (the safe default —
+        USER_FORCED_RESET disarmed rather than spuriously triggered)."""
+        for weird_value in ("false", "no", "0", "off", "None"):
+            body: str = self._wrap({
+                "version": 1,
+                "generation": 1,
+                "generation_range_hash": "abc",
+                "round_in_generation": 1,
+                "policy_applied": "iterative",
+                "resolved_fingerprints": [],
+                "open_fingerprints_this_gen": [],
+                "history": [],
+                "reviewed_label_applied": weird_value,
+            })
+            parsed = reviewer._parse_state_from_marker_body(body)
+            self.assertIsNotNone(parsed, weird_value)
+            self.assertFalse(
+                parsed.reviewed_label_applied,
+                f"non-boolean {weird_value!r} must NOT arm reset",
+            )
+
+    def test_reviewed_label_applied_accepts_json_true(self) -> None:
+        body: str = self._wrap({
+            "version": 1, "generation": 1,
+            "generation_range_hash": "abc",
+            "round_in_generation": 1, "policy_applied": "iterative",
+            "resolved_fingerprints": [], "open_fingerprints_this_gen": [],
+            "history": [],
+            "reviewed_label_applied": True,
+        })
+        parsed = reviewer._parse_state_from_marker_body(body)
+        self.assertIsNotNone(parsed)
+        self.assertTrue(parsed.reviewed_label_applied)
+
+    def test_fingerprint_list_drops_non_string_elements(self) -> None:
+        """Round-10 F3 sticky-DoS regression: `set(list_with_dict)`
+        raises `TypeError: unhashable type: 'dict'` inside
+        `dedupe_findings_against_prior`, which crashes the whole IAR
+        pipeline and falls back to baseline on every subsequent run
+        until the poisoned marker ages out. Coerce at parse time —
+        keep only str entries."""
+        body: str = self._wrap({
+            "version": 1, "generation": 1,
+            "generation_range_hash": "abc",
+            "round_in_generation": 1, "policy_applied": "iterative",
+            "resolved_fingerprints": [
+                "valid-fp-1",
+                {"attacker": "dict"},
+                42,
+                None,
+                ["nested", "list"],
+                "valid-fp-2",
+            ],
+            "open_fingerprints_this_gen": [
+                {"another": "dict"},
+                "keep-me",
+            ],
+            "history": [],
+            "reviewed_label_applied": True,
+        })
+        parsed = reviewer._parse_state_from_marker_body(body)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.resolved_fingerprints, ["valid-fp-1", "valid-fp-2"])
+        self.assertEqual(parsed.open_fingerprints_this_gen, ["keep-me"])
+        # Prove the downstream would have crashed on the poisoned
+        # input if the coercion wasn't in place.
+        set(parsed.resolved_fingerprints)  # must not raise
+        set(parsed.open_fingerprints_this_gen)  # must not raise
+
+    def test_history_drops_non_dict_elements(self) -> None:
+        """History entries are mutated by `run_iar_post_llm`
+        (`state.history[-1]["tokens_used"] = ...`) which blows up if
+        an entry is a scalar. Coerce at parse time."""
+        body: str = self._wrap({
+            "version": 1, "generation": 1,
+            "generation_range_hash": "abc",
+            "round_in_generation": 1, "policy_applied": "iterative",
+            "resolved_fingerprints": [], "open_fingerprints_this_gen": [],
+            "history": [
+                {"gen": 1, "range_hash": "x", "rounds_ran": 2},
+                "not-a-dict",
+                42,
+                None,
+                {"gen": 2, "range_hash": "y", "rounds_ran": 1},
+            ],
+            "reviewed_label_applied": False,
+        })
+        parsed = reviewer._parse_state_from_marker_body(body)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(len(parsed.history), 2)
+        self.assertEqual(parsed.history[0]["gen"], 1)
+        self.assertEqual(parsed.history[1]["gen"], 2)
+
+
 class MultipleBlocksTests(unittest.TestCase):
     """Defensive: if a marker somehow contains multiple state blocks,
     the LAST one wins. Callers only ever produce one block, so this is
@@ -377,6 +489,107 @@ class FetchLatestMarkerTests(unittest.TestCase):
             )
         self.assertIsNotNone(got)
         self.assertIn("NEWER", got)
+
+    def test_author_filter_rejects_non_bot_forged_marker(self) -> None:
+        """Round-10 F1 (critical) regression: `_fetch_latest_marker_body`
+        MUST filter by comment author when a bot_login is supplied.
+        Otherwise a PR participant can forge a marker with fabricated
+        fingerprints, and — under `collapse-previous: true` — the real
+        (minimized) bot marker loses to the attacker's (visible) forgery
+        under tier-1 ordering."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        forged_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " FORGED"
+                + reviewer.provider_marker("cursor")
+                + state_block
+            ),
+            "isMinimized": False,   # visible
+            "createdAt": "2026-07-15T20:00:00Z",  # newer
+            "author": {"login": "attacker"},
+        }
+        genuine_marker: dict[str, Any] = {
+            "body": (
+                reviewer.REVIEW_MARKER + " GENUINE"
+                + reviewer.provider_marker("cursor")
+                + state_block
+            ),
+            "isMinimized": True,   # collapsed by prior run
+            "createdAt": "2026-07-15T10:00:00Z",
+            "author": {"login": "github-actions[bot]"},
+        }
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([forged_marker, genuine_marker]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                provider_id="cursor",
+                bot_login="github-actions[bot]",
+            )
+        # Attacker's newer visible forgery must be dropped; the
+        # genuine bot-authored (minimized) marker wins via tier 2.
+        self.assertIsNotNone(got)
+        self.assertIn("GENUINE", got)
+        self.assertNotIn("FORGED", got)
+
+    def test_author_filter_normalizes_bot_suffix(self) -> None:
+        """`gh_get_authenticated_login` returns `github-actions[bot]` from
+        the /user tier but plain `github-actions` from the marker-scan
+        tier — the filter MUST accept both, same as
+        `gh_collapse_previous_reviews`."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        node_plain: dict[str, Any] = {
+            "body": reviewer.REVIEW_MARKER + " PLAIN" + state_block,
+            "isMinimized": False,
+            "createdAt": "2026-07-15T10:00:00Z",
+            "author": {"login": "github-actions"},  # no [bot] suffix
+        }
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([node_plain]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                bot_login="github-actions[bot]",
+            )
+        self.assertIsNotNone(got)
+        self.assertIn("PLAIN", got)
+
+    def test_author_filter_disabled_when_no_bot_login(self) -> None:
+        """Empty `bot_login` = filter off (back-compat for callers that
+        can't resolve an identity; safe because the pre-round-10
+        behaviour is the fallback and IAR still has the critical-
+        always-surfaces safety rail)."""
+        state_block: str = (
+            f"\n{reviewer.IAR_STATE_TAG_OPEN}\n"
+            + '{"version": 1}\n'
+            + reviewer.IAR_STATE_TAG_CLOSE
+        )
+        node: dict[str, Any] = {
+            "body": reviewer.REVIEW_MARKER + " ANY" + state_block,
+            "isMinimized": False,
+            "createdAt": "2026-07-15T10:00:00Z",
+            "author": {"login": "some-random-user"},
+        }
+        with patch.object(
+            reviewer, "gh_graphql",
+            return_value=self._gql_return([node]),
+        ):
+            got: str | None = reviewer._fetch_latest_marker_body(
+                repo="acme/x", pr_number=1, token="tok",
+                # bot_login empty → filter off
+            )
+        self.assertIsNotNone(got)
+        self.assertIn("ANY", got)
 
     def test_provider_isolation_reads_only_matching_provider_markers(
         self,
