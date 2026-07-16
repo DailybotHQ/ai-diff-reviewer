@@ -324,6 +324,13 @@ jobs:
           # merge gate should restrict who can apply `skip-ai-review` via a
           # GitHub ruleset (see docs/TRIGGER_MODES.md for the worked pattern).
           skip-review-label: skip-ai-review
+          # PR complexity labeling — dogfood docs/PR_METADATA_CHECKS.md
+          # § `complexity-labels-enabled`. The model calls `set_pr_complexity`
+          # and applies `complexity:low|medium|high`. Chat-completions legs
+          # (anthropic, codex) perform the assessment; agent-runner legs
+          # (claude-code, cursor) log a no-op warning by design.
+          complexity-labels-enabled: true
+          complexity-label-prefix: 'complexity:'
 
   # ---------------------------------------------------------------------------
   # Stable-named MERGE GATE — the one check with a stable name across events
