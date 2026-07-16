@@ -4,6 +4,8 @@
 **Reviewer:** Cursor Composer running the DWP `task_skills_agents_discovery` skill, 2026-07-15
 **Plan:** PLAN_iteration_aware_review — Task 12
 
+> **v1.8.0 default-flip addendum (post-DWP, 2026-07-15):** After this discovery closed, the two `action.yml` defaults flipped: IAR is now **on by default** with `first-pass-exhaustive`. The convention captured here — "Backward-compat regression suites for behaviorally-flagged features" — was generalized in `docs/TESTING_GUIDE.md` to cover both opt-in and opt-out master switches; the reference implementation at `tests/test_backward_compat_iar_off.py` now guards the explicit-opt-out path rather than the implicit-off default. No skills or agents were added or removed; the follow-up `CATALOG-FOLLOWUP-1` (`stateful-review-loop` general-purpose skill) is still recorded and still pending post-empirical-data.
+
 ## Executive summary
 
 The IAR subsystem introduced five reusable patterns worth surfacing in the catalog. **Zero new skills were authored** — every pattern is either domain-specific to the reviewer (best captured as agent-persona additions or `.review/extension.md` rules) or is more accurately a repo convention (best captured in `docs/`). Two existing agent personas (`reviewer`, `prompt-engineer`) received IAR-specific sections; `docs/TESTING_GUIDE.md` gained a "Backward-compat regression suites" convention section; `.agents/docs/skills_agents_catalog.md` gained an "Iteration-Aware Review (v1.6.0+) coverage" callout. One follow-up (`CATALOG-FOLLOWUP-1`, a general-purpose `stateful-review-loop` skill) is tracked for a future release, contingent on the empirical IAR data collected post-Task-10.

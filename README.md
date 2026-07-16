@@ -109,7 +109,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 - **Optional label gate**: only run when a PR carries a label (e.g. `ready`).
 - **Optional "reviewed" label**: applied automatically after a successful, non-blocked review.
 - **Self-healing on GitHub 422**: if the model anchors a comment outside the diff, the action retries summary-only instead of losing every other comment.
-- **Iteration-Aware Review (opt-in)**: dedup findings against prior rounds so the same warnings don't come back forever. Off by default; enable with `iteration-awareness-enabled: true`. Four convergence policies, a 30% new-lines safety net that forces an exhaustive pass when a big push arrives, and a hardcoded "criticals always surface" rail that no policy can bypass. See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) for the full spec and [examples/iteration-aware.yml](examples/iteration-aware.yml) for a recommended config.
+- **Iteration-Aware Review (on by default, v1.8.0+)**: dedup findings against prior rounds so the same warnings don't come back forever. The reviewer ships with `iteration-awareness-enabled: true` and `convergence-policy: first-pass-exhaustive` — exhaustive first pass (up to 3× the normal cap), dedup on subsequent rounds. Four convergence policies, a 30% new-lines safety net that forces an exhaustive pass when a big push arrives, and a hardcoded "criticals always surface" rail that no policy can bypass. Set `iteration-awareness-enabled: false` to opt out and get byte-identical pre-v1.8 behavior. See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) for the full spec and [examples/iteration-aware.yml](examples/iteration-aware.yml) for tuning knobs.
 
 ## Providers
 
@@ -190,8 +190,8 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
 | `cursor-version` | | `''` | Pin the Cursor Agent CLI version. Empty = latest stable. |
 | `codex-version` | | `''` | Pin the OpenAI Codex CLI version (npm semver). Empty = latest. |
-| `iteration-awareness-enabled` | | `false` | **Opt-in Iteration-Aware Review (IAR) master switch.** When `true`, the reviewer gains memory across rounds: dedup against prior reports, generation tracking (new commits reset the round counter), 4 convergence policies. Master switch off = byte-identical to prior releases. See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
-| `convergence-policy` | | `iterative` | IAR policy: `iterative` (dedup only), `first-pass-exhaustive` (exhaustive round 1 + higher cap), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). Ignored when `iteration-awareness-enabled` is `false`. |
+| `iteration-awareness-enabled` | | `true` | **Iteration-Aware Review (IAR) master switch (v1.8.0+ default: on).** IAR gives the reviewer memory across rounds: dedup against prior reports, generation tracking (new commits reset the round counter), 4 convergence policies. Set to `false` for byte-identical pre-v1.8 behavior. See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
+| `convergence-policy` | | `first-pass-exhaustive` | IAR policy. Default `first-pass-exhaustive` (exhaustive round 1 + higher cap, dedup on rounds 2+) — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, cost-neutral), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). Ignored when `iteration-awareness-enabled` is `false`. |
 | `max-review-rounds` | | `0` | Hard cap for `round-capped`. `0` = unlimited. After N rounds only critical severity findings surface. Ignored by other policies. |
 | `exhaustive-first-pass-cap-multiplier` | | `3` | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Set to `1` to keep exhaustive prompting without amplification. |
 | `iteration-escape-label` | | `full-review-please` | Label a human applies to force a full review — dedup skipped for that run, persisted state unchanged. |
@@ -208,7 +208,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `inline-dropped` | int | Inline comments dropped because GitHub returned 422. |
 | `blocked` | bool | Whether strictness blocked the check. When `true`, the action exits with code 2. |
 | `skipped` | bool | Whether the run was skipped (label/author gate). |
-| `iteration-round` | int (as string) | IAR round number within the current generation (empty when `iteration-awareness-enabled` is `false`). |
+| `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every run when IAR is on (default); empty when `iteration-awareness-enabled` is explicitly set to `false`. |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase (empty when IAR disabled). |
 | `iteration-policy-applied` | string | Which IAR policy actually fired (usually matches `convergence-policy`; safety net or escape label can override). Empty when IAR disabled. |
 | `iteration-tokens-used` | int (as string) | Total LLM input+output tokens for this run (cost telemetry). Empty when IAR disabled. |

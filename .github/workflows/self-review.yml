@@ -237,22 +237,22 @@ jobs:
           # keeps a single live review. See docs/PROVIDERS.md § "Running more
           # than one provider on the same PR".
           #
-          # Iteration-Aware Review — dogfood (opt-in per Rule #10 pillar A).
-          # We enable IAR on self-review so any PR to this repo that gets
-          # re-reviewed (via label toggle) exercises the full IAR flow,
-          # including generation tracking and dedup. Recommended config
-          # from docs/PERFORMANCE.md § Iteration-Aware Review — first-pass
-          # exhaustive with the default 3x cap multiplier is the balanced
-          # profile. Escape label `full-review-please` lets a maintainer
-          # bypass dedup on a specific run. Every self-review job now
-          # exercises the pre-LLM + post-LLM IAR path in production;
-          # the 428-test regression suite guards the IAR-off code path
-          # separately for consumers who don't opt in.
-          iteration-awareness-enabled: true
-          convergence-policy: first-pass-exhaustive
-          exhaustive-first-pass-cap-multiplier: 3
-          max-review-rounds: 5
-          iteration-escape-label: full-review-please
+          # Iteration-Aware Review — dogfood (Rule #10 pillar A).
+          # As of v1.8.0 IAR ships on by default with `first-pass-exhaustive`;
+          # the block below is kept explicit as living documentation of the
+          # profile self-review exercises, but every value here matches the
+          # shipped default (`max-review-rounds: 5` differs from the shipped
+          # `0`, on purpose — self-review verifies the `round-capped`
+          # code path composes correctly with `first-pass-exhaustive`).
+          # Every self-review job exercises the full pre-LLM + post-LLM
+          # IAR path in production; the 429-test regression suite guards
+          # the explicit-opt-out (`iteration-awareness-enabled: false`)
+          # code path separately.
+          iteration-awareness-enabled: true                # shipped default
+          convergence-policy: first-pass-exhaustive        # shipped default
+          exhaustive-first-pass-cap-multiplier: 3          # shipped default
+          max-review-rounds: 5                             # dogfood-only override (default is 0/unlimited)
+          iteration-escape-label: full-review-please       # shipped default
 
   # ---------------------------------------------------------------------------
   # Stable-named MERGE GATE — the one check with a stable name across events

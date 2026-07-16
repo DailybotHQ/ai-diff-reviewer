@@ -1,13 +1,21 @@
-# Recommended Iteration-Aware Review (IAR) configuration for medium-to-large
-# repos. Solves the multi-round "infinite loop" symptom (new warnings on
-# every re-run) by running an extended first pass, then deduplicating
-# against prior findings so subsequent rounds surface only deltas.
+# Iteration-Aware Review (IAR) — explicit configuration example.
 #
-# IAR is OPT-IN: default is `iteration-awareness-enabled: false` and the
-# reviewer's behavior is byte-identical to prior releases. Enabling IAR
-# adds ~500-800 ms of ambient overhead + a one-time cap-expanded first
-# pass per generation (see docs/PERFORMANCE.md § Iteration-Aware Review
-# for the full cost matrix).
+# As of v1.8.0, IAR is ON BY DEFAULT with `convergence-policy:
+# first-pass-exhaustive`. Consumers who don't set any of the five
+# `iteration-*` inputs get exactly the config shown below automatically —
+# you do NOT need to copy this file. It's kept here as a reference for
+# consumers who want to tune the knobs (e.g. lower the cap multiplier,
+# add a round cap, or rename the escape label) or for documentation.
+#
+# Solves the multi-round "infinite loop" symptom (new warnings on every
+# re-run) by running an extended first pass, then deduplicating against
+# prior findings so subsequent rounds surface only deltas. IAR adds
+# ~500-800 ms of ambient overhead + a one-time cap-expanded first pass
+# per generation (see docs/PERFORMANCE.md § Iteration-Aware Review for
+# the full cost matrix).
+#
+# To opt out of IAR entirely and get pre-v1.8 byte-identical behavior,
+# set `iteration-awareness-enabled: false` below.
 #
 # See docs/ITERATION_AWARENESS.md for the authoritative spec.
 
@@ -41,20 +49,23 @@ jobs:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           strictness: block-on-critical
 
-          # Iteration-Aware Review — opt-in convergence subsystem.
-          iteration-awareness-enabled: true
-          # Recommended policy: extended first pass per generation, then
-          # dedup-only on subsequent rounds. Best cost/quality trade-off.
-          convergence-policy: first-pass-exhaustive
+          # Iteration-Aware Review — every input below matches the
+          # v1.8.0+ shipped default. All five can be omitted entirely
+          # and you'll get the same behavior. Kept explicit here as
+          # documentation.
+          iteration-awareness-enabled: true                # DEFAULT
+          convergence-policy: first-pass-exhaustive        # DEFAULT
           # Round 1 of a new generation gets 3x the baseline cap so the
           # LLM can surface a comprehensive initial pass.
-          exhaustive-first-pass-cap-multiplier: 3
+          exhaustive-first-pass-cap-multiplier: 3          # DEFAULT
           # Only used by the `round-capped` policy; harmless here.
+          # Set to 5 in this example to show the input shape (default
+          # is 0 = unlimited).
           max-review-rounds: 5
           # Add this label to any PR to force a full (un-deduped) review
           # for that specific run. Persisted state is preserved so the
           # next normal run resumes the dedup timeline.
-          iteration-escape-label: full-review-please
+          iteration-escape-label: full-review-please       # DEFAULT
 
       # OPTIONAL — surface IAR telemetry as workflow annotations for
       # dashboards. Non-blocking; safe to remove.

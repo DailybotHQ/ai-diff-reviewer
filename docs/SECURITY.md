@@ -271,9 +271,9 @@ If you want to reduce the action's blast radius further:
 - **Provider data retention.** Anthropic's policy applies to anything the action sends. As of this writing, Anthropic does not train on Messages API data, but you should verify against the provider's current Terms of Service for your specific compliance needs.
 - **The `severity` field is model-asserted, not verified.** A model that systematically under-tags severity will under-block. The bundled default prompt explicitly defines severity levels to mitigate this; calibrate via a custom prompt if your team needs stricter assignments.
 
-## Iteration-Aware Review (IAR) trust boundary (v1.6.0+, opt-in)
+## Iteration-Aware Review (IAR) trust boundary (v1.8.0+, on by default)
 
-The IAR subsystem (see [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md)) adds three surfaces worth calling out explicitly. All are **opt-in** — with `iteration-awareness-enabled: false` (the default), none of the code paths below run and the trust model is byte-identical to pre-v1.6.0.
+The IAR subsystem (see [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md)) adds three surfaces worth calling out explicitly. As of v1.8.0 IAR is on by default; consumers who set `iteration-awareness-enabled: false` disable every code path in this section and the trust model is byte-identical to pre-v1.8.0.
 
 ### New subprocess boundary — `git diff` / `git show` / `git rev-parse`
 

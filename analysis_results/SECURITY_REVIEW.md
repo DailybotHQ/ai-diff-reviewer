@@ -4,6 +4,8 @@
 **Reviewer:** Cursor Composer running the DWP `task_security_review` skill, 2026-07-15
 **Plan:** PLAN_iteration_aware_review — Task 11
 
+> **v1.8.0 default-flip addendum (post-DWP, 2026-07-15):** After this review closed, the two `action.yml` defaults flipped: `iteration-awareness-enabled: false → true` and `convergence-policy: iterative → first-pass-exhaustive`. **The threat model does not change.** All five surfaces audited below are subject to exactly the same argv-list subprocess boundaries, unicode-safe JSON parsing, hardcoded prompt addendum, and env-var allowlist regardless of whether IAR is on via config or on via default. The only new consideration: the surfaces are now exercised on every `@v1` consumer that doesn't explicitly opt out — the audit findings and mitigations already assumed that scale (see §7 "IAR trust boundary" in `docs/SECURITY.md`).
+
 ## Overview
 
 This audit covers the full accumulated diff of Tasks 2–10 of PLAN_iteration_aware_review. The IAR subsystem introduces five broad new surfaces: (1) subprocess calls to `git diff` / `git show` / `git rev-parse`, (2) prompt splicing of a hardcoded exhaustive addendum, (3) untrusted JSON parsing from PR body HTML-comment blocks, (4) two new user-controllable inputs (`convergence-policy`, `iteration-escape-label`), and (5) cost/round telemetry (`RunTelemetry` + 5 outputs + 1 log line). All five are opt-in and gated by `iteration-awareness-enabled: false` by default — with the master switch off, the runtime is byte-identical to pre-IAR releases (verified by the 19-test `test_backward_compat_iar_off.py` regression suite).

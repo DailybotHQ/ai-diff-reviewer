@@ -124,7 +124,7 @@ The `severity` and `blocked` outputs are available to subsequent steps in the sa
 
 ## Strictness × Iteration-Aware Review (IAR)
 
-When [Iteration-Aware Review](ITERATION_AWARENESS.md) is enabled, the strictness gate reads `overall_severity` **after** IAR has filtered the LLM's findings — so a silenced (deduplicated) finding no longer contributes to the gate decision. This is deliberate: the gate reflects what the reviewer surfaces to the user, not what the LLM privately observed.
+[Iteration-Aware Review](ITERATION_AWARENESS.md) is on by default as of v1.8.0. The strictness gate reads `overall_severity` **after** IAR has filtered the LLM's findings — so a silenced (deduplicated) finding no longer contributes to the gate decision. This is deliberate: the gate reflects what the reviewer surfaces to the user, not what the LLM privately observed. Consumers who explicitly set `iteration-awareness-enabled: false` get the pre-v1.8 gating behavior (byte-identical to prior releases).
 
 **One rule survives every policy:** findings with `severity == critical` **always** surface, regardless of dedup or configured policy. This is the hardcoded safety rail in `dedupe_findings_against_prior()` (docs/ITERATION_AWARENESS.md § 7.1). The `block-on-critical` gate therefore behaves identically with IAR on or off — you never accidentally silence a blocking finding.
 

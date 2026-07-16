@@ -105,7 +105,7 @@ When finishing a prompt-engineering task, produce:
 
 The output is what goes into the PR description. The PR description is the canonical record of why the change shipped.
 
-## Iteration-Aware Review (IAR) prompt addendum (v1.6.0+)
+## Iteration-Aware Review (IAR) prompt addendum (v1.6.0+ preview; on by default from v1.8.0+)
 
 The IAR subsystem introduces one runtime-conditional splice into the system prompt: `IAR_EXHAUSTIVE_PROMPT_ADDENDUM` (declared in `scripts/reviewer.py`). It is appended to the system prompt on round 1 of a new generation under the `first-pass-exhaustive` policy, and instructs the model to be exhaustive (rather than iterative) for that round only. Design constraints that any future edit to this addendum MUST preserve:
 

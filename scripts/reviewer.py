@@ -1789,21 +1789,27 @@ class IARConfig:
 def build_iar_config(env: dict[str, str]) -> IARConfig:
     """Read the 5 IAR env vars from `env` and return a validated IARConfig.
 
-    All defaults preserve the pre-IAR runtime path byte-identically when the
-    master switch is off. Unknown policy values fall back to `iterative` with
-    a debug log; negative integers are clamped to sane values.
+    Defaults (v1.8.0+): IAR is ON by default with the `first-pass-exhaustive`
+    policy — matches the shipped `action.yml` defaults, so a consumer who
+    sets nothing gets the recommended convergence profile. Consumers who
+    explicitly set `iteration-awareness-enabled=false` get byte-identical
+    pre-v1.8 behavior (regression suite `test_backward_compat_iar_off.py`
+    locks that contract). Unknown policy values fall back to
+    `first-pass-exhaustive` with a debug log; negative integers are clamped
+    to sane values.
     """
     enabled: bool = parse_bool(
-        env.get("AIPRR_ITERATION_AWARENESS_ENABLED", ""), default=False
+        env.get("AIPRR_ITERATION_AWARENESS_ENABLED", ""), default=True
     )
     policy_raw: str = (
-        env.get("AIPRR_CONVERGENCE_POLICY", "").strip() or IAR_POLICY_ITERATIVE
+        env.get("AIPRR_CONVERGENCE_POLICY", "").strip()
+        or IAR_POLICY_FIRST_PASS_EXHAUSTIVE
     )
     if policy_raw not in IAR_VALID_POLICIES:
         # Silent fallback keeps the runtime safe even under a misconfiguration.
         # main() emits a debug log line so the miswiring is visible in the
         # workflow log when IAR is enabled.
-        policy: str = IAR_POLICY_ITERATIVE
+        policy: str = IAR_POLICY_FIRST_PASS_EXHAUSTIVE
     else:
         policy = policy_raw
     max_review_rounds_raw: str = (

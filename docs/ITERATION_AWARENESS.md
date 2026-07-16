@@ -1,10 +1,10 @@
 # Iteration-Aware Review (IAR)
 
-> **Opt-in subsystem that gives the reviewer memory across rounds — converging multi-round self-review workflows instead of surfacing new warnings indefinitely.**
+> **On-by-default subsystem that gives the reviewer memory across rounds — converging multi-round self-review workflows instead of surfacing new warnings indefinitely.**
 
 **Status:** authoritative spec for the IAR subsystem. All implementation in `scripts/reviewer.py` and public surface in `action.yml` conforms to what is described here. If the code disagrees with this document, this document wins — file a bug.
 
-**Master switch:** `iteration-awareness-enabled: false` (default). When off, runtime behavior is byte-identical to prior releases. All 4 other IAR inputs are ignored.
+**Master switch (v1.8.0+):** `iteration-awareness-enabled: true` (default). The shipped `convergence-policy` is `first-pass-exhaustive`. Consumers who want the pre-v1.8 review shape can set `iteration-awareness-enabled: false` and the runtime becomes byte-identical to prior releases — all 4 other IAR inputs are then ignored.
 
 ---
 
@@ -47,18 +47,18 @@ IAR reshapes the feedback:
 - **Safety rails**: `critical` severity findings ALWAYS surface, unconditionally. No policy can silence them.
 - **Escape hatch**: developer can apply a label to force a full review whenever they want to see everything again.
 
-The default is opt-out (`iteration-awareness-enabled: false`). Consumers who don't need this stay on the exact behavior they have today. Consumers who opt in get faster convergence with the same review quality.
+As of v1.8.0 IAR is **on by default** with the `first-pass-exhaustive` policy — the shape the maintainer team recommends for the majority of consumers. Consumers who prefer the pre-v1.8 review behavior can flip `iteration-awareness-enabled: false` and the runtime becomes byte-identical to prior releases (see § 2).
 
 ---
 
-## 2. Master switch + backward-compat contract
+## 2. Master switch + opt-out contract
 
-**Contract:** when `iteration-awareness-enabled: false` (default), the runtime is **byte-identical** to prior releases.
+**Contract:** when `iteration-awareness-enabled: false` (explicitly set), the runtime is **byte-identical** to pre-v1.8 releases.
 
 This is enforced by two independent mechanisms:
 
-1. **Structural guard rails.** Every IAR code path in `scripts/reviewer.py` is gated by `if IAR_ENABLED: ...` at its call site in `main()`. When `IAR_ENABLED` is False, none of the new code executes — the runtime falls through to the pre-IAR path unchanged.
-2. **Regression test suite.** `tests/test_backward_compat_iar_off.py` captures the runtime's output shape with `iteration-awareness-enabled: false` and asserts byte-identical behavior against a mock LLM baseline. This suite runs in CI on every PR and MUST stay green.
+1. **Structural guard rails.** Every IAR code path in `scripts/reviewer.py` is gated at its call site in `main()`. When the master switch is off, none of the new code executes — the runtime falls through to the pre-IAR path unchanged.
+2. **Regression test suite.** `tests/test_backward_compat_iar_off.py` captures the runtime's output shape with `iteration-awareness-enabled=false` (explicit opt-out) and asserts byte-identical behavior against a mock LLM baseline. This suite runs in CI on every PR and MUST stay green — it is the load-bearing contract for consumers who opt out of the v1.8.0 default flip.
 
 **Ways this can be broken:**
 - Removing the guard rails would break Test 1 of the regression suite.
@@ -68,18 +68,22 @@ This is enforced by two independent mechanisms:
 
 All 4 would fail CI. This is by design.
 
-**Migration promise:** consumers on `@v1` who don't touch their workflow YAML see zero change. Consumers can opt in at any time by adding `iteration-awareness-enabled: true` to their workflow, and can roll back at any time by removing that line (or setting it to `false` explicitly).
+**Migration guidance (v1.7 → v1.8):**
+- Consumers on `@v1` who don't touch their workflow YAML get IAR + `first-pass-exhaustive` automatically at the next release. Round 1 of the next new-generation review will surface up to 3× as many findings as before (bounded by `exhaustive-first-pass-cap-multiplier`, default `3`); subsequent rounds delegate to `iterative` (dedup only, no cost change).
+- Consumers who want the pre-v1.8 shape can add `iteration-awareness-enabled: false` to their workflow — the regression suite locks byte-identical behavior on that path.
+- Consumers who want IAR but prefer the flat cost profile can add `convergence-policy: iterative` — dedup only, no cap boost.
+- The critical-always-surfaces safety rail is hardcoded and cannot be silenced by any policy or opt-out setting.
 
 ---
 
 ## 3. Inputs and outputs
 
-### 3.1 Inputs (5 — all opt-in, defaults preserve current behavior)
+### 3.1 Inputs (5 — all optional, defaults ship IAR-on)
 
 | Input | Default | Type | Description |
 |---|---|---|---|
-| `iteration-awareness-enabled` | `false` | boolean | **Master switch.** When `false`, runtime is byte-identical to prior releases. All other IAR inputs are ignored. |
-| `convergence-policy` | `iterative` | enum | One of `iterative` \| `first-pass-exhaustive` \| `round-capped` \| `critical-gate`. Only consulted when master switch is on. See § 6. |
+| `iteration-awareness-enabled` | `true` | boolean | **Master switch.** Ships on. Set to `false` for byte-identical pre-v1.8 behavior; all other IAR inputs are then ignored. |
+| `convergence-policy` | `first-pass-exhaustive` | enum | One of `iterative` \| `first-pass-exhaustive` \| `round-capped` \| `critical-gate`. Only consulted when master switch is on. See § 6. |
 | `max-review-rounds` | `0` | integer | Hard cap for `round-capped` policy. `0` = unlimited. Ignored by other policies. See § 6.3. |
 | `exhaustive-first-pass-cap-multiplier` | `3` | integer | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Ignored by other policies. See § 6.2. |
 | `iteration-escape-label` | `full-review-please` | string | Label name a human can apply to a PR to force a full review (clears dedup for this run only; does NOT mutate persisted state). See § 8. |
@@ -237,18 +241,18 @@ Explicitly out of scope:
 
 Four policies, selected via the `convergence-policy` input. All policies enforce the safety rails from § 7 (critical-always-surfaces, 30% safety net) — this is documented per-policy for clarity but the guarantee is orthogonal.
 
-### 6.1 `iterative` (default when master switch is on)
+### 6.1 `iterative` (cost-neutral alternative)
 
 **Behavior:** dedup only. No prompt splicing, no cap adjustment.
 
 **Round 1 of Gen 1:** all findings surface (no prior state to dedup against).
 **Round N of Gen G (N > 1):** dedup silences findings whose fingerprints match `open_fingerprints_this_gen`. Critical severities bypass unconditionally.
 
-**When to use:** cost-sensitive repos. This is the closest-to-baseline policy — cost delta ~0% vs pre-IAR.
+**When to use:** cost-sensitive repos, push-heavy workflows where the round-1-of-new-gen boost of `first-pass-exhaustive` would fire frequently. This is the closest-to-baseline policy — cost delta ~0% vs pre-IAR.
 
 **Trade-off:** doesn't accelerate convergence beyond dedup. If the LLM's per-round finding output is non-deterministic (typical), convergence still takes multiple rounds — just without re-flagging already-reported findings.
 
-### 6.2 `first-pass-exhaustive` (recommended default for quality)
+### 6.2 `first-pass-exhaustive` (shipped default, v1.8.0+)
 
 **Behavior:** on round 1 of each generation, the reviewer is instructed to be exhaustive with a higher findings cap. On rounds 2+ within the same generation, delegates to `iterative`.
 
@@ -500,17 +504,20 @@ Marker title:
 
 Empirical defaults (theoretical; refined by dogfooding data in Task 10).
 
-### 11.1 Balanced (recommended default)
+### 11.1 Balanced (SHIPPED DEFAULT — v1.8.0+)
+
+This is what every consumer gets by default. **No YAML required** — the values below are the shipped defaults; the block is shown only for clarity:
 
 ```yaml
+# All of these are the v1.8.0+ shipped defaults — do NOT need to be set.
 iteration-awareness-enabled: true
 convergence-policy: first-pass-exhaustive
-max-review-rounds: 5
+max-review-rounds: 0                        # unlimited (only meaningful for round-capped)
 exhaustive-first-pass-cap-multiplier: 3
 iteration-escape-label: full-review-please
 ```
 
-**Use when:** general-purpose repos, medium-sized PRs typical.
+**Use when:** general-purpose repos, medium-sized PRs typical. This is the shipped profile; you don't have to configure anything.
 
 ### 11.2 Cost-sensitive
 
@@ -546,21 +553,31 @@ convergence-policy: critical-gate
 
 ## 12. Migration guide
 
-### 12.1 Enabling IAR
+### 12.1 Upgrading from v1.7 → v1.8.0
 
-1. Add `iteration-awareness-enabled: true` to your workflow YAML.
-2. Choose a `convergence-policy` (see § 11 recommendations).
-3. Optionally adjust `max-review-rounds`, `exhaustive-first-pass-cap-multiplier`, or `iteration-escape-label`.
-4. Push a commit; the next review will show `Gen 1 round 1` in the marker title.
+**Nothing to do.** IAR is now on by default with the `first-pass-exhaustive` policy. On your next review after upgrading, you'll see:
+- The marker annotation gains a line like `_Iteration-Aware Review: gen 1, round 1, policy=first-pass-exhaustive (first_review) — N surfaced._`
+- Round 1 of each new generation may surface more findings than pre-v1.8 (bounded by `max-inline-comments × 3` under the default multiplier).
+- Rounds 2+ of the same generation dedup against prior unresolved findings.
+- 5 new action outputs populate on every run.
 
-**No other changes needed.** Your existing inputs (`strictness`, `provider`, `api-key`, etc.) work unchanged.
+**No other changes needed.** Your existing inputs (`strictness`, `provider`, `api-key`, etc.) work unchanged. The critical-always-surfaces safety rail guarantees no finding that could gate the check is ever silenced.
 
-### 12.2 Rolling back
+### 12.2 Tuning after upgrade
 
-Remove the `iteration-awareness-enabled: true` line (or set to `false`). The next review will:
-- Return to pre-IAR behavior (byte-identical to today).
-- Populate the 5 IAR outputs as empty strings.
-- The 3 IAR outputs empty out; downstream steps reading them see `""`.
+If the default profile doesn't suit your workflow:
+
+- Push-heavy repos → set `convergence-policy: iterative` (cost-neutral, dedup only, no round-1 boost).
+- Want a hard upper bound on rounds → `convergence-policy: round-capped` with `max-review-rounds: N`.
+- Manage resolution manually → `convergence-policy: critical-gate` (strict cross-gen dedup).
+- Want to force a full review on demand → apply the `full-review-please` label (or your custom label name via `iteration-escape-label`).
+
+### 12.3 Opting out of IAR entirely
+
+Add `iteration-awareness-enabled: false` to your workflow. The runtime becomes byte-identical to pre-v1.8:
+- No marker annotation.
+- 5 IAR outputs are empty strings; downstream steps reading them see `""`.
+- The 4 other IAR inputs are ignored.
 
 Persisted state in old markers is IGNORED (not deleted). If IAR is re-enabled later, it will resume from that state.
 

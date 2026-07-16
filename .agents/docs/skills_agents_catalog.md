@@ -55,13 +55,13 @@ Common workflows:
 
 The four remaining entries (`release`, `prompt-test`, `add-provider`, and the agent personas) are authored directly in this repo and **not** tracked by the lockfile — modifying them just means editing files under `.agents/`.
 
-### Iteration-Aware Review (v1.6.0+) coverage across the catalog
+### Iteration-Aware Review (v1.6.0+ preview; on by default from v1.8.0+) coverage across the catalog
 
 The IAR subsystem (shipped in the v1.6 release) did **not** warrant a new dedicated skill or agent — the design patterns it introduced (content-anchored fingerprinting, HTML-comment embedded state, prompt-splicing addenda) are all domain-specific to the reviewer. Instead, IAR coverage was added to the existing catalog as follows:
 
 - **`reviewer` agent** — new "Iteration-Aware Review (IAR) contract (v1.6.0+)" checklist item (Section 11 in the agent's review checklist) so any PR touching IAR code paths is reviewed against the load-bearing invariants (critical-always-surfaces rail, whitelist-fallback for policy, argv-list subprocess, `_parse_state_from_marker_body` failure discipline, `write_iar_outputs_empty()` when off).
 - **`prompt-engineer` agent** — new "Iteration-Aware Review (IAR) prompt addendum" section codifying the design constraints of `IAR_EXHAUSTIVE_PROMPT_ADDENDUM` (hardcoded module constant, additive to base prompt, round-1-of-generation only, ~150 tokens).
-- **`docs/TESTING_GUIDE.md`** — new "Backward-compat regression suites for opt-in features (repo convention)" section that promotes the `test_backward_compat_<feature>.py` file naming convention as a repo standard for any future opt-in feature (IAR's own file at `tests/test_backward_compat_iar_off.py` is the reference implementation).
+- **`docs/TESTING_GUIDE.md`** — "Backward-compat regression suites for behaviorally-flagged features (repo convention)" section promotes the `test_backward_compat_<feature>.py` file naming convention as a repo standard for any feature that ships behind a master switch — whether opt-in (original IAR v1.6-preview) or opt-out (IAR v1.8.0 default-flip). IAR's own file at `tests/test_backward_compat_iar_off.py` is the reference implementation.
 - **`.review/extension.md`** — new "Iteration-Aware Review (IAR) conventions" section that codifies IAR-specific rules the CI reviewer enforces on every PR.
 
 Future opportunity — **not authored in this release**: a general-purpose `stateful-review-loop` skill that abstracts the IAR patterns (fingerprint / dedup / policy / generation) for other AI-driven CI tools. Not shipped because the IAR patterns are still evolving and would benefit from empirical dogfood evidence (Task 10) before abstraction. Track as `CATALOG-FOLLOWUP-1`.

@@ -354,31 +354,36 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 ---
 
-## Iteration-Aware Review (IAR) — opt-in
+## Iteration-Aware Review (IAR) — on by default (v1.8.0+)
 
-Five opt-in inputs power the IAR subsystem. Master switch defaults to
-`false` so the runtime behaves byte-identically to prior releases unless
-the consumer explicitly opts in. Full spec:
+Five inputs power the IAR subsystem. Master switch ships as `true`
+(v1.8.0+) with `convergence-policy: first-pass-exhaustive`, so consumers
+who don't configure anything get IAR automatically. Consumers who want the
+pre-v1.8 shape can set `iteration-awareness-enabled: false` and the
+runtime becomes byte-identical to prior releases. Full spec:
 [docs/ITERATION_AWARENESS.md](../../../docs/ITERATION_AWARENESS.md).
 
 ### `iteration-awareness-enabled`
 
-- **Default:** `false`.
-- **What it is:** Master switch. When `true`, the reviewer gains memory
-  across rounds: dedupes findings against prior reports, tracks
+- **Default:** `true` (was `false` in the v1.6 preview; flipped in v1.8.0).
+- **What it is:** Master switch. When `true` (default), the reviewer gains
+  memory across rounds: dedupes findings against prior reports, tracks
   generations (new commits / rebase reset the round counter), and applies
   the configured `convergence-policy`. Critical severity findings ALWAYS
-  surface unconditionally — hardcoded safety rail. When `false`, all other
-  IAR inputs are ignored and the runtime path is unchanged.
+  surface unconditionally — hardcoded safety rail. Set to `false` to get
+  byte-identical pre-v1.8 behavior; the four other IAR inputs are then
+  ignored.
 
 ### `convergence-policy`
 
-- **Default:** `iterative`.
+- **Default:** `first-pass-exhaustive` (was `iterative` in the v1.6 preview; flipped in v1.8.0).
 - **What it is:** Which IAR policy to apply. One of:
-  - `iterative` — dedup only. Cost-neutral vs pre-IAR baseline.
-  - `first-pass-exhaustive` — exhaustive prompt + higher findings cap on
-    round 1 of each generation; dedup on rounds 2+. Best for
-    "prefer 20 findings at once vs 10 loops" workflows.
+  - `first-pass-exhaustive` (default) — exhaustive prompt + higher
+    findings cap on round 1 of each generation; dedup on rounds 2+.
+    Solves the "prefer 20 findings at once vs 10 loops" workflow.
+  - `iterative` — dedup only, no cap boost. Cost-neutral vs pre-IAR
+    baseline. Set explicitly when your workflow pushes frequently and
+    the round-1-of-new-gen boost would fire too often.
   - `round-capped` — dedup pre-cap. Post-cap only critical findings
     surface. Requires `max-review-rounds > 0`.
   - `critical-gate` — strict cross-generation dedup: prior-resolved
@@ -424,7 +429,7 @@ downstream steps to consume.
 | `inline-dropped` | Number of inline comments dropped because GitHub rejected the review with HTTP 422 (the action retries summary-only on 422). |
 | `blocked` | Whether the strictness gate decided to fail the check (`true`/`false`). When `true`, the action exits with code 2 so the GitHub check turns red. |
 | `skipped` | Whether the run was skipped by the label gate (`true`/`false`). |
-| `iteration-round` | IAR round number within the current generation. Empty when `iteration-awareness-enabled` is `false`. |
+| `iteration-round` | IAR round number within the current generation. Populated on every enabled run (default). Empty when `iteration-awareness-enabled` is explicitly set to `false`. |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty when IAR disabled. |
 | `iteration-policy-applied` | Which IAR policy actually fired (usually matches `convergence-policy`; the 30% safety net or escape label can override). Empty when IAR disabled. |
 | `iteration-tokens-used` | Total LLM input+output tokens consumed this run (cost telemetry). Empty when IAR disabled. |

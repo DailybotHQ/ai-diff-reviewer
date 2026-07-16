@@ -159,15 +159,15 @@ If you're adding a new self-contained component (a new tool, a new severity-eval
 
 If your test would require mocking the entire Anthropic API surface or the entire GitHub API surface, the test isn't pulling its weight — write a smoke test on a real PR instead.
 
-## Backward-compat regression suites for opt-in features (repo convention)
+## Backward-compat regression suites for behaviorally-flagged features (repo convention)
 
-When you add a feature that ships as **opt-in behind a master switch** (like Iteration-Aware Review's `iteration-awareness-enabled` input), pair it with a dedicated `tests/test_backward_compat_<feature>.py` file that asserts the runtime is **byte-identical** to the pre-feature baseline when the master switch is off. This convention exists because:
+When you add a feature that ships behind a **master switch** (whether opt-in like the original v1.6-preview of Iteration-Aware Review, or opt-out like the v1.8.0 default flip of the same feature), pair it with a dedicated `tests/test_backward_compat_<feature>.py` file that asserts the runtime is **byte-identical** to the pre-feature baseline when the master switch is set to the "off" position (whichever position that is for the feature — for IAR it's `iteration-awareness-enabled: false`). This convention exists because:
 
 - The stdlib-only, single-file runtime relies on strict backward compat — a regression in the master-off path silently affects every existing consumer at the next release.
-- A dedicated file lets a reviewer see, at a glance, exactly which invariants a new opt-in feature protects (env-var parse-when-disabled, output-writing-when-disabled, no new subprocess-when-disabled, etc.).
+- A dedicated file lets a reviewer see, at a glance, exactly which invariants a behaviorally-flagged feature protects (env-var parse-when-disabled, output-writing-when-disabled, no new subprocess-when-disabled, etc.).
 - The file becomes the failing test that any future refactor of the feature must first update — a deliberate friction point.
 
-Existing example: [`tests/test_backward_compat_iar_off.py`](../tests/test_backward_compat_iar_off.py) (19 tests, added in the v1.6 IAR release). Copy that structure when adding a new opt-in feature.
+Existing example: [`tests/test_backward_compat_iar_off.py`](../tests/test_backward_compat_iar_off.py) (19 tests, added in the v1.6 IAR preview, updated in v1.8.0 to test the explicit opt-out path after the default flip). Copy that structure when adding a new behaviorally-flagged feature.
 
 ## Releasing
 

@@ -8,44 +8,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Iteration-Aware Review (IAR) — opt-in convergence subsystem.** New
-  master switch `iteration-awareness-enabled` (default `false`) that
-  preserves current runtime behavior byte-identically when off. When
-  enabled, the reviewer gains memory across rounds: dedupes findings
-  against prior reports using content-anchored fingerprints (hash of the
-  finding + ~20 lines of surrounding code), tracks generations (new
-  commits or rebase reset the round counter), and applies one of four
-  convergence policies (`iterative`, `first-pass-exhaustive`,
+- **Iteration-Aware Review (IAR) — convergence subsystem, on by default.**
+  New master switch `iteration-awareness-enabled` (default `true`) makes
+  the reviewer memory-aware across rounds: dedupes findings against prior
+  reports using content-anchored fingerprints (hash of the finding + ~20
+  lines of surrounding code), tracks generations (new commits or rebase
+  reset the round counter), and applies one of four convergence policies
+  (`iterative`, `first-pass-exhaustive` **— shipped default**,
   `round-capped`, `critical-gate`). **Critical severity findings ALWAYS
   surface unconditionally** — hardcoded safety rail, non-configurable.
   Human escape hatch via a `full-review-please` label that forces a full
   review without mutating persisted state. Full spec in
   [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md).
 
+### Changed (v1.8.0 default flip)
+- **`iteration-awareness-enabled` default is now `true`** (was `false` in
+  the pre-release preview). This means consumers on `@v1` who don't
+  configure anything get IAR automatically. Steady-state cost delta is
+  `+0%` for every policy; the shipped `first-pass-exhaustive` boosts
+  round 1 of each new generation (transient +205% on that specific round
+  under the default cap multiplier `3×`), then delegates to `iterative`
+  for rounds 2+. Weighted-lifetime cost vs the pre-IAR "infinite loop"
+  baseline is `~-42%` because IAR converges in ~half the rounds.
+- **`convergence-policy` default is now `first-pass-exhaustive`** (was
+  `iterative`). Matches the recommended profile from
+  [docs/PERFORMANCE.md](docs/PERFORMANCE.md) and directly addresses the
+  original developer pain: *"prefiero que me saques 20 warnings de golpe
+  a tener que hacer 10 loops"*.
+- **Opt-out:** consumers who want the pre-v1.8 review shape can set
+  `iteration-awareness-enabled: false`. The 19-test regression suite
+  `tests/test_backward_compat_iar_off.py` locks byte-identical behavior
+  on that path.
+
 ### Public surface
-- 5 new inputs (all optional, all default-off / safe):
-  `iteration-awareness-enabled` (`false`), `convergence-policy`
-  (`iterative`), `max-review-rounds` (`0`),
+- 5 new inputs (all optional; defaults now match the shipped IAR-on
+  profile): `iteration-awareness-enabled` (`true`), `convergence-policy`
+  (`first-pass-exhaustive`), `max-review-rounds` (`0`),
   `exhaustive-first-pass-cap-multiplier` (`3`),
   `iteration-escape-label` (`full-review-please`).
-- 5 new outputs (empty strings when IAR disabled — downstream steps
-  reading them always see a defined value):
+- 5 new outputs: populated on every enabled run, empty strings when IAR
+  is explicitly disabled (`iteration-awareness-enabled: false`) —
+  downstream steps reading them always see a defined value:
   `iteration-round`, `iteration-generation`, `iteration-policy-applied`,
   `iteration-tokens-used`, `iteration-cost-vs-baseline-estimate`.
-- Zero breaking changes; the new inputs/outputs are additive to
-  `action.yml`. Consumers on `@v1` see no change unless they explicitly
-  opt in.
+- The 5 inputs and 5 outputs are additive to `action.yml`. The behavior
+  change (dedup + exhaustive round 1) affects any consumer on `@v1` who
+  doesn't explicitly opt out — but the critical-always-surfaces safety
+  rail guarantees no finding that could gate the check is ever silenced.
 
 ### Convergence policies
-- **`iterative`** (default when IAR is on): dedup only. Steady-state
-  LLM cost is the pre-IAR baseline; the reviewer just posts *deltas*.
-- **`first-pass-exhaustive`** (recommended for most consumers): round 1
-  of each generation runs with an expanded `max-inline-comments` cap
-  (via `exhaustive-first-pass-cap-multiplier`, default `3×`) and a
-  ~150-token prompt addendum telling the model to prefer completeness
-  over conciseness. Round 2+ of the same generation delegate to
-  `iterative` (dedup only). Recommended for consumers who see the
-  "same warnings on every re-run" symptom.
+- **`first-pass-exhaustive`** (shipped default): round 1 of each
+  generation runs with an expanded `max-inline-comments` cap (via
+  `exhaustive-first-pass-cap-multiplier`, default `3×`) and a ~150-token
+  prompt addendum telling the model to prefer completeness over
+  conciseness. Round 2+ of the same generation delegate to `iterative`
+  (dedup only). Directly solves the "same warnings on every re-run"
+  symptom by front-loading the exhaustive pass.
+- **`iterative`** (cost-neutral alternative — set explicitly to switch):
+  dedup only, no cap boost. Steady-state LLM cost is the pre-IAR
+  baseline; the reviewer just posts *deltas*. Recommended for
+  push-heavy workflows where round 1 of each new generation would fire
+  frequently.
 - **`round-capped`** (`max-review-rounds: N`): behaves like `iterative`
   for the first N rounds of a generation; from round N+1 onward,
   non-critical findings are silenced. Criticals still surface (safety
@@ -102,13 +125,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Regression contract
 - New test suite `tests/test_backward_compat_iar_off.py` asserts
-  byte-identical runtime behavior when the master switch is off. CI
-  fails any PR where this suite regresses.
+  byte-identical runtime behavior when the master switch is explicitly
+  set to `false`. CI fails any PR where this suite regresses. This is
+  the load-bearing contract for consumers who opt out of the v1.8.0
+  default flip.
 - 190+ additional unit tests across
   `test_iar_state_layer.py`, `test_iar_generation_tracking.py`,
   `test_iar_dedup.py`, `test_iar_policies.py`, `test_iar_dispatch.py`,
   and `test_iar_observability.py` cover the pure IAR helpers. Total
-  suite grew from 242 to **428 tests** (all passing).
+  suite grew from 242 to **429 tests** (all passing).
 
 - **New "Security audit alignment" section in `.review/extension.md`.**
   Codifies the review rules that keep the two external security

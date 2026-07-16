@@ -1,10 +1,12 @@
 # Executive Report — Iteration-Aware Review (IAR)
 
 **Plan:** PLAN_iteration_aware_review
-**Ship target:** v1.8.0 (minor release, additive)
-**Status:** COMPLETE (13/13)
+**Ship target:** v1.8.0 (minor release, additive + default flip)
+**Status:** COMPLETE (13/13, + post-plan default flip)
 **Branch:** `feat/iteration-aware-review`
 **Author:** Cursor Composer running the DWP `task_executive_report` skill, 2026-07-15
+
+> **v1.8.0 default-flip addendum (post-DWP, 2026-07-15):** After the plan closed, the maintainer asked for IAR to ship **on by default** (no configuration required) rather than opt-in behind a flag, provided the opt-out path stayed byte-identical. The two `action.yml` defaults now ship as `iteration-awareness-enabled: true` and `convergence-policy: first-pass-exhaustive`. The 19-test regression suite `tests/test_backward_compat_iar_off.py` was updated to lock byte-identical behavior on the explicit-opt-out path (`iteration-awareness-enabled: false`). Read the paragraphs below with that flip in mind: what the plan describes as "opt-in" is now "on by default with an opt-out escape hatch". Nothing in the technical architecture changed — only the two default values in `action.yml` and the matching fallback constants in `build_iar_config()`.
 
 ## Executive Summary
 
@@ -95,9 +97,9 @@ Regression suite `tests/test_backward_compat_iar_off.py` proves byte-identical b
 
 ## FAQs
 
-### Q: Will IAR change my current review behavior if I don't opt in?
+### Q: Will IAR change my current review behavior when I upgrade to v1.8.0?
 
-A: No. `iteration-awareness-enabled` defaults to `false`. Master switch off = byte-identical to prior releases, verified by the dedicated 19-test regression suite.
+A: Yes — IAR is on by default (v1.8.0+) with `convergence-policy: first-pass-exhaustive`. Round 1 of the next new-generation review will surface up to 3× as many findings as pre-v1.8; rounds 2+ dedup against unresolved findings. The critical-always-surfaces safety rail guarantees no finding that would gate the check gets silenced. To keep pre-v1.8 behavior, set `iteration-awareness-enabled: false` — the runtime becomes byte-identical to prior releases, verified by the dedicated 19-test regression suite.
 
 ### Q: What happens when I push new commits after convergence?
 
@@ -113,7 +115,7 @@ A: The steady-state cost delta is `+0%` for every recommended policy (verified b
 
 ### Q: How do I roll back IAR?
 
-A: Set `iteration-awareness-enabled: false` (the default) in your workflow. Zero code change. Runtime returns to byte-identical pre-IAR behavior at the next run.
+A: Set `iteration-awareness-enabled: false` in your workflow (v1.8.0+ ships with this as `true` by default). Zero code change. Runtime returns to byte-identical pre-IAR behavior at the next run.
 
 ### Q: Can I combine IAR with strictness?
 

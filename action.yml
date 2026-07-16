@@ -155,17 +155,18 @@ inputs:
 
   # ---------------- Iteration-Aware Review (IAR) — opt-in subsystem ----------------
   # All defaults preserve the pre-IAR runtime behavior byte-identically. The
-  # master switch is `iteration-awareness-enabled`; when false (default), the
-  # other four IAR inputs are ignored and the runtime path is unchanged.
+  # master switch is `iteration-awareness-enabled`; when true (default) IAR
+  # runs with the `first-pass-exhaustive` policy. Set to false to restore the
+  # pre-v1.8 review behavior (byte-identical to prior releases).
   # See docs/ITERATION_AWARENESS.md for the full spec.
   iteration-awareness-enabled:
-    description: 'Opt-in master switch for the Iteration-Aware Review (IAR) subsystem. When `false` (default), runtime behavior is byte-identical to prior releases — all other `iteration-*` inputs are ignored. When `true`, the reviewer gains memory across rounds: it dedupes findings against prior reports, tracks generations (new commits / rebase reset the counter), and applies the configured `convergence-policy`. Critical severity findings ALWAYS surface unconditionally — this safety rail is hardcoded and non-configurable. See docs/ITERATION_AWARENESS.md.'
+    description: 'Master switch for the Iteration-Aware Review (IAR) subsystem. Defaults to `true` (v1.8.0+): the reviewer gains memory across rounds — it dedupes findings against prior reports, tracks generations (new commits / rebase reset the counter), and applies the configured `convergence-policy`. Critical severity findings ALWAYS surface unconditionally — this safety rail is hardcoded and non-configurable. Set to `false` to opt out and get byte-identical pre-v1.8 behavior; the four other `iteration-*` inputs are then ignored. See docs/ITERATION_AWARENESS.md.'
     required: false
-    default: 'false'
+    default: 'true'
   convergence-policy:
-    description: 'Which IAR convergence policy to apply when `iteration-awareness-enabled` is `true`. One of `iterative` (default; dedup only), `first-pass-exhaustive` (exhaustive prompt + higher cap on round 1 of each generation, dedup on rounds 2+), `round-capped` (dedup pre-cap, only critical severity surfaces post-cap; requires `max-review-rounds > 0`), `critical-gate` (strict cross-generation dedup — prior-resolved fingerprints stay silenced unless critical). Ignored when master switch is `false`.'
+    description: 'Which IAR convergence policy to apply when `iteration-awareness-enabled` is `true`. Defaults to `first-pass-exhaustive` (v1.8.0+): exhaustive prompt + higher cap on round 1 of each generation, dedup on rounds 2+ — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, no cap boost; cost-neutral; recommended for push-heavy workflows), `round-capped` (dedup pre-cap, only critical severity surfaces post-cap; requires `max-review-rounds > 0`), `critical-gate` (strict cross-generation dedup — prior-resolved fingerprints stay silenced unless critical). Ignored when master switch is `false`.'
     required: false
-    default: 'iterative'
+    default: 'first-pass-exhaustive'
   max-review-rounds:
     description: 'Hard cap for the `round-capped` convergence policy. `0` (default) = unlimited (behaves like `iterative` for that policy). After N rounds, only critical severity findings surface — warnings and infos are silenced with a "cap reached" annotation. Ignored by other policies and when master switch is `false`.'
     required: false

@@ -98,9 +98,9 @@ Run through this in order:
 - `action.yml` parses (`python3 -c "import yaml; yaml.safe_load(open('action.yml'))"`).
 - The `self-review.yml` workflow ran successfully on the PR.
 
-### 11. Iteration-Aware Review (IAR) contract (v1.6.0+)
+### 11. Iteration-Aware Review (IAR) contract (v1.6.0+ preview; on by default from v1.8.0+)
 
-The IAR subsystem is off by default (`iteration-awareness-enabled: false`); any code touching it must preserve the byte-identical baseline path when the master switch is off. Specific checks for PRs that touch IAR code paths:
+The IAR subsystem ships on by default (`iteration-awareness-enabled: true`, `convergence-policy: first-pass-exhaustive`); any code touching it must preserve the byte-identical baseline path when the master switch is explicitly set to `false` (the opt-out path — locked by `tests/test_backward_compat_iar_off.py`). Specific checks for PRs that touch IAR code paths:
 
 - `IARConfig` is `@dataclass(frozen=True)`; construction ALWAYS goes through `build_iar_config(dict(os.environ))` — never `IARConfig(...)` directly (that would bypass validation and clamping).
 - Unknown `convergence-policy` values MUST fall back to `iterative` (not crash) — see `IAR_VALID_POLICIES` whitelist.

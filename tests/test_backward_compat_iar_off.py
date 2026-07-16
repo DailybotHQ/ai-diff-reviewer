@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Backward-compatibility regression suite for the Iteration-Aware Review
-(IAR) subsystem.
+"""Opt-out regression suite for the Iteration-Aware Review (IAR) subsystem.
 
-The IAR subsystem is opt-in behind a master switch
-(`iteration-awareness-enabled`, env var `AIPRR_ITERATION_AWARENESS_ENABLED`).
-The load-bearing correctness invariant of the whole subsystem is:
+As of v1.8.0 the IAR subsystem is **on by default**
+(`iteration-awareness-enabled: true`, `convergence-policy:
+first-pass-exhaustive`). Consumers who want the pre-v1.8 review shape can
+explicitly set `iteration-awareness-enabled: false` — the load-bearing
+correctness invariant of the opt-out path is:
 
-    When the master switch is off (the default), the runtime path is
+    When the master switch is explicitly OFF, the runtime path is
     byte-identical to prior releases.
 
 This suite verifies that invariant with narrow, pure-logic assertions that
 cannot inadvertently drift as the IAR internals evolve. Any regression here
 means IAR has bled into a code path a consumer opted out of and MUST be
 treated as a blocker.
+
+The file is still named `test_backward_compat_iar_off.py` (rather than
+being renamed to `test_iar_opt_out.py`) so `git blame` continues to point
+at the original intent; the semantics of "off" simply flipped from "the
+default" to "an explicit opt-out" in v1.8.0.
 
 Stdlib `unittest` only — matches the rest of `tests/*`. Run with:
 
@@ -74,41 +80,52 @@ def _parse_github_outputs(raw: str) -> dict[str, str]:
     return result
 
 
-class IARDefaultsAreOffTests(unittest.TestCase):
-    """The master switch defaults to off in every code path where a
-    consumer could accidentally see IAR behavior enabled."""
+class IAROptOutContractTests(unittest.TestCase):
+    """When a consumer explicitly sets `iteration-awareness-enabled: false`
+    the runtime MUST behave byte-identically to pre-v1.8 releases —
+    regardless of what the other four IAR env vars carry."""
 
-    def test_build_iar_config_empty_env_returns_disabled(self) -> None:
-        """A completely empty env dict must produce enabled=False."""
-        cfg: reviewer.IARConfig = reviewer.build_iar_config({})
+    def test_build_iar_config_explicit_false_returns_disabled(self) -> None:
+        """`AIPRR_ITERATION_AWARENESS_ENABLED=false` MUST disable IAR
+        end-to-end. Any regression here breaks the opt-out contract."""
+        cfg: reviewer.IARConfig = reviewer.build_iar_config({
+            "AIPRR_ITERATION_AWARENESS_ENABLED": "false",
+        })
         self.assertFalse(
             cfg.enabled,
-            "IAR master switch MUST default to False when the env var is unset. "
-            "Any change that makes this True breaks backward compat.",
+            "AIPRR_ITERATION_AWARENESS_ENABLED='false' MUST disable IAR. "
+            "Any change that makes this True breaks the v1.8+ opt-out contract.",
         )
 
     def test_build_iar_config_switch_off_ignores_other_fields(self) -> None:
-        """When the master switch is off, the other IAR env vars are
-        parsed for shape but are ignored by the runtime. This test locks
-        in that the parser is still lenient enough to not crash on
-        garbage, so a consumer accidentally setting one of them (without
-        the master switch) never breaks the run."""
+        """When the master switch is explicitly off, the other IAR env
+        vars are still parsed for shape (so a subsequent flip of the
+        master switch never breaks), but the runtime path is byte-
+        identical. This test locks in that the parser is lenient enough
+        to not crash on garbage."""
         cfg: reviewer.IARConfig = reviewer.build_iar_config({
+            "AIPRR_ITERATION_AWARENESS_ENABLED": "false",
             "AIPRR_CONVERGENCE_POLICY": "not-a-real-policy",
             "AIPRR_MAX_REVIEW_ROUNDS": "not-a-number",
             "AIPRR_EXHAUSTIVE_FIRST_PASS_CAP_MULTIPLIER": "-99",
             "AIPRR_ITERATION_ESCAPE_LABEL": "",
         })
         self.assertFalse(cfg.enabled)
-        # Falls back to defaults; no exception.
-        self.assertEqual(cfg.policy, reviewer.IAR_POLICY_ITERATIVE)
+        # Falls back to defaults; no exception. In v1.8+ the fallback
+        # for an unknown policy is `first-pass-exhaustive` (matches the
+        # action.yml default), but this only matters when the master
+        # switch is on — it's asserted here purely as a shape check.
+        self.assertEqual(cfg.policy, reviewer.IAR_POLICY_FIRST_PASS_EXHAUSTIVE)
         self.assertEqual(cfg.max_review_rounds, 0)
         self.assertEqual(cfg.cap_multiplier, 1)  # clamped up from -99
         self.assertEqual(cfg.escape_label, reviewer.IAR_DEFAULT_ESCAPE_LABEL)
 
     def test_build_iar_config_various_falsy_values(self) -> None:
-        """Every accepted "falsy" string keeps IAR off."""
-        for raw in ("", "false", "False", "FALSE", "no", "0", "off"):
+        """Every accepted "falsy" string keeps IAR off — same shape as
+        every other repo-native bool flag (`author-association`,
+        `label-gate`, etc.). parse_bool contract must stay symmetric
+        across the codebase."""
+        for raw in ("false", "False", "FALSE", "no", "0", "off"):
             with self.subTest(raw=raw):
                 cfg: reviewer.IARConfig = reviewer.build_iar_config({
                     "AIPRR_ITERATION_AWARENESS_ENABLED": raw,
@@ -118,6 +135,23 @@ class IARDefaultsAreOffTests(unittest.TestCase):
                     f"Raw env value {raw!r} unexpectedly enabled IAR. "
                     "parse_bool contract must stay symmetric with pre-IAR flags.",
                 )
+
+    def test_build_iar_config_empty_env_returns_v18_defaults(self) -> None:
+        """v1.8.0 behavior change: a completely empty env dict now
+        produces IAR-on with the `first-pass-exhaustive` policy — this
+        matches the shipped action.yml defaults. Consumers who want the
+        pre-v1.8 shape must explicitly set
+        `iteration-awareness-enabled: false`."""
+        cfg: reviewer.IARConfig = reviewer.build_iar_config({})
+        self.assertTrue(
+            cfg.enabled,
+            "v1.8.0+: IAR master switch defaults to True. If this fails, "
+            "either action.yml default was flipped back OR build_iar_config "
+            "no longer matches the action.yml contract.",
+        )
+        self.assertEqual(cfg.policy, reviewer.IAR_POLICY_FIRST_PASS_EXHAUSTIVE)
+        self.assertEqual(cfg.cap_multiplier, reviewer.IAR_DEFAULT_CAP_MULTIPLIER)
+        self.assertEqual(cfg.escape_label, reviewer.IAR_DEFAULT_ESCAPE_LABEL)
 
 
 class IARConfigParsingTests(unittest.TestCase):
@@ -139,15 +173,16 @@ class IARConfigParsingTests(unittest.TestCase):
         self.assertEqual(cfg.escape_label, "audit-me")
 
     def test_unknown_policy_silently_falls_back(self) -> None:
-        """Unknown policy values MUST fall back to `iterative` (safest
-        default) rather than crashing. The workflow log surfaces the
-        miswiring via the log() call in main()."""
+        """Unknown policy values MUST fall back to the shipped default
+        (`first-pass-exhaustive` as of v1.8.0) rather than crashing.
+        The workflow log surfaces the miswiring via the log() call in
+        main()."""
         cfg: reviewer.IARConfig = reviewer.build_iar_config({
             "AIPRR_ITERATION_AWARENESS_ENABLED": "true",
             "AIPRR_CONVERGENCE_POLICY": "bogus-policy",
         })
         self.assertTrue(cfg.enabled)
-        self.assertEqual(cfg.policy, reviewer.IAR_POLICY_ITERATIVE)
+        self.assertEqual(cfg.policy, reviewer.IAR_POLICY_FIRST_PASS_EXHAUSTIVE)
 
     def test_max_rounds_negative_clamped_to_zero(self) -> None:
         cfg: reviewer.IARConfig = reviewer.build_iar_config({

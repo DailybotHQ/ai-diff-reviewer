@@ -2,6 +2,8 @@
 
 **Plan:** PLAN_iteration_aware_review · **Task:** 10 · **Status:** software-level validated; empirical CI validation gate deferred to the release PR
 
+> **v1.8.0 default-flip addendum (post-DWP, 2026-07-15):** The `iteration-awareness-enabled` default was flipped from `false` to `true` and `convergence-policy` default from `iterative` to `first-pass-exhaustive` after this report was written. The dogfood configuration on `self-review.yml` did not change (it was already explicit and IAR-on); the flip means every consumer of `@v1` now gets the same dogfood profile automatically. Cost / quality gates below are unchanged — the maths hold irrespective of whether IAR is on via config or on via default.
+
 ## Summary
 
 The IAR subsystem is enabled on `.github/workflows/self-review.yml` via `iteration-awareness-enabled: true` + `convergence-policy: first-pass-exhaustive` (see [commit dogfooding IAR on self-review.yml](../.dwp/plans/PLAN_iteration_aware_review/state.json) for the exact SHA). Every future PR that carries the `ready` label now exercises the IAR pipeline end-to-end.

@@ -334,9 +334,9 @@ unchanged.
 
 | Trigger | Fires? |
 |---|---|
-| `iteration-awareness-enabled: false` (default) | Never |
-| `convergence-policy: iterative` | Never |
-| `convergence-policy: first-pass-exhaustive`, round 1 of new generation | Yes |
+| `iteration-awareness-enabled: false` (opt-out) | Never |
+| `convergence-policy: iterative` (explicit) | Never |
+| `convergence-policy: first-pass-exhaustive` (v1.8.0+ default), round 1 of new generation | Yes |
 | `convergence-policy: first-pass-exhaustive`, round 2+ of same generation | No (dedup-only) |
 | `convergence-policy: round-capped`, any round | No |
 | `convergence-policy: critical-gate`, any round | No |

@@ -318,10 +318,12 @@ extend the security posture to the whole surface consumers touch.
 
 ## Iteration-Aware Review (IAR) conventions
 
-The IAR subsystem is opt-in but load-bearing: consumers who enable it
-depend on the exact behavior contracts documented in
-[`docs/ITERATION_AWARENESS.md`](../docs/ITERATION_AWARENESS.md). These
-rules protect that contract across future PRs to this repo.
+The IAR subsystem is on by default (v1.8.0+) and load-bearing: every
+consumer inherits the exact behavior contracts documented in
+[`docs/ITERATION_AWARENESS.md`](../docs/ITERATION_AWARENESS.md), and
+consumers who explicitly opt out via `iteration-awareness-enabled: false`
+rely on the regression suite guaranteeing byte-identical pre-v1.8
+behavior. These rules protect both contracts across future PRs.
 
 - **Always `critical`:** removal or rename of any of the 5 IAR inputs
   (`iteration-awareness-enabled`, `convergence-policy`,

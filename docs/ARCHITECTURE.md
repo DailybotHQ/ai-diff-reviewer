@@ -231,9 +231,9 @@ Each install step:
 2. Runs the vendor's install command, optionally pinned via the corresponding `*-version` input.
 3. Emits a `--version` line as a smoke assertion — if the binary is not on PATH, the composite step fails loudly here instead of the reviewer's `install()` sanity check firing 20 lines later.
 
-### 10. Iteration-Aware Review — a cross-cutting subsystem (v1.6.0+, opt-in)
+### 10. Iteration-Aware Review — a cross-cutting subsystem (v1.8.0+, on by default)
 
-Iteration-Aware Review (IAR) is a subsystem that wraps the reviewer's main loop with a state layer, a generation-tracking layer, a content-anchored deduplication engine, and four convergence policies. It is **opt-in** (default off) and every code path is gated on `iar_config.enabled` at the call site, so consumers who don't enable it get byte-identical behavior to prior releases (enforced by the 19-test regression suite `tests/test_backward_compat_iar_off.py`).
+Iteration-Aware Review (IAR) is a subsystem that wraps the reviewer's main loop with a state layer, a generation-tracking layer, a content-anchored deduplication engine, and four convergence policies. As of v1.8.0 it ships **on by default** with `convergence-policy: first-pass-exhaustive`. Every code path is gated on `iar_config.enabled` at the call site, so consumers who explicitly set `iteration-awareness-enabled: false` get byte-identical behavior to pre-v1.8 releases (enforced by the 19-test regression suite `tests/test_backward_compat_iar_off.py`). The IAR pipeline is additionally wrapped in `try/except` at every `main()` touchpoint, so any IAR-specific failure degrades gracefully to the baseline review path — the reviewer never crashes on IAR bugs.
 
 **Read/write flow per review run (when enabled):**
 

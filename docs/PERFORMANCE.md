@@ -142,7 +142,7 @@ There is no benchmark suite (adding one would violate the stdlib-only rule for t
 
 ## Iteration-Aware Review (IAR) — Cost and Latency Model
 
-IAR (opt-in, off by default) rebuilds the "converge in 1–3 rounds instead of 5–10" experience without raising per-turn cost. This section makes the cost impact explicit so you can enable it deliberately.
+IAR (on by default as of v1.8.0, with the `first-pass-exhaustive` policy) rebuilds the "converge in 1–3 rounds instead of 5–10" experience without raising steady-state per-turn cost. This section makes the cost impact explicit so you can tune it — or opt out via `iteration-awareness-enabled: false` — deliberately.
 
 **One-line summary:** on the *first* review of a new commit-set with the recommended `first-pass-exhaustive` policy, the LLM may produce up to `cap_multiplier` × `max-inline-comments` findings and receives ~150 extra tokens of prompt guidance (the exhaustive addendum). On *subsequent* rounds of the same generation, IAR is close to a no-op — the LLM produces its normal set, and the reviewer dedupes them before posting. The full authoritative spec is in [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md).
 
