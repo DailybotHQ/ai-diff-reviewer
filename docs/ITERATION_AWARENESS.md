@@ -607,7 +607,8 @@ Embedded in the tracking marker comment as an HTML-comment block:
       "tokens_used": 24580,
       "wall_clock_ms": 128000
     }
-  ]
+  ],
+  "base_sha": "deadbeef00112233"
 }
 -->
 ```
@@ -623,7 +624,8 @@ Embedded in the tracking marker comment as an HTML-comment block:
 | `policy_applied` | string | Which policy actually fired (may differ from configured policy if safety net or escape label overrode). One of: `iterative`, `first-pass-exhaustive`, `round-capped-pre-cap`, `round-capped-post-cap`, `critical-gate`, `escape-label-forced-full-review`, plus safety-net variants. |
 | `resolved_fingerprints` | list of strings | Fingerprints of findings that were open in a prior round/generation and are no longer produced by the reviewer (assumed resolved). Preserved across generations. |
 | `open_fingerprints_this_gen` | list of strings | Fingerprints of findings that surfaced in the current generation and are still open. Reset when generation advances. |
-| `history` | list of objects | Append-only summary of past generations. Each object: `{gen, range_hash, rounds_ran, converged, tokens_used, wall_clock_ms}`. |
+| `history` | list of objects | Append-only summary of past generations. Each object: `{gen, range_hash, rounds_ran, converged, tokens_used, wall_clock_ms}`. Capped to the last 20 entries (`IAR_HISTORY_MAX_ENTRIES`) so the marker body cannot grow unboundedly across a long-lived PR. |
+| `base_sha` | string | The PR base SHA at the start of the current generation. Used by `detect_generation_change` to distinguish `REBASED` (base changed) from `NEW_COMMITS` (base same, head grew). Optional in schema v1 — an empty string means "prior IAR version didn't persist this" and `detect_generation_change` falls back to `NEW_COMMITS` on any hash mismatch (safe fallback: extra exhaustive review, never silent silencing). |
 
 ### 13.2 Parse failure handling
 

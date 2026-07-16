@@ -80,6 +80,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -1905,6 +1906,11 @@ class IterationState:
     resolved_fingerprints: list[str]
     open_fingerprints_this_gen: list[str]
     history: list[dict[str, Any]]
+    # Optional in v1 schema — populated by Task 4 (generation tracking).
+    # An empty string means "unknown prior base" and forces `detect_generation
+    # _change` to fall back to NEW_COMMITS on any hash mismatch (safe: extra
+    # exhaustive review, never silent silencing).
+    base_sha: str = ""
 
 
 # Cap on `history` list length. 20 generations is plenty for the lifetime
@@ -1919,6 +1925,7 @@ def new_iteration_state(
     generation_range_hash: str = "",
     round_in_generation: int = 1,
     policy_applied: str = IAR_POLICY_ITERATIVE,
+    base_sha: str = "",
 ) -> IterationState:
     """Construct a fresh IterationState with schema version + empty lists.
     Used on first review of a PR (no prior marker found)."""
@@ -1931,6 +1938,7 @@ def new_iteration_state(
         resolved_fingerprints=[],
         open_fingerprints_this_gen=[],
         history=[],
+        base_sha=base_sha,
     )
 
 
@@ -1984,6 +1992,7 @@ def _parse_state_from_marker_body(
                 data.get("open_fingerprints_this_gen", []) or []
             ),
             history=list(data.get("history", []) or []),
+            base_sha=str(data.get("base_sha", "")),
         )
     except IterationStateParseError as exc:
         log(f"IAR: state parse failed: {exc}; treating as first review.")
@@ -2104,6 +2113,7 @@ def embed_iteration_state(
         resolved_fingerprints=list(state.resolved_fingerprints),
         open_fingerprints_this_gen=list(state.open_fingerprints_this_gen),
         history=bounded_history,
+        base_sha=state.base_sha,
     )
     state_json: str = json.dumps(
         asdict(bounded_state), indent=2, sort_keys=True
@@ -2120,6 +2130,193 @@ def embed_iteration_state(
     )
     stripped_body: str = pattern.sub("", marker_body).rstrip()
     return stripped_body + block
+
+
+# ---------------------------------------------------------------------------
+# Iteration-Aware Review (IAR) — generation tracking
+# ---------------------------------------------------------------------------
+# A "generation" is a stable diff-content window. When the developer
+# pushes new commits or rebases, the content window changes → a new
+# generation begins. The round counter resets; convergence policies
+# re-activate (e.g. first-pass-exhaustive fires again on the fresh
+# content). See docs/ITERATION_AWARENESS.md § 4.
+#
+# The generation counter is stored in `IterationState.generation` and
+# incremented by `advance_generation()`. Detection reads
+# `IterationState.generation_range_hash` + `IterationState.base_sha`
+# and compares them to the current values from the diff being reviewed.
+
+
+class GenerationTransition(str, Enum):
+    """Which of the four possible transitions the current run represents.
+
+    Values match the strings persisted in `IterationState.policy_applied`
+    when relevant, and the debug-log tags. Never surfaced to consumers;
+    used internally by the dispatcher (Task 7)."""
+
+    FIRST_REVIEW = "first_review"
+    SAME_GENERATION = "same_generation"
+    NEW_COMMITS = "new_commits"
+    REBASED = "rebased"
+
+
+def compute_generation_range_hash(
+    *,
+    base_sha: str,
+    head_sha: str,
+    repo_root: str | None = None,
+) -> str:
+    """Deterministic 16-hex-char hash of the diff content between
+    `base_sha` and `head_sha`.
+
+    Two commits producing the same diff content produce the same hash →
+    used to detect content-window changes across runs. Empty string is
+    returned when the git subprocess fails (network hiccup, missing
+    refs, sparse checkout) — callers treat that as "unknown" and
+    fall back to conservative behavior (typically FIRST_REVIEW).
+    """
+    if not base_sha or not head_sha:
+        return ""
+    try:
+        result: subprocess.CompletedProcess[str] = subprocess.run(
+            ["git", "diff", f"{base_sha}..{head_sha}"],
+            capture_output=True,
+            check=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        log(
+            f"IAR: compute_generation_range_hash failed "
+            f"(base={base_sha[:8]}, head={head_sha[:8]}): {exc}. "
+            "Returning empty hash; caller falls back to FIRST_REVIEW."
+        )
+        return ""
+    digest: str = hashlib.sha256(result.stdout.encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
+def detect_generation_change(
+    *,
+    prior_state: IterationState | None,
+    current_range_hash: str,
+    current_base_sha: str,
+) -> GenerationTransition:
+    """Classify what kind of transition the current run represents.
+
+    Precedence:
+    1. No prior state → `FIRST_REVIEW`.
+    2. Range hash matches prior → `SAME_GENERATION` (adds a round).
+    3. Base SHA changed (and we know both) → `REBASED`.
+    4. Otherwise (hash mismatch, same or unknown base) → `NEW_COMMITS`.
+
+    When `prior_state.base_sha` is empty (older marker from a prior IAR
+    version that didn't persist base_sha), rebase detection is impossible
+    → we default to NEW_COMMITS. This is the safest fallback: NEW_COMMITS
+    still advances the generation and re-activates first-pass-exhaustive.
+    """
+    if prior_state is None:
+        return GenerationTransition.FIRST_REVIEW
+    if current_range_hash and prior_state.generation_range_hash == current_range_hash:
+        return GenerationTransition.SAME_GENERATION
+    prior_base: str = prior_state.base_sha
+    if prior_base and current_base_sha and prior_base != current_base_sha:
+        return GenerationTransition.REBASED
+    return GenerationTransition.NEW_COMMITS
+
+
+def advance_generation(
+    *,
+    prior_state: IterationState | None,
+    transition: GenerationTransition,
+    new_range_hash: str,
+    new_base_sha: str,
+    policy: str,
+) -> IterationState:
+    """Return a fresh `IterationState` reflecting a generation change.
+
+    Preserves `resolved_fingerprints` across generations (they carry
+    audit-trail value across the whole PR lifetime). Appends a summary
+    entry to `history` describing the closed-out generation (Task 8
+    populates `tokens_used` + `wall_clock_ms`).
+
+    For `SAME_GENERATION`, callers do NOT invoke this function — they
+    just increment `round_in_generation` in place via
+    `increment_round_in_generation()`.
+    """
+    if transition == GenerationTransition.FIRST_REVIEW or prior_state is None:
+        log(
+            f"IAR: FIRST_REVIEW — starting generation 1 "
+            f"(range_hash={new_range_hash!r}, base_sha={new_base_sha[:8]!r})."
+        )
+        return new_iteration_state(
+            generation=1,
+            generation_range_hash=new_range_hash,
+            round_in_generation=1,
+            policy_applied=policy,
+            base_sha=new_base_sha,
+        )
+    closed_gen_entry: dict[str, Any] = {
+        "gen": prior_state.generation,
+        "range_hash": prior_state.generation_range_hash,
+        "rounds_ran": prior_state.round_in_generation,
+        "converged": len(prior_state.open_fingerprints_this_gen) == 0,
+        "tokens_used": 0,     # populated by Task 8 (observability)
+        "wall_clock_ms": 0,   # populated by Task 8 (observability)
+    }
+    new_history: list[dict[str, Any]] = list(prior_state.history) + [
+        closed_gen_entry
+    ]
+    log(
+        f"IAR: generation change detected ({transition.value}). "
+        f"Prior: gen={prior_state.generation}, "
+        f"rounds={prior_state.round_in_generation}, "
+        f"range_hash={prior_state.generation_range_hash!r}, "
+        f"converged={closed_gen_entry['converged']}. "
+        f"New: gen={prior_state.generation + 1}, "
+        f"range_hash={new_range_hash!r}, "
+        f"base_sha={new_base_sha[:8]!r}."
+    )
+    return IterationState(
+        version=IAR_STATE_SCHEMA_VERSION,
+        generation=prior_state.generation + 1,
+        generation_range_hash=new_range_hash,
+        round_in_generation=1,
+        policy_applied=policy,
+        # resolved_fingerprints crosses generations for cross-gen dedup
+        # (used by `critical-gate` policy and audit trail).
+        resolved_fingerprints=list(prior_state.resolved_fingerprints),
+        # open_fingerprints_this_gen resets — repopulated by Task 5 dedup.
+        open_fingerprints_this_gen=[],
+        history=new_history,
+        base_sha=new_base_sha,
+    )
+
+
+def increment_round_in_generation(
+    *, prior_state: IterationState, policy: str
+) -> IterationState:
+    """For `SAME_GENERATION` transitions: bump `round_in_generation` and
+    refresh `policy_applied` without touching fingerprints or history."""
+    log(
+        f"IAR: SAME_GENERATION — advancing round "
+        f"{prior_state.round_in_generation} → "
+        f"{prior_state.round_in_generation + 1} "
+        f"(gen={prior_state.generation})."
+    )
+    return IterationState(
+        version=prior_state.version,
+        generation=prior_state.generation,
+        generation_range_hash=prior_state.generation_range_hash,
+        round_in_generation=prior_state.round_in_generation + 1,
+        policy_applied=policy,
+        resolved_fingerprints=list(prior_state.resolved_fingerprints),
+        open_fingerprints_this_gen=list(
+            prior_state.open_fingerprints_this_gen
+        ),
+        history=list(prior_state.history),
+        base_sha=prior_state.base_sha,
+    )
 
 
 # ---------------------------------------------------------------------------
