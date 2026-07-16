@@ -5439,6 +5439,54 @@ def resolve_pr_complexity(
     return state.proposed_pr_complexity or result.complexity
 
 
+# Path substrings that bump heuristic complexity (security / runtime surface).
+_COMPLEXITY_HIGH_PATH_MARKERS: tuple[str, ...] = (
+    "auth",
+    "crypto",
+    "secret",
+    "password",
+    "token",
+    "security",
+    "scripts/reviewer.py",
+    "action.yml",
+)
+_COMPLEXITY_DOC_SUFFIXES: tuple[str, ...] = (".md", ".mdx", ".rst", ".txt")
+
+
+def infer_pr_complexity_fallback(pr_ctx: PRContext) -> str:
+    """Heuristic complexity when the model omits an explicit level.
+
+    Used only when `complexity-labels-enabled` is on but neither
+    `set_pr_complexity` nor findings.json `complexity` was recorded.
+    Keeps labeling provider-agnostic even when an agent-runner CLI skips
+    the output contract.
+    """
+    paths: list[str] = [
+        str(f.get("filename") or "") for f in pr_ctx.changed_files
+    ]
+    if not paths:
+        return PR_COMPLEXITY_LOW
+
+    lowered: list[str] = [p.lower() for p in paths]
+    if any(
+        marker in path
+        for path in lowered
+        for marker in _COMPLEXITY_HIGH_PATH_MARKERS
+    ):
+        return PR_COMPLEXITY_HIGH
+
+    if len(paths) == 1 and paths[0].endswith(_COMPLEXITY_DOC_SUFFIXES):
+        return PR_COMPLEXITY_LOW
+
+    line_delta: int = pr_ctx.additions + pr_ctx.deletions
+    if len(paths) >= 8 or line_delta > 500:
+        return PR_COMPLEXITY_HIGH
+    if len(paths) >= 3 or line_delta > 100:
+        return PR_COMPLEXITY_MEDIUM
+
+    return PR_COMPLEXITY_LOW
+
+
 def parse_findings_file(
     path: Path, *, allow_malformed_summary_fallback: bool = False
 ) -> ReviewResult:
@@ -6726,6 +6774,15 @@ def main() -> int:
     complexity_level: str | None = resolve_pr_complexity(
         state=state, result=result
     )
+    if complexity_labels_enabled and not complexity_level:
+        complexity_level = infer_pr_complexity_fallback(pr_ctx)
+        log(
+            "WARNING: complexity-labels-enabled=true but the reviewer did not "
+            f"record a complexity level — applied heuristic fallback "
+            f"{complexity_level!r}. Prefer an explicit model assessment via "
+            "set_pr_complexity (chat-completions) or findings.json "
+            "'complexity' (agent-runner)."
+        )
     if complexity_labels_enabled and complexity_level:
         new_label: str = f"{complexity_label_prefix}{complexity_level}"
         try:

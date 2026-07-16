@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; the runtime applies `complexity:low|medium|high` the same way as the chat-completions `set_pr_complexity` tool path. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
+- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
 
 > **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
 > `auto-release.yml` (`feat!:` commit). **`@v2` is the default consumer

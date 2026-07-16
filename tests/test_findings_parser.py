@@ -68,6 +68,38 @@ class ResolvePrComplexityTests(unittest.TestCase):
         )
 
 
+class InferPrComplexityFallbackTests(unittest.TestCase):
+    def test_docs_only_is_low(self) -> None:
+        ctx = reviewer.PRContext(
+            title="t",
+            author="a",
+            head_ref="h",
+            base_ref="main",
+            state="open",
+            additions=5,
+            deletions=2,
+            commits=1,
+            body="",
+            changed_files=[{"filename": "README.md"}],
+        )
+        self.assertEqual(reviewer.infer_pr_complexity_fallback(ctx), "low")
+
+    def test_runtime_path_is_high(self) -> None:
+        ctx = reviewer.PRContext(
+            title="t",
+            author="a",
+            head_ref="h",
+            base_ref="main",
+            state="open",
+            additions=10,
+            deletions=0,
+            commits=1,
+            body="",
+            changed_files=[{"filename": "scripts/reviewer.py"}],
+        )
+        self.assertEqual(reviewer.infer_pr_complexity_fallback(ctx), "high")
+
+
 class ParseFindingsComplexityTests(unittest.TestCase):
     def test_complexity_field_parsed(self) -> None:
         with tempfile.TemporaryDirectory() as td:
