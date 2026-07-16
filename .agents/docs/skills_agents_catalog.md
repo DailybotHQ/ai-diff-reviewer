@@ -27,19 +27,21 @@ For the philosophy of why these exist and when to use each, see [docs/AI_AGENT_C
 | [`release`](../skills/release/SKILL.md) | 2 | release | Cutting a new `vX.Y.Z` tag and publishing the GitHub Release. |
 | [`prompt-test`](../skills/prompt-test/SKILL.md) | 2 | evaluate | Producing before/after evidence for a prompt change. Required for any non-trivial `prompts/default.md` PR. |
 | [`add-provider`](../skills/add-provider/SKILL.md) | 3 | scaffold | Scaffolding a new provider — either chat-completions (`Provider`) or agent-runner (`AgentRunnerProvider`). Handles class, registry, defaults, action.yml inputs, install steps, dogfooding matrix legs, examples, docs. |
-| [`deepworkplan`](../skills/deepworkplan/SKILL.md) | 3 | methodology | Structured plan-execute-verify loop for novel/large work. Router + eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`). Backed by the `dwp-*` / `skill-create` / `agent-create` slash commands. **Vendored** from `DailybotHQ/deepworkplan-skill` and pinned via [`skills-lock.json`](../../skills-lock.json). |
+| [`deepworkplan`](../skills/deepworkplan/SKILL.md) | 3 | methodology | Structured plan-execute-verify loop for novel/large work. Router + eight sub-skills (`create`, `execute`, `refine`, `resume`, `status`, `verify`, `onboard`, `author`). Opt-in addons under `addons/` include Dailybot and **AI Diff Reviewer** (Flow A/B Security Review augmentation). Backed by the `dwp-*` / `skill-create` / `agent-create` slash commands. **Vendored** from `DailybotHQ/deepworkplan-skill` (**v2.17.0+**) and pinned via [`skills-lock.json`](../../skills-lock.json). |
 | [`dailybot`](../skills/dailybot/SKILL.md) | 2 | integration | Report progress, check messages, complete check-ins, give kudos, submit forms, and send chat / email through Dailybot. Router + sub-skills (`report`, `messages`, `email`, `health`, `checkin`, `kudos`, `teams`, `forms`, `chat`, `ask`, `env`, `channels`, `conversation`, `workflow`). **Vendored** from `DailybotHQ/agent-skill` and pinned via [`skills-lock.json`](../../skills-lock.json). Wires into the DWP Dailybot addon at [`../skills/deepworkplan/addons/dailybot/`](../skills/deepworkplan/addons/dailybot/). |
+| [`ai-diff-reviewer`](../skills/ai-diff-reviewer/SKILL.md) | 2 | review | Local companion to the shipped Action (parent default flow + `generate-extension` / `setup` / `open-pr` / `apply-review`). **Vendored dogfood snapshot** of the released skill (source of truth for consumers is [`skills/ai-diff-reviewer/`](../../skills/ai-diff-reviewer/) at repo root). Also the detection target for the DWP **AI Diff Reviewer addon** (Flow B in this repo — see [`AGENTS.md`](../../AGENTS.md)). |
 
 ### Vendored skills and the lockfile
 
-Two of the skills above are **not authored in this repo** — they are vendored dogfood copies of upstream skill packs, installed and pinned via the [`skills.sh`](https://skills.sh) CLI (`npx skills`). The lockfile at repo root — [`skills-lock.json`](../../skills-lock.json) — records the source repo and a content hash for each vendored skill:
+Three skills under `.agents/skills/` are **vendored dogfood copies**, installed and pinned via the [`skills.sh`](https://skills.sh) CLI (`npx skills`). The lockfile at repo root — [`skills-lock.json`](../../skills-lock.json) — records the source repo and a content hash for each:
 
 ```json
 {
   "version": 1,
   "skills": {
-    "dailybot":      { "source": "DailybotHQ/agent-skill",         "sourceType": "github", "skillPath": "skills/dailybot/SKILL.md",      "computedHash": "…" },
-    "deepworkplan":  { "source": "DailybotHQ/deepworkplan-skill",  "sourceType": "github", "skillPath": "skills/deepworkplan/SKILL.md",  "computedHash": "…" }
+    "ai-diff-reviewer": { "source": "DailybotHQ/ai-diff-reviewer",  "sourceType": "github", "skillPath": "skills/ai-diff-reviewer/SKILL.md", "computedHash": "…" },
+    "dailybot":         { "source": "DailybotHQ/agent-skill",       "sourceType": "github", "skillPath": "skills/dailybot/SKILL.md",         "computedHash": "…" },
+    "deepworkplan":     { "source": "DailybotHQ/deepworkplan-skill", "sourceType": "github", "skillPath": "skills/deepworkplan/SKILL.md",     "computedHash": "…" }
   }
 }
 ```
@@ -49,11 +51,11 @@ Common workflows:
 | Task | Command |
 |---|---|
 | Restore vendored skills from the lockfile (fresh clone) | `npx skills experimental_install` |
-| Bump both vendored skills to the latest upstream releases | `npx skills update deepworkplan dailybot` |
+| Bump vendored skills to the latest upstream releases | `npx skills update deepworkplan dailybot ai-diff-reviewer` |
 | Re-add a single vendored skill from scratch | `npx skills add DailybotHQ/agent-skill --skill dailybot -y` |
 | List everything currently installed for this project | `npx skills list` |
 
-The four remaining entries (`release`, `prompt-test`, `add-provider`, and the agent personas) are authored directly in this repo and **not** tracked by the lockfile — modifying them just means editing files under `.agents/`.
+The in-house entries (`release`, `prompt-test`, `add-provider`, and the agent personas) are authored directly in this repo and **not** tracked by the lockfile — modifying them just means editing files under `.agents/`. Do **not** hand-edit the vendored `.agents/skills/ai-diff-reviewer/` snapshot on a feature branch; change [`skills/ai-diff-reviewer/`](../../skills/ai-diff-reviewer/) instead (AGENTS.md Rule #10).
 
 ### Iteration-Aware Review (IAR) coverage across the catalog
 

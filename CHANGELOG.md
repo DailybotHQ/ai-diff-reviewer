@@ -24,6 +24,16 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Harness: Deep Work Plan skill bumped to v2.17.0 + AI Diff Reviewer
+  addon wired (Flow B).** Vendored `deepworkplan` via
+  `npx skills update deepworkplan` (lockfile hash refresh). New addon
+  lands at `.agents/skills/deepworkplan/addons/ai-diff-reviewer/`.
+  Documented Flow B in `AGENTS.md` / `docs/AI_AGENT_COLLAB.md` /
+  `.agents/docs/skills_agents_catalog.md`: Security Review gains a
+  local review pass (skill + `.review/extension.md`); CI dual-surface
+  stays `.github/workflows/self-review.yml` (no consumer
+  `pr-review.yml`). Dailybot addon already present — reconciled, no
+  wiring changes. Consumer Action runtime unchanged.
 - **Docs + skill + examples sync for IAR / `skip-review-label`, plus
   v2 pin surface.** Discoverability pass so Marketplace consumers and
   the companion skill see the same story as `action.yml`, and consumer

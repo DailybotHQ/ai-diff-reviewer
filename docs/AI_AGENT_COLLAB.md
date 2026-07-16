@@ -87,6 +87,17 @@ If you're stuck:
 
 Don't sit on a blocker silently. Don't push half-baked code to mainline. Don't bypass the dogfooding step "just this once".
 
+## DWP Security Review + AI Diff Reviewer addon (Flow B)
+
+This repo enables the Deep Work Plan **AI Diff Reviewer addon** in **Flow B** (documented in [`AGENTS.md`](../AGENTS.md) § Deep Work Plan). When executing a plan's mandatory Security Review:
+
+1. Run the usual SR checklist (keep [`docs/SECURITY.md`](SECURITY.md) current).
+2. **Additionally** invoke the local companion skill's parent default flow ("Review my current branch") when `.agents/skills/ai-diff-reviewer/` and `.review/extension.md` are both present. Append the output under `## AI Diff Reviewer local review` in the plan's `analysis_results/SECURITY_REVIEW.md`.
+3. Soft-fail the local pass only on missing skill/extension or invocation errors; once a review ran, open `critical` findings still block SR completion.
+4. After push, optionally run `apply-review` to walk CI findings from `self-review.yml` — never as an extra plan task.
+
+Do not install a consumer `pr-review.yml` in this repo; dogfood CI is already [`self-review.yml`](../.github/workflows/self-review.yml).
+
 ## Working with the dogfood loop
 
 Every PR triggers `.github/workflows/self-review.yml`, which runs the action against itself. The direct `anthropic` leg is the always-on baseline. The `claude-code`, `cursor`, and `codex` legs are present in the matrix but only invoke the LLM when the diff touches provider-sensitive action/runtime surfaces. Each active leg posts an independent review with a distinct `self-reviewed:<provider>` label so you can tell them apart in the PR conversation.

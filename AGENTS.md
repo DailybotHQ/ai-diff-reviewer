@@ -306,6 +306,18 @@ Every event is emitted via the dailybot `report` sub-skill (`dailybot agent upda
 
 **Uninstall.** Delete `.dailybot/`, `.cursor/hooks.json`, and remove the three hook entries from `.agents/settings.json` (every entry contains the string `dailybot hook`).
 
+### AI Diff Reviewer addon (Flow B — dual-surface)
+
+This repo has the **AI Diff Reviewer addon** enabled in **Flow B** (local skill + CI Action). Detection for DWP `create` / `execute` is: vendored skill at [`.agents/skills/ai-diff-reviewer/`](.agents/skills/ai-diff-reviewer/) **plus** [`.review/extension.md`](.review/extension.md). Spec: [`.agents/skills/deepworkplan/addons/ai-diff-reviewer/SPEC.md`](.agents/skills/deepworkplan/addons/ai-diff-reviewer/SPEC.md).
+
+**Security Review augmentation (both flows).** When a Deep Work Plan reaches the mandatory Security Review task, agents also run the upstream parent default flow ("Review my current branch" / `/ai-diff-reviewer`), append verdict + findings under `## AI Diff Reviewer local review` in that plan's `analysis_results/SECURITY_REVIEW.md`, and treat open `critical` findings as SR blockers until fixed or explicitly accepted. Soft-fail (warn once, continue the base SR) only if the skill/extension is missing or the local review invocation errors — an unset CI provider secret must **not** skip the local pass.
+
+**CI surface (this repo).** Consumer Flow B normally installs `.github/workflows/pr-review.yml` via the upstream `setup` sub-skill. This repository **is** the Action, so the dual-surface CI gate is the dogfood workflow [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) (`uses: ./` against the PR HEAD, label-gated on `ready`, stable gate job). Do **not** add a second consumer-style `pr-review.yml` here — that would double-review every PR. Provider secrets for the dogfood matrix: at least one of `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, or `OPENAI_API_KEY` (see `self-review.yml`).
+
+**Optional post-CI companion (Flow B).** After a plan's PR has been pushed and self-review has posted, developers MAY invoke the upstream `apply-review` sub-skill to walk CI findings per-finding (apply / defer / skip) with explicit consent. Read-only by default; never commits or pushes. This is an available option during `/dwp-execute`, not a plan task file.
+
+**Vendor-neutral reminder.** The core DWP methodology has zero dependency on this product. Declining the addon elsewhere still yields a fully AI-first repo; enabling it here is dogfood + SR quality for plans that touch this codebase.
+
 ---
 
 ## Skills & Agents
