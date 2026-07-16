@@ -1953,17 +1953,22 @@ class IterationState:
     # is the safe conservative fallback (never silences a review that would
     # have benefited from an exhaustive pass; just skips the boost).
     head_sha: str = ""
-    # Records whether the reviewer stamped `applied-label` on the PR at the
-    # end of the last run (True only when the review posted AND was NOT
-    # blocked by the strictness gate). This is the load-bearing signal for
-    # USER_FORCED_RESET: the "reviewed label absent" gesture only counts as
-    # a deliberate reset if the label was previously present — otherwise
-    # every blocked run would look like a reset (since blocked runs never
-    # stamp the label). Defaults to `False` for backward-compat with older
-    # marker bodies that predate this field; the safe conservative fallback
-    # is "the label was never stamped", which suppresses the reset gesture
-    # (users on old state must complete one successful review before the
-    # reset gesture becomes armed — the correct, safe behavior).
+    # Load-bearing arming signal for USER_FORCED_RESET on the NEXT run.
+    # Computed by `compute_reviewed_label_applied` as the OR of three
+    # signals: (1) this run's `gh_apply_label` call succeeded,
+    # (2) the label is currently on the PR at trigger time (a prior
+    # run stamped it and it's still there — no one manually removed
+    # it yet), or (3) the previous run's state recorded a successful
+    # stamp AND this run took a path (blocked, escape-label, etc.)
+    # that does not remove the label. This three-signal OR is
+    # deliberately stronger than "this run stamped the label" —
+    # otherwise a blocked follow-up would silently clear the arming
+    # bit and disarm a legitimate reset gesture on the run after
+    # that. Defaults to `False` for back-compat with older marker
+    # bodies that predate this field (safe conservative fallback:
+    # users on old state must complete one successful review before
+    # the reset gesture becomes armed). Full contract in
+    # docs/ITERATION_AWARENESS.md § 8.5.
     reviewed_label_applied: bool = False
 
 
@@ -6051,19 +6056,39 @@ def main() -> int:
         return 0
 
     # ------------------------------------------------------------------
+    # Resolve the reviewer's own bot identity — always, regardless of
+    # `collapse-previous`. Two independent downstream consumers need it:
+    # (1) `gh_collapse_previous_reviews` (below, guarded by
+    # `collapse_previous`) filters comments to authors matching this
+    # login; (2) the IAR marker-author filter in
+    # `_fetch_latest_marker_body` (via `run_iar_pre_llm` below) uses
+    # it to reject forged state markers from non-bot commenters
+    # (round-10 F1 security fix). Prior to round-11 this was scoped
+    # inside `if collapse_previous:` so consumers with
+    # `collapse-previous: false` had IAR's author filter permanently
+    # disabled. Failure mode is safe on both sides — `""` disables
+    # the collapse loop's filter (already documented) and disables
+    # the IAR author filter (falls back to pre-round-10 behaviour —
+    # over-review, never under-surface).
+    bot_login: str = ""
+    try:
+        # v1.2.0+: pass repo + pr_number so the fallback chain in
+        # `gh_get_authenticated_login` can marker-scan for the prior
+        # bot's login when the built-in `GITHUB_TOKEN` refuses
+        # `/user` (the fix for the silent 403 that broke this
+        # feature for every workflow-token consumer).
+        bot_login = gh_get_authenticated_login(
+            gh_token, repo=repo, pr_number=pr_number
+        )
+        log(f"Authenticated as: {bot_login}")
+    except Exception as e:  # noqa: BLE001
+        log(f"bot-login lookup failed (non-fatal): {e}")
+
+    # ------------------------------------------------------------------
     # Collapse previous bot reviews/comments as outdated
     # ------------------------------------------------------------------
     if collapse_previous:
         try:
-            # v1.2.0+: pass repo + pr_number so the fallback chain in
-            # `gh_get_authenticated_login` can marker-scan for the prior
-            # bot's login when the built-in `GITHUB_TOKEN` refuses
-            # `/user` (the fix for the silent 403 that broke this
-            # feature for every workflow-token consumer).
-            bot_login: str = gh_get_authenticated_login(
-                gh_token, repo=repo, pr_number=pr_number
-            )
-            log(f"Authenticated as: {bot_login}")
             gh_collapse_previous_reviews(
                 token=gh_token,
                 repo=repo,

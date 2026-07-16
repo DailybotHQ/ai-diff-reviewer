@@ -270,6 +270,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
   constants. Cosmetic; no behavioral impact.
 
+### Fixed (round-11 self-review: bot_login hoist + doc alignment)
+
+Round-11 self-review **passed the strictness gate** (highest severity =
+warning, `self-reviewed:cursor` label stamped, PR green) but flagged 3
+warnings around defensive edge cases and doc drift:
+
+- **`bot_login` was scoped inside `if collapse_previous:`,** so
+  consumers with `collapse-previous: false` (or any run where
+  `gh_get_authenticated_login` raised) hit `UnboundLocalError` at
+  the `run_iar_pre_llm(bot_login=bot_login, …)` call site — falling
+  through the IAR try/except into baseline mode with the round-10
+  author filter effectively disabled. Hoisted the resolution to
+  ALWAYS run (with a `""` fallback that mirrors the pre-round-10
+  behaviour on failure). Both consumers — `gh_collapse_previous_reviews`
+  and the IAR author filter — now see the same resolved identity
+  regardless of `collapse_previous` setting.
+- **`docs/SECURITY.md § IAR — User-controllable inputs`** still
+  described escape-label matching as `in pr_labels` (case-sensitive
+  membership) after round-8's `_labels_contain_ci` fix. Updated to
+  reflect the case-insensitive helper and explicitly call out the
+  three consumers (escape label, skip-review-label, and
+  reviewed-label reset) that share the normalisation.
+- **`IterationState.reviewed_label_applied` field comment** described
+  the pre-round-7 semantics ("True only when the review posted AND
+  was NOT blocked"). Round-7 replaced that with the three-signal OR
+  in `compute_reviewed_label_applied` — updated the comment to
+  match, listing all three signals and the load-bearing rationale
+  ("otherwise a blocked follow-up would silently clear the arming
+  bit").
+
 ### Fixed (round-10 self-review: marker author filter + parser trust boundary)
 
 - **Marker fetch now filters by comment author (SECURITY, critical).**

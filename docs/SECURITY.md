@@ -302,7 +302,7 @@ IAR persists per-PR iteration state as a JSON block inside the tracking marker c
 
 ### User-controllable inputs
 
-Two new inputs accept user text: `convergence-policy` and `iteration-escape-label`. Both are validated at parse time — the policy is compared against a whitelist and falls back to `first-pass-exhaustive` (the shipped default) on any unknown value; the escape label is compared with `in pr_labels` (a Python list membership check on strings pulled from the GitHub REST `labels` field). Neither is ever passed to a subprocess, HTTP URL, or shell string.
+Two new inputs accept user text: `convergence-policy` and `iteration-escape-label`. Both are validated at parse time — the policy is compared against a whitelist and falls back to `first-pass-exhaustive` (the shipped default) on any unknown value; the escape label is compared via the `_labels_contain_ci` helper (whitespace-trimmed, case-insensitive membership over strings pulled from the GitHub REST `labels` field). Same helper is used for `skip-review-label` and the reviewed-label-based USER_FORCED_RESET check — aligning with `resolve_trigger_action`'s case-insensitive `label-gate` handling so a casing mismatch between the configured label and the GitHub-returned name can never silently disable a gesture (or, worse, look like "reviewed label removed" and falsely wipe fingerprint memory). Neither input is ever passed to a subprocess, HTTP URL, or shell string.
 
 ### API surface delta
 
