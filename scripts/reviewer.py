@@ -2497,6 +2497,7 @@ def dedupe_findings_against_prior(
     new_findings: list[Finding],
     prior_state: IterationState | None,
     code_contexts: dict[str, CodeContext | None],
+    strict_cross_gen: bool = False,
 ) -> DedupResult:
     """Filter `new_findings` against prior IAR state.
 
@@ -2509,7 +2510,7 @@ def dedupe_findings_against_prior(
     through this function precisely so this safety rail cannot be
     accidentally bypassed.
 
-    Non-critical dedup behavior:
+    Non-critical dedup behavior (default — `strict_cross_gen=False`):
     - `first review` (prior_state is None) → all findings surface.
     - Fingerprint matches `prior_state.open_fingerprints_this_gen` →
       silence with reason "already reported in gen N, unresolved".
@@ -2517,6 +2518,13 @@ def dedupe_findings_against_prior(
       (regression signal — the finding was resolved but re-appeared).
       Caller may attach a "previously resolved" annotation.
     - Otherwise → surface.
+
+    Strict cross-generation dedup (`strict_cross_gen=True`, used by the
+    `critical-gate` policy in Task 7):
+    - Fingerprint matches `prior_state.resolved_fingerprints` → silence
+      instead of surfacing (treats resolved status as permanent for
+      non-critical findings across generations). Critical severity
+      still surfaces via the hardcoded safety rail above.
     """
     fingerprints_by_finding: dict[int, str] = {}
     surfaced: list[Finding] = []
@@ -2559,9 +2567,19 @@ def dedupe_findings_against_prior(
                 )
             )
             continue
-        # `known_resolved` matches surface (regression signal); the
-        # caller may attach a "previously resolved" annotation. For the
-        # dedup engine itself, resolved-then-reappeared → surface.
+        if strict_cross_gen and fp in known_resolved:
+            silenced.append(
+                SilencedFinding(
+                    finding=finding,
+                    reason=(
+                        "previously resolved in an earlier generation; "
+                        "cross-generation dedup active (critical-gate policy)"
+                    ),
+                )
+            )
+            continue
+        # Default: `known_resolved` matches surface (regression signal);
+        # the caller may attach a "previously resolved" annotation.
         surfaced.append(finding)
     return DedupResult(
         surfaced=surfaced,
@@ -2722,6 +2740,333 @@ def apply_first_pass_exhaustive_policy(
         effective_max_inline_comments=iterative_result.effective_max_inline_comments,
         prompt_addendum="",
         policy_applied=IAR_POLICY_FIRST_PASS_EXHAUSTIVE,
+    )
+
+
+# The two `policy_applied` string values below are outputs of the
+# round-capped policy so consumers can distinguish "still under cap"
+# from "cap reached, only criticals surfacing".
+IAR_POLICY_ROUND_CAPPED_PRE_CAP: str = "round-capped-pre-cap"
+IAR_POLICY_ROUND_CAPPED_POST_CAP: str = "round-capped-post-cap"
+# When the escape label short-circuits dedup for one run.
+IAR_POLICY_ESCAPE_LABEL_FORCED: str = "escape-label-forced-full-review"
+# When the 30% new-lines safety net forces first-pass-exhaustive.
+IAR_POLICY_SAFETY_NET_FORCED: str = "safety-net-forced-first-pass-exhaustive"
+
+
+def apply_round_capped_policy(
+    *,
+    findings: list[Finding],
+    prior_state: IterationState | None,
+    code_contexts: dict[str, "CodeContext | None"],
+    base_max_inline_comments: int,
+    max_rounds: int,
+) -> PolicyResult:
+    """After N rounds in the current generation, only critical findings
+    surface — non-critical warnings/infos are silenced with a "cap
+    reached" reason.
+
+    Pre-cap: behaves like `iterative` (dedup only).
+    Post-cap: filters non-critical → silence; critical → surface via the
+    hardcoded safety rail in the dedup engine (routed through the same
+    path so the rail cannot be bypassed).
+
+    `max_rounds == 0` means unlimited (post-cap never triggers).
+    """
+    # +1 because this run IS a round in the current generation; if
+    # prior_state.round_in_generation == max_rounds, THIS run is the
+    # first one past the cap.
+    current_round: int = (
+        1 if prior_state is None else prior_state.round_in_generation + 1
+    )
+    if max_rounds > 0 and current_round > max_rounds:
+        critical_only: list[Finding] = [
+            f for f in findings if f.severity == SEVERITY_CRITICAL
+        ]
+        silenced: list[SilencedFinding] = [
+            SilencedFinding(
+                finding=f,
+                reason=(
+                    f"round cap ({max_rounds}) reached; non-critical "
+                    "suppressed"
+                ),
+            )
+            for f in findings
+            if f.severity != SEVERITY_CRITICAL
+        ]
+        return PolicyResult(
+            findings_to_surface=critical_only,
+            findings_silenced=silenced,
+            effective_max_inline_comments=base_max_inline_comments,
+            prompt_addendum="",
+            policy_applied=IAR_POLICY_ROUND_CAPPED_POST_CAP,
+        )
+    iterative_result: PolicyResult = apply_iterative_policy(
+        findings=findings,
+        prior_state=prior_state,
+        code_contexts=code_contexts,
+        base_max_inline_comments=base_max_inline_comments,
+    )
+    return PolicyResult(
+        findings_to_surface=iterative_result.findings_to_surface,
+        findings_silenced=iterative_result.findings_silenced,
+        effective_max_inline_comments=iterative_result.effective_max_inline_comments,
+        prompt_addendum="",
+        policy_applied=IAR_POLICY_ROUND_CAPPED_PRE_CAP,
+    )
+
+
+def apply_critical_gate_policy(
+    *,
+    findings: list[Finding],
+    prior_state: IterationState | None,
+    code_contexts: dict[str, "CodeContext | None"],
+    base_max_inline_comments: int,
+) -> PolicyResult:
+    """Strict cross-generation dedup. Same as `iterative` for the
+    open-fingerprints path, but also silences findings whose fingerprint
+    matches `prior_state.resolved_fingerprints` (treating resolved
+    status as permanent across generations).
+
+    Critical severity findings still surface unconditionally via the
+    hardcoded safety rail in `dedupe_findings_against_prior`.
+    """
+    dedup: DedupResult = dedupe_findings_against_prior(
+        new_findings=findings,
+        prior_state=prior_state,
+        code_contexts=code_contexts,
+        strict_cross_gen=True,
+    )
+    return PolicyResult(
+        findings_to_surface=list(dedup.surfaced),
+        findings_silenced=list(dedup.silenced),
+        effective_max_inline_comments=base_max_inline_comments,
+        prompt_addendum="",
+        policy_applied=IAR_POLICY_CRITICAL_GATE,
+    )
+
+
+def should_force_exhaustive_via_safety_net(
+    *,
+    transition: GenerationTransition,
+    new_lines_pct: float,
+    threshold_pct: int = IAR_SAFETY_NET_NEW_LINES_PCT,
+) -> bool:
+    """Returns True when the current run represents a NEW_COMMITS or
+    REBASED transition AND the generation change brought at least
+    `threshold_pct` new lines relative to the total diff.
+
+    When True, the dispatcher overrides the configured policy back to
+    `first-pass-exhaustive` for this run's round-1 pass — protecting
+    against the "PR grew significantly; critical findings in new code
+    might otherwise get silenced" scenario. Safety net never fires on
+    SAME_GENERATION or FIRST_REVIEW.
+    """
+    if transition not in (
+        GenerationTransition.NEW_COMMITS,
+        GenerationTransition.REBASED,
+    ):
+        return False
+    return new_lines_pct >= float(threshold_pct)
+
+
+def compute_new_lines_pct(
+    *,
+    prior_base_sha: str,
+    prior_head_sha: str,
+    current_base_sha: str,
+    current_head_sha: str,
+    repo_root: str | None = None,
+) -> float:
+    """Estimate the percentage of net-new lines introduced by the
+    current generation vs the prior one.
+
+    Formula: `new_added / max(total_current, 1) * 100`, where
+    `total_current = added + removed` across all files in the diff
+    `current_base..current_head`, and `new_added` counts only lines
+    added since `prior_head..current_head` (net new).
+
+    Best-effort: returns `0.0` on any git subprocess failure so the
+    safety net defaults to "no override" rather than crashing the run.
+    """
+    if not current_base_sha or not current_head_sha:
+        return 0.0
+    try:
+        total_stat: subprocess.CompletedProcess[str] = subprocess.run(
+            [
+                "git", "diff", "--numstat",
+                f"{current_base_sha}..{current_head_sha}",
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return 0.0
+    total_added: int = 0
+    total_removed: int = 0
+    for line in total_stat.stdout.splitlines():
+        parts: list[str] = line.split("\t")
+        if len(parts) < 2:
+            continue
+        try:
+            total_added += int(parts[0]) if parts[0] != "-" else 0
+            total_removed += int(parts[1]) if parts[1] != "-" else 0
+        except ValueError:
+            continue
+    total: int = total_added + total_removed
+    if total <= 0:
+        return 0.0
+    # Net-new since the prior run — only relevant when we have a prior
+    # head to diff against. Fall back to the whole current diff when we
+    # don't (first review; the safety net won't fire anyway because the
+    # transition will be FIRST_REVIEW).
+    if not prior_head_sha:
+        return 0.0
+    try:
+        new_stat: subprocess.CompletedProcess[str] = subprocess.run(
+            [
+                "git", "diff", "--numstat",
+                f"{prior_head_sha}..{current_head_sha}",
+            ],
+            capture_output=True,
+            check=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return 0.0
+    new_added: int = 0
+    for line in new_stat.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        try:
+            new_added += int(parts[0]) if parts[0] != "-" else 0
+        except ValueError:
+            continue
+    return (new_added / float(total)) * 100.0
+
+
+def check_escape_label(
+    *, pr_labels: list[str], escape_label: str
+) -> bool:
+    """Returns True when a human has applied the escape label to the
+    PR. When True, the dispatcher short-circuits dedup for THIS run
+    only — persisted state is NOT mutated so subsequent normal runs
+    resume from where they left off. Removing the label restores
+    normal IAR behavior."""
+    if not escape_label:
+        return False
+    return escape_label in pr_labels
+
+
+def dispatch_policy(
+    *,
+    iar_config: IARConfig,
+    findings: list[Finding],
+    prior_state: IterationState | None,
+    code_contexts: dict[str, "CodeContext | None"],
+    base_max_inline_comments: int,
+    transition: GenerationTransition,
+    new_lines_pct: float,
+    pr_labels: list[str],
+) -> PolicyResult:
+    """Top-level IAR policy dispatch. Order of precedence (highest → lowest):
+
+    1. Escape label short-circuit → surface all findings; no dedup; NO
+       state mutation for this run.
+    2. Safety net (>= 30% new lines on NEW_COMMITS or REBASED) → force
+       `first-pass-exhaustive` for this round regardless of configured
+       policy.
+    3. Configured `iar_config.policy` → one of iterative,
+       first-pass-exhaustive, round-capped, critical-gate.
+    4. Unknown policy (should be unreachable — `build_iar_config`
+       already falls back) → iterative + warning log.
+    """
+    if check_escape_label(
+        pr_labels=pr_labels, escape_label=iar_config.escape_label
+    ):
+        log(
+            f"IAR: escape label {iar_config.escape_label!r} detected — "
+            "bypassing dedup for this run only. Persisted state unchanged."
+        )
+        return PolicyResult(
+            findings_to_surface=list(findings),
+            findings_silenced=[],
+            effective_max_inline_comments=base_max_inline_comments,
+            prompt_addendum="",
+            policy_applied=IAR_POLICY_ESCAPE_LABEL_FORCED,
+        )
+    is_round_1_of_generation: bool = (
+        prior_state is None
+        or transition != GenerationTransition.SAME_GENERATION
+    )
+    if should_force_exhaustive_via_safety_net(
+        transition=transition, new_lines_pct=new_lines_pct
+    ):
+        log(
+            f"IAR: safety net triggered ({new_lines_pct:.1f}% new lines "
+            f">= {IAR_SAFETY_NET_NEW_LINES_PCT}% threshold on "
+            f"{transition.value}) — forcing "
+            f"{IAR_POLICY_FIRST_PASS_EXHAUSTIVE}."
+        )
+        result: PolicyResult = apply_first_pass_exhaustive_policy(
+            findings=findings,
+            prior_state=prior_state,
+            code_contexts=code_contexts,
+            base_max_inline_comments=base_max_inline_comments,
+            cap_multiplier=iar_config.cap_multiplier,
+            is_round_1_of_generation=True,
+        )
+        return PolicyResult(
+            findings_to_surface=result.findings_to_surface,
+            findings_silenced=result.findings_silenced,
+            effective_max_inline_comments=result.effective_max_inline_comments,
+            prompt_addendum=result.prompt_addendum,
+            policy_applied=IAR_POLICY_SAFETY_NET_FORCED,
+        )
+    if iar_config.policy == IAR_POLICY_ITERATIVE:
+        return apply_iterative_policy(
+            findings=findings,
+            prior_state=prior_state,
+            code_contexts=code_contexts,
+            base_max_inline_comments=base_max_inline_comments,
+        )
+    if iar_config.policy == IAR_POLICY_FIRST_PASS_EXHAUSTIVE:
+        return apply_first_pass_exhaustive_policy(
+            findings=findings,
+            prior_state=prior_state,
+            code_contexts=code_contexts,
+            base_max_inline_comments=base_max_inline_comments,
+            cap_multiplier=iar_config.cap_multiplier,
+            is_round_1_of_generation=is_round_1_of_generation,
+        )
+    if iar_config.policy == IAR_POLICY_ROUND_CAPPED:
+        return apply_round_capped_policy(
+            findings=findings,
+            prior_state=prior_state,
+            code_contexts=code_contexts,
+            base_max_inline_comments=base_max_inline_comments,
+            max_rounds=iar_config.max_review_rounds,
+        )
+    if iar_config.policy == IAR_POLICY_CRITICAL_GATE:
+        return apply_critical_gate_policy(
+            findings=findings,
+            prior_state=prior_state,
+            code_contexts=code_contexts,
+            base_max_inline_comments=base_max_inline_comments,
+        )
+    log(
+        f"IAR: unreachable — unknown convergence-policy "
+        f"{iar_config.policy!r}; falling back to iterative."
+    )
+    return apply_iterative_policy(
+        findings=findings,
+        prior_state=prior_state,
+        code_contexts=code_contexts,
+        base_max_inline_comments=base_max_inline_comments,
     )
 
 
