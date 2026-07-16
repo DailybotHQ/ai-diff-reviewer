@@ -124,7 +124,7 @@ See [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md). The summary:
 
 ## Versioning
 
-SemVer. Tags `vX.Y.Z`. The moving major tag (`v1`) auto-updates on every `v1.x.y` publish via `release.yml`. Don't delete published tags.
+SemVer. Tags `vX.Y.Z`. The moving major tag for the current line (`v2`) auto-updates on every `v2.x.y` publish via `release.yml`. Don't delete published tags.
 
 ## License
 

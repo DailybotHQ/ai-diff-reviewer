@@ -19,13 +19,14 @@ triaged on the same schedule but may take longer to resolve.
 ## Supported versions
 
 We publish releases as SemVer git tags (`vX.Y.Z`) and maintain a moving
-major-version alias (`v1`). Security fixes ship as `patch` releases against
-the current major only; older majors do not receive back-ported fixes once
-a new major is out.
+major-version alias for the current line (`v2`). Security fixes ship as
+`patch` releases against the current major only; older majors do not
+receive back-ported fixes once a new major is out.
 
 | Version | Supported |
 |---------|-----------|
-| `v1.x` (`@v1`) | ✅ current major — receives security patches |
+| `v2.x` (`@v2`) | ✅ current major — receives security patches |
+| `v1.x` (`@v1`) | ⚠️ frozen at `v1.8.0` — no further features; critical security patches only while migration is reasonable |
 | < `v1.0` | ❌ pre-release, unsupported |
 
 ## Full security model

@@ -75,7 +75,7 @@ The applied label is a real PR label — any GitHub Action or webhook can react 
 They're orthogonal — enable both if you want:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

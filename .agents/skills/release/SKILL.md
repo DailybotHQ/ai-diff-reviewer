@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a new vX.Y.Z release tag, update CHANGELOG, push to origin, publish a GitHub Release. The release.yml workflow then auto-updates the moving major tag (e.g. v1) so consumers pinning @v1 pick up the new version.
+description: Cut a new vX.Y.Z release tag, update CHANGELOG, push to origin, publish a GitHub Release. The release.yml workflow then auto-updates the moving major tag for the current line (e.g. v2) so consumers pinning @v2 pick up the new version.
 disable-model-invocation: false
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 model: sonnet

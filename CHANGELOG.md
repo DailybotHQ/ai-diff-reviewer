@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration (v1 → v2)
 
+Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
+
 - **Recommended pin:** `uses: DailybotHQ/ai-diff-reviewer@v2` and
   `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`.
   Companion skill frontmatter is `version: "2.0.0"`.
@@ -41,9 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `setup/reference.md` — `skipped` output + related-docs links;
     `apply-review/SKILL.md` — ignore embedded IterationState when
     collecting findings.
-  - `README.md` / `examples/**` / docs snippets — `@v2` moving major;
-    Features emergency-bypass bullet; `ITERATION_AWARENESS.md` in the
-    docs index; corrected local-skill wording (no local IAR dedup).
+  - `README.md` / `examples/**` / docs tree (`ARCHITECTURE`,
+    `PRODUCT_SPEC`, `PROMPTS`, `PROVIDERS`, `SECURITY`, `STANDARDS`,
+    root `SECURITY.md`, `prompts/README.md`, `CONTRIBUTING.md`, …) —
+    `@v2` moving major; Features emergency-bypass bullet;
+    `ITERATION_AWARENESS.md` in the docs index; corrected local-skill
+    wording (no local IAR dedup).
   - `examples/full-featured.yml` + `examples/README.md` — explicit
     IAR knobs + commented skip-review-label.
   - `docs/ARCHITECTURE.md` topology + `main()` Components prose

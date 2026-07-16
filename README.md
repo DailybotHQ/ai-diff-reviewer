@@ -647,6 +647,7 @@ The deep-dive docs live under [`docs/`](docs/) and are cross-linked from every r
 | Strictness (`lenient` / `block-on-*` semantics) | [docs/STRICTNESS.md](docs/STRICTNESS.md) |
 | Trigger modes, branch-protection recipes & emergency-bypass label | [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md) |
 | Iteration-Aware Review (dedup, policies, escape label, outputs) | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
+| Migrating from v1 → v2 | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
 | PR-metadata checks (autocomplete, warn, block) | [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md) |
 | Security model (author-association, egress surfaces, provider trust) | [docs/SECURITY.md](docs/SECURITY.md) |
 | Performance (turn budgets, prompt caching, token cost) | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |

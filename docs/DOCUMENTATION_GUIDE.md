@@ -96,7 +96,7 @@ python3 -m py_compile scripts/reviewer.py
 ```
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
 ```
 ````
 
@@ -112,7 +112,7 @@ Docs version with the code. A change in `scripts/reviewer.py` plus a doc update 
 
 When cutting a release:
 - `CHANGELOG.md` is updated *in the same commit* that bumps to the release tag.
-- The README's "Quick start" example pins to `@v1` (or whichever major), not to a specific patch — so it doesn't need updating per release.
+- The README's "Quick start" example pins to `@v2` (or whichever current major), not to a specific patch — so it doesn't need updating per release.
 - `docs/PROVIDERS.md` "Status" table updates only when a provider's status actually changes.
 
 ## Translations

@@ -47,7 +47,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 | Configurable gating | Four strictness modes (`lenient`, `block-on-critical`, `block-on-warning`, `block-on-any`) translate severity into the GitHub check status. |
 | Trigger control | Four `trigger-mode` values (`always`, `label-required`, `label-once`, `label-added-only`) for cost control and review-on-demand patterns. |
 | Label gate | Optionally only run when a PR has a specific label (e.g. `ready`). |
-| Applied label | Optionally label a PR after a successful review (e.g. `pr-reviewed`) so downstream automation can require it. Removing that label before the next trigger forces an IAR state reset (fresh generation) — see [`ITERATION_AWARENESS.md` § 8.5](ITERATION_AWARENESS.md). |
+| Applied label | Optionally label a PR after a successful review (e.g. `pr-reviewed`) so downstream automation can require it. Removing that label before the next trigger can force an IAR state reset (fresh generation) when the prior run had stamped the label — five-condition guard; see [`ITERATION_AWARENESS.md` § 8.5](ITERATION_AWARENESS.md). |
 | Emergency-bypass label | Opt-in `skip-review-label` short-circuits to success (no LLM call, no findings, no IAR state mutation) when the label is present — hotfixes / rollbacks. Disabled by default; consumers must restrict who can apply the label. See [`TRIGGER_MODES.md` § Emergency-bypass label](TRIGGER_MODES.md). |
 | Auto-collapse | Previous bot reviews are marked `OUTDATED` on every new push so only the latest is visually active. Per-provider marker so multiple providers can co-exist on one PR. |
 | Tracking comment | A spinner comment with a stable `<!-- ai-pr-reviewer-marker -->` marker transitions in-place from `Working…` to `View review →`. |
@@ -81,9 +81,9 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 ### GitHub Action
 
 - **License:** MIT.
-- **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v1`.
+- **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v2`.
 - **Repo path:** `DailybotHQ/ai-diff-reviewer` (renamed 2026-07-14 from `DailybotHQ/ai-pr-reviewer`; the old path still resolves via GitHub's permanent 301 redirect, so existing `@v1` pins keep working).
-- **Versioning:** SemVer. The moving major tag (`v1`) auto-points to the latest `v1.x.y` so consumers pinning `@v1` get patches and minor features automatically.
+- **Versioning:** SemVer. The recommended pin is the moving major `@v2` (tracks latest `v2.x.y`). `@v1` freezes at `v1.8.0` and does not auto-move to v2.
 - **Provider parity:** as of `v1.1.0` the action ships with **four** providers across two families:
   - Chat-completions family (this action drives the tool-use loop): `anthropic`.
   - Agent-runner family (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`.
@@ -93,7 +93,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 - **License:** MIT (same repository).
 - **Channel:** [skills.sh](https://skills.sh) via `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer` — a one-liner that vendors the skill into `.agents/skills/ai-diff-reviewer/` and records the pinned version in `skills-lock.json`.
-- **Versioning:** the skill package's `version:` frontmatter is bumped in lockstep with the Action's tag by [`auto-release.yml`](../.github/workflows/auto-release.yml). Pinning `DailybotHQ/ai-diff-reviewer@v1.5.0` on both surfaces guarantees the exact same review methodology on both.
+- **Versioning:** the skill package's `version:` frontmatter is bumped in lockstep with the Action's tag by [`auto-release.yml`](../.github/workflows/auto-release.yml). Pinning `DailybotHQ/ai-diff-reviewer@v2.0.0` on both surfaces guarantees the exact same review methodology on both.
 - **Agent support:** any coding agent that reads the Open Agent Skills format — Cursor, Claude Code, Codex CLI, Gemini CLI, GitHub Copilot's agent mode, Cline, Windsurf, OpenClaw.
 - **Dogfooded install:** this repo also vendors its own skill copy at [`.agents/skills/ai-diff-reviewer/`](../.agents/skills/ai-diff-reviewer/) using the exact same `npx skills` install path, refreshed automatically after every release by `auto-release.yml` Step 3.5.
 
@@ -120,7 +120,10 @@ The shipped versions so far:
 | **v1.3.x** (2026-07-14) | Marketplace listing published; `author-association` gate for public-repo abuse defense; Claude Code accepts subscription OAuth tokens as `api-key`. |
 | **v1.4.x** (2026-07-14) | Full four-leg self-review matrix on every ready-labeled PR (removed the critical-surface filter); vendored `dailybot` skill dogfood; strictness dogfood at `block-on-critical`. |
 | **v1.5.0** (2026-07-14) | Coordinated rename to **AI Diff Reviewer** (unblocked the Marketplace publish) + **the local companion `ai-diff-reviewer` skill** with the `generate-extension` and `setup` sub-skills + the `.review/extension.md` convention as a single source of truth. |
-| **v1.6.0** (in flight — PR #29) | New `open-pr` sub-skill authoring well-structured PR titles + bodies from the current branch's diff (Conventional-Commits inference, structured body, PR-template merge, `gh pr create`/`edit`). |
+| **v1.6.x** (2026-07-14) | `open-pr` sub-skill; dual-surface flow docs; dogfood install hardening. |
+| **v1.7.0** (2026-07-15) | `apply-review` sub-skill closes the CI → local loop. |
+| **v1.8.0** (2026-07-15) | Unconditional Iteration-Aware Review + user-forced reset + `skip-review-label` emergency bypass. |
+| **v2.0.0** (shipping) | SemVer major for the IAR platform: recommended pin `@v2` / skill `2.0.0`; `@v1` freezes at `v1.8.0`. No `action.yml` inputs renamed or removed. |
 
 The upcoming work — no commitment on ordering, all `v1.x` unless flagged:
 

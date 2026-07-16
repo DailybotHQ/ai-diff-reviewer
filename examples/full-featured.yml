@@ -58,13 +58,14 @@ jobs:
           collapse-previous: true
           tracking-comment: true
 
-          # 7. Iteration-Aware Review — every input below matches the
-          #    shipped default. Omit them and you get the same behavior;
-          #    kept explicit here as documentation. See
+          # 7. Iteration-Aware Review — the defaults shown below match
+          #    action.yml. Omit them and you get the same behavior; kept
+          #    explicit here as documentation. See
           #    docs/ITERATION_AWARENESS.md and examples/iteration-aware.yml.
-          convergence-policy: first-pass-exhaustive
-          exhaustive-first-pass-cap-multiplier: 3
-          iteration-escape-label: full-review-please
+          convergence-policy: first-pass-exhaustive          # DEFAULT
+          max-review-rounds: 0                               # DEFAULT (unused unless policy=round-capped)
+          exhaustive-first-pass-cap-multiplier: 3            # DEFAULT
+          iteration-escape-label: full-review-please         # DEFAULT
 
           # 8. Optional emergency bypass (DISABLED by default — uncomment
           #    only if you also protect the label with a ruleset /

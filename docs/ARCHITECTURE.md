@@ -6,10 +6,10 @@ A high-level walk-through of how AI Diff Reviewer is put together. For input/out
 
 The product ships on **two disjoint surfaces from the same repository**:
 
-1. **The GitHub Action** — `action.yml` + `scripts/reviewer.py`, invoked by a consumer's workflow via `uses: DailybotHQ/ai-diff-reviewer@v1`. This is the CI-time reviewer.
+1. **The GitHub Action** — `action.yml` + `scripts/reviewer.py`, invoked by a consumer's workflow via `uses: DailybotHQ/ai-diff-reviewer@v2`. This is the CI-time reviewer.
 2. **The local companion skill** — [`skills/ai-diff-reviewer/`](../skills/ai-diff-reviewer/SKILL.md), installed into a consumer repo via `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer`. This is the pre-push local reviewer that runs inside the developer's coding agent.
 
-Both surfaces share the same [`prompts/default.md`](../prompts/default.md) as the review methodology and the same [`.review/extension.md`](../.review/extension.md) convention for repo-specific overrides. **Two CI invariants keep the parity real**: (a) the `Skills — prompt-sync invariant` job in [`code_check.yml`](../.github/workflows/code_check.yml) fails PRs where the skill's `prompt.md` byte-copy has drifted from `prompts/default.md`; (b) [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy AND bumps the skill's frontmatter `version:` field on every release cut so `@v1.5.0` on both surfaces ships the same review methodology.
+Both surfaces share the same [`prompts/default.md`](../prompts/default.md) as the review methodology and the same [`.review/extension.md`](../.review/extension.md) convention for repo-specific overrides. **Two CI invariants keep the parity real**: (a) the `Skills — prompt-sync invariant` job in [`code_check.yml`](../.github/workflows/code_check.yml) fails PRs where the skill's `prompt.md` byte-copy has drifted from `prompts/default.md`; (b) [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy AND bumps the skill's frontmatter `version:` field on every release cut so `@v2.0.0` on both surfaces ships the same review methodology.
 
 ## Topology
 
@@ -21,7 +21,7 @@ Both surfaces share the same [`prompts/default.md`](../prompts/default.md) as th
 │  ┌────────────────────────────────────────────────────────────┐  │
 │  │  jobs.review.steps:                                         │  │
 │  │    - actions/checkout (fetch-depth: 0)                      │  │
-│  │    - DailybotHQ/ai-diff-reviewer@v1                         │  │
+│  │    - DailybotHQ/ai-diff-reviewer@v2                         │  │
 │  └─────────────────────┬───────────────────────────────────────┘  │
 └────────────────────────┼─────────────────────────────────────────┘
                          │

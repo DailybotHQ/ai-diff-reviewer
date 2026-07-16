@@ -66,7 +66,7 @@ python3 scripts/reviewer.py
 
 ## Releasing
 
-Tagged releases follow SemVer (`v1.2.3`). The `release.yml` workflow auto-updates the major-version moving tag (`v1`) when a new `v1.x.y` is published, so consumers pinning `@v1` get patches and minor features automatically.
+Tagged releases follow SemVer (`v1.2.3`). The `release.yml` workflow auto-updates the major-version moving tag for the current line (`v2`) when a new `v2.x.y` is published, so consumers pinning `@v2` get patches and minor features automatically.
 
 ## Code of conduct
 

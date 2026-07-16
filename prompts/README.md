@@ -33,7 +33,7 @@ The workflow:
 Consumers can point the action at their own prompt via the `prompt-file` input:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

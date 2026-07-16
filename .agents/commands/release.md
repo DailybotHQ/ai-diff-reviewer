@@ -4,7 +4,7 @@ description: Cut a new vX.Y.Z release tag and publish a GitHub Release
 
 # Release Cutter
 
-Cut a new SemVer release of AI Diff Reviewer. The `release.yml` workflow then auto-updates the moving major tag (e.g. `v1`) so consumers pinning `@v1` pick up the new version automatically.
+Cut a new SemVer release of AI Diff Reviewer. The `release.yml` workflow then auto-updates the moving major tag for the current line (e.g. `v2`) so consumers pinning `@v2` pick up the new version automatically.
 
 ## Pre-flight
 
@@ -78,7 +78,7 @@ gh release create vX.Y.Z \
 
 Or use the GitHub UI ("Draft a new release" on the Releases page) — paste the changelog section as the release notes.
 
-The `release.yml` workflow fires on the `release` event and auto-updates the moving major tag (e.g. `v1`) to point at `vX.Y.Z`. No manual tag-update needed.
+The `release.yml` workflow fires on the `release` event and auto-updates the moving major tag for the current line (e.g. `v2`) to point at `vX.Y.Z`. No manual tag-update needed.
 
 ### 5. Verify
 
@@ -86,8 +86,8 @@ After a couple of minutes:
 
 ```bash
 git fetch --tags
-git rev-parse v1            # should resolve to the same SHA as vX.Y.Z
-git log --oneline v1 -1     # should show the release commit
+git rev-parse v2            # should resolve to the same SHA as vX.Y.Z
+git log --oneline v2 -1     # should show the release commit
 ```
 
 If the major tag didn't move, check the Actions tab for a failed `release.yml` run.
@@ -104,7 +104,7 @@ If something is wrong after release:
 2. **Don't move the major tag back.** Same reason.
 3. **Cut a patch release** (`vX.Y.{Z+1}`) that fixes the issue. The major tag will move forward to it.
 
-The "moving major" pattern means consumers pinning `@v1` always get the latest patched version. That's the recovery mechanism.
+The "moving major" pattern means consumers pinning `@v2` always get the latest patched version on the current major. That's the recovery mechanism.
 
 ## Major-version (vN.0.0) extras
 

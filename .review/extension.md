@@ -32,9 +32,9 @@ overrides the base prompt for the patterns most likely to slip a review.
   leak to Claude Code / Cursor / Codex; adding a var without allowlisting
   breaks that boundary silently.
 - **Always `critical`:** removal or rename of any `action.yml` input or
-  output (Rule #4 — public contract). Same for the moving major tag `v1`.
-  Breaking these needs a coordinated `v2.0.0` bump. Adding a new
-  **optional** input is fine.
+  output (Rule #4 — public contract). Same for the moving major tag of
+  the current line (`v2`). Breaking these needs a coordinated
+  `v3.0.0` bump. Adding a new **optional** input is fine.
 - **Always `critical`:** rename of any HTML marker string:
   `<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`,
   `<!-- ai-pr-reviewer-provider:… -->`,

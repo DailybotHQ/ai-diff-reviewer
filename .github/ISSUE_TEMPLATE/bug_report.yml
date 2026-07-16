@@ -27,8 +27,8 @@ body:
     id: version
     attributes:
       label: Action version
-      description: The `uses:` ref you pinned (e.g. `DailybotHQ/ai-diff-reviewer@v1` or a SHA).
-      placeholder: DailybotHQ/ai-diff-reviewer@v1
+      description: The `uses:` ref you pinned (e.g. `DailybotHQ/ai-diff-reviewer@v2` or a SHA).
+      placeholder: DailybotHQ/ai-diff-reviewer@v2
     validations:
       required: true
   - type: dropdown

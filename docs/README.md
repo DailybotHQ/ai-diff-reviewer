@@ -34,6 +34,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [TRIGGER_MODES.md](TRIGGER_MODES.md) | The four `trigger-mode` values (`always` / `label-required` / `label-once` / `label-added-only`), how to pair them with the workflow's `on:` block, and the opt-in `skip-review-label` emergency-bypass hatch. |
 | [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |
 | [ITERATION_AWARENESS.md](ITERATION_AWARENESS.md) | Iteration-Aware Review (IAR) subsystem — converges multi-round self-review loops via content-anchored fingerprints, four convergence policies, generation tracking, and a hardcoded critical-always-surfaces safety rail. Runs on every review; wrapped in `try/except` so an IAR failure degrades to the baseline review path. |
+| [MIGRATION_v2.md](MIGRATION_v2.md) | Consumer migration guide from `@v1` → `@v2` (pin changes, frozen `@v1` at `v1.8.0`, contract + IAR behavioral notes). |
 
 ## Local companion skill (`skills/ai-diff-reviewer/`)
 

@@ -27,6 +27,7 @@ The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised e
 | Providers (user-facing) | [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | Performance | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | Iteration-Aware Review | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
+| Migrating to v2 | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
 | Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
@@ -172,7 +173,7 @@ Whenever you change runtime behaviour:
 
 ### 8. SemVer for Releases (MANDATORY)
 
-Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag (`v1`) on every `v1.x.y` release; consumers pinning `@v1` get patches and minor features automatically. Never delete a published tag — consumers pin to it.
+Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. The previous major alias (`v1`) freezes at `v1.8.0` and is not advanced by v2 releases. Never delete a published tag — consumers pin to it.
 
 ### 9. Marketplace Branding Stable
 
@@ -184,7 +185,7 @@ The current values are:
 - `branding.icon: 'check-circle'`
 - `branding.color: 'purple'`
 
-**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` (historical, with published tags v1.0.0–v1.4.2) and consumers pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v1`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
+**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` (historical, with published tags v1.0.0–v1.4.2) and new copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v2`; `@v1` remains valid and frozen at `v1.8.0`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
 
 ### Rename decision log (chronological)
 
@@ -311,7 +312,7 @@ Every event is emitted via the dailybot `report` sub-skill (`dailybot agent upda
 
 Reusable **Skills** (slash commands and one-shot workflows) and **Agents** (specialised personas) live in [.agents/skills/](.agents/skills/) and [.agents/agents/](.agents/agents/). The full catalog with tier classification is in [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md).
 
-**This repo also ships a native skill of its own — [`ai-diff-reviewer`](skills/ai-diff-reviewer/SKILL.md)** — the local companion to the shipped GitHub Action. It lives at [`skills/ai-diff-reviewer/`](skills/ai-diff-reviewer/) in the ROOT (not under `.agents/`) because that is where [`skills.sh`](https://skills.sh) scans when consumers run `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer`. Two CI invariants guarantee action ↔ skill parity: (a) [`code_check.yml`](.github/workflows/code_check.yml) `Skills — prompt-sync invariant` job fails on PRs where `skills/ai-diff-reviewer/prompt.md` diverges from `prompts/default.md`; (b) [`auto-release.yml`](.github/workflows/auto-release.yml) re-syncs the byte-copy AND bumps the skill's frontmatter `version:` field on every release cut so `@v1.4.3` on both surfaces ships the same prompt. Frontmatter is validated in CI against the Open Agent Skills contract by [`scripts/validate-frontmatter.py`](scripts/validate-frontmatter.py) (adapted from the DailybotHQ/agent-skill validator). Consumers layer repo-specific overrides at `.review/extension.md` (auto-detected by the skill; same path can be referenced from CI via the action's `prompt-extension-file:` input for local ↔ CI parity). See [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md) for the extension-authoring guide.
+**This repo also ships a native skill of its own — [`ai-diff-reviewer`](skills/ai-diff-reviewer/SKILL.md)** — the local companion to the shipped GitHub Action. It lives at [`skills/ai-diff-reviewer/`](skills/ai-diff-reviewer/) in the ROOT (not under `.agents/`) because that is where [`skills.sh`](https://skills.sh) scans when consumers run `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer`. Two CI invariants guarantee action ↔ skill parity: (a) [`code_check.yml`](.github/workflows/code_check.yml) `Skills — prompt-sync invariant` job fails on PRs where `skills/ai-diff-reviewer/prompt.md` diverges from `prompts/default.md`; (b) [`auto-release.yml`](.github/workflows/auto-release.yml) re-syncs the byte-copy AND bumps the skill's frontmatter `version:` field on every release cut so `@v2.0.0` on both surfaces ships the same prompt. Frontmatter is validated in CI against the Open Agent Skills contract by [`scripts/validate-frontmatter.py`](scripts/validate-frontmatter.py) (adapted from the DailybotHQ/agent-skill validator). Consumers layer repo-specific overrides at `.review/extension.md` (auto-detected by the skill; same path can be referenced from CI via the action's `prompt-extension-file:` input for local ↔ CI parity). See [`docs/PROMPTS.md` § "Local coding-agent parity"](docs/PROMPTS.md) for the extension-authoring guide.
 
 Two other skills — [`deepworkplan`](.agents/skills/deepworkplan/SKILL.md) and [`dailybot`](.agents/skills/dailybot/SKILL.md) — are **vendored dogfood copies of upstream skills** (`DailybotHQ/deepworkplan-skill` and `DailybotHQ/agent-skill`), pinned via [`skills-lock.json`](skills-lock.json) at repo root. The lockfile is written by the [`skills.sh`](https://skills.sh) CLI (`npx skills`) and records the exact source repo + content hash for each vendored skill so any contributor can restore the same versions deterministically:
 

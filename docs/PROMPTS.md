@@ -98,7 +98,7 @@ You have three levers, from least to most invasive:
 ### Example — extend the default
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
   with:
     prompt-extension-file: examples/prompts/python-strict.md
 ```
@@ -106,7 +106,7 @@ You have three levers, from least to most invasive:
 ### Example — full replacement
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
   with:
     prompt-file: .github/prompts/our_review_rules.md
 ```
@@ -167,17 +167,17 @@ Agent-runner providers do their own caching internally (Claude Code, Cursor Agen
 
 The action ships a companion **local review skill** ([`skills/ai-diff-reviewer/`](../skills/ai-diff-reviewer/SKILL.md)) that runs the SAME prompt against your current branch — from Cursor / Claude Code / Codex / Gemini / Copilot / Cline / Windsurf — without opening a PR. Two invariants keep the parity real:
 
-1. **The skill's `prompt.md` is a byte-identical copy of `prompts/default.md`.** [`code_check.yml`](../.github/workflows/code_check.yml) has a `Skills — prompt-sync invariant` job that fails PRs where the copy has drifted; [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy on every release cut so pinning `@v1.4.3` on both action and skill guarantees you see the same review methodology on both surfaces.
+1. **The skill's `prompt.md` is a byte-identical copy of `prompts/default.md`.** [`code_check.yml`](../.github/workflows/code_check.yml) has a `Skills — prompt-sync invariant` job that fails PRs where the copy has drifted; [`auto-release.yml`](../.github/workflows/auto-release.yml) re-syncs the copy on every release cut so pinning `@v2.0.0` on both action and skill guarantees you see the same review methodology on both surfaces.
 2. **The skill auto-detects the same `prompt-extension-file` your CI uses.** By convention, put repo-specific overrides at `.review/extension.md` and reference the same path from your workflow's `prompt-extension-file:` input.
 
 ### Install the skill in a consumer repo
 
 ```bash
-# Latest v1.x — vendors into .agents/skills/ai-diff-reviewer/ + adds skills-lock.json entry
+# Latest v2.x — vendors into .agents/skills/ai-diff-reviewer/ + adds skills-lock.json entry
 npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-diff-reviewer@v1.4.2 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v2.0.0 --skill ai-diff-reviewer
 
 # Bump to latest published action tag later
 npx skills update ai-diff-reviewer
@@ -229,7 +229,7 @@ The first time the review flow activates on a repo without an extension file, th
 Reference the same file from your CI workflow so both surfaces produce the same review:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v1
+- uses: DailybotHQ/ai-diff-reviewer@v2
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

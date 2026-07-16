@@ -133,9 +133,9 @@ any teammate can restore identical bytes with `npx skills experimental_install`.
 Bump to the latest with `npx skills update ai-diff-reviewer`.
 
 > **Note on the git repo slug.** The repo path stays at
-> `DailybotHQ/ai-diff-reviewer` (historical — published tags v1.0.0–v1.4.2
-> anchor the URL space). The `--skill ai-diff-reviewer` flag matches the
-> Marketplace listing name; both refer to the same product.
+> `DailybotHQ/ai-diff-reviewer` (historical — published tags from v1.0.0
+> onward, current major `@v2`). The `--skill ai-diff-reviewer` flag
+> matches the Marketplace listing name; both refer to the same product.
 
 ---
 
