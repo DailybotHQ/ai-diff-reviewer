@@ -2286,12 +2286,22 @@ def compute_generation_range_hash(
     returned when the git subprocess fails (network hiccup, missing
     refs, sparse checkout) — callers treat that as "unknown" and
     fall back to conservative behavior (typically FIRST_REVIEW).
+
+    Uses THREE-dot `base_sha...head_sha` (not two-dot `base_sha..head_sha`)
+    so the hash mirrors the exact diff the review payload sees via
+    `fetch_pr_context` (`origin/<base>...HEAD`). Two-dot would recompute
+    the hash every time `origin/<base>` advanced upstream even though
+    the PR-visible diff is unchanged — that produced false REBASED /
+    NEW_COMMITS transitions on any label-gated re-review after the
+    base branch moved, burning a full exhaustive pass and re-surfacing
+    already-open warnings. Three-dot pins the comparison to the merge
+    base of the two commits, matching the PR contract.
     """
     if not base_sha or not head_sha:
         return ""
     try:
         result: subprocess.CompletedProcess[str] = subprocess.run(
-            ["git", "diff", f"{base_sha}..{head_sha}"],
+            ["git", "diff", f"{base_sha}...{head_sha}"],
             capture_output=True,
             check=True,
             text=True,
@@ -3055,7 +3065,11 @@ def compute_new_lines_pct(
         total_stat: subprocess.CompletedProcess[str] = subprocess.run(
             [
                 "git", "diff", "--numstat",
-                f"{current_base_sha}..{current_head_sha}",
+                # Three-dot: same convention as compute_generation_range_hash
+                # and fetch_pr_context — pins the diff to the merge base
+                # so upstream base-branch movement doesn't inflate the
+                # denominator (see docs/ITERATION_AWARENESS.md § 4.3).
+                f"{current_base_sha}...{current_head_sha}",
             ],
             capture_output=True,
             check=True,
@@ -3414,6 +3428,55 @@ def _estimate_cost_vs_baseline(
     pct: int = int(round(total_delta * 100))
     sign: str = "+" if pct > 0 else ""
     return f"{sign}{pct}%"
+
+
+def compute_reviewed_label_applied(
+    *,
+    applied_label: str,
+    label_stamped: bool,
+    current_labels: list[str],
+    prior_state: "IterationState | None",
+) -> bool:
+    """Compute the `reviewed_label_applied` bit that gets embedded in
+    the outgoing IAR state block at the end of a run.
+
+    This is the arming signal for USER_FORCED_RESET on the NEXT run
+    (docs/ITERATION_AWARENESS.md § 8.5): the reset gesture only fires
+    when the prior state's `reviewed_label_applied` was `True` AND the
+    label is now absent from the PR. So this function's job is to
+    answer: "is the reviewed label (going to be) on the PR at the end
+    of this run — such that its removal on a future run means the
+    developer deliberately took it off?"
+
+    Returns `True` if ANY of:
+      1. `label_stamped` — this run's `gh_apply_label` call succeeded.
+      2. `applied_label in current_labels` — the label was already on
+         the PR at trigger time (a prior run stamped it; this run may
+         be a blocked follow-up or a no-op re-trigger, but the label
+         is still present).
+      3. `prior_state.reviewed_label_applied is True` — the previous
+         run's marker recorded a successful stamp AND this run took
+         a path (blocked, escape-label, etc.) that does not remove
+         the label. Preserving the prior bit here prevents a blocked
+         follow-up from silently clearing the arming signal for a
+         later legitimate reset gesture.
+
+    Returns `False` only when NONE of these hold — the reviewer has
+    never successfully stamped the label AND it is not currently on
+    the PR AND prior state does not record a successful stamp. In
+    that case there is nothing meaningful to "reset from" and
+    USER_FORCED_RESET on the next run correctly no-ops.
+
+    Also returns `False` when `applied_label` is empty (consumer opted
+    out of the reviewed-label workflow entirely).
+    """
+    if not applied_label:
+        return False
+    prior_bit: bool = (
+        prior_state is not None and prior_state.reviewed_label_applied
+    )
+    label_currently_on_pr: bool = applied_label in current_labels
+    return label_stamped or label_currently_on_pr or prior_bit
 
 
 def _render_iar_marker_annotation(
@@ -6283,15 +6346,17 @@ def main() -> int:
         and iar_policy_final is not None
         and iar_pre_context is not None
     ):
-        # Load-bearing for USER_FORCED_RESET: record whether the applied
-        # label WAS ACTUALLY stamped on this run (not "would be" — we
-        # attempted it above and captured the observed outcome). The
-        # next run reads this bit to distinguish "the user removed the
-        # reviewed label deliberately" from "the previous run was
-        # blocked / failed to stamp so the label was never on the PR
-        # in the first place" — the former is a real reset gesture,
-        # the latter is a natural re-trigger.
-        iar_state_final.reviewed_label_applied = label_stamped
+        # Load-bearing for USER_FORCED_RESET: the arming bit reflects
+        # whether the applied label is (or should be treated as) on the
+        # PR at the end of this run — see `compute_reviewed_label_applied`.
+        iar_state_final.reviewed_label_applied = (
+            compute_reviewed_label_applied(
+                applied_label=applied_label,
+                label_stamped=label_stamped,
+                current_labels=current_labels,
+                prior_state=iar_pre_context.prior_state,
+            )
+        )
         tracking_body = tracking_body + _render_iar_marker_annotation(
             state=iar_state_final,
             policy_result=iar_policy_final,

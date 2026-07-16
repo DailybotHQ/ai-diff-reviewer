@@ -1007,5 +1007,131 @@ class RunIarPostLlmTests(unittest.TestCase):
         self.assertEqual(result.overall_severity, SEVERITY_CRITICAL)
 
 
+# ---------------------------------------------------------------------------
+# compute_reviewed_label_applied — the three-signal OR write logic for the
+# USER_FORCED_RESET arming bit. Extracted from main() so the invariant can
+# be unit-tested in isolation. See docs/ITERATION_AWARENESS.md § 8.5 for
+# the load-bearing correctness contract.
+# ---------------------------------------------------------------------------
+
+
+class ComputeReviewedLabelAppliedTests(unittest.TestCase):
+    """Every code path in `compute_reviewed_label_applied`. The function
+    computes the `reviewed_label_applied` bit that arms USER_FORCED_RESET
+    on the NEXT run — inverting the logic silently disarms the reset
+    gesture, so each signal gets a dedicated test."""
+
+    def _state(self, *, reviewed_label_applied: bool) -> IterationState:
+        return IterationState(
+            version=IAR_STATE_SCHEMA_VERSION,
+            generation=1, generation_range_hash="h", round_in_generation=1,
+            policy_applied=IAR_POLICY_ITERATIVE, resolved_fingerprints=[],
+            open_fingerprints_this_gen=[], history=[], base_sha="b",
+            head_sha="h", reviewed_label_applied=reviewed_label_applied,
+        )
+
+    def test_empty_applied_label_always_false(self) -> None:
+        """Consumers who don't configure `applied-label` opt out of the
+        reviewed-label workflow entirely — the bit must stay False so
+        USER_FORCED_RESET cannot fire on them."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="",
+            label_stamped=True,      # even if somehow stamped
+            current_labels=["foo"],  # even if PR has labels
+            prior_state=self._state(reviewed_label_applied=True),
+        )
+        self.assertFalse(got)
+
+    def test_label_stamped_this_run_true(self) -> None:
+        """Signal 1: this run's stamp succeeded → True."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="ai-reviewed",
+            label_stamped=True,
+            current_labels=[],
+            prior_state=None,
+        )
+        self.assertTrue(got)
+
+    def test_label_already_on_pr_true(self) -> None:
+        """Signal 2: label present at trigger time → True even if this
+        run didn't stamp (blocked / re-trigger)."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="ai-reviewed",
+            label_stamped=False,
+            current_labels=["ready", "ai-reviewed"],
+            prior_state=None,
+        )
+        self.assertTrue(got)
+
+    def test_prior_state_bit_preserved_when_blocked(self) -> None:
+        """Signal 3 — CORE FIX for the round-3 warning: a blocked
+        follow-up run does not stamp AND does not remove the label,
+        but MUST preserve the prior state's arming bit so a later
+        legitimate reset gesture can still fire. Before the fix, this
+        case returned False and silently disarmed USER_FORCED_RESET."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="ai-reviewed",
+            label_stamped=False,       # blocked: didn't stamp
+            current_labels=[],         # label GONE from PR view
+            prior_state=self._state(reviewed_label_applied=True),
+        )
+        self.assertTrue(
+            got,
+            msg="Blocked run with prior arming bit=True MUST preserve "
+                "True so the reset gesture stays armed. "
+                "Regression against docs § 8.5 four-condition guard.",
+        )
+
+    def test_all_signals_false_returns_false(self) -> None:
+        """No stamp, no label on PR, no prior arming → False. This is
+        the correct disarm case: reviewer has never established the
+        reviewed-label state, so USER_FORCED_RESET must not fire on
+        the next run (there is nothing meaningful to reset from)."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="ai-reviewed",
+            label_stamped=False,
+            current_labels=["ready"],  # unrelated label only
+            prior_state=self._state(reviewed_label_applied=False),
+        )
+        self.assertFalse(got)
+
+    def test_no_prior_state_falls_back_to_stamp_or_pr(self) -> None:
+        """First-ever run with no prior state → bit reflects this
+        run's outcome only (signals 1 + 2)."""
+        # No stamp, no PR label → False
+        self.assertFalse(
+            reviewer.compute_reviewed_label_applied(
+                applied_label="ai-reviewed",
+                label_stamped=False,
+                current_labels=["ready"],
+                prior_state=None,
+            )
+        )
+        # Stamp only → True
+        self.assertTrue(
+            reviewer.compute_reviewed_label_applied(
+                applied_label="ai-reviewed",
+                label_stamped=True,
+                current_labels=[],
+                prior_state=None,
+            )
+        )
+
+    def test_prior_bit_false_and_no_current_signals_returns_false(
+        self,
+    ) -> None:
+        """Prior state exists but its arming bit was False (e.g. the
+        previous run was blocked too). No stamp this run, no PR label
+        → False. This ensures the bit doesn't ratchet True from
+        nothing."""
+        got: bool = reviewer.compute_reviewed_label_applied(
+            applied_label="ai-reviewed",
+            label_stamped=False,
+            current_labels=[],
+            prior_state=self._state(reviewed_label_applied=False),
+        )
+        self.assertFalse(got)
+
+
 if __name__ == "__main__":
     unittest.main()

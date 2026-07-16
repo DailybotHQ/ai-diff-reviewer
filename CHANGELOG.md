@@ -144,7 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test_iar_state_layer.py`, `test_iar_generation_tracking.py`,
   `test_iar_dedup.py`, `test_iar_policies.py`, `test_iar_dispatch.py`,
   and `test_iar_observability.py` cover the pure IAR helpers. Total
-  suite: **447 tests** (all passing).
+  suite: **455 tests** (all passing).
 
 ### Fixed
 - **IAR × `collapse-previous` ordering bug.** Before this fix, on the
@@ -222,6 +222,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/reviewer.py`.** The schema section was renumbered to § 12
   when the "Migration guide" was removed, but four inline comments
   still pointed at § 13. Updated in-place — no behavior change.
+- **`compute_generation_range_hash` used two-dot diff instead of
+  three-dot.** `git diff base_sha..head_sha` compares the two SHAs
+  directly, so any upstream advance of `origin/<base>` (a normal
+  base-branch merge that doesn't touch the PR) would change the hash
+  and trigger a false `NEW_COMMITS` / `REBASED` transition — burning
+  a full exhaustive pass and re-surfacing already-open warnings on
+  any label-gated re-review after the base branch moved. Fixed by
+  switching to `base_sha...head_sha` (three-dot), which pins the
+  comparison to the merge base — matching `fetch_pr_context`'s
+  `origin/<base>...HEAD` payload contract. Same three-dot fix applied
+  to `compute_new_lines_pct`'s `total` diff so the safety-net
+  denominator stays proportional to what the LLM actually reviewed.
+  Docs § 4.3 code sample updated in lockstep.
+- **`reviewed_label_applied` overwritten to `False` on blocked
+  follow-up runs, silently disarming USER_FORCED_RESET.** The prior
+  logic (`= label_stamped`) rewrote the bit from the current run's
+  stamp outcome alone. A blocked run (`block-on-critical` fired) does
+  not remove the label from the PR but wrote `reviewed_label_applied=False`
+  anyway; when the developer then removed the label expecting a
+  reset, the four-way guard failed on condition (c) and the reset
+  silently no-op'd. Fixed by writing the bit as a three-signal OR:
+  `label_stamped OR label_currently_on_pr OR prior_bit`. The bit
+  is now `True` whenever the label is (or would be) present on the
+  PR at the end of this run; blocked runs preserve the prior arming
+  signal instead of clearing it. Docs § 8.5 and § 4.2 rewritten to
+  match the new semantics.
+- **Docs § 4.2 omitted the fourth USER_FORCED_RESET condition.** The
+  paragraph listed three conditions and stopped, contradicting the
+  authoritative § 8.5 spec and the runtime guard. Now enumerates all
+  four (label configured, label absent, prior state exists, prior
+  `reviewed_label_applied=True`) with an explicit note on why the
+  fourth is load-bearing (blocked-run false-positive prevention).
+
+### Known limitations (documented, not yet fixed)
+
+- **Agent-runner overflow findings are not fingerprinted** (§ 13.1).
+  Only surfaces when a CLI provider (Claude Code / Cursor / Codex)
+  emits more findings than `effective-max-inline-comments` — the
+  overflow is dropped after the criticals-first sort but before
+  `run_iar_post_llm`, so it can re-surface in the next round.
+  Tail-risk edge case; does not affect the chat-completions Provider
+  path (Anthropic / OpenAI / Gemini) which fingerprints the full
+  result set before the pipeline caps it.
+- **`finding.body[:200]` fingerprint slice is a magic constant**
+  (§ 13.2). Value is stable and documented; a follow-up will promote
+  it to `IAR_FINGERPRINT_BODY_CHARS` next to the other IAR module
+  constants. Cosmetic; no behavioral impact.
 
 - **New "Security audit alignment" section in `.review/extension.md`.**
   Codifies the review rules that keep the two external security

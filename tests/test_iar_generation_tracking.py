@@ -464,6 +464,39 @@ class ComputeGenerationRangeHashTests(unittest.TestCase):
         self.assertIsInstance(cmd, list)
         self.assertEqual(cmd[0], "git")
 
+    def test_uses_three_dot_diff_not_two_dot(self) -> None:
+        """Correctness invariant: the diff spec must be three-dot
+        (`base...head`) so the hash mirrors the PR-visible diff pinned
+        to the merge base. Two-dot (`base..head`) recomputes whenever
+        `origin/<base>` advances upstream even though the PR-visible
+        content is unchanged, producing false NEW_COMMITS/REBASED
+        transitions and burning full exhaustive passes on label-gated
+        re-reviews. See docs/ITERATION_AWARENESS.md § 4.3."""
+        captured: dict[str, Any] = {}
+
+        def _capture(*args: Any, **kwargs: Any) -> Any:
+            captured["args"] = args
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout="x"
+            )
+
+        with patch.object(subprocess, "run", side_effect=_capture):
+            reviewer.compute_generation_range_hash(
+                base_sha="basesha1", head_sha="headsha1"
+            )
+        cmd: list[str] = captured["args"][0]
+        # cmd should be ["git", "diff", "basesha1...headsha1"]
+        self.assertEqual(cmd[:2], ["git", "diff"])
+        self.assertIn(
+            "...", cmd[2],
+            msg=f"Diff spec must use three-dot: got {cmd[2]!r}",
+        )
+        self.assertNotIn(
+            "..", cmd[2].replace("...", "X"),
+            msg=f"Diff spec must NOT contain two-dot: got {cmd[2]!r}",
+        )
+        self.assertEqual(cmd[2], "basesha1...headsha1")
+
 
 class GenerationRoundtripThroughMarkerTests(unittest.TestCase):
     """End-to-end: advance a generation, embed in marker, re-parse, and

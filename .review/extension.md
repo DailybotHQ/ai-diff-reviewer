@@ -414,6 +414,25 @@ both contracts across future PRs.
   cap-drop that sheds a critical silently bypasses it. Both round-1
   exhaustive AND the agent-runner cap-enforce path currently obey
   this invariant; any new truncation site must too.
+- **Always `warning`:** any change to `compute_generation_range_hash`
+  or `compute_new_lines_pct` that swaps their three-dot diff spec
+  (`base_sha...head_sha`) back to two-dot (`base_sha..head_sha`).
+  Three-dot pins the comparison to the merge base — matching the
+  PR-visible diff `fetch_pr_context` sends to the LLM. Two-dot
+  recomputes the hash / percentage whenever `origin/<base>` moves
+  upstream even though the PR content is unchanged, producing false
+  `NEW_COMMITS` / `REBASED` transitions and inflating the
+  safety-net denominator. See docs/ITERATION_AWARENESS.md § 4.3.
+- **Always `warning`:** any refactor of `compute_reviewed_label_applied`
+  that reduces the three-signal OR (`label_stamped OR
+  label_currently_on_pr OR prior_bit`) to fewer inputs — or that
+  changes the write site in `main()` to bypass this helper and set
+  `iar_state_final.reviewed_label_applied` from a subset of the
+  signals. Each signal is load-bearing per docs § 8.5: dropping
+  `label_currently_on_pr` breaks the blocked-follow-up preservation
+  case; dropping `prior_bit` breaks the escape-label path; dropping
+  `label_stamped` breaks first-review arming. The helper is the
+  single source of truth — the write site must call it.
 - **Always `info`:** using the term "silence" for a finding IAR
   chose not to submit. The correct term is "dedup" or "silence"
   depending on the reason (dedup = the finding matches a prior

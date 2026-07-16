@@ -129,7 +129,14 @@ Detection logic (deterministic, no ambiguity):
 - `prior_base_sha != current_base_sha` → `REBASED` (takes precedence over NEW_COMMITS)
 - Otherwise → `NEW_COMMITS`
 
-After the four-way classification above, one **override** may fire: if the consumer's `applied-label` (the "reviewed" label the action stamps on every successful review) is non-empty AND absent from the PR labels AND `prior_state` was not None, the transition is upgraded to `USER_FORCED_RESET` and `prior_state` is discarded before any downstream logic runs. Behaviorally identical to `FIRST_REVIEW` (fresh state, no dedup memory, round-1 exhaustive under the default policy) — the separate enum value only exists so the log and marker annotation can tell developers the reset was a deliberate gesture. Full spec in § 8.5.
+After the four-way classification above, one **override** may fire: if ALL FOUR of the following are true, the transition is upgraded to `USER_FORCED_RESET` and `prior_state` is discarded before any downstream logic runs:
+
+1. The consumer's `applied-label` (the "reviewed" label the action stamps on every successful review) is non-empty.
+2. That label is absent from the PR's current labels at trigger time.
+3. `prior_state is not None` (i.e., a previous review exists in the marker chain).
+4. `prior_state.reviewed_label_applied == True` (i.e., the reviewer previously succeeded at stamping the reviewed label — see § 8.5 for why this fourth condition is load-bearing).
+
+Behaviorally identical to `FIRST_REVIEW` (fresh state, no dedup memory, round-1 exhaustive under the default policy) — the separate enum value only exists so the log and marker annotation can tell developers the reset was a deliberate gesture. The fourth condition prevents a blocked run (whose review posted but whose reviewed-label stamp was suppressed by the strictness gate) from being misread as a deliberate reset on the natural re-trigger that follows. Full spec in § 8.5.
 
 ### 4.3 The range hash
 
@@ -138,13 +145,18 @@ The generation is anchored by a **range hash** — a deterministic SHA256 of the
 ```python
 def compute_generation_range_hash(base_sha: str, head_sha: str) -> str:
     result = subprocess.run(
-        ["git", "diff", f"{base_sha}..{head_sha}"],
+        # Three-dot: matches `fetch_pr_context`'s `origin/<base>...HEAD`
+        # so upstream base-branch movement does not flip the hash while
+        # the PR-visible diff stays the same.
+        ["git", "diff", f"{base_sha}...{head_sha}"],
         capture_output=True, check=True, text=True,
     )
     return hashlib.sha256(result.stdout.encode()).hexdigest()[:16]
 ```
 
 Two commits producing the same diff (rare but possible via cherry-pick / revert cycles) → same hash → same generation. This is intentional: if the code content is truly identical, we shouldn't create false-positive generation changes.
+
+**Why three-dot, not two-dot:** three-dot diff (`base_sha...head_sha`) pins the comparison to the merge base of the two commits — matching exactly what `fetch_pr_context` sends to the LLM as the review payload. Two-dot would recompute the hash every time `origin/<base>` moved upstream even though the PR-visible content is unchanged, producing false `NEW_COMMITS` / `REBASED` transitions on any label-gated re-review after the base branch advanced (burning a full exhaustive pass and re-surfacing already-open warnings). `compute_new_lines_pct` uses the same three-dot convention for its `total` denominator, so the safety net stays proportional to what the LLM actually reviewed.
 
 ### 4.4 What survives across generations
 
@@ -402,7 +414,15 @@ Distinct from the escape label, there is a second **stateful** escape gesture th
 
 **How the two are distinguished in the marker.** The annotation carries the transition name in parentheses — `(escape_label)` for one-shot bypass (state preserved) vs `(user_forced_reset)` for the reset (state discarded).
 
-**The load-bearing `reviewed_label_applied` safety guard.** The reset detection requires four conditions to fire — (1) `applied-label` is configured, (2) prior IAR state exists, (3) that prior state records the reviewer had previously stamped the label (`prior_state.reviewed_label_applied == True`), and (4) the label is absent from the PR now. Condition (3) is critical: without it, any blocked review (`block-on-critical` fired, so the reviewer never stamped the label) followed by the natural re-trigger would look identical to a deliberate reset and wipe fingerprint memory. The bit is written at the end of each run: `True` only when the review posted AND the strictness gate did not block; otherwise `False`. For state written before the field existed (missing key in the JSON block), the parser defaults to `False` — the safe side of the guard, which suppresses the gesture until the reviewer completes one successful run and re-writes the state with the bit set.
+**The load-bearing `reviewed_label_applied` safety guard.** The reset detection requires four conditions to fire — (1) `applied-label` is configured, (2) prior IAR state exists, (3) that prior state records the reviewer had previously stamped the label (`prior_state.reviewed_label_applied == True`), and (4) the label is absent from the PR now. Condition (3) is critical: without it, any blocked review (`block-on-critical` fired, so the reviewer never stamped the label) followed by the natural re-trigger would look identical to a deliberate reset and wipe fingerprint memory.
+
+The bit is written at the end of each run as the OR of three signals — `label_stamped OR label_currently_on_pr OR prior_bit`:
+
+- **`label_stamped`** — this run's `gh_apply_label` call succeeded (unblocked, permissions healthy, API responded).
+- **`label_currently_on_pr`** — the label was already on the PR at trigger time (a previous run stamped it; this run may be blocked or a no-op re-trigger, but the label is still there).
+- **`prior_bit`** — the previous state's `reviewed_label_applied` was `True` AND this run took a path that does not remove the label (blocked, escape-label, etc.). Preserving the prior bit here prevents a blocked follow-up from silently clearing the arming signal for a later legitimate reset gesture.
+
+The bit becomes `False` only when NONE of these hold — i.e., the reviewer has never successfully stamped this label, it's not currently on the PR, and prior state does not record a successful stamp either. In that case there is nothing meaningful to "reset from" and the gesture correctly no-ops. For state written before the field existed (missing key in the JSON block), the parser defaults to `False` — the safe side of the guard, which suppresses the gesture until the reviewer completes one successful run and re-writes the state with the bit set.
 
 **No-op cases.** The reset gesture does nothing when:
 - `applied-label` is empty / not configured (the consumer opted out of the reviewed-label workflow entirely).
@@ -649,6 +669,26 @@ No schema version is ever removed. Marker state written by prior versions will a
 
 ---
 
+## 13. Known limitations
+
+Documented edge cases and follow-up items that consumers should be aware of. None of these break the primary IAR contract (convergence + critical-always-surfaces + failure-fallback); they are quality-of-implementation gaps tracked for future work.
+
+### 13.1 Agent-runner overflow findings are not fingerprinted
+
+The tool-call cap enforcement in the agent-runner code path (Claude Code / Cursor / Codex integrations) truncates any surplus findings the CLI emits above `effective-max-inline-comments` — after the criticals-first sort, so the safety rail still holds — BEFORE `run_iar_post_llm` fingerprints them. This means overflow findings do not enter `open_fingerprints_this_gen`, so if the next round's LLM re-emits the same findings the dedup engine cannot suppress them and they re-surface.
+
+**Failure mode:** an agent-runner provider emits 40 findings in round 1 (effective cap 30, so 10 dropped after criticals-first sort). Round 2 re-emits the same 40; the 30 previously surfaced are correctly deduped, but the 10 that were dropped surface as "new" findings — the very "infinite loop" symptom IAR is designed to prevent, scoped to the overflow tail.
+
+**Scope:** only bites when the agent-runner CLI overshoots the cap (typical LLM output stays under 30 findings, so the failure mode is a tail-risk edge case). Does not affect the chat-completions Provider path (Anthropic / OpenAI / Gemini) which fingerprints the full result set before the pipeline caps it.
+
+**Follow-up:** the clean fix is either (a) plumb `code_contexts` to the agent-runner truncation site so `finding_fingerprint` can produce merge-compatible hashes, or (b) move the cap enforcement into `run_iar_post_llm` so the pipeline is single-path. Either resolves the semantic mismatch of `code_context=None` fingerprints from the truncation site vs `code_context=<real>` fingerprints from the post-LLM stage.
+
+### 13.2 Fingerprint body slice is a magic constant
+
+`finding.body[:200]` in `finding_fingerprint` (`scripts/reviewer.py`) is inlined as a magic number rather than promoted to a module-level `IAR_FINGERPRINT_BODY_CHARS: int = 200` next to `IAR_CONTEXT_HASH_RADIUS`. The value is stable and documented in this file (§ 5.2), but a single named constant would let tests and docs reference one source of truth. Cosmetic; no behavioral impact.
+
+---
+
 ## Related documentation
 
 - [`docs/PERFORMANCE.md`](PERFORMANCE.md) — cost + latency numbers (theoretical here, empirical there after Task 10 dogfooding).
@@ -661,4 +701,4 @@ No schema version is ever removed. Marker state written by prior versions will a
 
 ## Change log
 
-- **v1 (2026-07-16):** initial spec authored during Task 1 of `PLAN_iteration_aware_review`.
+- **v1 (2026-07-16):** initial spec authored during Task 1 of `PLAN_iteration_aware_review`. Post-launch corrections in the same day (three-dot generation range hash, four-condition USER_FORCED_RESET guard with three-signal `reviewed_label_applied` write logic, § 13 known-limitations catalogue) folded in during self-review dogfooding.
