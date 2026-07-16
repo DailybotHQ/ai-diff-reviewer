@@ -33,6 +33,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [STRICTNESS.md](STRICTNESS.md) | The four strictness modes (`lenient` / `block-on-critical` / `block-on-warning` / `block-on-any`) and how the model's `severity` argument maps to the GitHub check outcome. |
 | [TRIGGER_MODES.md](TRIGGER_MODES.md) | The four `trigger-mode` values (`always` / `label-required` / `label-once` / `label-added-only`) and how to pair them with the workflow's `on:` block. |
 | [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |
+| [ITERATION_AWARENESS.md](ITERATION_AWARENESS.md) | Opt-in Iteration-Aware Review (IAR) subsystem — converges multi-round self-review loops via content-anchored fingerprints, four convergence policies, generation tracking, and a hardcoded critical-always-surfaces safety rail. Master switch defaults OFF so byte-identical backward compat is preserved. |
 
 ## Local companion skill (`skills/ai-diff-reviewer/`)
 

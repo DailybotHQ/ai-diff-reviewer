@@ -26,6 +26,7 @@ The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised e
 | Prompts (user-facing) | [docs/PROMPTS.md](docs/PROMPTS.md) |
 | Providers (user-facing) | [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | Performance | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| Iteration-Aware Review (opt-in) | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
 | Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
