@@ -178,7 +178,14 @@ Every PR contains author-controlled text: the title, body, file paths, and code 
 
 Public open-source repositories are exposed to a specific abuse vector that has nothing to do with prompt injection: **someone opens N low-effort PRs to burn the maintainer's provider API budget**. A single afternoon of PR spam against a repo running `provider: anthropic` on the default `claude-sonnet-4-6` model can easily reach three-digit dollars of Anthropic billing.
 
-The `author-association` input closes this vector by default. It reads `pull_request.author_association` from the webhook payload — a server-computed field that the PR author cannot spoof — and skips the review (zero API calls, `outputs.skipped=true`) when the association is not in the configured whitelist.
+The `author-association` input closes this vector by default. It reads `pull_request.author_association` from the webhook payload — a server-computed field that the PR author cannot spoof — and skips the review (zero LLM / provider API calls, `outputs.skipped=true`) when the association is not in the configured whitelist.
+
+**Permission-aware fallback (v2.x+, private / internal only).** GitHub sometimes under-reports `author_association` on `pull_request` webhooks — especially on private org repos where access is granted via teams. A webhook value of `CONTRIBUTOR` does **not** mean the author lacks write access. On **private / internal** repos, when the webhook association is not in the allow-list, the runtime calls `GET /repos/{owner}/{repo}/collaborators/{username}/permission` and treats `admin`, `maintain`, or `write` as sufficient to pass the gate. **Public repos stay association-only** — narrowed presets like `OWNER,MEMBER` are not widened by collaborator permission. If that lookup fails:
+
+- **Private / internal repos** — fail-open (allow the review) and log a warning. Org boundaries already limit who can open PRs.
+- **Public repos** — fail-closed (deny) to preserve abuse prevention.
+
+Logs emit one actionable line per run, e.g. `Author gate: webhook=CONTRIBUTOR permission=admin visibility=private allowlist=OWNER,MEMBER,COLLABORATOR → allow (permission=admin overrides webhook=CONTRIBUTOR)`.
 
 ### Default: `OWNER,MEMBER,COLLABORATOR`
 
@@ -210,15 +217,16 @@ Note that GitHub already refuses to expose secrets to workflows triggered by for
 
 | Repo type | Recommended value | Effect |
 |---|---|---|
-| Public open-source, strict | `OWNER,MEMBER` | Only org members / owner. External contributors always denied. |
+| Public open-source, strict | `OWNER,MEMBER` | Only org members / owner by webhook association. External contributors and repo collaborators with write access but a weaker association are denied. |
 | Public open-source, standard | `OWNER,MEMBER,COLLABORATOR` **(default)** | Above + explicit repo collaborators. |
 | Public open-source, community-friendly | `OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR` | Above + returning contributors (they've had a prior commit merged). |
-| Private / internal | `''` (empty string) | Gate disabled — review every PR. Safe because there are no untrusted PR openers by construction. |
+| Private / internal | **(default is fine)** | Default write-tier gate + permission API fallback. Org members/admins with team-granted access are not skipped when the webhook under-reports `CONTRIBUTOR`. Set `''` (empty string) to disable the gate entirely and review every PR. |
 
-The gate composes with `label-gate` and `trigger-mode` via AND — a review runs only when **all three** gates pass. Evaluation order is cheapest-first (author gate → no API call → label gate → API call for label counting), so a denied PR terminates immediately.
+The gate composes with `label-gate` and `trigger-mode` via AND — a review runs only when **all three** gates pass. Evaluation order is cheapest-first (author gate — may perform one GitHub permission lookup on private/internal when the webhook mismatches — then label gate → API call for label counting), so a denied PR terminates before any LLM call or diff fetch.
 
 ### Edge cases
 
+- **Webhook under-reporting on private org repos** — `pull_request.author_association` can be weaker than the author's real repo permission (e.g. `CONTRIBUTOR` for an org admin). The permission-aware fallback resolves this via the collaborator-permission API; you no longer need `author-association: ''` on private repos unless you want the gate fully disabled.
 - **Local runs / `workflow_dispatch`** — no `pull_request` payload in `GITHUB_EVENT_PATH`, so `author_association` is empty. The gate **fails-open** in this case: the operator running locally already has write access by definition, and forcing them to unset the gate for every debug run creates more friction than value.
 - **Case- and whitespace-tolerant** — `owner, member ,collaborator` normalises to `OWNER,MEMBER,COLLABORATOR`. Unknown values (typo, misspelling) log a warning and can never match a real association (fail-safe).
 - **The default is a soft behavioural change from v1.2.x.** Consumers whose workflows relied on reviewing every external-contributor PR need to explicitly set `author-association: ''` (or add `CONTRIBUTOR`/`FIRST_TIME_CONTRIBUTOR` to the list) after upgrading. The `[Unreleased]` CHANGELOG entry calls this out.

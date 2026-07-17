@@ -62,10 +62,16 @@ inputs:
       values allowed to trigger the review. Defaults to write-tier only
       (`OWNER,MEMBER,COLLABORATOR`) — the safest baseline for public
       open-source repos, since it prevents an external contributor from
-      opening PRs to burn the maintainer's provider API budget. Set to
-      an empty string to disable the gate (review every PR). Common
-      presets: add `CONTRIBUTOR` to include returning contributors;
-      remove `COLLABORATOR` to gate on org membership only. Case- and
+      opening PRs to burn the maintainer's provider API budget. When the
+      webhook association is not in the list on a private or internal
+      repo, the runtime also checks
+      `GET /repos/{owner}/{repo}/collaborators/{username}/permission`
+      and allows authors with `admin`, `maintain`, or `write` access
+      (fixes GitHub under-reporting on private org repos). Public repos
+      stay association-only. Set to an empty string to disable the gate
+      (review every PR). Common presets: add `CONTRIBUTOR` to include
+      returning contributors; remove `COLLABORATOR` to gate on org
+      membership only (association-based on public repos). Case- and
       whitespace-insensitive. See docs/SECURITY.md § "Author-association
       gate" for the threat model.
     required: false

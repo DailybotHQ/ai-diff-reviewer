@@ -266,6 +266,15 @@ AUTHOR_ASSOCIATION_WRITE_TIER: tuple[str, ...] = (
     "COLLABORATOR",
 )
 
+# GitHub collaborator permission levels that imply write-tier repo access.
+# Used by the author-association gate when the webhook under-reports
+# membership (common on private org repos with team-granted access).
+COLLABORATOR_PERMISSION_WRITE_TIER: tuple[str, ...] = (
+    "admin",
+    "maintain",
+    "write",
+)
+
 # Severity levels — ordered low→high so `max(SEVERITY_RANK)` yields the most
 # severe finding in a review.
 SEVERITY_NONE: str = "none"
@@ -594,6 +603,56 @@ def gh_request(
         if not raw:
             return {}
         return json.loads(raw)
+
+
+def gh_get_collaborator_permission(
+    *, token: str, owner: str, repo: str, username: str
+) -> tuple[str, bool]:
+    """Return effective repo permission and whether the lookup failed.
+
+    Returns ``(permission, lookup_failed)``. ``permission`` is one of
+    ``admin|maintain|write|triage|read|none|unknown``. HTTP 404 means the
+    user is not a collaborator → ``none`` with ``lookup_failed=False``.
+    Other HTTP/network errors → ``unknown`` with ``lookup_failed=True``.
+    """
+    if not username or not owner or not repo:
+        return ("unknown", True)
+    try:
+        payload: Any = gh_request(
+            "GET",
+            (
+                f"/repos/{owner}/{repo}/collaborators/"
+                f"{urllib.parse.quote(username)}/permission"
+            ),
+            token=token,
+        )
+        if not isinstance(payload, dict):
+            return ("unknown", True)
+        permission: str = str(payload.get("permission", "") or "none").lower()
+        if permission in (
+            "admin",
+            "maintain",
+            "write",
+            "triage",
+            "read",
+            "none",
+        ):
+            return (permission, False)
+        return ("unknown", False)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return ("none", False)
+        log(
+            f"WARNING: collaborator permission lookup failed for "
+            f"{username!r}: HTTP {e.code}"
+        )
+        return ("unknown", True)
+    except Exception as e:  # noqa: BLE001 — best-effort gate lookup
+        log(
+            f"WARNING: collaborator permission lookup failed for "
+            f"{username!r}: {e}"
+        )
+        return ("unknown", True)
 
 
 def gh_graphql(query: str, variables: dict[str, Any], *, token: str) -> Any:
@@ -4809,19 +4868,23 @@ def execute_tool(name: str, args: dict[str, Any], state: ReviewState) -> str:
 
 @dataclass(frozen=True)
 class AuthorAssociationDecision:
-    """Result of `resolve_author_association_gate()`.
+    """Result of `resolve_author_association_gate()` / enhanced resolver.
 
     - `should_run` — True when the PR author is allowed through the gate.
     - `reason` — one-line explanation for the runtime log.
-    - `author_association` — the association we compared, uppercase.
+    - `author_association` — the webhook association compared, uppercase.
     - `allowed_associations` — the parsed whitelist, for downstream log
       messages (`Skipping: author X not in [OWNER, MEMBER, …]`).
+    - `collaborator_permission` — resolved REST permission when looked up.
+    - `repo_visibility` — `public`, `private`, `internal`, or `unknown`.
     """
 
     should_run: bool
     reason: str
     author_association: str
     allowed_associations: tuple[str, ...]
+    collaborator_permission: str = ""
+    repo_visibility: str = "unknown"
 
 
 def resolve_author_association_gate(
@@ -4901,6 +4964,139 @@ def resolve_author_association_gate(
         ),
         author_association=normalized_actual,
         allowed_associations=allowed,
+    )
+
+
+def _author_gate_needs_permission_lookup(
+    *, gate: str, webhook_association: str
+) -> bool:
+    """Return True when the collaborator-permission API should be called."""
+    if not gate.strip():
+        return False
+    if not (webhook_association or "").strip():
+        return False
+    base: AuthorAssociationDecision = resolve_author_association_gate(
+        gate=gate,
+        actual_association=webhook_association,
+    )
+    return not base.should_run
+
+
+def _is_private_or_internal_visibility(repo_visibility: str) -> bool:
+    normalized: str = (repo_visibility or "").strip().lower()
+    return normalized in ("private", "internal")
+
+
+def resolve_author_association_gate_enhanced(
+    *,
+    gate: str,
+    webhook_association: str,
+    collaborator_permission: str | None = None,
+    permission_lookup_failed: bool = False,
+    repo_visibility: str = "unknown",
+) -> AuthorAssociationDecision:
+    """Permission-aware author gate — extends webhook-only resolution.
+
+    When the webhook ``author_association`` is not in the allow-list on a
+    **private or internal** repo, a collaborator permission of ``admin``,
+    ``maintain``, or ``write`` still allows the review (fixes GitHub
+    under-reporting on private org repos). On public repos the gate stays
+    association-only so narrowed presets like ``OWNER,MEMBER`` remain
+    strict. Permission lookup failures fail-open on private/internal repos
+    and fail-closed on public repos.
+    """
+    visibility: str = (repo_visibility or "unknown").lower() or "unknown"
+    base: AuthorAssociationDecision = resolve_author_association_gate(
+        gate=gate,
+        actual_association=webhook_association,
+    )
+    metadata: dict[str, str] = {
+        "collaborator_permission": collaborator_permission or "",
+        "repo_visibility": visibility,
+    }
+
+    if base.should_run:
+        return AuthorAssociationDecision(
+            should_run=base.should_run,
+            reason=base.reason,
+            author_association=base.author_association,
+            allowed_associations=base.allowed_associations,
+            **metadata,
+        )
+
+    if not gate.strip():
+        return AuthorAssociationDecision(
+            should_run=base.should_run,
+            reason=base.reason,
+            author_association=base.author_association,
+            allowed_associations=base.allowed_associations,
+            **metadata,
+        )
+
+    if permission_lookup_failed:
+        if _is_private_or_internal_visibility(visibility):
+            return AuthorAssociationDecision(
+                should_run=True,
+                reason=(
+                    f"permission lookup failed; fail-open on {visibility}"
+                ),
+                author_association=base.author_association,
+                allowed_associations=base.allowed_associations,
+                collaborator_permission="unknown",
+                repo_visibility=visibility,
+            )
+        return AuthorAssociationDecision(
+            should_run=False,
+            reason="permission lookup failed; fail-closed on public",
+            author_association=base.author_association,
+            allowed_associations=base.allowed_associations,
+            collaborator_permission="unknown",
+            repo_visibility=visibility,
+        )
+
+    permission: str = (collaborator_permission or "").lower()
+    if (
+        permission in COLLABORATOR_PERMISSION_WRITE_TIER
+        and _is_private_or_internal_visibility(visibility)
+    ):
+        return AuthorAssociationDecision(
+            should_run=True,
+            reason=(
+                f"permission={permission} overrides "
+                f"webhook={base.author_association}"
+            ),
+            author_association=base.author_association,
+            allowed_associations=base.allowed_associations,
+            collaborator_permission=permission,
+            repo_visibility=visibility,
+        )
+
+    return AuthorAssociationDecision(
+        should_run=False,
+        reason=(
+            f"webhook={base.author_association} permission={permission or 'unknown'} "
+            f"not in gate {list(base.allowed_associations)}"
+        ),
+        author_association=base.author_association,
+        allowed_associations=base.allowed_associations,
+        collaborator_permission=permission or "unknown",
+        repo_visibility=visibility,
+    )
+
+
+def format_author_gate_log_line(
+    decision: AuthorAssociationDecision, *, gate_raw: str
+) -> str:
+    """Emit the actionable author-gate log line required by operators."""
+    webhook: str = decision.author_association or "(none)"
+    permission: str = decision.collaborator_permission or "not_fetched"
+    visibility: str = decision.repo_visibility or "unknown"
+    allowlist: str = gate_raw.strip() or "(disabled)"
+    verdict: str = "allow" if decision.should_run else "deny"
+    return (
+        f"Author gate: webhook={webhook} permission={permission} "
+        f"visibility={visibility} allowlist={allowlist} → {verdict} "
+        f"({decision.reason})"
     )
 
 
@@ -5098,6 +5294,28 @@ def _read_github_event_pr_author_association() -> str:
     if not isinstance(pr, dict):
         return ""
     return str(pr.get("author_association", "") or "").upper()
+
+
+def _read_github_event_pr_author_login() -> str:
+    """Return `pull_request.user.login` from the event payload, or `""`."""
+    payload = _read_github_event_payload()
+    pr = payload.get("pull_request")
+    if not isinstance(pr, dict):
+        return ""
+    user = pr.get("user")
+    if not isinstance(user, dict):
+        return ""
+    return str(user.get("login", "") or "")
+
+
+def _read_github_event_repo_visibility() -> str:
+    """Return `repository.visibility` from the event payload, or `unknown`."""
+    payload = _read_github_event_payload()
+    repository = payload.get("repository")
+    if not isinstance(repository, dict):
+        return "unknown"
+    visibility: str = str(repository.get("visibility", "") or "").lower()
+    return visibility or "unknown"
 
 
 def _read_existing_tracking_state(
@@ -6175,20 +6393,48 @@ def main() -> int:
         ",".join(AUTHOR_ASSOCIATION_WRITE_TIER),
     )
     pr_author_association: str = _read_github_event_pr_author_association()
+    repo_visibility: str = _read_github_event_repo_visibility()
+    collaborator_permission: str | None = None
+    permission_lookup_failed: bool = False
+    if _author_gate_needs_permission_lookup(
+        gate=author_gate_raw,
+        webhook_association=pr_author_association,
+    ):
+        author_login: str = _read_github_event_pr_author_login()
+        if author_login and "/" in repo:
+            owner, name = repo.split("/", 1)
+            collaborator_permission, permission_lookup_failed = (
+                gh_get_collaborator_permission(
+                    token=gh_token,
+                    owner=owner,
+                    repo=name,
+                    username=author_login,
+                )
+            )
+        else:
+            permission_lookup_failed = True
     author_decision: AuthorAssociationDecision = (
-        resolve_author_association_gate(
+        resolve_author_association_gate_enhanced(
             gate=author_gate_raw,
-            actual_association=pr_author_association,
+            webhook_association=pr_author_association,
+            collaborator_permission=collaborator_permission,
+            permission_lookup_failed=permission_lookup_failed,
+            repo_visibility=repo_visibility,
         )
     )
-    log(f"Author-association gate: {author_decision.reason}")
+    log(
+        format_author_gate_log_line(
+            author_decision, gate_raw=author_gate_raw
+        )
+    )
     if not author_decision.should_run:
         log(
-            "Skipping review — this is the abuse-prevention default. To "
-            "allow this author, add their association to "
-            "`author-association` (see docs/SECURITY.md § "
-            "'Author-association gate') or set the input to an empty "
-            "string to disable the gate entirely."
+            "Skipping review — author not allowed by the association gate. "
+            "On public repos this is the abuse-prevention default. To allow "
+            "this author, add their association to `author-association` "
+            "(see docs/SECURITY.md § 'Author-association gate'), widen the "
+            "allow-list, or set the input to an empty string to disable the "
+            "gate entirely."
         )
         write_all_outputs(skipped=True)
         return 0
