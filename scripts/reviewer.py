@@ -1154,6 +1154,7 @@ class AgentRunnerProvider:
         review_instructions: str,
         workspace: Path,
         output_dir: Path,
+        require_complexity_in_findings: bool = False,
     ) -> ReviewResult:
         """Invoke the vendor CLI headless; return a ReviewResult."""
         raise NotImplementedError
@@ -1361,6 +1362,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         review_instructions: str,
         workspace: Path,
         output_dir: Path,
+        require_complexity_in_findings: bool = False,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1373,7 +1375,9 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         # per-argv byte limit; only the diff-carrying user prompt is large,
         # and that goes via stdin below.
         enriched_instructions: str = write_findings_prompt_directive(
-            review_instructions, findings_path
+            review_instructions,
+            findings_path,
+            require_complexity=require_complexity_in_findings,
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
@@ -1485,6 +1489,7 @@ class CursorProvider(AgentRunnerProvider):
         review_instructions: str,
         workspace: Path,
         output_dir: Path,
+        require_complexity_in_findings: bool = False,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1493,7 +1498,9 @@ class CursorProvider(AgentRunnerProvider):
         # we inline our review instructions as the front of the user prompt.
         # The vendor's own code-tuned baseline system prompt still applies.
         enriched_instructions: str = write_findings_prompt_directive(
-            review_instructions, findings_path
+            review_instructions,
+            findings_path,
+            require_complexity=require_complexity_in_findings,
         )
         user_prompt: str = (
             enriched_instructions
@@ -1636,12 +1643,15 @@ class CodexProvider(AgentRunnerProvider):
         review_instructions: str,
         workspace: Path,
         output_dir: Path,
+        require_complexity_in_findings: bool = False,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
 
         enriched_instructions: str = write_findings_prompt_directive(
-            review_instructions, findings_path
+            review_instructions,
+            findings_path,
+            require_complexity=require_complexity_in_findings,
         )
         user_prompt: str = (
             enriched_instructions
@@ -2671,6 +2681,9 @@ class ReviewResult:
     summary: str = ""
     findings: list[Finding] = field(default_factory=list)
     overall_severity: str = SEVERITY_NONE
+    # Optional PR-level metadata from chat-completions tools or agent-runner
+    # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
+    complexity: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -5252,21 +5265,19 @@ def build_agent_runner_noop_warning(
     """Return the WARNING log line for v1.2 features that silently no-op
     on agent-runner providers, or `""` if none apply.
 
-    Extracted from `main()` for unit-testability. `set_pr_description` and
-    `set_pr_complexity` are exposed via `tools_schema()` only on the
-    chat-completions path, so `pr-description-mode=autocomplete` and
-    `complexity-labels-enabled=true` never populate their `state.proposed_*`
-    fields on agent-runner providers → the post-loop PATCH/label blocks
-    silently no-op. See docs/PR_METADATA_CHECKS.md § "Provider support
-    matrix".
+    Extracted from `main()` for unit-testability. `set_pr_description` is
+    exposed via `tools_schema()` only on the chat-completions path, so
+    `pr-description-mode=autocomplete` never populates `state.proposed_*`
+    on agent-runner providers → the post-loop PATCH block silently no-ops.
+    Complexity labeling is bridged via optional `complexity` in
+    `findings.json` when `complexity-labels-enabled=true`. See
+    docs/PR_METADATA_CHECKS.md § "Provider support matrix".
     """
     if not is_agent_runner:
         return ""
     skips: list[str] = []
     if pr_desc_mode == PR_DESC_MODE_AUTOCOMPLETE:
         skips.append("pr-description-mode=autocomplete")
-    if complexity_labels_enabled:
-        skips.append("complexity-labels-enabled=true")
     if not skips:
         return ""
     return (
@@ -5405,6 +5416,77 @@ def _extract_summary_from_malformed_findings(raw_text: str) -> str | None:
     return value
 
 
+def parse_complexity_level(raw_value: Any) -> str | None:
+    """Normalise an optional complexity level from tools or findings.json.
+
+    Returns a validated `low`/`medium`/`high` string, or `None` when the
+    value is absent or not a recognised level.
+    """
+    if raw_value is None:
+        return None
+    level: str = str(raw_value).strip().lower()
+    if level not in PR_COMPLEXITY_LEVELS:
+        return None
+    return level
+
+
+def resolve_pr_complexity(
+    *,
+    state: "ReviewState",
+    result: ReviewResult,
+) -> str | None:
+    """Return the PR complexity level from either provider family."""
+    return state.proposed_pr_complexity or result.complexity
+
+
+# Path substrings that bump heuristic complexity (security / runtime surface).
+_COMPLEXITY_HIGH_PATH_MARKERS: tuple[str, ...] = (
+    "auth",
+    "crypto",
+    "secret",
+    "password",
+    "token",
+    "security",
+    "scripts/reviewer.py",
+    "action.yml",
+)
+_COMPLEXITY_DOC_SUFFIXES: tuple[str, ...] = (".md", ".mdx", ".rst", ".txt")
+
+
+def infer_pr_complexity_fallback(pr_ctx: PRContext) -> str:
+    """Heuristic complexity when the model omits an explicit level.
+
+    Used only when `complexity-labels-enabled` is on but neither
+    `set_pr_complexity` nor findings.json `complexity` was recorded.
+    Keeps labeling provider-agnostic even when an agent-runner CLI skips
+    the output contract.
+    """
+    paths: list[str] = [
+        str(f.get("filename") or "") for f in pr_ctx.changed_files
+    ]
+    if not paths:
+        return PR_COMPLEXITY_LOW
+
+    lowered: list[str] = [p.lower() for p in paths]
+    if any(
+        marker in path
+        for path in lowered
+        for marker in _COMPLEXITY_HIGH_PATH_MARKERS
+    ):
+        return PR_COMPLEXITY_HIGH
+
+    if len(paths) == 1 and paths[0].endswith(_COMPLEXITY_DOC_SUFFIXES):
+        return PR_COMPLEXITY_LOW
+
+    line_delta: int = pr_ctx.additions + pr_ctx.deletions
+    if len(paths) >= 8 or line_delta > 500:
+        return PR_COMPLEXITY_HIGH
+    if len(paths) >= 3 or line_delta > 100:
+        return PR_COMPLEXITY_MEDIUM
+
+    return PR_COMPLEXITY_LOW
+
+
 def parse_findings_file(
     path: Path, *, allow_malformed_summary_fallback: bool = False
 ) -> ReviewResult:
@@ -5529,15 +5611,26 @@ def parse_findings_file(
         )
 
     severities: list[str] = [f.severity for f in findings]
+    complexity_level: str | None = parse_complexity_level(raw.get("complexity"))
+    if raw.get("complexity") is not None and complexity_level is None:
+        log(
+            "WARNING: findings.json 'complexity' field was present but "
+            f"not a recognised level ({list(PR_COMPLEXITY_LEVELS)}); "
+            "ignoring."
+        )
     return ReviewResult(
         summary=summary,
         findings=findings,
         overall_severity=overall_severity(severities),
+        complexity=complexity_level,
     )
 
 
 def write_findings_prompt_directive(
-    review_instructions: str, findings_path: Path
+    review_instructions: str,
+    findings_path: Path,
+    *,
+    require_complexity: bool = False,
 ) -> str:
     """Append the "write your findings to this file" directive to the
     review instructions handed to an agent-runner CLI.
@@ -5546,6 +5639,25 @@ def write_findings_prompt_directive(
     parser (`parse_findings_file`) is a single implementation shared across
     all providers.
     """
+    complexity_schema: str = (
+        ',\n  "complexity": "low | medium | high"\n'
+        if require_complexity
+        else ',\n  "complexity": "low | medium | high"  // optional\n'
+    )
+    complexity_rule: str = (
+        "\n- `complexity` is **required** for this run. Assess the PR's "
+        "overall review difficulty based on cognitive load, files touched, "
+        "cross-cutting concerns, security surface, and test-coverage "
+        "delta — NOT line count. Use `low` for self-contained changes "
+        "(docs, typos, isolated helpers), `medium` for one subsystem, "
+        "`high` for multiple subsystems, security-adjacent code, or "
+        "novel abstractions."
+        if require_complexity
+        else (
+            "\n- `complexity` is optional PR-level metadata (`low`, `medium`, "
+            "or `high`). Include it when you assess overall review difficulty."
+        )
+    )
     return (
         review_instructions
         + "\n\n---\n\n"
@@ -5565,7 +5677,8 @@ def write_findings_prompt_directive(
         + '      "start_line": 121,\n'
         + '      "side": "RIGHT"\n'
         + "    }\n"
-        + "  ]\n"
+        + "  ]"
+        + complexity_schema
         + "}\n"
         + "```\n\n"
         + "Rules:\n"
@@ -5582,6 +5695,7 @@ def write_findings_prompt_directive(
         + "- The file MUST parse with Python `json.load()`. Do not hand-write "
         + "JSON when the content contains Markdown, quotes, or code blocks; "
         + "use a JSON serializer so strings are escaped correctly."
+        + complexity_rule
     )
 
 
@@ -6424,14 +6538,9 @@ def main() -> int:
             provider_id, api_key=api_key, model=model
         )
 
-        # v1.2.0 dispatch caveat: the `set_pr_description` and
-        # `set_pr_complexity` tools are only exposed on the chat-completions
-        # path (they piggyback on the built-in tool-use loop). On agent-
-        # runner providers, `state.proposed_*` stays empty and the post-loop
-        # PATCH/label blocks silently no-op. Warn the consumer so they
-        # don't silently pay for a review that can't do what they asked.
-        # Roadmap: extend findings.json schema to carry these signals from
-        # the CLI back to the runtime (see docs/PR_METADATA_CHECKS.md).
+        # v1.2.0 dispatch caveat: `set_pr_description` autocomplete is
+        # chat-completions-only (tool-use loop). Complexity labeling is
+        # bridged on agent-runners via optional `complexity` in findings.json.
         agent_runner_warning: str = build_agent_runner_noop_warning(
             provider_id=provider_id,
             is_agent_runner=isinstance(provider, AgentRunnerProvider),
@@ -6452,6 +6561,7 @@ def main() -> int:
                 review_instructions=system_prompt,
                 workspace=workspace,
                 output_dir=workspace,
+                require_complexity_in_findings=complexity_labels_enabled,
             )
             # Enforce max_inline_comments on the agent-runner path too. The
             # tool handler enforces this for chat-completions providers; the
@@ -6661,10 +6771,20 @@ def main() -> int:
     # ------------------------------------------------------------------
     # PR complexity labeling (v1.2.0+) — best-effort label update.
     # ------------------------------------------------------------------
-    if complexity_labels_enabled and state.proposed_pr_complexity:
-        new_label: str = (
-            f"{complexity_label_prefix}{state.proposed_pr_complexity}"
+    complexity_level: str | None = resolve_pr_complexity(
+        state=state, result=result
+    )
+    if complexity_labels_enabled and not complexity_level:
+        complexity_level = infer_pr_complexity_fallback(pr_ctx)
+        log(
+            "WARNING: complexity-labels-enabled=true but the reviewer did not "
+            f"record a complexity level — applied heuristic fallback "
+            f"{complexity_level!r}. Prefer an explicit model assessment via "
+            "set_pr_complexity (chat-completions) or findings.json "
+            "'complexity' (agent-runner)."
         )
+    if complexity_labels_enabled and complexity_level:
+        new_label: str = f"{complexity_label_prefix}{complexity_level}"
         try:
             # Remove any prior `complexity:*` label so the labels reflect
             # the current review's assessment, not a stale one.

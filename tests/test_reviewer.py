@@ -945,13 +945,12 @@ class ResolveTriggerActionTests(unittest.TestCase):
 
 
 class AgentRunnerNoopWarningTests(unittest.TestCase):
-    """`build_agent_runner_noop_warning` — the v1.2 provider-family notice.
+    """`build_agent_runner_noop_warning` — autocomplete-only notice on CLIs.
 
     Regression for the PR #9 self-review finding: enabling
-    `pr-description-mode=autocomplete` or `complexity-labels-enabled=true`
-    on an agent-runner CLI provider silently no-ops. This helper produces
-    a WARNING log line so consumers see the caveat before paying for a
-    review that can't apply their PATCH/label.
+    `pr-description-mode=autocomplete` on an agent-runner CLI provider
+    silently no-ops the PATCH. Complexity labeling is bridged via
+    `findings.json` on all provider families.
     """
 
     def test_chat_completions_never_warns(self) -> None:
@@ -1000,16 +999,15 @@ class AgentRunnerNoopWarningTests(unittest.TestCase):
         self.assertIn("'cursor'", w)
         self.assertIn("PR_METADATA_CHECKS.md", w)
 
-    def test_complexity_on_agent_runner_warns(self) -> None:
+    def test_complexity_on_agent_runner_does_not_warn(self) -> None:
+        """Complexity labeling is bridged via findings.json on agent-runners."""
         w = reviewer.build_agent_runner_noop_warning(
             provider_id="claude-code",
             is_agent_runner=True,
             pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
             complexity_labels_enabled=True,
         )
-        self.assertIn("WARNING", w)
-        self.assertIn("complexity-labels-enabled=true", w)
-        self.assertIn("'claude-code'", w)
+        self.assertEqual(w, "")
 
     def test_both_features_listed_together(self) -> None:
         w = reviewer.build_agent_runner_noop_warning(
@@ -1019,7 +1017,7 @@ class AgentRunnerNoopWarningTests(unittest.TestCase):
             complexity_labels_enabled=True,
         )
         self.assertIn("pr-description-mode=autocomplete", w)
-        self.assertIn("complexity-labels-enabled=true", w)
+        self.assertNotIn("complexity-labels-enabled=true", w)
 
 
 class TriggerStateRoundtripTests(unittest.TestCase):

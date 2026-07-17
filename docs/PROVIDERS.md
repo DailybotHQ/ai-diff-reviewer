@@ -122,6 +122,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 ```json
 {
   "summary": "markdown body of the overall review",
+  "complexity": "low",
   "findings": [
     {
       "path": "src/foo.py",
@@ -138,6 +139,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `summary` | string | recommended | Markdown for the top-level review body. Empty string is legal (produces a default fallback summary). |
+| `complexity` | string | optional* | Exactly one of `low`, `medium`, `high` (case-insensitive). Drives `complexity-labels-enabled` when set. *Required in the output contract when the consumer enables complexity labeling. |
 | `findings` | array | required | May be empty (means "no issues"). |
 | `findings[].path` | string | required | Repo-relative file path. Must appear in the PR diff. |
 | `findings[].line` | integer | required | Line number (end line for multi-line). Must appear in the diff. |

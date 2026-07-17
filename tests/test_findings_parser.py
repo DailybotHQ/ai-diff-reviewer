@@ -37,6 +37,97 @@ def _write_json(tmpdir: Path, content: Any) -> Path:
     return path
 
 
+class ParseComplexityLevelTests(unittest.TestCase):
+    def test_valid_levels(self) -> None:
+        for level in reviewer.PR_COMPLEXITY_LEVELS:
+            self.assertEqual(reviewer.parse_complexity_level(level), level)
+
+    def test_case_insensitive(self) -> None:
+        self.assertEqual(reviewer.parse_complexity_level("HIGH"), "high")
+
+    def test_invalid_returns_none(self) -> None:
+        self.assertIsNone(reviewer.parse_complexity_level("epic"))
+
+
+class ResolvePrComplexityTests(unittest.TestCase):
+    def test_prefers_state_over_result(self) -> None:
+        state = reviewer.ReviewState()
+        state.proposed_pr_complexity = "medium"
+        result = reviewer.ReviewResult(complexity="high")
+        self.assertEqual(
+            reviewer.resolve_pr_complexity(state=state, result=result),
+            "medium",
+        )
+
+    def test_falls_back_to_result(self) -> None:
+        state = reviewer.ReviewState()
+        result = reviewer.ReviewResult(complexity="low")
+        self.assertEqual(
+            reviewer.resolve_pr_complexity(state=state, result=result),
+            "low",
+        )
+
+
+class InferPrComplexityFallbackTests(unittest.TestCase):
+    def test_docs_only_is_low(self) -> None:
+        ctx = reviewer.PRContext(
+            title="t",
+            author="a",
+            head_ref="h",
+            base_ref="main",
+            state="open",
+            additions=5,
+            deletions=2,
+            commits=1,
+            body="",
+            changed_files=[{"filename": "README.md"}],
+        )
+        self.assertEqual(reviewer.infer_pr_complexity_fallback(ctx), "low")
+
+    def test_runtime_path_is_high(self) -> None:
+        ctx = reviewer.PRContext(
+            title="t",
+            author="a",
+            head_ref="h",
+            base_ref="main",
+            state="open",
+            additions=10,
+            deletions=0,
+            commits=1,
+            body="",
+            changed_files=[{"filename": "scripts/reviewer.py"}],
+        )
+        self.assertEqual(reviewer.infer_pr_complexity_fallback(ctx), "high")
+
+
+class ParseFindingsComplexityTests(unittest.TestCase):
+    def test_complexity_field_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = _write_json(
+                Path(td),
+                {
+                    "summary": "ok",
+                    "findings": [],
+                    "complexity": "medium",
+                },
+            )
+            result = reviewer.parse_findings_file(path)
+            self.assertEqual(result.complexity, "medium")
+
+    def test_invalid_complexity_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = _write_json(
+                Path(td),
+                {
+                    "summary": "ok",
+                    "findings": [],
+                    "complexity": "epic",
+                },
+            )
+            result = reviewer.parse_findings_file(path)
+            self.assertIsNone(result.complexity)
+
+
 class ParseFindingsFileHappyPath(unittest.TestCase):
     def test_canonical_three_findings(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -332,6 +423,15 @@ class WriteFindingsPromptDirectiveTests(unittest.TestCase):
         self.assertIn("RIGHT", directive)
         self.assertIn("LEFT", directive)
         self.assertIn("json.load", directive)
+        self.assertIn("complexity", directive)
+
+    def test_require_complexity_marks_field_mandatory(self) -> None:
+        directive = reviewer.write_findings_prompt_directive(
+            "",
+            Path("/tmp/x/findings.json"),
+            require_complexity=True,
+        )
+        self.assertIn("complexity` is **required**", directive)
 
 
 class FindingsContractConstantsTests(unittest.TestCase):

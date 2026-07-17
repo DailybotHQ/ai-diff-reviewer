@@ -299,7 +299,9 @@ Every workflow using AI Diff Reviewer sets these two.
 - **What it is:** When `true`, the reviewer assesses PR complexity
   (`low` / `medium` / `high`) based on the full change (cognitive
   load, files touched, security surface, coverage delta) and applies
-  a `<prefix><level>` label.
+  a `<prefix><level>` label. Works on **all** providers: chat-completions
+  via the `set_pr_complexity` tool; agent-runners via a `complexity`
+  field in `.aiprr/findings.json`.
 - **When to enable:** you use complexity labels for triage boards,
   code-owner routing, or PR-size KPIs.
 
