@@ -173,7 +173,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `model` | | provider default | Model id (defaults balance review quality vs cost). Anthropic → `claude-sonnet-4-6`, Claude Code → `claude-sonnet-4-6` (never `auto`; Claude Code's `api-key` also accepts a `claude setup-token` subscription token, `sk-ant-oat…`), Cursor → `auto` (flat-rate on Pro), Codex → `gpt-5.6-luna` (`gpt-5-codex` is deprecated). See [docs/PROVIDERS.md](docs/PROVIDERS.md#choosing-a-cost-efficient-model). |
 | `prompt-file` | | bundled `prompts/default.md` | Path **inside the consumer checkout** to a markdown system prompt. FULLY REPLACES the base. Customising the prompt is the main lever for adapting the review to your codebase — see [docs/PROMPTS.md](docs/PROMPTS.md). |
 | `prompt-extension-file` | | _(empty)_ | Path **inside the consumer checkout** to a markdown file APPENDED to the base prompt. Use to layer overrides without copying the whole default. Combines with `prompt-file` (base + extension). Starter templates in [`examples/prompts/`](examples/prompts/). |
-| `author-association` | | `OWNER,MEMBER,COLLABORATOR` | Comma-separated whitelist of GitHub `pull_request.author_association` values allowed to trigger a review. Default is write-tier only — the safe baseline for public open-source repos (prevents external-contributor PR spam from burning your LLM budget). Add `CONTRIBUTOR` to allow returning contributors, or set to empty string to disable the gate. See [docs/SECURITY.md § "Author-association gate"](docs/SECURITY.md). |
+| `author-association` | | `OWNER,MEMBER,COLLABORATOR` | Comma-separated whitelist of GitHub `pull_request.author_association` values allowed to trigger a review. Default is write-tier only — the safe baseline for public open-source repos (prevents external-contributor PR spam from burning your LLM budget). When the webhook value is not in the list, the runtime also checks collaborator permission (`admin` / `maintain` / `write` still pass — fixes webhook under-reporting on private org repos). Add `CONTRIBUTOR` to allow returning contributors, or set to empty string to disable the gate. See [docs/SECURITY.md § "Author-association gate"](docs/SECURITY.md). |
 | `label-gate` | | `''` | If non-empty, the review only runs when the PR carries this label (e.g. `ready`). Combined with `trigger-mode`. |
 | `trigger-mode` | | _(auto)_ | `always` / `label-required` / `label-once` / `label-added-only` — see [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md). Empty picks `label-required` when `label-gate` is set, else `always`. |
 | `applied-label` | | `''` | If non-empty, this label is applied to the PR after a successful, non-blocked review (e.g. `pr-reviewed`). The label is auto-created if it doesn't exist. |
@@ -245,14 +245,14 @@ Full guide: [docs/STRICTNESS.md](docs/STRICTNESS.md).
 
 Every review spends tokens, so the action layers three controls, evaluated **cheapest-first** — a denied gate costs **zero API calls**:
 
-**1. Who can trigger a review — `author-association`** (default `OWNER,MEMBER,COLLABORATOR` = write-tier only). This is evaluated **first**, before the diff is even fetched, so an outsider opening PRs from a fork can never burn your budget — the field comes from GitHub's webhook payload and can't be spoofed.
+**1. Who can trigger a review — `author-association`** (default `OWNER,MEMBER,COLLABORATOR` = write-tier only). This is evaluated **first**, before the diff is even fetched, so an outsider opening PRs from a fork can never burn your budget on public repos. The webhook field cannot be spoofed; when it under-reports membership on private org repos, a collaborator-permission API check still allows write-tier authors.
 
 | Want to… | Set |
 |---|---|
 | Only people with write access (default, safe for public repos) | `OWNER,MEMBER,COLLABORATOR` |
 | Also allow returning contributors | `OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR` |
 | Only org members | `OWNER,MEMBER` |
-| Review **every** PR (e.g. private repos) | `''` (empty) |
+| Disable the gate entirely | `''` (empty) |
 
 **2. When it runs — `label-gate` + `trigger-mode`:**
 
@@ -596,7 +596,7 @@ The [`generate-extension` sub-skill](#sub-skill-generate-extension--tailor-the-r
 
 The Action's runtime (the local skill mirrors these steps in your coding agent):
 
-1. **Access & trigger gates** (cheapest first, no API calls) — `author-association` runs first (skip if the PR author isn't in the whitelist), then the `label-gate` / `trigger-mode` check (skip if the required label is missing or this label application was already reviewed).
+1. **Access & trigger gates** (cheapest first) — `author-association` runs first (skip if the PR author isn't in the whitelist and lacks write-tier collaborator permission), then the `label-gate` / `trigger-mode` check (skip if the required label is missing or this label application was already reviewed).
 2. **Emergency-bypass check** — if `skip-review-label` is configured AND that label is on the PR, short-circuit to success (no LLM call, no state mutation, `⏭️ skipped` tracking comment posted). See [docs/TRIGGER_MODES.md § Emergency-bypass label](docs/TRIGGER_MODES.md).
 3. **Collapse previous** — marks prior bot reviews/comments as `OUTDATED` via GraphQL.
 4. **Tracking comment** — posts a `Working…` comment with a stable marker.
@@ -676,7 +676,7 @@ No — they're independent. Many teams start with just the Action (auto-review o
 The action sends the PR diff and any files the model `read_file`s to the configured provider. Treat it like any other LLM integration — review your provider's data-retention policy and use a self-hosted runner if you have specific constraints. The skill runs your local agent, so it inherits your agent's data-handling posture (Cursor Pro, Claude Pro/API, etc.).
 
 **Does it work on private repos?**
-Yes. The default `secrets.GITHUB_TOKEN` has the right scope; just make sure the repo's settings allow Actions to read content and write PR comments.
+Yes. The default `secrets.GITHUB_TOKEN` has the right scope; just make sure the repo's settings allow Actions to read content and write PR comments. The default `author-association` allow-list works on private org repos — org members and admins are not skipped when GitHub's webhook under-reports `CONTRIBUTOR`. Set `author-association: ''` only if you want the gate fully disabled.
 
 **Can I dogfood the reviewer on its own PRs?**
 Yes — see [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) in this repo for the pattern. This repo also vendors its own skill copy at [`.agents/skills/ai-diff-reviewer/`](.agents/skills/ai-diff-reviewer/) refreshed automatically on every release — dogfooding the install flow every time we publish.

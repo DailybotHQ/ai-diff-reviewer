@@ -201,8 +201,7 @@ workflow event types.
 ### Q4 — External contributors
 
 > **Who should be allowed to trigger the review?**
-> (Applies mostly to public open-source repos — private repos can
-> skip the gate.)
+> (Applies mostly to public open-source repos.)
 >
 > - **`OWNER,MEMBER,COLLABORATOR`** (recommended for public repos) —
 >   Only writes-tier authors trigger the review. Blocks external
@@ -211,9 +210,13 @@ workflow event types.
 >   returning contributors (people whose PRs you've merged before).
 >   Good middle ground once you have a stable contributor pool.
 > - **empty string `''`** — Review every PR from anyone.
->   Recommended for private repos; risky on public ones.
+>   Optional on private repos; risky on public ones.
 
-Skip this question if `visibility == "PRIVATE"` (default to empty).
+On **private / internal** repos, keep the default
+`OWNER,MEMBER,COLLABORATOR` — the action also checks collaborator
+permission when GitHub's webhook under-reports membership (common with
+team-granted org access). Only choose `''` if you want the gate fully
+disabled.
 
 Record: `AUTHOR_ASSOC`.
 

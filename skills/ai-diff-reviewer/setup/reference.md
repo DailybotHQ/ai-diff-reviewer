@@ -128,6 +128,9 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Default:** `OWNER,MEMBER,COLLABORATOR` (write-tier only).
 - **What it is:** Comma-separated whitelist of GitHub
   `pull_request.author_association` values allowed to trigger the review.
+  When the webhook value is not in the list, the runtime also checks
+  collaborator permission via the GitHub API (`admin` / `maintain` / `write`
+  still pass — fixes webhook under-reporting on private org repos).
 - **Presets:**
   - Public open-source repo (default) — protects your API budget from
     external PR spam.
@@ -135,7 +138,11 @@ Every workflow using AI Diff Reviewer sets these two.
     already been merged.
   - Remove `COLLABORATOR` to gate on org membership only.
   - Empty string `''` — disable the gate, review every PR from anyone.
-    Recommended for private repos; risky on public ones.
+    Optional on private repos; risky on public ones.
+- **Private / internal repos:** the default allow-list is usually enough —
+  org members and admins are not skipped when GitHub reports a weaker
+  webhook association (e.g. `CONTRIBUTOR`). Set `''` only if you want the
+  gate fully disabled.
 - **Case- and whitespace-insensitive.**
 - **See:** `docs/SECURITY.md § "Author-association gate"` in the action
   repo for the threat model.

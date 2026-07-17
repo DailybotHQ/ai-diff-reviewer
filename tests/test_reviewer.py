@@ -2289,5 +2289,113 @@ class ResolveAuthorAssociationGateTests(unittest.TestCase):
             d.should_run = False  # type: ignore[misc]
 
 
+class AuthorAssociationGatePermissionTests(unittest.TestCase):
+    """Permission-aware author gate (webhook under-report + API fallback)."""
+
+    _DEFAULT_GATE: str = "OWNER,MEMBER,COLLABORATOR"
+
+    def test_private_contributor_webhook_admin_permission_allows(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            collaborator_permission="admin",
+            repo_visibility="private",
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("permission=admin overrides", d.reason)
+
+    def test_private_contributor_webhook_write_permission_allows(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            collaborator_permission="write",
+            repo_visibility="private",
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("permission=write overrides", d.reason)
+
+    def test_private_none_webhook_none_permission_denies(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="NONE",
+            collaborator_permission="none",
+            repo_visibility="private",
+        )
+        self.assertFalse(d.should_run)
+        self.assertIn("webhook=NONE", d.reason)
+
+    def test_public_first_time_contributor_none_permission_denies(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="FIRST_TIME_CONTRIBUTOR",
+            collaborator_permission="none",
+            repo_visibility="public",
+        )
+        self.assertFalse(d.should_run)
+
+    def test_public_member_webhook_allows_without_permission(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="MEMBER",
+            repo_visibility="public",
+        )
+        self.assertTrue(d.should_run)
+        self.assertEqual(d.collaborator_permission, "")
+
+    def test_empty_gate_allows_regardless_of_association(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate="",
+            webhook_association="NONE",
+            collaborator_permission="none",
+            repo_visibility="public",
+        )
+        self.assertTrue(d.should_run)
+
+    def test_permission_api_failure_private_fail_open(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            permission_lookup_failed=True,
+            repo_visibility="private",
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("fail-open on private", d.reason)
+
+    def test_permission_api_failure_public_fail_closed(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            permission_lookup_failed=True,
+            repo_visibility="public",
+        )
+        self.assertFalse(d.should_run)
+        self.assertIn("fail-closed on public", d.reason)
+
+    def test_format_author_gate_log_line_includes_matrix(self) -> None:
+        decision = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            collaborator_permission="admin",
+            repo_visibility="private",
+        )
+        line = reviewer.format_author_gate_log_line(
+            decision, gate_raw=self._DEFAULT_GATE
+        )
+        self.assertIn("webhook=CONTRIBUTOR", line)
+        self.assertIn("permission=admin", line)
+        self.assertIn("visibility=private", line)
+        self.assertIn("→ allow", line)
+
+    def test_internal_repo_permission_failure_fail_open(self) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            permission_lookup_failed=True,
+            repo_visibility="internal",
+        )
+        self.assertTrue(d.should_run)
+        self.assertIn("fail-open on internal", d.reason)
+
+
 if __name__ == "__main__":
     unittest.main()

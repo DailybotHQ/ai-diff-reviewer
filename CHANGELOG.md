@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime now checks `GET /repos/{owner}/{repo}/collaborators/{username}/permission` and allows authors with `admin`, `maintain`, or `write` access before skipping. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
+
 - **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
 
 > **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
