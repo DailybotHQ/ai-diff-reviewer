@@ -3,14 +3,14 @@ name: Self-review
 # Dogfood: review PRs to this action's own `main` with the action itself.
 #
 # Design goals:
-#   1. LABEL-GATED, RUN-ONCE — the dogfood runs only when the `AIReview` label is
-#      applied (case-insensitive: `AIReview`/`aireview`/…), exactly once per
+#   1. LABEL-GATED, RUN-ONCE — the dogfood runs only when the `ready` label is
+#      applied (case-insensitive: `ready`/`Ready`/`READY`), exactly once per
 #      application. It fires on the `labeled` event (and on `opened` if the PR
-#      already carries `AIReview`), NOT on every push — so to re-review you remove
-#      and re-add the `AIReview` label. This keeps the maintainer in explicit
+#      already carries `ready`), NOT on every push — so to re-review you remove
+#      and re-add the `ready` label. This keeps the maintainer in explicit
 #      control of when tokens burn.
 #   2. FULL COVERAGE — every configured provider (Anthropic + the three CLI
-#      providers: claude-code, cursor, codex) reviews EVERY AIReview-labeled PR,
+#      providers: claude-code, cursor, codex) reviews EVERY ready-labeled PR,
 #      including docs-only and AI-tooling-only diffs. Rationale is trust
 #      surface: skill vendors under `.agents/`, workflow tweaks under
 #      `.github/`, prompt edits under `prompts/`, and doc changes are exactly
@@ -20,7 +20,7 @@ name: Self-review
 #      repo — never based on the diff shape.
 #   3. HONEST STATUS — the single `scope` job builds the matrix of provider legs
 #      that will ACTUALLY review this event. A leg that shouldn't run (no
-#      `AIReview` label, or an unset provider secret) is simply absent from the
+#      `ready` label, or an unset provider secret) is simply absent from the
 #      matrix, so it never shows a misleading green Success; when nothing is
 #      eligible the whole review job reports as **Skipped** (grey). A green
 #      leg means it actually reviewed.
@@ -28,20 +28,20 @@ name: Self-review
 #      (`Self-review gate`) is the one check you mark as *Required* in branch
 #      protection under an opt-in review flow. It ONLY runs when THIS event
 #      was a review-request event (i.e. `scope` decided a review should run,
-#      detected via `empty_reason != 'no-gate-label'`), and when it runs it
+#      detected via `empty_reason != 'no-ready-label'`), and when it runs it
 #      FAILS (red → blocks merge) unless AT LEAST ONE provider leg ran and
 #      passed — a scope error, no eligible provider, or every leg failing all
 #      block; a single failing provider does NOT block if another passed.
-#      When the event isn't a review-request (no `AIReview` label, or an
-#      unrelated `labeled` event on a PR that happens to carry `AIReview`) the
+#      When the event isn't a review-request (no `ready` label, or an
+#      unrelated `labeled` event on a PR that happens to carry `ready`) the
 #      whole gate is **Skipped** (grey) so a docs/other PR that doesn't want
 #      a review carries no red-X noise in the checks list.
 #
 #      Trade-off: GitHub treats a *skipped* required check as *passing* for
-#      branch protection, so under this opt-in design a PR without `AIReview`
+#      branch protection, so under this opt-in design a PR without `ready`
 #      becomes mergeable without a self-review. If you want "every PR must be
 #      reviewed", pair this required check with a separate rule that enforces
-#      the `AIReview` label (a lightweight labeler action or a repository ruleset)
+#      the `ready` label (a lightweight labeler action or a repository ruleset)
 #      — the gate itself is deliberately scoped to "review was requested".
 #
 #      Mark ONLY `Self-review gate` required — never the dynamic
@@ -53,7 +53,7 @@ name: Self-review
 # can only be skipped at the STEP level — which leaves the job green. Building
 # the matrix from a decision job is the supported way to make ineligible legs
 # skip cleanly. Consumers who want the same pattern: see docs/TRIGGER_MODES.md
-# § "Recipe: run once when labelled `AIReview`, block merge until it passes".
+# § "Recipe: run once when labelled `ready`, block merge until it passes".
 #
 # The local checkout under `./` is what gets used (instead of a
 # `uses: DailybotHQ/ai-diff-reviewer@v2` pin), so the in-flight changes are what
@@ -62,8 +62,8 @@ name: Self-review
 on:
   pull_request:
     branches: [main]
-    # `labeled` (re-)adding `AIReview` re-triggers; `opened` catches a PR created
-    # with `AIReview` already on it. Deliberately NOT `synchronize` — pushes do
+    # `labeled` (re-)adding `ready` re-triggers; `opened` catches a PR created
+    # with `ready` already on it. Deliberately NOT `synchronize` — pushes do
     # not re-review (run-once semantics; toggle the label to re-run).
     types: [opened, labeled]
 
@@ -88,15 +88,15 @@ jobs:
       # A JSON array of matrix `include` entries — `[]` when nothing runs.
       matrix: ${{ steps.decide.outputs.matrix }}
       # Why the matrix is empty, surfaced in the scope job's log for humans and
-      # consumed by the gate when it runs (`AIReview` applied path only). Values:
-      # `no-gate-label` (the gate is skipped, no error), `no-provider-secret`
-      # (gate fails — `AIReview` is applied but no provider secret is configured
+      # consumed by the gate when it runs (`ready` applied path only). Values:
+      # `no-ready-label` (the gate is skipped, no error), `no-provider-secret`
+      # (gate fails — `ready` is applied but no provider secret is configured
       # on the repo, so nothing can review). Empty when the matrix is
       # non-empty.
       empty_reason: ${{ steps.decide.outputs.empty_reason }}
     steps:
       # No checkout: the decision only reads event context and secret presence,
-      # never the diff (full coverage = every provider on every AIReview PR).
+      # never the diff (full coverage = every provider on every ready PR).
       - name: Decide which provider legs run
         id: decide
         shell: bash
@@ -115,31 +115,31 @@ jobs:
           lc() { tr '[:upper:]' '[:lower:]'; }
 
           # 1. RUN-ONCE LABEL GATE (case-insensitive).
-          #    - `labeled` event: run only when the label just added is `AIReview`
+          #    - `labeled` event: run only when the label just added is `ready`
           #      (ignore unrelated labels like `bug`/`dependencies`).
-          #    - `opened` event: run if the PR already carries `AIReview`.
-          gate_label_present=false
-          if printf '%s' "$LABELS_JSON" | lc | grep -qE '"aireview"'; then
-            gate_label_present=true
+          #    - `opened` event: run if the PR already carries `ready`.
+          ready_present=false
+          if printf '%s' "$LABELS_JSON" | lc | grep -qE '"ready"'; then
+            ready_present=true
           fi
           should_run=false
           case "$EVENT_ACTION" in
             labeled)
-              [ "$(printf '%s' "$EVENT_LABEL" | lc)" = "aireview" ] && should_run=true ;;
+              [ "$(printf '%s' "$EVENT_LABEL" | lc)" = "ready" ] && should_run=true ;;
             opened)
-              [ "$gate_label_present" = "true" ] && should_run=true ;;
+              [ "$ready_present" = "true" ] && should_run=true ;;
           esac
           if [ "$should_run" != "true" ]; then
-            echo "::notice::Self-review skipped — apply the 'AIReview' label to run the dogfood (remove + re-add to re-run)."
+            echo "::notice::Self-review skipped — apply the 'ready' label to run the dogfood (remove + re-add to re-run)."
             {
               echo 'matrix=[]'
-              echo 'empty_reason=no-gate-label'
+              echo 'empty_reason=no-ready-label'
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # 2. Build the matrix. Every configured provider reviews EVERY
-          #    AIReview-labeled PR — no critical-surface filtering — because the
+          #    ready-labeled PR — no critical-surface filtering — because the
           #    non-runtime paths (`.agents/**` vendored skills, workflows,
           #    prompts, docs) are exactly where prompt injection or malicious
           #    content can hide, and deserve the same scrutiny as runtime
@@ -163,7 +163,7 @@ jobs:
           [ "$HAS_OPENAI" = "true" ]      && add codex OPENAI_API_KEY "self-reviewed:codex" gpt-5.4-mini
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
-          # print an accurate hint. Reaching here means `AIReview` is applied, so an
+          # print an accurate hint. Reaching here means `ready` is applied, so an
           # empty matrix means "no provider secret is configured on this repo".
           if [ "$matrix" = "[]" ]; then
             echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, or OPENAI_API_KEY as a repo secret so the self-review gate can run."
@@ -212,9 +212,9 @@ jobs:
           provider: ${{ matrix.provider }}
           api-key: ${{ secrets[matrix.secret] }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Defense-in-depth: the `scope` job already gated on the `AIReview`
+          # Defense-in-depth: the `scope` job already gated on the `ready`
           # label, but pass it through so the action's own gate agrees.
-          label-gate: AIReview
+          label-gate: ready
           model: ${{ matrix.model }}
           # `block-on-critical` — the check fails only on `critical` findings
           # (security, data loss, breaking API), while `warning`/`info` still
@@ -265,8 +265,8 @@ jobs:
           #      `self-reviewed:anthropic`). Removing this label does
           #      NOT trigger the workflow on its own; it just changes
           #      the PR's label state.
-          #   2. Remove the `AIReview` label. Same — no workflow trigger.
-          #   3. Re-add `AIReview`. The workflow fires (`types: [labeled]`);
+          #   2. Remove the `ready` label. Same — no workflow trigger.
+          #   3. Re-add `ready`. The workflow fires (`types: [labeled]`);
           #      IAR checks all FIVE USER_FORCED_RESET conditions:
           #        (a) `applied-label` configured (yes: `self-reviewed:*`),
           #        (b) `prior_state is not None` (yes: marker chain has
@@ -311,9 +311,9 @@ jobs:
           # § "Emergency-bypass label". Enabled here so the short-circuit
           # path runs in production (zero LLM tokens on any PR that carries
           # `skip-ai-review`). Manual smoke test:
-          #   1. On any PR with `AIReview` applied and a prior self-review run,
+          #   1. On any PR with `ready` applied and a prior self-review run,
           #      add the `skip-ai-review` label.
-          #   2. Remove and re-add `AIReview` to re-trigger the workflow.
+          #   2. Remove and re-add `ready` to re-trigger the workflow.
           #   3. Expected: the reviewer posts a `⏭️ skipped` tracking comment
           #      naming `skip-ai-review`, does NOT stamp `self-reviewed:*`,
           #      does NOT touch the IAR marker state, and the leg reports
@@ -335,22 +335,22 @@ jobs:
   # Stable-named MERGE GATE — the one check with a stable name across events
   # (unlike the dynamic `Self-review — <provider>` legs). Mark THIS job
   # (`Self-review gate`) as the required status check in branch protection when
-  # you want "if `AIReview` is applied, a review must pass before merge".
+  # you want "if `ready` is applied, a review must pass before merge".
   #
-  # Runs ONLY when the `AIReview` label is on the PR (opt-in flow). When `AIReview`
+  # Runs ONLY when the `ready` label is on the PR (opt-in flow). When `ready`
   # isn't applied the whole gate is skipped cleanly — GitHub shows a grey
   # "Skipped" instead of a red X, so a docs/other PR that doesn't want a review
   # doesn't carry noise in the checks list. Trade-off: GitHub treats a *skipped*
   # required check as *passing* for branch protection, so under this opt-in
-  # design a PR without `AIReview` becomes mergeable without a self-review. If you
-  # want to force `AIReview` on every PR (i.e. every PR must be reviewed), combine
-  # this required check with a separate rule that enforces the `AIReview` label
+  # design a PR without `ready` becomes mergeable without a self-review. If you
+  # want to force `ready` on every PR (i.e. every PR must be reviewed), combine
+  # this required check with a separate rule that enforces the `ready` label
   # (e.g. a lightweight action or a ruleset) — the gate itself is deliberately
   # scoped to "review was requested".
   #
-  # When `AIReview` IS applied and the gate runs, it FAILS (red → blocks merge)
+  # When `ready` IS applied and the gate runs, it FAILS (red → blocks merge)
   # unless AT LEAST ONE provider leg ran and passed. This catches two real
-  # failure modes: (a) `AIReview` applied but no provider eligible (config bug —
+  # failure modes: (a) `ready` applied but no provider eligible (config bug —
   # e.g. no `ANTHROPIC_API_KEY` and the diff isn't critical); (b) every eligible
   # leg failed.
   #
@@ -359,26 +359,26 @@ jobs:
   # cleanly. The aggregate `needs.self-review.result` can't express this (it's
   # `failure` if ANY leg fails), so we count successful legs from this run's
   # jobs via the API. See docs/TRIGGER_MODES.md § "Recipe: run once when
-  # labelled `AIReview`, block merge until it passes".
+  # labelled `ready`, block merge until it passes".
   gate:
     name: 'Self-review gate'
     needs: [scope, self-review]
     # Run the gate ONLY when this specific event was a review-request event,
     # authoritatively decided by the scope job's should_run logic and exposed
-    # via `empty_reason`. `no-gate-label` means "this run wasn't gated on a
-    # review-labeling — either the label isn't on the PR at all, or an
-    # unrelated label (e.g. `bug`) fired the workflow while `AIReview` happens to
+    # via `empty_reason`. `no-ready-label` means "this run wasn't gated on a
+    # ready-labeling — either the label isn't on the PR at all, or an
+    # unrelated label (e.g. `bug`) fired the workflow while `ready` happens to
     # be present". In either case we skip the gate (grey) rather than fail on
     # an empty matrix that was expected. When the run IS a review-request the
     # gate runs and enforces pass/fail. `always()` ensures the gate still
     # reports even when the upstream `self-review` job fails or skips.
     #
-    # Why not `contains(github.event.pull_request.labels.*.name, 'AIReview')`?
+    # Why not `contains(github.event.pull_request.labels.*.name, 'ready')`?
     # That's a PR-state check — true whenever the label is on the PR, even
     # when the event that fired this run was unrelated (e.g. adding `bug` to
-    # a PR that already has `AIReview`). Then the gate would treat the expected
+    # a PR that already has `ready`). Then the gate would treat the expected
     # empty matrix as a config bug and fail red incorrectly.
-    if: always() && needs.scope.outputs.empty_reason != 'no-gate-label'
+    if: always() && needs.scope.outputs.empty_reason != 'no-ready-label'
     runs-on: ubuntu-latest
     # Override the workflow-wide grant: the gate only needs to read this run's
     # job conclusions; it touches neither the repo contents nor the PR.
@@ -403,11 +403,11 @@ jobs:
             exit 1
           fi
           # Empty matrix == this run WAS a review-request event (the gate's
-          # `if:` already filtered out `no-gate-label` runs) but no provider
+          # `if:` already filtered out `no-ready-label` runs) but no provider
           # secret is configured on the repo. That's a real config bug worth
           # surfacing — a review was requested but nothing can run it.
           if [ "${MATRIX:-[]}" = "[]" ]; then
-            echo "::error::Self-review did not run — a review was requested (via 'AIReview' label) but no provider secret is configured on this repo. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, or OPENAI_API_KEY as a repo secret to unblock the merge gate."
+            echo "::error::Self-review did not run — a review was requested (via 'ready' label) but no provider secret is configured on this repo. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, or OPENAI_API_KEY as a repo secret to unblock the merge gate."
             exit 1
           fi
           # Count the `Self-review — <provider>` legs of THIS run that concluded
@@ -422,6 +422,6 @@ jobs:
           if [ "${passed:-0}" -ge 1 ]; then
             echo "At least one self-review leg passed — merge gate satisfied."
           else
-            echo "::error::No self-review leg passed — at least one provider must run and pass before merge. Fix findings / rerun (toggle the 'AIReview' label)."
+            echo "::error::No self-review leg passed — at least one provider must run and pass before merge. Fix findings / rerun (toggle the 'ready' label)."
             exit 1
           fi
