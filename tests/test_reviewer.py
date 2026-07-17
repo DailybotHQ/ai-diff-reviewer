@@ -2396,6 +2396,30 @@ class AuthorAssociationGatePermissionTests(unittest.TestCase):
         self.assertTrue(d.should_run)
         self.assertIn("fail-open on internal", d.reason)
 
+    def test_public_write_permission_does_not_override_strict_gate(
+        self,
+    ) -> None:
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate="OWNER,MEMBER",
+            webhook_association="CONTRIBUTOR",
+            collaborator_permission="write",
+            repo_visibility="public",
+        )
+        self.assertFalse(d.should_run)
+        self.assertIn("webhook=CONTRIBUTOR", d.reason)
+
+    def test_lookup_skipped_private_fail_open_via_lookup_failed(
+        self,
+    ) -> None:
+        """When main() cannot attempt the API call, fail-open on private."""
+        d = reviewer.resolve_author_association_gate_enhanced(
+            gate=self._DEFAULT_GATE,
+            webhook_association="CONTRIBUTOR",
+            permission_lookup_failed=True,
+            repo_visibility="private",
+        )
+        self.assertTrue(d.should_run)
+
 
 if __name__ == "__main__":
     unittest.main()

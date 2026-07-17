@@ -620,7 +620,10 @@ def gh_get_collaborator_permission(
     try:
         payload: Any = gh_request(
             "GET",
-            f"/repos/{owner}/{repo}/collaborators/{username}/permission",
+            (
+                f"/repos/{owner}/{repo}/collaborators/"
+                f"{urllib.parse.quote(username)}/permission"
+            ),
             token=token,
         )
         if not isinstance(payload, dict):
@@ -4994,11 +4997,13 @@ def resolve_author_association_gate_enhanced(
 ) -> AuthorAssociationDecision:
     """Permission-aware author gate — extends webhook-only resolution.
 
-    When the webhook ``author_association`` is not in the allow-list,
-    a collaborator permission of ``admin``, ``maintain``, or ``write``
-    still allows the review (fixes GitHub under-reporting on private
-    org repos). Permission lookup failures fail-open on private/internal
-    repos and fail-closed on public repos.
+    When the webhook ``author_association`` is not in the allow-list on a
+    **private or internal** repo, a collaborator permission of ``admin``,
+    ``maintain``, or ``write`` still allows the review (fixes GitHub
+    under-reporting on private org repos). On public repos the gate stays
+    association-only so narrowed presets like ``OWNER,MEMBER`` remain
+    strict. Permission lookup failures fail-open on private/internal repos
+    and fail-closed on public repos.
     """
     visibility: str = (repo_visibility or "unknown").lower() or "unknown"
     base: AuthorAssociationDecision = resolve_author_association_gate(
@@ -5050,7 +5055,10 @@ def resolve_author_association_gate_enhanced(
         )
 
     permission: str = (collaborator_permission or "").lower()
-    if permission in COLLABORATOR_PERMISSION_WRITE_TIER:
+    if (
+        permission in COLLABORATOR_PERMISSION_WRITE_TIER
+        and _is_private_or_internal_visibility(visibility)
+    ):
         return AuthorAssociationDecision(
             should_run=True,
             reason=(
@@ -6403,6 +6411,8 @@ def main() -> int:
                     username=author_login,
                 )
             )
+        else:
+            permission_lookup_failed = True
     author_decision: AuthorAssociationDecision = (
         resolve_author_association_gate_enhanced(
             gate=author_gate_raw,

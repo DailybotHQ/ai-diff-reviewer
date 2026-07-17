@@ -130,13 +130,15 @@ Every workflow using AI Diff Reviewer sets these two.
   `pull_request.author_association` values allowed to trigger the review.
   When the webhook value is not in the list, the runtime also checks
   collaborator permission via the GitHub API (`admin` / `maintain` / `write`
-  still pass — fixes webhook under-reporting on private org repos).
+  still pass on **private / internal** repos — fixes webhook under-reporting).
+  Public repos stay association-only.
 - **Presets:**
   - Public open-source repo (default) — protects your API budget from
     external PR spam.
   - Add `CONTRIBUTOR` to include returning contributors whose PRs have
     already been merged.
-  - Remove `COLLABORATOR` to gate on org membership only.
+  - Remove `COLLABORATOR` to gate on org membership only (association-based
+    on public repos; permission fallback does not widen this preset).
   - Empty string `''` — disable the gate, review every PR from anyone.
     Optional on private repos; risky on public ones.
 - **Private / internal repos:** the default allow-list is usually enough —
