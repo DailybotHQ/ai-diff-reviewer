@@ -235,55 +235,57 @@ Defined in [.agents/commands/](.agents/commands/). When invoked, look up the pro
 | `/dwp-resume` | Reconstruct state and continue an interrupted plan. |
 | `/dwp-status` | Report progress on a plan without making changes. |
 | `/dwp-verify` | Objective pass/fail conformance report against the DWP spec. |
+| `/dwp-upgrade` | Check for a newer DeepWorkPlan skill and upgrade only with explicit consent. |
 | `/skill-create` | Author or update a reusable skill under `.agents/skills/`. |
 | `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. |
 
-The eight `dwp-*` / `skill-create` / `agent-create` entries are thin delegators to the installed `deepworkplan` skill at [`.agents/skills/deepworkplan/`](.agents/skills/deepworkplan/) — see the [Deep Work Plan](#deep-work-plan) section below.
+The nine `dwp-*` / `skill-create` / `agent-create` entries are thin delegators to the installed `deepworkplan` skill at [`.agents/skills/deepworkplan/`](.agents/skills/deepworkplan/) — see the [Deep Work Plan](#deep-work-plan) section below.
 
 ---
 
 ## Deep Work Plan
 
-This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer).
+This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 5.0.0 (onboarded 2026-07-04; upgraded 2026-09-13; skill 5.3.0).
 
-### The eight sub-skills
+### Deep Work Plans — invocation
 
-Installed at [.agents/skills/deepworkplan/](.agents/skills/deepworkplan/):
+Structured work runs through the local DWP flows (`.agents/commands/dwp-*` delegators; the flows live in `.agents/skills/deepworkplan/` — discovery is local, no network service is consulted):
+
+| Intent | Route |
+|---|---|
+| "plan this work", "create a plan" | `/dwp-create` |
+| "execute / run the plan" | `/dwp-execute` |
+| "continue / resume the interrupted plan" | `/dwp-resume` |
+| "plan status", "what's left" | `/dwp-status` (read-only) |
+| "verify the repo / the plan" | `/dwp-verify` (read-only) |
+| "upgrade the DWP skill / harness" | `/dwp-upgrade` (read-only check; installs only on consent) |
+| ordinary direct edit ("fix this", "rename that") | done directly — never silently becomes a plan |
+
+Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only.
+
+### The nine sub-skills
 
 | Sub-skill | Purpose |
 |---|---|
-| `create` | Decompose a goal into a numbered, sequential Deep Work Plan with per-task validation gates. |
+| `create` | Decompose a goal into a Deep Work Plan (Lite or Full) with per-task validation gates. |
 | `execute` | Run a plan task by task, checking each gate, updating progress. |
-| `refine` | Modify a plan (add, remove, reorder tasks) while preserving completed work. |
+| `refine` | Modify a plan (add, split, reorder, promote Lite→Full, migrate legacy) while preserving completed work. |
 | `resume` | Reconstruct state and continue an interrupted plan across sessions or agents. |
 | `status` | Report progress without making changes. |
 | `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
-| `onboard` | Make a repository AI-first (reasoned analysis + non-destructive generation). |
+| `onboard` | Make a repository AI-first, or run a targeted harness upgrade (reasoned analysis + non-destructive generation). |
 | `author` | Author or evolve this repo's own skills, agents, and commands. |
+| `upgrade` | Check for a newer DeepWorkPlan skill release and upgrade only with explicit consent (read-only check). |
 
 The `dwp-*`, `skill-create`, and `agent-create` slash commands in [.agents/commands/](.agents/commands/) are thin delegators to these — the skill is the single source of truth.
 
 ### Where plans live
 
-Deep Work Plan outputs — plans, drafts, and onboarding recon/report — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source.
-
-```
-.dwp/
-├── plans/       ← PLAN_{name}/ directories (executing/executed plans)
-├── drafts/      ← {name}_draft_refined.md (created by /dwp-create)
-└── onboard/     ← RECON.md and REPORT.md from /deepworkplan-onboard
-```
-
-Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+Deep Work Plan outputs — `plans/` (`PLAN_{name}/` directories), `drafts/`, and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
 
 ### When to reach for it
 
-- The task has multiple valid approaches, touches many files, or needs to survive across sessions → `/dwp-create` first, then `/dwp-execute`.
-- A previous plan was interrupted → `/dwp-resume`.
-- Before wrapping onboarding or a large change → `/dwp-verify` gives an objective conformance gate.
-- Small, obvious edits → don't bother; work directly.
-
-DWP is complementary to the repo's existing `/release`, `/prompt-test`, and `/add-provider` skills — those remain the right tools for their specific workflows. DWP is for **novel** work that needs decomposition and gates.
+Reach for a plan when work has multiple valid approaches, touches many files, or must survive across sessions (`/dwp-create` → `/dwp-execute`; `/dwp-resume` if interrupted; `/dwp-verify` for an objective gate). Small, obvious edits → work directly. DWP is complementary to the repo's existing `/release`, `/prompt-test`, and `/add-provider` skills — those remain the right tools for their specific workflows. DWP is for **novel** work that needs decomposition and gates.
 
 ### Dailybot reporting (optional, non-blocking)
 
