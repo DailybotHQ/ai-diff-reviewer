@@ -16,7 +16,7 @@ venv/
 # inside tmp/ is ever tracked or committed. See AGENTS.md → "Temporary Files".
 tmp/
 
-# Deep Work Plan output — plans/, drafts/, and onboarding recon/report live
+# Deep Work Plan output — plans/ and onboarding recon/report live
 # here. Working artifacts, not tracked source. See AGENTS.md → "Deep Work Plan"
 # and .agents/skills/deepworkplan/shared/dwp-paths.md.
 .dwp/

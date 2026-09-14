@@ -281,7 +281,7 @@ The `dwp-*`, `skill-create`, and `agent-create` slash commands in [.agents/comma
 
 ### Where plans live
 
-Deep Work Plan outputs — `plans/` (`PLAN_{name}/` directories), `drafts/`, and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+Deep Work Plan outputs — `plans/` (`PLAN_{name}/` directories) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
 
 ### When to reach for it
 
