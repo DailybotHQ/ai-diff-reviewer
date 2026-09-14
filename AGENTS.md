@@ -235,7 +235,7 @@ Defined in [.agents/commands/](.agents/commands/). When invoked, look up the pro
 | `/dwp-resume` | Reconstruct state and continue an interrupted plan. |
 | `/dwp-status` | Report progress on a plan without making changes. |
 | `/dwp-verify` | Objective pass/fail conformance report against the DWP spec. |
-| `/dwp-upgrade` | Check for a newer DeepWorkPlan skill and upgrade only with explicit consent. |
+| `/dwp-upgrade` | Check for a newer DeepWorkPlan skill; read-only until consent, then installs the accepted tag and re-onboards. |
 | `/skill-create` | Author or update a reusable skill under `.agents/skills/`. |
 | `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. |
 
