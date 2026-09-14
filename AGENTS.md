@@ -255,10 +255,11 @@ Structured work runs through the local DWP flows (`.agents/commands/dwp-*` deleg
 |---|---|
 | "plan this work", "create a plan" | `/dwp-create` |
 | "execute / run the plan" | `/dwp-execute` |
+| "modify the plan", "change the scope", "promote Lite→Full" | `/dwp-refine` |
 | "continue / resume the interrupted plan" | `/dwp-resume` |
 | "plan status", "what's left" | `/dwp-status` (read-only) |
 | "verify the repo / the plan" | `/dwp-verify` (read-only) |
-| "upgrade the DWP skill / harness" | `/dwp-upgrade` (read-only check; installs only on consent) |
+| "upgrade the DWP skill / harness" | `/dwp-upgrade` (read-only until consent; then installs the accepted tag and re-onboards) |
 | ordinary direct edit ("fix this", "rename that") | done directly — never silently becomes a plan |
 
 Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only.
@@ -275,9 +276,7 @@ Hosts without slash commands invoke the same flows by name (`#deepworkplan-creat
 | `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
 | `onboard` | Make a repository AI-first, or run a targeted harness upgrade (reasoned analysis + non-destructive generation). |
 | `author` | Author or evolve this repo's own skills, agents, and commands. |
-| `upgrade` | Check for a newer DeepWorkPlan skill release and upgrade only with explicit consent (read-only check). |
-
-The `dwp-*`, `skill-create`, and `agent-create` slash commands in [.agents/commands/](.agents/commands/) are thin delegators to these — the skill is the single source of truth.
+| `upgrade` | Check for a newer DeepWorkPlan skill release; read-only until consent, then installs the accepted tag and re-onboards. |
 
 ### Where plans live
 
