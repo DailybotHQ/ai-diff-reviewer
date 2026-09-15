@@ -43,6 +43,43 @@ was read from (in a repo, typically `.agents/skills/deepworkplan/`; a global
 install lives under `~/.<agent>/skills/deepworkplan/`). Everything below reads
 versions relative to that directory.
 
+## Trust boundary (write scope)
+
+`allowed-tools` includes write-capable `Edit`, `Write`, and `Bash`. Phase 1 is
+read-only; Phase 3 writes only after Phase 2 acceptance. Skills.sh / Gen Agent
+Trust Hub treat `allowed-tools` as a trust boundary; this section is the
+human-readable contract for that field. Anything not listed here does not
+happen.
+
+**Reads (Phase 1 — always allowed, no consent needed):**
+
+- Installed pack frontmatter (`version:`), `verify/conformance.sh`
+  (`SUPPORTED_SPEC`), the repository's `DWP standard:` provenance line in
+  `AGENTS.md`, and upstream release tags via `git ls-remote` / `gh release view`.
+
+**Reads (Phase 2 — before overwrite):**
+
+- Diff between the installed vendored tree and the incoming tag staged in a
+  temporary directory (`diff -r --brief`).
+
+**Writes (Phase 3 only — after explicit Phase 2 acceptance):**
+
+- The vendored skill pack under `.agents/skills/deepworkplan/` (or the global
+  install path), replaced by the accepted tag via the documented channel.
+- `skills-lock.json` content hash for the `deepworkplan` entry.
+- Harness reconciliation from re-running `../onboard/SKILL.md` end-to-end:
+  `AGENTS.md`, `docs/`, `.agents/` (commands, catalog, addon sections) — merged,
+  never clobbering existing content without asking.
+- Optional addon re-offers under each addon's standing consent policy.
+- Local adaptation re-applies the developer accepted on top of the new tag.
+
+**It MUST NOT:** touch `.dwp/` (plans, state, evidence — never migrated by an
+upgrade), install an unpinned or unverified tag (Phase 7 install-verification
+from `../onboard/SKILL.md` is mandatory; fall back to `git archive <tag>` on
+mismatch), run `git pull && ./setup.sh` without a pinned checkout, read or store
+credentials, commit or push without the developer's instruction, or start Phase
+3 on silence or an ambiguous reply.
+
 ---
 
 ## Phase 1 — Check (read-only)
@@ -104,7 +141,8 @@ versions relative to that directory.
    ```
    A repository that installed via Method 2 or 3 upgrades through its own
    documented channel instead (`openclaw skills update deepworkplan`, or
-   `git pull && ./setup.sh` in the clone). Around every CLI install, run the
+   `git fetch --tags && git checkout vX.Y.Z && ./setup.sh` in the clone — the
+   accepted tag, never an unpinned `git pull`). Around every CLI install, run the
    Phase 7 install-verification contract from `../onboard/SKILL.md` (two CLI
    defects are known from round-1 evidence — `../shared/troubleshooting.md`
    §2): pre-create `.agents/skills/deepworkplan/` before the call, then

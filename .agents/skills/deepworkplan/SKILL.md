@@ -112,6 +112,9 @@ inside the delegated sub-skill, each of which declares its own trust boundary:
 - **Execute / resume** write task outputs, progress, and per-task commits —
   gated by each task's validation, never committing secrets, never pushing
   without the developer's instruction.
+- **Upgrade** replaces the vendored `deepworkplan` pack with a tag-pinned,
+  consent-gated install and re-runs onboarding in reconcile mode; it never
+  migrates `.dwp/` plans.
 - **Addons** install or configure anything only after the developer explicitly
   accepts the offer, always via pinned, verified install paths.
 
