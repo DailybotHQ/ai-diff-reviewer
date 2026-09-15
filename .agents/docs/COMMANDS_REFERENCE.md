@@ -19,6 +19,7 @@ In Claude Code, type `/<name>`. In Codex / Cursor / Gemini, type `#<name>` (or w
 | `/dwp-resume` | Reconstruct state and continue an interrupted plan. | [commands/dwp-resume.md](../commands/dwp-resume.md) → [skills/deepworkplan/resume](../skills/deepworkplan/resume/SKILL.md) |
 | `/dwp-status` | Report progress on a plan without making changes. | [commands/dwp-status.md](../commands/dwp-status.md) → [skills/deepworkplan/status](../skills/deepworkplan/status/SKILL.md) |
 | `/dwp-verify` | Emit a CONFORMANT / NOT CONFORMANT verdict against the DWP spec. | [commands/dwp-verify.md](../commands/dwp-verify.md) → [skills/deepworkplan/verify](../skills/deepworkplan/verify/SKILL.md) |
+| `/dwp-upgrade` | Check for a newer DeepWorkPlan skill; read-only until consent, then installs the accepted tag and re-onboards. | [commands/dwp-upgrade.md](../commands/dwp-upgrade.md) → [skills/deepworkplan/upgrade](../skills/deepworkplan/upgrade/SKILL.md) |
 | `/skill-create` | Author or update a reusable skill under `.agents/skills/`. | [commands/skill-create.md](../commands/skill-create.md) → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) |
 | `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. | [commands/agent-create.md](../commands/agent-create.md) → [skills/deepworkplan/author](../skills/deepworkplan/author/SKILL.md) |
 

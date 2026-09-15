@@ -235,55 +235,56 @@ Defined in [.agents/commands/](.agents/commands/). When invoked, look up the pro
 | `/dwp-resume` | Reconstruct state and continue an interrupted plan. |
 | `/dwp-status` | Report progress on a plan without making changes. |
 | `/dwp-verify` | Objective pass/fail conformance report against the DWP spec. |
+| `/dwp-upgrade` | Check for a newer DeepWorkPlan skill; read-only until consent, then installs the accepted tag and re-onboards. |
 | `/skill-create` | Author or update a reusable skill under `.agents/skills/`. |
 | `/agent-create` | Author or update a sub-agent persona under `.agents/agents/`. |
 
-The eight `dwp-*` / `skill-create` / `agent-create` entries are thin delegators to the installed `deepworkplan` skill at [`.agents/skills/deepworkplan/`](.agents/skills/deepworkplan/) — see the [Deep Work Plan](#deep-work-plan) section below.
+The nine `dwp-*` / `skill-create` / `agent-create` entries are thin delegators to the installed `deepworkplan` skill at [`.agents/skills/deepworkplan/`](.agents/skills/deepworkplan/) — see the [Deep Work Plan](#deep-work-plan) section below.
 
 ---
 
 ## Deep Work Plan
 
-This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer).
+This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 5.0.0 (onboarded 2026-07-04; upgraded 2026-09-13; skill 5.3.0).
 
-### The eight sub-skills
+### Deep Work Plans — invocation
 
-Installed at [.agents/skills/deepworkplan/](.agents/skills/deepworkplan/):
+Structured work runs through the local DWP flows (`.agents/commands/dwp-*` delegators; the flows live in `.agents/skills/deepworkplan/` — discovery is local, no network service is consulted):
+
+| Intent | Route |
+|---|---|
+| "plan this work", "create a plan" | `/dwp-create` |
+| "execute / run the plan" | `/dwp-execute` |
+| "modify the plan", "change the scope", "promote Lite→Full" | `/dwp-refine` |
+| "continue / resume the interrupted plan" | `/dwp-resume` |
+| "plan status", "what's left" | `/dwp-status` (read-only) |
+| "verify the repo / the plan" | `/dwp-verify` (read-only) |
+| "upgrade the DWP skill / harness" | `/dwp-upgrade` (read-only until consent; then installs the accepted tag and re-onboards) |
+| ordinary direct edit ("fix this", "rename that") | done directly — never silently becomes a plan |
+
+Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only.
+
+### The nine sub-skills
 
 | Sub-skill | Purpose |
 |---|---|
-| `create` | Decompose a goal into a numbered, sequential Deep Work Plan with per-task validation gates. |
+| `create` | Decompose a goal into a Deep Work Plan (Lite or Full) with per-task validation gates. |
 | `execute` | Run a plan task by task, checking each gate, updating progress. |
-| `refine` | Modify a plan (add, remove, reorder tasks) while preserving completed work. |
+| `refine` | Modify a plan (add, split, reorder, promote Lite→Full, migrate legacy) while preserving completed work. |
 | `resume` | Reconstruct state and continue an interrupted plan across sessions or agents. |
 | `status` | Report progress without making changes. |
 | `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
-| `onboard` | Make a repository AI-first (reasoned analysis + non-destructive generation). |
+| `onboard` | Make a repository AI-first, or run a targeted harness upgrade (reasoned analysis + non-destructive generation). |
 | `author` | Author or evolve this repo's own skills, agents, and commands. |
-
-The `dwp-*`, `skill-create`, and `agent-create` slash commands in [.agents/commands/](.agents/commands/) are thin delegators to these — the skill is the single source of truth.
+| `upgrade` | Check for a newer DeepWorkPlan skill release; read-only until consent, then installs the accepted tag and re-onboards. |
 
 ### Where plans live
 
-Deep Work Plan outputs — plans, drafts, and onboarding recon/report — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source.
-
-```
-.dwp/
-├── plans/       ← PLAN_{name}/ directories (executing/executed plans)
-├── drafts/      ← {name}_draft_refined.md (created by /dwp-create)
-└── onboard/     ← RECON.md and REPORT.md from /deepworkplan-onboard
-```
-
-Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+Deep Work Plan outputs — `plans/` (`PLAN_{name}/` directories) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
 
 ### When to reach for it
 
-- The task has multiple valid approaches, touches many files, or needs to survive across sessions → `/dwp-create` first, then `/dwp-execute`.
-- A previous plan was interrupted → `/dwp-resume`.
-- Before wrapping onboarding or a large change → `/dwp-verify` gives an objective conformance gate.
-- Small, obvious edits → don't bother; work directly.
-
-DWP is complementary to the repo's existing `/release`, `/prompt-test`, and `/add-provider` skills — those remain the right tools for their specific workflows. DWP is for **novel** work that needs decomposition and gates.
+Reach for a plan when work has multiple valid approaches, touches many files, or must survive across sessions (`/dwp-create` → `/dwp-execute`; `/dwp-resume` if interrupted; `/dwp-verify` for an objective gate). Small, obvious edits → work directly. DWP is complementary to the repo's existing `/release`, `/prompt-test`, and `/add-provider` skills — those remain the right tools for their specific workflows. DWP is for **novel** work that needs decomposition and gates.
 
 ### Dailybot reporting (optional, non-blocking)
 
@@ -310,13 +311,13 @@ Every event is emitted via the dailybot `report` sub-skill (`dailybot agent upda
 
 This repo has the **AI Diff Reviewer addon** enabled in **Flow B** (local skill + CI Action). Detection for DWP `create` / `execute` is: vendored skill at [`.agents/skills/ai-diff-reviewer/`](.agents/skills/ai-diff-reviewer/) **plus** [`.review/extension.md`](.review/extension.md). Spec: [`.agents/skills/deepworkplan/addons/ai-diff-reviewer/SPEC.md`](.agents/skills/deepworkplan/addons/ai-diff-reviewer/SPEC.md).
 
-**Security Review augmentation (both flows).** When a Deep Work Plan reaches the mandatory Security Review task, agents also run the upstream parent default flow ("Review my current branch" / `/ai-diff-reviewer`), append verdict + findings under `## AI Diff Reviewer local review` in that plan's `analysis_results/SECURITY_REVIEW.md`, and treat open `critical` findings as SR blockers until fixed or explicitly accepted. Soft-fail (warn once, continue the base SR) only if the skill/extension is missing or the local review invocation errors — an unset CI provider secret must **not** skip the local pass.
+**Final Review security-pass augmentation (both flows).** Every 2.3.0+ plan ends in a single mandatory Final Review; its security pass runs the upstream parent default flow ("Review my current branch" / `/ai-diff-reviewer`), appends verdict + findings under `## AI Diff Reviewer local review` in `analysis_results/SECURITY_REVIEW.md`, and treats open `critical` findings as Final Review blockers until fixed or explicitly accepted. A missing vendored skill or extension file is **not** a silent skip — record a `local reviewer not installed` finding (installation is onboarding-only). Soft-fail (warn once, continue the security pass) applies only to invocation errors (network down, upstream skill error) — an unset CI provider secret must **not** skip the local pass.
 
 **CI surface (this repo).** Consumer Flow B normally installs `.github/workflows/pr-review.yml` via the upstream `setup` sub-skill. This repository **is** the Action, so the dual-surface CI gate is the dogfood workflow [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) (`uses: ./` against the PR HEAD, label-gated on `ready`, stable gate job). Do **not** add a second consumer-style `pr-review.yml` here — that would double-review every PR. Provider secrets for the dogfood matrix: at least one of `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, or `OPENAI_API_KEY` (see `self-review.yml`).
 
 **Optional post-CI companion (Flow B).** After a plan's PR has been pushed and self-review has posted, developers MAY invoke the upstream `apply-review` sub-skill to walk CI findings per-finding (apply / defer / skip) with explicit consent. Read-only by default; never commits or pushes. This is an available option during `/dwp-execute`, not a plan task file.
 
-**Vendor-neutral reminder.** The core DWP methodology has zero dependency on this product. Declining the addon elsewhere still yields a fully AI-first repo; enabling it here is dogfood + SR quality for plans that touch this codebase.
+**Vendor-neutral reminder.** The core DWP methodology has zero dependency on this product. Declining the local reviewer elsewhere is allowed but recorded as a declared exception and reported non-conformant on that point until installed; enabling it here is dogfood + Final Review quality for plans that touch this codebase.
 
 ---
 
