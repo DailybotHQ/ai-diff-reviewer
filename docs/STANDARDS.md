@@ -129,3 +129,7 @@ SemVer. Tags `vX.Y.Z`. The moving major tag for the current line (`v2`) auto-upd
 ## License
 
 MIT for everything in this repo unless a specific file says otherwise. By contributing you agree that your contribution is licensed under the same.
+
+## Skill frontmatter limits
+
+Every `skills/**/SKILL.md` follows the Open Agent Skills contract: `name` is kebab-case and at most 64 characters; `description` is one dense paragraph of at most **1,024 characters** (hosts such as Pi warn or refuse beyond that). Keep the description to the routing summary and put the full trigger catalogue in the body (`## Activation` / `## When it fires`). `scripts/validate-frontmatter.py` fails CI on either overrun and prints the measured length.

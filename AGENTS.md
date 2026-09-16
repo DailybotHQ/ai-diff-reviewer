@@ -169,6 +169,7 @@ Whenever you change runtime behaviour:
 - `docs/STRICTNESS.md` / `PROMPTS.md` / `PROVIDERS.md` → update the section that covers the area you touched.
 - `examples/` → add an example if you added an input that has a non-trivial usage pattern.
 - `skills/ai-diff-reviewer/setup/reference.md` → update if `action.yml` inputs, defaults, or descriptions changed (this file is the local companion skill's reference manual; drift breaks the "any agent can answer setup questions" promise).
+- `skills/**/SKILL.md` frontmatter → `description` ≤ 1,024 characters and `name` ≤ 64 (Open Agent Skills limits; `scripts/validate-frontmatter.py` enforces both in CI — hosts such as Pi warn on longer descriptions). Put trigger catalogues in the body, not the frontmatter.
 - `AGENTS.md` (this file) → update the "Critical Rules" or "DO/DON'T" sections if you change a project standard.
 
 ### 8. SemVer for Releases (MANDATORY)

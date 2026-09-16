@@ -94,8 +94,10 @@ Every workflow using AI Diff Reviewer sets these two.
   - `cursor` → `auto` (unlimited on Pro; pin `composer-2.5` etc. to
     force a specific model).
   - `codex` → `gpt-5.6-luna` (current-gen budget model; the parallel of
-    the Sonnet-class choice above; `gpt-5-codex` is deprecated; pin
-    `gpt-5.4-mini` for a shallower smoke review).
+    the Sonnet-class choice above; `gpt-5-codex` is deprecated; use
+    `model: economy` for the cheap tier — as of 2026-09-16 `gpt-5.4-mini`
+    is no longer cheaper than `gpt-5.6-luna`, so pin it only if you
+    specifically want that model).
   - `grok` → `grok-4.3` (daily tier; `grok-4.6` for a deeper reasoning
     pass; never `auto` on a metered CLI).
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the

@@ -60,6 +60,11 @@ def parse_frontmatter(path: Path) -> dict | None:
     return data
 
 
+# Open Agent Skills limits — hosts (e.g. Pi) refuse or warn on longer values.
+MAX_NAME_CHARS = 64
+MAX_DESCRIPTION_CHARS = 1024
+
+
 def validate(path: Path, data: dict) -> list[str]:
     errors: list[str] = []
 
@@ -78,10 +83,20 @@ def validate(path: Path, data: dict) -> list[str]:
             f"name '{name}' must be kebab-case "
             f"(lowercase letters, digits, hyphens; start with a letter)"
         )
+    elif len(name) > MAX_NAME_CHARS:
+        errors.append(
+            f"name is {len(name)} characters; the limit is {MAX_NAME_CHARS}"
+        )
 
     description = data.get("description")
     if not description or not isinstance(description, str) or not description.strip():
         errors.append("missing or empty required field: description")
+    elif len(description) > MAX_DESCRIPTION_CHARS:
+        errors.append(
+            f"description is {len(description)} characters; the limit is "
+            f"{MAX_DESCRIPTION_CHARS} (move trigger phrases into the body, "
+            f"e.g. an Activation / When-it-fires section)"
+        )
 
     version = data.get("version")
     if not version:

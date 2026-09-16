@@ -193,6 +193,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Skill descriptions fit the 1,024-character Open Agent Skills limit.**
+  Pi printed `description exceeds 1024 characters (1695)` for the
+  vendored skill; the parent `SKILL.md` and `apply-review/SKILL.md`
+  descriptions are rewritten as compact routing summaries (the full
+  trigger catalogues stay in the body) and
+  `scripts/validate-frontmatter.py` now fails on descriptions over 1,024
+  characters or names over 64. Downstream vendored copies clear the
+  warning when they pick up the release that ships this.
 - **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
 
 - **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
