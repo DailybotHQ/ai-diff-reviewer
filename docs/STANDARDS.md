@@ -74,7 +74,7 @@ All code, comments, documentation, commit messages, and PR descriptions are in E
 - `scripts/reviewer.py` — one file, ~10k LOC as of v2.1.0. The historical ~4500 LOC soft ceiling was crossed deliberately by the runner × backend work, and the **decision (2026-09-16)** is: keep the single file for the rest of the v2.x line — zero-install composite action, one artefact to audit, `python3 scripts/reviewer.py` for local debugging are product features. The split is a v3.0 change with its own Deep Work Plan (a stdlib-only `scripts/aiprr/` package with `scripts/reviewer.py` as a thin entry shim; compile-all gate; prompt-sync and vendored-skill invariants unchanged). Until then, no new subsystem lands as more lines in the single file without a module plan in its PR description; reviewers treat size creep as `info` (`.review/extension.md`).
 - Doc files — under 500 lines. Long docs are signal that they need to be split.
 - Examples — under 50 lines each. They're showcase, not reference.
-- Test files — under 500 lines. Split by concern rather than growing an existing file (the current four-file split is the model).
+- Test files — under 500 lines. Split by concern rather than growing an existing file (v2.1.0's agent-runner and backend modules are the model: core / hardening / CLI invocations / Cursor / custom backends / Grok + snapshots; `api-base` / requests / matrix). Recorded debt above the line as of 2026-09-16: `test_reviewer.py` (2,623), `test_iar_observability.py` (1,419), `test_iar_state_layer.py` (885), `test_iar_dispatch.py` (608), `test_iar_dedup.py` (541), `test_iar_generation_tracking.py` (526) — pre-v2.1.0 files, split when next touched substantially; not a per-PR blocker (`info`).
 
 ## Whitespace and formatting
 

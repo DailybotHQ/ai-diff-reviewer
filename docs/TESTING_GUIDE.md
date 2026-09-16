@@ -16,7 +16,7 @@ The [`.github/workflows/code_check.yml`](../.github/workflows/code_check.yml) wo
 |---|---|---|
 | `compile-check` | `python3 -m py_compile scripts/reviewer.py` | Catches syntax errors and undefined imports before we ship. |
 | `validate-action-yml` | Runs `python3 .github/scripts/validate_action.py`, which asserts the required top-level keys, that every input the runtime reads is declared, and that every declared output matches a runtime writer. | Catches accidental key renames or forgotten `write_action_output()` calls in PRs. |
-| `unit-tests` | `python3 -m unittest discover -s tests` — the full 717-test stdlib suite (17 files, listed below). | Catches regressions in pure logic without any network dependency. |
+| `unit-tests` | `python3 -m unittest discover -s tests` — the full 720-test stdlib suite (24 files, listed below). | Catches regressions in pure logic without any network dependency. |
 | `cli-install-smoke` (matrix: `claude-code`, `cursor`, `codex`, `grok`) | Runs each agent-runner CLI's install command on a fresh runner, verifies `--version`, then imports `scripts/reviewer.py` and asserts `build_provider(PROVIDER_ID)` returns an `AgentRunnerProvider` instance. | Catches upstream CLI-installer breakage before it hits consumers. |
 | `actionlint` | Downloads the official actionlint binary and runs it across `.github/workflows/`. | Catches malformed workflow YAML, unsafe `${{ }}` interpolations in `run:` blocks, and shellcheck issues in inline shell. |
 
@@ -26,30 +26,37 @@ If a leg's API-key secret isn't set on the repo, the leg gracefully skips (emits
 
 ## What the unit suite covers
 
-The suite lives in `tests/` and is composed of 17 files (717 tests; regenerate the counts with `for f in tests/test_*.py; do printf '%s %s\n' "$f" "$(grep -c 'def test_' "$f")"; done`):
+The suite lives in `tests/` and is composed of 24 files (720 tests; regenerate the counts with `for f in tests/test_*.py; do printf '%s %s\n' "$f" "$(grep -c 'def test_' "$f")"; done`):
 
 | File | Focus | Tests |
 |---|---|---|
-| [`tests/test_agent_runner_providers.py`](../tests/test_agent_runner_providers.py) | The four `AgentRunnerProvider` implementations (`claude-code`, `cursor`, `codex`, `grok`) — dispatch, MCP passthrough, `_invoke_cli_agent`, subprocess-security invariants, `_CLI_ENV_ALLOWLIST`, custom backends (Claude Code env contract, Codex `config.toml` + model catalog, Grok argv), prompt v3 directive, hardening regressions (credential lanes, bounded findings file, glob caps, ReDoS) and the **default-profile back-compat snapshot table captured from `main`**. | 99 |
-| [`tests/test_backends.py`](../tests/test_backends.py) | `api-base` contract — `validate_api_base` (https, ASCII hosts, IPv6, host tricks), `classify_endpoint_host`, `resolve_endpoint_profile`, `build_provider(api_base=…)`, Anthropic on compatible gateways, the diff cache breakpoint, the custom-host WARNING and the **runner × backend matrix** (six runners × five backends). | 48 |
+| [`tests/test_agent_runner_backends.py`](../tests/test_agent_runner_backends.py) | Custom backends for CLI runners — Claude Code env contract on Z.ai/xAI, Codex `config.toml` + cloned model catalog, Codex custom-tool warning. | 21 |
+| [`tests/test_agent_runner_cli_invocations.py`](../tests/test_agent_runner_cli_invocations.py) | Claude Code and Codex invocations — argv/env shapes, subscription auth, Codex `auth.json` and isolated `CODEX_HOME`. | 22 |
+| [`tests/test_agent_runner_cursor.py`](../tests/test_agent_runner_cursor.py) | Cursor Agent CLI headless defaults — flags, model handling, extra args. | 6 |
+| [`tests/test_agent_runner_grok_and_snapshots.py`](../tests/test_agent_runner_grok_and_snapshots.py) | Grok CLI invocation (prompt file, rules, hardening flags, `--max-turns`, env) and the **default-profile back-compat snapshot table captured from `main`**. | 9 |
+| [`tests/test_agent_runner_hardening.py`](../tests/test_agent_runner_hardening.py) | Agent-runner security — `_CLI_ENV_ALLOWLIST` / `_build_cli_env`, subprocess invariants (no `shell=True`, `shlex.split`), hardening regressions (credential lanes, bounded findings file, glob caps, ReDoS timing), Cursor `api-base` warning, prompt v3 directive and prompt hygiene. | 18 |
+| [`tests/test_agent_runner_providers.py`](../tests/test_agent_runner_providers.py) | Agent-runner core — `build_provider()` dispatch, provider construction, MCP passthrough, `_invoke_cli_agent` semantics, CLI binary constants. | 23 |
+| [`tests/test_backend_matrix.py`](../tests/test_backend_matrix.py) | The **runner × backend matrix** (six runners × five backends), endpoint path joining, backend-selection logging. | 9 |
+| [`tests/test_backend_requests.py`](../tests/test_backend_requests.py) | Anthropic runner on compatible gateways — request headers per auth style, cache-control flags, the diff cache breakpoint. | 13 |
+| [`tests/test_backends.py`](../tests/test_backends.py) | `api-base` contract — `validate_api_base` (https, ASCII hosts, IPv6, host tricks), `classify_endpoint_host`, `resolve_endpoint_profile`, `build_provider(api_base=…)`. | 29 |
 | [`tests/test_end_to_end_roundtrip.py`](../tests/test_end_to_end_roundtrip.py) | Cross-family invariants — `ReviewResult` → GitHub-shape serialization, env-var → `build_provider()` integration for all CLI runners, in-process providers ignoring agent env vars, usage never leaking into the GitHub payload, constant wiring. | 13 |
 | [`tests/test_findings_parser.py`](../tests/test_findings_parser.py) | `parse_findings_file()` — happy paths and every documented error mode of the `.aiprr/findings.json` schema, including the summary-only fallback. | 33 |
 | [`tests/test_iar_dedup.py`](../tests/test_iar_dedup.py) | IAR fingerprinting and dedup of findings against prior rounds. | 32 |
 | [`tests/test_iar_dispatch.py`](../tests/test_iar_dispatch.py) | IAR trigger dispatch — event/label/policy routing into review modes. | 29 |
 | [`tests/test_iar_failure_fallback.py`](../tests/test_iar_failure_fallback.py) | IAR failure-fallback contract — the runtime still produces a review (and all IAR outputs) when the subsystem crashes mid-flight. | 20 |
 | [`tests/test_iar_generation_tracking.py`](../tests/test_iar_generation_tracking.py) | IAR generation and range-hash tracking across force-pushes and rebases. | 30 |
-| [`tests/test_iar_incremental.py`](../tests/test_iar_incremental.py) | Incremental review mode (rounds 2+) — prior findings from review threads, delta computation, mode selection, budget scaling, advisory resolution, thread helpers, marker SHA coercion. | 36 |
+| [`tests/test_iar_incremental.py`](../tests/test_iar_incremental.py) | Incremental review mode (rounds 2+) — prior findings from review threads, delta computation, mode selection, budget scaling, reconciliation, marker SHA coercion. | 36 |
 | [`tests/test_iar_observability.py`](../tests/test_iar_observability.py) | IAR outputs, tracking-comment rendering, base/head SHA round trips, budget accounting. | 57 |
 | [`tests/test_iar_policies.py`](../tests/test_iar_policies.py) | IAR policies (iterative / exhaustive) and their budget rules. | 16 |
 | [`tests/test_iar_state_layer.py`](../tests/test_iar_state_layer.py) | Iteration-Aware Review state — marker embed/parse round trips, per-field shape validation of the persisted JSON. | 39 |
 | [`tests/test_model_tiers.py`](../tests/test_model_tiers.py) | `model` tier aliases (`balanced` / `economy` / `deep`), the dated defaults matrix, legacy-default hints, `agent-max-turns` parsing and native caps. | 17 |
 | [`tests/test_openai_provider.py`](../tests/test_openai_provider.py) | `provider: openai` — Anthropic-shape ↔ chat-completions translation both ways, headers per auth style (Bearer / Azure `api-key`), retry client, error surfacing. | 20 |
+| [`tests/test_review_safety_regressions.py`](../tests/test_review_safety_regressions.py) | Local-review regressions for multi-backend and incremental safety — delta context, prior-critical gating, advisory resolution, thread pagination, usage accounting, routing safety, control characters, redirect refusal. | 14 |
 | [`tests/test_reviewer.py`](../tests/test_reviewer.py) | Core runtime — input parsing, log redaction, tool-output truncation, path sandboxing, tool handlers, inline-comment queueing, tracking-comment rendering, `write_action_output()`, severity aggregation, strictness gating, conversation pruning, diff shaping (`ignore-paths`, omitted-files block) and the cache-prefix stability of the first user message. | 192 |
 | [`tests/test_telemetry.py`](../tests/test_telemetry.py) | Usage telemetry — `normalise_usage`, the three CLI stdout parsers (bounded tail), cost estimation, `format_usage_line` variants, tracking-comment usage line, real `iteration-tokens-used`. | 22 |
-| [`tests/test_review_safety_regressions.py`](../tests/test_review_safety_regressions.py) | Outstanding-critical gating, actual delta context, base movement, paginated history, backend isolation, redirect refusal, complete cache accounting and modular CLI installation. | 14 |
-| **Total** | | **717** |
+| **Total** | | **720** |
 
-Run one file with `python3 -m unittest tests.test_backends` (module form, from the repo root). Three cross-cutting nets are worth knowing about when you touch providers: the **runner × backend matrix** (`tests/test_backends.py::RunnerBackendMatrixTests`) locks the endpoint kind and constructability of every `provider` × `api-base` combination; the **default-profile snapshot table** (`tests/test_agent_runner_providers.py::DefaultProfileBackCompatSnapshotTests`) compares each CLI runner's argv/env against literals captured from `main` before the multi-backend work, with intentional deltas listed explicitly; and the **hardening regressions** (`HardeningRegressionTests`) keep the security fixes from regressing (credential lanes, bounded findings file, glob caps, ReDoS timing).
+Run one file with `python3 -m unittest tests.test_backends` (module form, from the repo root). Three cross-cutting nets are worth knowing about when you touch providers: the **runner × backend matrix** (`tests/test_backend_matrix.py::RunnerBackendMatrixTests`) locks the endpoint kind and constructability of every `provider` × `api-base` combination; the **default-profile snapshot table** (`tests/test_agent_runner_grok_and_snapshots.py::DefaultProfileBackCompatSnapshotTests`) compares each CLI runner's argv/env against literals captured from `main` before the multi-backend work, with intentional deltas listed explicitly; and the **hardening regressions** (`tests/test_agent_runner_hardening.py::HardeningRegressionTests`) keep the security fixes from regressing (credential lanes, bounded findings file, glob caps, ReDoS timing). Every module added or grown by v2.1.0 stays under 500 lines (split by concern); the pre-v2.1.0 modules over that size (`test_reviewer.py`, the `test_iar_*` family) are recorded debt in `docs/STANDARDS.md § File size`.
 
 Two guiding rules:
 
@@ -170,7 +177,7 @@ If you're adding a new self-contained component (a new tool, a new severity-eval
 - **Pure-function logic only.** Severity ranking, line-range parsing, marker extraction, findings-file parsing, subprocess-argv construction. Not anything that hits a network end-to-end.
 - **Stdlib `unittest` only.** No `pytest` dependency.
 - Place tests in `tests/test_<area>.py` and run via `python3 -m unittest discover -s tests`.
-- Keep each file under ~500 lines. If a file grows beyond that, split it by concern (parser vs dispatch vs security invariants), following the four-file structure that already exists.
+- Keep each file under ~500 lines. If a file grows beyond that, split it by concern (parser vs dispatch vs security invariants), following the concern-scoped structure in the table above.
 
 If your test would require mocking the entire Anthropic API surface or the entire GitHub API surface, the test isn't pulling its weight — write a smoke test on a real PR instead.
 
@@ -202,7 +209,7 @@ To skip the auto-release for a docs-only or infrastructure-only merge, put `[ski
 
 ## When the bar might rise
 
-We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 717 tests across 17 files. The remaining triggers for tightening the bar further:
+We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 720 tests across 24 files. The remaining triggers for tightening the bar further:
 
 1. The runtime file is already past the historical ~4500 LOC soft ceiling (see `docs/STANDARDS.md § "File size"`); the "split into modules" decision is open and should be made deliberately — the next feature that adds significant surface (a Gemini provider, a v2 findings schema) should not land as more lines in the single file.
 2. A class of bug ships repeatedly that `py_compile` + the unit suite + dogfooding doesn't catch.

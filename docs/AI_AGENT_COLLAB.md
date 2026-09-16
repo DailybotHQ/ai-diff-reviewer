@@ -146,7 +146,7 @@ Each of those is a real cost. We've decided the cost outweighs the benefit at th
 
 What we **do** have (post v1.1.0) that earlier versions of this doc claimed we didn't:
 
-- A stdlib `unittest` suite (720 tests across 17 files in `tests/`) that runs in CI.
+- A stdlib `unittest` suite (720 tests across 24 files in `tests/`) that runs in CI.
 - A CLI-installer smoke matrix (`cli-install-smoke` in `code_check.yml`).
 - Automated releases from Conventional Commits (`auto-release.yml`), so no manual tag-and-push step.
 - A local companion skill (`skills/ai-diff-reviewer/`) shipped alongside the Action, with two CI invariants (`Skills — prompt-sync invariant` in `code_check.yml`; `npx skills update` smoke in `auto-release.yml` Step 3.5) keeping the two surfaces in lock-step.

@@ -193,7 +193,7 @@ overrides the base prompt for the patterns most likely to slip a review.
   (`shell=False`, env allowlist).
 - New findings-file parsing → cases in `tests/test_findings_parser.py`.
 - Split at ~500 LOC per test file rather than growing an existing one
-  past that (four-file split is the codified model).
+  past that (the concern-scoped split in `tests/` is the codified model).
 - Any change to the agentic loop, `prompts/default.md`, or the
   review-submission path MUST be verified by `self-review.yml` on the
   PR (Rule #10 pillar A). If it can't (e.g. only fires on
