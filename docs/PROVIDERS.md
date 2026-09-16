@@ -339,10 +339,10 @@ Missing files raise `FileNotFoundError` with an actionable message. Malformed JS
 |---|---|---|
 | exit 0, findings file written | normal review | strictness gate as usual |
 | non-zero exit, findings file written | posts the review with a `Partial review: <cli> exited with code N` footer and a WARNING in the log | strictness gate as usual |
-| exit 0, no findings file | posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
+| exit 0, no findings file | **retried once** with a fresh session (both attempts' usage is reported, the summary carries a `Retried once` note); if the retry also produces no file, posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
 | non-zero exit, no findings file | the run fails with the CLI's stderr/stdout tail | red |
 
-Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run.
+Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run. CLI stdout/stderr are captured **bounded** (last 4 MB of each stream): a chatty agent cannot grow the reviewer's memory, and a multi-megabyte prompt on stdin cannot deadlock against a full pipe.
 
 ### The prompt directive
 
@@ -465,7 +465,7 @@ Every review reports what its provider can tell us. The tracking comment ends wi
 | `claude-code` | stream-json `result` event | reads + writes | **vendor-reported** `total_cost_usd` |
 | `codex` | `--json` `turn.completed` events, summed | reads + writes | indicative estimate (Codex reports none) |
 | `grok` | JSON document (`usage`, `num_turns`, `total_cost_usd`) | reads + writes | **vendor-reported** |
-| `cursor` | not exposed by the CLI | — | `not reported by this provider` |
+| `cursor` | `--output-format json` (v2.2.0+, parse-or-ignore: any `usage` object the CLI prints) | when the CLI reports them | `total_cost_usd` when reported; otherwise `not reported by this provider` — **unverified live** (no Cursor key in the dogfood matrix); please report the CLI's JSON shape if the line stays empty |
 
 Estimates use `INDICATIVE_PRICES_USD_PER_MTOK` (dated in `scripts/reviewer.py`; cache reads at 10 % and writes at 125 % of the input price) and are labelled `(indicative)`; vendor-reported costs are shown as-is. Unknown model ids (Azure deployment names, custom gateways) show tokens without a cost. Nothing here is meant to gate CI.
 

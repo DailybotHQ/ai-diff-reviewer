@@ -87,7 +87,7 @@ class RunnerBackendMatrixTests(unittest.TestCase):
     def _run(self, provider) -> None:
         import subprocess as sp
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
-            reviewer.subprocess, "run",
+            reviewer, "_run_cli_process",
             side_effect=AssertionError("CLI must not be invoked"),
         ), mock.patch.object(reviewer, "log"):
             provider.run_review(

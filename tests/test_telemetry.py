@@ -182,13 +182,13 @@ class WiringTests(unittest.TestCase):
             fake = _sp.CompletedProcess(["x"], 0, stdout=CLAUDE_CODE_STREAM, stderr="")
             def fake_run(*_a: Any, **_k: Any) -> Any:  # the "CLI" writes the file (stale files are unlinked first)
                 fp.write_text(json.dumps({"summary": "s", "findings": []})); return fake
-            with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run):
+            with mock.patch.object(reviewer, "_run_cli_process", side_effect=fake_run):
                 res = reviewer._invoke_cli_agent(argv=["x"], workspace=Path(td), findings_path=fp, env={}, cli_name="X", usage_parser=reviewer.parse_claude_code_usage)
             assert res.usage is not None
             self.assertEqual(res.usage.output_tokens, 49)
             def boom(_: str) -> Any:
                 raise RuntimeError("bad parser")
-            with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+            with mock.patch.object(reviewer, "_run_cli_process", side_effect=fake_run), mock.patch.object(reviewer, "log"):
                 res2 = reviewer._invoke_cli_agent(argv=["x"], workspace=Path(td), findings_path=fp, env={}, cli_name="X", usage_parser=boom)
             self.assertIsNone(res2.usage)
             self.assertEqual(res2.summary, "s")
@@ -248,3 +248,23 @@ class WiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CursorUsageParserTests(unittest.TestCase):
+    def test_single_document_with_usage(self) -> None:
+        out = json.dumps({"type": "result", "usage": {"input_tokens": 100, "output_tokens": 20, "cache_read_input_tokens": 50}, "num_turns": 3, "total_cost_usd": 0.01})
+        u = reviewer.parse_cursor_usage(out)
+        assert u is not None
+        self.assertEqual((u.input_tokens, u.output_tokens, u.cache_read_tokens, u.turns, u.cost_usd, u.source), (100, 20, 50, 3, 0.01, "cli"))
+
+    def test_json_lines_take_the_last_usage_object(self) -> None:
+        out = "\n".join([json.dumps({"type": "assistant", "text": "hi"}), json.dumps({"type": "result", "usage": {"input_tokens": 5, "output_tokens": 1}})])
+        u = reviewer.parse_cursor_usage("noise\n" + out)
+        assert u is not None
+        self.assertEqual((u.input_tokens, u.output_tokens), (5, 1))
+
+    def test_text_output_or_no_usage_is_ignored(self) -> None:
+        self.assertIsNone(reviewer.parse_cursor_usage("Looks good.\n"))
+        self.assertIsNone(reviewer.parse_cursor_usage(json.dumps({"type": "result"})))
+        self.assertIsNone(reviewer.parse_cursor_usage(""))
+
