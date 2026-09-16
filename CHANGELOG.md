@@ -222,6 +222,16 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **`open-pr` sub-skill syncs the branch with the remote base before
+  opening or refreshing a PR.** New automatic Step 1.5: fetch, merge
+  `origin/<base>` into the current branch when behind, resolve conflicts
+  keeping both sides' intent, run the repo's quick validation, commit,
+  and push the current branch (non-force, announced in one line, no
+  extra prompt). Honest trust boundary rewritten accordingly; explicit
+  stop conditions (dirty tree, unjustifiable/binary conflict, failing
+  gate, rejected push, linear-history repos ask once before rebase +
+  `--force-with-lease`). Preview shows the sync outcome; the PR body
+  gains a `## Merge notes` section when conflicts were resolved.
 - **Dogfood matrix covers the new runners and backends.** `self-review.yml`
   adds legs for `grok` (`XAI_API_KEY`), `claude-code` on Z.ai GLM
   (`ZAI_CODING_API_KEY` + `api-base`), `codex` on Azure Foundry

@@ -315,10 +315,11 @@ Natural-language triggers:
 
 What it does, in order:
 
+0. **Syncs the branch with the remote base** (v2.1.0+) — `git fetch`, `git merge origin/<base>` into the current branch when it is behind, conflict resolution that keeps both sides' intent, the repo's quick validation, a `chore: merge origin/<base> into <branch>` commit, and a non-force push of the current branch. Announced in one line, no extra confirmation; a dirty tree, an unjustifiable conflict, a failing gate or a rejected push stops it with the exact commands. Linear-history repos are asked once before any rebase.
 1. **Reads the branch's diff and commit trail** — infers a Conventional Commits title (`feat(scope): summary`) or the repo's native title style if a `.github/pull_request_template.md` or the commit history reveals a different convention.
 2. **Drafts a structured body** with the sections a good PR review actually needs: Summary (the *why*), Changes (the *what*, per file), Test plan (checklist), Related issues (auto-linked from `Fixes #123` / `Refs #456` in commits), Screenshots (when UI files changed), Breaking changes (when applicable), Risks (called out for architectural or security-adjacent diffs).
 3. **Merges with `.github/pull_request_template.md` when present** — never overwrites the team's template, layers the generated content into the template's placeholders.
-4. **Previews everything to the developer** with a single confirmation before executing — the sub-skill never opens a PR unattended.
+4. **Previews everything to the developer** — including the base-sync outcome and a `## Merge notes` section when conflicts were resolved — with a single confirmation before executing; the sub-skill never opens a PR unattended.
 5. **Executes via `gh`** — supports `--draft`, stacked PRs against non-default bases, and forks.
 
 Full flow, quality gates, and sample dialogues: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md).

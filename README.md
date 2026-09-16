@@ -497,7 +497,7 @@ The skill is a **router** — it inspects your intent from natural language and 
 | **[Local review](skills/ai-diff-reviewer/SKILL.md)** *(default flow)* | Run the CI review methodology locally on your current branch's diff | *"Review my current branch"* · *"Do a pre-flight review before I push"* |
 | **[`setup`](skills/ai-diff-reviewer/setup/SKILL.md)** | Install & configure the CI GitHub Action via a 6-question wizard. Also the reference manual for every `action.yml` input | *"Set up AI Diff Reviewer for this repo"* · *"What does `strictness` do?"* |
 | **[`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** | Bootstrap a repo-tailored `.review/extension.md` after inspecting your stack (≥ 12 Discovery tool calls) | *"Generate a `.review/extension.md` for this repo"* · *"Customize the review for our project"* |
-| **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Author a well-documented pull request (title + body) from the current diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
+| **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Sync the branch with the remote base (merge, resolve conflicts, push), then author a well-documented pull request (title + body) from the diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
 
 Together they form a **lifecycle**: `setup` installs the Action once per repo → `generate-extension` tailors the review once per repo → the default review flow catches issues before pushing on every branch → `open-pr` authors the PR that ships the change.
 
@@ -588,7 +588,9 @@ It reads the diff, empirically detects your repo's title convention from the las
 - **Migrations** — when `migrations/`, `alembic/versions/`, `prisma/migrations/`, etc. are touched
 - **Dependencies** — when `package.json`, `poetry.lock`, `go.sum`, etc. are touched
 
-Your existing `.github/pull_request_template.md` is **merged, never overwritten** — repo-specific `## Checklist` / `## Rollout plan` sections are preserved intact; only the diff-derived sections override the template's placeholders. Preview → single `yes` / `edit` / `cancel` → `gh pr create` (new PR) or `gh pr edit` (refresh existing — with a body diff shown). Never pushes commits, never auto-merges, never fabricates issue refs.
+Before drafting anything it **brings the branch up to date with the remote base** (v2.1.0+): fetch, merge `origin/<base>` into the current branch when it is behind, resolve conflicts by reading both sides (never dropping the base's change), run the repo's quick validation, commit, and push the current branch — non-force, current branch only, announced in one line, no extra prompt. Dirty tree, an unjustifiable conflict, a failing quick gate, or a rejected push **stop** the skill with the exact commands instead. Repos that mandate a linear history get one question before any rebase + `--force-with-lease`.
+
+Your existing `.github/pull_request_template.md` is **merged, never overwritten** — repo-specific `## Checklist` / `## Rollout plan` sections are preserved intact; only the diff-derived sections override the template's placeholders. Preview (with the sync outcome on its own line) → single `yes` / `edit` / `cancel` → `gh pr create` (new PR) or `gh pr edit` (refresh existing — with a body diff shown). A `## Merge notes` section lists resolved conflicts when there were any. Never force-pushes, never auto-merges, never fabricates issue refs.
 
 Full skill: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](skills/ai-diff-reviewer/open-pr/SKILL.md).
 
