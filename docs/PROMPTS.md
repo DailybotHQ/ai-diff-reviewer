@@ -82,6 +82,20 @@ The point of the example is the *structure* — persona, severity overrides, hou
 - **One file, not many.** A single prompt file is easier to maintain than three. The bundled default is ~250 lines and that's plenty of headroom.
 - **Iterate from real PRs.** When the reviewer misses something obvious or flags something it shouldn't, that's data. Update the prompt; the next PR benefits.
 
+## What changed in the bundled prompt (v3, 2.1.0)
+
+The default prompt keeps its severity model, its "what NOT to comment on" list and the summary shape unchanged, so extensions written against v2 still layer cleanly. v3 adds:
+
+- **Plan the review first (triage)** — rank changed files by risk (auth/secrets/input/migrations/API/concurrency first; tests/docs/generated last) and spend verification there.
+- **Verification budget** — read slices around hunks, grep before claiming something is missing, stop once a concrete failure mode is confirmed or ruled out; no builds/tests/installs unless one cheap command is decisive.
+- **Calibration: things that look like bugs but usually are not** — the most common false positives (guarantees provided by callers/types/validators, intentional propagation, reflection-referenced "unused" code, documented constants, test-only patterns, CI-enforced formatting).
+- **Finding shape** — issue with its concrete failure mode → smallest fix (suggestion block when short) → what you checked. Unverified suspicions go to the summary as a question, never inline with a lowered severity.
+- **Triage is not severity** — triage decides where verification effort goes; severity is decided per finding on impact alone, and the calibration list is a set of hypotheses to check, not verdicts.
+- **Follow-up reviews** — how to behave in incremental rounds (verify prior findings through the prior-findings channel, do not repeat, review only what changed).
+- An acknowledgement of the omitted-files block and a note that other tool environments substitute the file tools.
+
+Before/after evidence for the change (offline, same four merged PRs, same backend) ships with the plan that introduced it. The first v3 draft showed severity inflation and one run that ended without calling `submit_review`; a calibration pass (the `prompt-engineer` agent) produced the shipped v3.1 text, which separates triage from severity, restores "verify or don't post", and always closes with `submit_review`. Net on the evaluation set: same or better recall on risky paths, inflation back to v2 levels, every run posting a summary, cost roughly neutral. If a review round still looks expensive, check the `**Usage:**` line in the tracking comment before touching the prompt.
+
 ## How the action loads your prompt
 
 You have three levers, from least to most invasive:

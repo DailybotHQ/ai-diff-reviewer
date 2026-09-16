@@ -137,6 +137,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **§ 13.1 closed:** the agent-runner inline cap is enforced inside the
   IAR post-LLM step after fingerprinting, so overflow findings are known
   to dedup instead of re-surfacing as new.
+- **Default prompt v3.** Adds triage-first planning, a verification
+  budget, a false-positive calibration list, an explicit finding shape,
+  an omitted-files acknowledgement and the follow-up-review section;
+  severity model, "what NOT to comment on" and summary shape are
+  unchanged so extensions keep layering. Triage is explicitly decoupled
+  from severity and unverified suspicions go to the summary instead of
+  inline with a lowered severity; the session always ends with
+  `submit_review`. The agent-runner findings directive keeps only the
+  file-safety rule (no duplicated budget text). Evaluated offline
+  before/after on four merged PRs with two live backends, then refined
+  after a calibration review (see `docs/PROMPTS.md`). The agent-runner
+  findings directive's JSON example is now valid JSON (the `// optional`
+  comment that the review itself flagged is gone; the rule text below the
+  example already says the field is optional).
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

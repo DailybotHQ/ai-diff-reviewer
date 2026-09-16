@@ -6804,16 +6804,18 @@ def render_user_prompt(
             f"{OMITTED_FILES_HEADING}\n\n"
             "These files changed in the PR but their diff sections were not "
             "included (lockfiles, minified bundles, source maps, vendored or "
-            "generated content). Do not report on them and do not guess their "
-            "contents; mention one only if a kept change clearly depends on "
-            "it.\n\n" + listing + "\n\n"
+            "generated content). Do not review or guess their contents; you may "
+            "note in the summary when their presence or absence is itself a "
+            "problem, or when a kept change clearly depends on one.\n\n"
+            + listing + "\n\n"
         )
     body_block: str = ctx.body.strip() or "(no body)"
     if for_agent_runner:
         closing: str = (
-            "Review this PR using the rubric in the instructions above. Use "
-            "your own file-reading and search tools to verify findings "
-            "against the broader codebase before reporting them. Only comment "
+            "Review this PR using the rubric in the instructions above: triage "
+            "the changed files by risk first, then use your own file-reading "
+            "and search tools to verify findings against the broader codebase "
+            "before reporting them — read slices, not whole trees. Only comment "
             "on lines that appear in the diff, and set each finding's "
             "`severity` honestly — it drives the gating behaviour configured "
             "by the consumer. When you're done, write your review to the "
@@ -8404,11 +8406,9 @@ def write_findings_prompt_directive(
     parser (`parse_findings_file`) is a single implementation shared across
     all providers.
     """
-    complexity_schema: str = (
-        ',\n  "complexity": "low | medium | high"\n'
-        if require_complexity
-        else ',\n  "complexity": "low | medium | high"  // optional\n'
-    )
+    # The example must stay valid JSON (no `//` comments): whether the
+    # field is optional is stated by ``complexity_rule`` right below it.
+    complexity_schema: str = ',\n  "complexity": "low | medium | high"\n'
     complexity_rule: str = (
         "\n- `complexity` is **required** for this run. Assess the PR's "
         "overall review difficulty based on cognitive load, files touched, "
@@ -8465,6 +8465,8 @@ def write_findings_prompt_directive(
         + "- Empty `findings` is valid — it means "
         + '"no issues found; just the summary".\n'
         + "- Only write the file once, at the end. Do NOT stream partials.\n"
+        + "- Never modify any file other than the findings file (the review "
+        + "instructions above carry the triage and verification budget).\n"
         + "- The file MUST parse with Python `json.load()`. Do not hand-write "
         + "JSON when the content contains Markdown, quotes, or code blocks; "
         + "use a JSON serializer so strings are escaped correctly."

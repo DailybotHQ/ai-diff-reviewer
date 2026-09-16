@@ -866,6 +866,30 @@ class AgentRunnerPromptHygieneTests(unittest.TestCase):
         self.assertIn("submit_review", text)
 
 
+class PromptV3DirectiveTests(unittest.TestCase):
+    """Prompt v3 (Task 12): the agent-runner directive keeps only the
+    file-safety rule (the triage/verification budget lives in the prompt,
+    never duplicated), and the agent-runner closing asks for triage."""
+
+    def test_directive_has_file_safety_rule_but_no_duplicated_budget(self) -> None:
+        d = reviewer.write_findings_prompt_directive("RUBRIC", Path("/tmp/f.json"))
+        self.assertIn("Never modify any file other than the findings file", d)
+        self.assertNotIn("Exploration budget", d)
+
+    def test_agent_runner_closing_mentions_triage_and_slices(self) -> None:
+        text = reviewer.render_user_prompt(_make_pr_context(), for_agent_runner=True)
+        self.assertIn("triage", text)
+        self.assertIn("read slices, not whole trees", text)
+
+    def test_bundled_prompt_carries_v3_sections(self) -> None:
+        prompt = (_ROOT / "prompts" / "default.md").read_text(encoding="utf-8")
+        for heading in ("## Plan the review first (triage)", "## Verification budget", "## Calibration: things that look like bugs but usually are not", "### Finding shape", "## Follow-up reviews", "## Severity definitions", "## What NOT to comment on"):
+            self.assertIn(heading, prompt, heading)
+        self.assertIn("It does **not** decide severity", prompt)
+        self.assertIn("Always finish the session by calling `submit_review` exactly once", prompt)
+        self.assertEqual(prompt, (_ROOT / "skills" / "ai-diff-reviewer" / "prompt.md").read_text(encoding="utf-8"), "skill prompt must be byte-identical")
+
+
 class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
     """`api-key` maps to metered API auth OR subscription OAuth auth based on
     the token prefix — so a Claude Pro/Max subscription can bill the review
