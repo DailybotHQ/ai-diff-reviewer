@@ -390,3 +390,33 @@ class SinglePathCapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class MarkerShaCoercionTests(unittest.TestCase):
+    """Task 13 hardening: SHA fields from persisted marker state are argv
+    tokens for `git diff` / `git merge-base` — only hex object ids pass."""
+
+    def test_accepts_hex_object_ids(self) -> None:
+        self.assertEqual(reviewer._coerce_git_sha("ABCDEF1234"), "abcdef1234")
+        self.assertEqual(reviewer._coerce_git_sha(" " + "a" * 40 + " "), "a" * 40)
+        self.assertEqual(reviewer._coerce_git_sha("0" * 64), "0" * 64)
+
+    def test_rejects_options_and_garbage(self) -> None:
+        for bad in ("--output=/tmp/pwn", "-", "HEAD", "main..evil", "abc", "", None, 12, ["a" * 40], "a" * 65, "zzzz1234"):
+            self.assertEqual(reviewer._coerce_git_sha(bad), "", repr(bad))
+
+    def test_parser_drops_poisoned_shas(self) -> None:
+        """Embed a real state, then poison the persisted JSON the way an
+        editor of the tracking comment could, and parse it back."""
+        good = "b" * 40
+        state = reviewer.IterationState(
+            version=reviewer.IAR_STATE_SCHEMA_VERSION, generation=1,
+            generation_range_hash="abc123", round_in_generation=1,
+            policy_applied=reviewer.IAR_POLICY_ITERATIVE, resolved_fingerprints=[],
+            open_fingerprints_this_gen=[], history=[], base_sha=good, head_sha=good,
+        )
+        body = reviewer.embed_iteration_state("### Tracking marker\n", state)
+        poisoned = body.replace(json.dumps(good)[1:-1], "--output=/tmp/pwn", 1)
+        parsed = reviewer._parse_state_from_marker_body(poisoned)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.base_sha, "")
+        self.assertEqual(parsed.head_sha, good)

@@ -642,8 +642,8 @@ class HeadShaRoundTripTests(unittest.TestCase):
     def test_embed_and_parse_round_trip(self) -> None:
         state: IterationState = new_iteration_state(
             generation=3, generation_range_hash="range",
-            round_in_generation=2, base_sha="baseabc",
-            head_sha="headabc",
+            round_in_generation=2, base_sha="ba5eabc",
+            head_sha="4eadabc",
         )
         marker_body: str = "<!-- ai-pr-reviewer-marker -->\nBody text."
         embedded: str = embed_iteration_state(marker_body, state)
@@ -651,8 +651,8 @@ class HeadShaRoundTripTests(unittest.TestCase):
         parsed_state = reviewer._parse_state_from_marker_body(embedded)
         self.assertIsNotNone(parsed_state)
         assert parsed_state is not None  # type narrowing
-        self.assertEqual(parsed_state.head_sha, "headabc")
-        self.assertEqual(parsed_state.base_sha, "baseabc")
+        self.assertEqual(parsed_state.head_sha, "4eadabc")
+        self.assertEqual(parsed_state.base_sha, "ba5eabc")
 
     def test_older_markers_without_head_sha_parse_to_empty(self) -> None:
         # Simulate a marker written by pre-Task-8 IAR: no head_sha field.
@@ -668,7 +668,7 @@ class HeadShaRoundTripTests(unittest.TestCase):
             '  "resolved_fingerprints": [],\n'
             '  "open_fingerprints_this_gen": [],\n'
             '  "history": [],\n'
-            '  "base_sha": "old_base"\n'
+            '  "base_sha": "01dba5e"\n'
             "}"
         )
         old_body: str = (
@@ -682,7 +682,7 @@ class HeadShaRoundTripTests(unittest.TestCase):
         self.assertIsNotNone(parsed_state)
         assert parsed_state is not None
         self.assertEqual(parsed_state.head_sha, "")
-        self.assertEqual(parsed_state.base_sha, "old_base")
+        self.assertEqual(parsed_state.base_sha, "01dba5e")
 
 
 # ---------------------------------------------------------------------------

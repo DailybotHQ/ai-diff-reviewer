@@ -73,6 +73,36 @@ class ValidateApiBaseTests(unittest.TestCase):
             "http://127.0.0.1:11434/v1",
         )
 
+    def test_rejects_non_ascii_host_requires_punycode(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            reviewer.validate_api_base("https://api.\u0445.ai/v1")  # Cyrillic kha
+        self.assertIn("punycode", str(ctx.exception))
+        # The explicit punycode form is classified as custom (not a vendor).
+        norm = reviewer.validate_api_base("https://api.xn--80a.ai/v1")
+        self.assertEqual(reviewer.classify_endpoint_host(
+            reviewer.urllib.parse.urlsplit(norm).hostname), "custom")
+
+    def test_ipv6_literals(self) -> None:
+        self.assertEqual(
+            reviewer.validate_api_base("http://[::1]:8000/v1"), "http://[::1]:8000/v1"
+        )
+        self.assertEqual(
+            reviewer.validate_api_base("https://[2001:db8::1]:8443/v1/"),
+            "https://[2001:db8::1]:8443/v1",
+        )
+        with self.assertRaises(ValueError):
+            reviewer.validate_api_base("http://[2001:db8::1]/v1")
+
+    def test_host_tricks_never_classify_as_vendor(self) -> None:
+        for raw in (
+            "https://api.x.ai.evil.example/v1",
+            "https://evil.example/api.x.ai",
+            "https://api.x.ai./v1",
+            "https://API.X.AI.example/v1",
+        ):
+            host = reviewer.urllib.parse.urlsplit(reviewer.validate_api_base(raw)).hostname
+            self.assertEqual(reviewer.classify_endpoint_host(host), "custom", raw)
+
     def test_rejects_userinfo(self) -> None:
         with self.assertRaises(ValueError):
             reviewer.validate_api_base("https://user:pass@gateway.example/v1")
@@ -92,6 +122,25 @@ class ValidateApiBaseTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             reviewer.validate_api_base("http://api.x.ai/v1")
         self.assertIn("https://", str(ctx.exception))
+
+
+class BackendSelectionLogTests(unittest.TestCase):
+    """Custom hosts trigger a visible warning naming where the key goes."""
+
+    def test_custom_host_warns_and_names_host(self) -> None:
+        profile = reviewer.resolve_endpoint_profile("https://gw.example.com/v1", "openai")
+        with mock.patch.object(reviewer, "log") as fake_log:
+            reviewer.log_backend_selection(profile)
+        msgs = [str(c.args[0]) for c in fake_log.call_args_list]
+        self.assertTrue(any("WARNING" in m and "gw.example.com" in m and "api-key" in m for m in msgs), msgs)
+
+    def test_vendor_and_default_hosts_do_not_warn(self) -> None:
+        for api_base, pid in (("", "anthropic"), ("https://api.x.ai/v1", "openai"), ("https://api.z.ai/api/anthropic", "anthropic")):
+            with mock.patch.object(reviewer, "log") as fake_log:
+                reviewer.log_backend_selection(reviewer.resolve_endpoint_profile(api_base, pid))
+            msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+            self.assertNotIn("WARNING", msgs, api_base)
+            self.assertIn("Backend:", msgs)
 
 
 class ClassifyEndpointHostTests(unittest.TestCase):

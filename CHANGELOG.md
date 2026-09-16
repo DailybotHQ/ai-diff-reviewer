@@ -154,6 +154,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 
+### Security
+
+- **`api-base` hardening.** Hostnames must be ASCII (internationalised
+  domains only in their explicit punycode form) so a homoglyph host can
+  never masquerade as a vendor domain in logs; IPv6 literals are handled
+  (`http://[::1]` is a loopback exception like `localhost`). When the
+  host is not a recognised vendor endpoint the run logs a WARNING naming
+  the host that will receive `api-key`.
+- **Bounded untrusted input from vendor CLIs.** The agent-runner findings
+  file is capped at 5 MB (`MAX_FINDINGS_FILE_BYTES`; larger files are
+  refused, not parsed); usage parsers already scan a bounded stdout tail.
+- **`ignore-paths` cannot stall the runner.** Globs are matched by a
+  backtracking-free segment matcher (`_GlobMatcher`) instead of a compiled
+  regex — the regex form backtracked exponentially on patterns such as
+  `*.*.*.*.ts` against a long non-matching file name, and file names are
+  PR-controlled. Globs are also capped in count (200) and length (256
+  characters). Semantics are unchanged (`**`, `*`, `?`, `/` anchoring,
+  trailing `/`).
+- **Persisted marker state cannot inject git arguments.** `base_sha` /
+  `head_sha` read back from the tracking comment's `ai-pr-reviewer-state`
+  JSON are accepted only as hex object ids (4–64 chars); anything else
+  (e.g. `--output=/path`) becomes `""`, which disables the delta fast
+  path instead of reaching `git diff` / `git merge-base` as an argv
+  token. Found by the Task 13 security review of the branch.
+- **Installer steps honour a pre-installed CLI.** The `cursor` and `grok`
+  install steps skip the `curl | bash` installer when the binary is
+  already on `PATH` (self-hosted / pre-provisioned runners can mirror the
+  installer in-house). `provider: cursor` now logs a WARNING and ignores
+  `api-base` instead of silently accepting it (Cursor has no
+  bring-your-own-endpoint lane).
+- `docs/SECURITY.md` documents the new surface: where the key goes with a
+  custom endpoint, per-run generated files and their permissions, Grok's
+  web-search/subagent defaults, vendor stdout as untrusted input, the
+  Grok installer supply chain, and a credential-lanes table asserted by
+  tests. `.review/extension.md` gains matching `critical`/`warning`
+  rules for the reviewer itself.
+
 ### Fixed
 
 - **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).

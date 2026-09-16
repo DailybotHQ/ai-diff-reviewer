@@ -53,12 +53,48 @@ As a runtime backstop, the reviewer registers the provider API key and the GitHu
 
 The default `provider: anthropic` path is not subject to (1) or (2): its only tools are `read_file`/`grep`/`glob` (all `safe_repo_path`-scoped to the checkout), `post_inline_comment`, and `submit_review` — none can read process env or files outside the repo, so the worst case of a successful injection there is "the reviewer wrote silly comments on this one PR."
 
-### Cursor installer supply chain
+### Custom endpoints (`api-base`, v2.1.0+) — where your key goes
 
-The `provider: cursor` install step in `action.yml` runs `curl -fsSL https://cursor.com/install | bash`. This is the officially-supported installer path from Cursor and is used by every consumer of that CLI. Consequences:
+`api-base` points a runner at a different backend (Z.ai, xAI, Azure Foundry, a self-hosted gateway). The value is validated **before anything outward-facing happens** (`validate_api_base`): absolute `https://` URL (plain `http://` only for `localhost` / `127.0.0.1` / `[::1]`), a host, **ASCII hostnames only** (internationalised domains must be given in their explicit punycode `xn--` form so a homoglyph can never look like a vendor domain in your logs), no userinfo, no query string, no fragment. A malformed value aborts the run with a `CONFIGURATION ERROR` — the credential is never sent to a guessed host.
 
-- Compromise of `cursor.com` or the CDN serving `/install` would execute arbitrary code on every runner that invokes the action with `provider: cursor`.
-- Consumers on regulated networks should either (a) mirror the installer script in-house and reference it via a self-hosted runner + `agent-extra-args`-style extension in a future task, or (b) stay on `provider: anthropic` / `provider: claude-code` (npm — has integrity metadata) / `provider: codex` (npm) until Cursor publishes signed installer artefacts.
+The host is then classified into an endpoint kind by exact host or registrable-domain suffix (`api.anthropic.com`, `.x.ai`, `.z.ai`, `.openai.com`, `.openai.azure.com` / `.cognitiveservices.azure.com` / `.services.ai.azure.com`). Anything else is `custom`, and the run logs a **WARNING naming the host that will receive `api-key`**:
+
+```
+WARNING: api-base host 'gw.example.com' is not a recognised vendor endpoint. The `api-key` credential will be sent to this host on every request …
+```
+
+Every URL the runtime calls with the credential is derived from that one profile (`resolve_endpoint_profile`); providers never build backend URLs on their own. The consequences to keep in mind:
+
+- **`api-base` is a trust decision by the workflow author.** Whoever can edit the workflow can already exfiltrate the secret; `api-base` adds nothing for that actor. What it must not do — and does not — is let PR content, labels or an `agent-extra-args` string change the host.
+- The same credential travels in more than one header on non-Anthropic hosts (`x-api-key` **and** `Authorization: Bearer` for the `anthropic` runner on a compatible gateway; `Authorization: Bearer` **and** `api-key` for Azure). All go to the single host you configured.
+- Agent-runner CLIs receive the backend through their documented env/config contract (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` for Claude Code, a generated `config.toml` for Codex). Grok and Cursor have no `api-base` lane; the input is ignored with a warning.
+
+### Generated per-run files (Codex `config.toml` / `auth.json` / `models.json`, Grok prompt file)
+
+Two runners write files next to a credential or the diff for the duration of one run:
+
+| Runner | Directory | Files | Mode | Cleanup |
+|---|---|---|---|---|
+| `codex` | `tempfile.mkdtemp(prefix="aiprr-codex-")` (0700), used as `CODEX_HOME` | `auth.json` (holds the key), `config.toml` (base URL, wire API, model catalog path — never the key), `models.json` (cloned catalog entry) | 0600 each | `shutil.rmtree` in `finally` |
+| `grok` | `tempfile.mkdtemp(prefix="aiprr-grok-")` (0700) | `prompt.md` (PR metadata + diff for `--prompt-file`) | 0600 | `shutil.rmtree` in `finally` |
+
+A failed `chmod` is logged as a WARNING and the run continues (the parent directory is already private). A hard kill (SIGKILL / OOM) can leave the directory behind on a **persistent self-hosted runner**; on ephemeral runners the VM is destroyed with it. The findings file the CLI writes (`.aiprr/findings.json`) is capped at `MAX_FINDINGS_FILE_BYTES` (5 MB); a larger file is refused rather than parsed, because a CLI tricked into dumping content is the only way to produce one.
+
+### Grok CLI — web search and subagents are OFF by default
+
+`provider: grok` runs `grok --always-approve --output-format json --disable-web-search --no-subagents --no-plan`. Web search is disabled so a prompt injection in the diff cannot turn the review into an outbound request carrying repository content; subagents and plan mode are disabled so the review is a single bounded loop (`--max-turns` from `agent-max-turns`). The CLI still has the broad local access every agent-runner has (see above); the same fork-PR guidance applies. `agent-extra-args` can re-enable these features deliberately — treat that as a security decision.
+
+### Vendor stdout is untrusted input
+
+Usage telemetry is parsed from each CLI's stdout (`--json` / `stream-json` / `--output-format json`). Parsers scan only the last `CLI_STDOUT_SCAN_MAX_BYTES` (2 MB), accept only well-formed JSON objects, and never fail a review (parse errors log and yield "not reported"). Numbers from stdout only ever become the `**Usage:**` line and the `iteration-tokens-used` output; nothing from stdout is executed or used to build a URL.
+
+### Cursor and Grok installer supply chain
+
+The `provider: cursor` install step in `action.yml` runs `curl -fsSL https://cursor.com/install | bash`, and the `provider: grok` step runs `curl -fsSL https://x.ai/cli/install.sh | bash -s "<grok-version>"`. These are the vendors' officially-supported installer paths and are used by every consumer of those CLIs. Consequences:
+
+- Compromise of `cursor.com` / `x.ai` or the CDN serving the script would execute arbitrary code on every runner that invokes the action with that provider. Both steps run **only** when the provider is selected — a consumer on `anthropic` / `openai` / `claude-code` / `codex` never fetches them.
+- `grok-version` pins the CLI version the installer resolves, but not the installer script itself.
+- Consumers on regulated networks should either (a) mirror the installer script in-house and pre-install the CLI on a self-hosted runner (the action skips installation when the binary is already on `PATH`), or (b) stay on `provider: anthropic` / `provider: openai` (in-process, no CLI) / `provider: claude-code` and `provider: codex` (npm — integrity metadata) until the vendors publish signed installer artefacts.
 
 ### MCP config passthrough on self-hosted runners
 
@@ -94,10 +130,23 @@ Each is pinned by major version. The choice to pin major rather than commit-SHA 
 
 | Secret | Where | Why |
 |---|---|---|
-| Provider API key | `inputs.api-key` → `AIPRR_API_KEY` env var | Authentication to the LLM provider. |
+| Provider API key | `inputs.api-key` → `AIPRR_API_KEY` env var | Authentication to the LLM provider or backend. One input, whatever the runner: an Anthropic / OpenAI / xAI / Z.ai / Azure key, a Claude Code OAuth token (`sk-ant-oat…`), or a Cursor key. |
 | GitHub token | `inputs.github-token` → `AIPRR_GH_TOKEN` env var | Authentication to read the PR and post the review. |
 
-Both are passed into the script as environment variables and never written to stdout, stderr, or any file.
+Both are passed into the script as environment variables and never written to stdout or stderr. The **only** on-disk copy is Codex's per-run `auth.json` (0600, private temp `CODEX_HOME`, removed in `finally`) — see "Generated per-run files" above.
+
+**Credential lanes.** Which variable carries the key to which process — asserted by `tests/test_agent_runner_providers.py::HardeningRegressionTests::test_credential_lanes_per_agent_runner`:
+
+| Runner | In-process HTTP headers | Subprocess env (on top of the allowlist) |
+|---|---|---|
+| `anthropic` | `x-api-key` (default) · `x-api-key` + `Authorization: Bearer` on compatible gateways | — |
+| `openai` | `Authorization: Bearer` · plus `api-key` on Azure | — |
+| `claude-code` | — | `ANTHROPIC_API_KEY`, or `CLAUDE_CODE_OAUTH_TOKEN` for `sk-ant-oat…`, or `ANTHROPIC_AUTH_TOKEN` + `ANTHROPIC_BASE_URL` on a custom backend |
+| `codex` | — | `OPENAI_API_KEY` + `CODEX_HOME` (the key also sits in `auth.json` inside it) |
+| `cursor` | — | `CURSOR_API_KEY` |
+| `grok` | — | `XAI_API_KEY` |
+
+`AIPRR_GH_TOKEN` and every other `AIPRR_*` variable never enter any subprocess env; the allowlist itself contains no credential-like names (asserted by `test_allowlist_has_no_credential_like_names`).
 
 ### Logging discipline
 
@@ -110,9 +159,9 @@ LOG_REDACT_SUBSTRINGS = ("token", "key", "secret", "password", "auth")
 Any tool argument whose key contains one of those substrings is replaced with `***` in the log. This is a defense-in-depth measure — the model is not normally given access to env vars, but the redaction catches the case where the system prompt was tricked into surfacing one.
 
 **What the action does NOT do:**
-- Log the API key under any circumstances.
-- Write secrets to the runner's filesystem.
-- Send secrets to any endpoint other than the one they authenticate against.
+- Log the API key under any circumstances (audit: `grep -n 'log(f' scripts/reviewer.py | grep -iE 'api_key|token|authorization'` is empty). Backend logs name the endpoint kind and host only.
+- Write secrets to the runner's filesystem, except Codex's private per-run `auth.json` described above.
+- Send secrets to any endpoint other than the one they authenticate against — the host is fixed by `resolve_endpoint_profile` from `api-base`, and unrecognised hosts are called out with a WARNING.
 
 ### Recommendations for consumers
 
@@ -308,6 +357,9 @@ IAR persists per-PR iteration state as a JSON block inside the tracking marker c
 - Fingerprint strings are used only in `==` and `in` comparisons against newly-computed fingerprints — never as subprocess args, HTTP URLs, path components, or shell strings.
 - Convergence policy strings pulled from the block are used only to populate `state.policy_applied` (rendered in the marker annotation); the policy that governs the current run's behavior always comes from `iar_config.policy` (via `build_iar_config` with a whitelist), not from the parsed state.
 
+
+**Shape validation per field (v2.1.0+).** Fingerprint lists keep only strings, `history` keeps only objects, `reviewed_label_applied` accepts only JSON booleans, and `base_sha` / `head_sha` accept only lowercase hex object ids (`[0-9a-f]{4,64}`, `_coerce_git_sha`). The SHA rule matters because those two values become their own argv tokens in `git diff --name-only <prior> <head>` and `git merge-base --is-ancestor <prior> <head>` (incremental mode): a poisoned `--output=<path>` would otherwise be parsed by git as an option. Invalid values degrade to `""`, which simply disables the delta fast path (full review — the safe direction).
+
 ### User-controllable inputs
 
 Two new inputs accept user text: `convergence-policy` and `iteration-escape-label`. Both are validated at parse time — the policy is compared against a whitelist and falls back to `first-pass-exhaustive` (the shipped default) on any unknown value; the escape label is compared via the `_labels_contain_ci` helper (whitespace-trimmed, case-insensitive membership over strings pulled from the GitHub REST `labels` field). Same helper is used for `skip-review-label` and the reviewed-label-based USER_FORCED_RESET check — aligning with `resolve_trigger_action`'s case-insensitive `label-gate` handling so a casing mismatch between the configured label and the GitHub-returned name can never silently disable a gesture (or, worse, look like "reviewed label removed" and falsely wipe fingerprint memory). Neither input is ever passed to a subprocess, HTTP URL, or shell string.
@@ -354,9 +406,13 @@ The label name flows through the `_labels_contain_ci` helper (whitespace-trimmed
 
 For organisations that need to audit before adopting:
 
-- [ ] Read `scripts/reviewer.py` end-to-end (~1500 LOC, single file).
+- [ ] Read `scripts/reviewer.py` end-to-end (single file).
 - [ ] Verify zero non-stdlib imports.
-- [ ] Verify no outbound network calls beyond the two documented endpoints.
+- [ ] Verify no outbound network calls beyond GitHub and the backend host resolved from `api-base` (three `urlopen` sites: two GitHub helpers, one shared provider client).
+- [ ] Verify `api-base` handling: `validate_api_base` (https, ASCII host, no userinfo/query/fragment), `classify_endpoint_host`, the custom-host WARNING.
+- [ ] Verify the vendor-CLI env allowlist (`_CLI_ENV_ALLOWLIST`) and the per-runner credential lanes table above.
+- [ ] Verify per-run files are 0600 inside 0700 temp dirs and removed in `finally` (`codex`, `grok`).
+- [ ] Verify the installer steps run only for the selected provider (`cursor`, `grok`).
 - [ ] Verify the redaction list and path-traversal protections.
 - [ ] Verify the action.yml branding and inputs match what's published on the Marketplace.
 - [ ] Pin to a commit SHA or a specific `vX.Y.Z` tag rather than `@v2` for change control.

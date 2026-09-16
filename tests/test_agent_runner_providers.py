@@ -304,6 +304,109 @@ class CliEnvAllowlistTests(unittest.TestCase):
             os.environ.update(prev)
 
 
+class HardeningRegressionTests(unittest.TestCase):
+    """Task 13 hardening: allowlist hygiene, bounded findings file, bounded
+    ignore globs, and the credential lanes per runner."""
+
+    def test_allowlist_has_no_credential_like_names(self) -> None:
+        for name in reviewer._CLI_ENV_ALLOWLIST:
+            low = name.lower()
+            self.assertFalse(
+                any(s in low for s in reviewer.LOG_REDACT_SUBSTRINGS),
+                f"{name} looks like a credential and must not be forwarded",
+            )
+            self.assertFalse(name.startswith("AIPRR_"), name)
+
+    def test_findings_file_above_cap_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "findings.json"
+            path.write_text("{}" + " " * 16, encoding="utf-8")
+            with mock.patch.object(reviewer, "MAX_FINDINGS_FILE_BYTES", 8):
+                with self.assertRaises(ValueError) as ctx:
+                    reviewer.parse_findings_file(path)
+            self.assertIn("cap", str(ctx.exception))
+            # Under the cap the same file parses (empty findings list is fine).
+            path.write_text(json.dumps({"summary": "ok", "findings": []}), encoding="utf-8")
+            self.assertEqual(reviewer.parse_findings_file(path).summary, "ok")
+
+    def test_ignore_globs_are_capped(self) -> None:
+        many = ",".join(f"dir{i}/**" for i in range(reviewer.MAX_IGNORE_GLOBS + 50))
+        with mock.patch.object(reviewer, "log"):
+            self.assertEqual(len(reviewer.parse_ignore_paths(many)), reviewer.MAX_IGNORE_GLOBS)
+            long_glob = "a" * (reviewer.MAX_IGNORE_GLOB_LEN + 1)
+            self.assertEqual(reviewer.parse_ignore_paths(f"{long_glob},keep.txt"), ("keep.txt",))
+
+    def test_pathological_globs_match_in_bounded_time(self) -> None:
+        """PR-controlled file names must not stall the matcher (ReDoS)."""
+        import time
+        cases = (
+            ("**/" * 40 + "a", "b/" * 60 + "c"),
+            ("*.*.*.*.*.*.*.*.*.*.ts", "a." * 120 + "x"),
+            ("*a*a*a*a*a*a*a*a*a*a*b", "a" * 200),
+        )
+        for glob, path in cases:
+            t0 = time.monotonic()
+            self.assertFalse(reviewer.path_is_ignored(path, (glob,)))
+            self.assertLess(time.monotonic() - t0, 0.5, glob)
+        self.assertTrue(reviewer.path_is_ignored("a.b.c.d.e.f.g.h.i.j.ts", ("*.*.*.*.*.*.*.*.*.*.ts",)))
+
+    def test_credential_lanes_per_agent_runner(self) -> None:
+        """Each CLI receives exactly its own credential variable(s) and never
+        the GitHub token or any other AIPRR_* variable."""
+        expected: dict[str, set[str]] = {
+            "claude-code": {"ANTHROPIC_API_KEY"},
+            "codex": {"OPENAI_API_KEY", "CODEX_HOME"},
+            "cursor": {"CURSOR_API_KEY"},
+            "grok": {reviewer.GROK_API_KEY_ENV},
+        }
+        prev = dict(os.environ)
+        try:
+            os.environ["AIPRR_GH_TOKEN"] = "ghp_leak_value"
+            os.environ["AIPRR_API_KEY"] = "leak_value"
+            for pid, lanes in expected.items():
+                provider = reviewer.build_provider(pid, api_key="sk-lane-KEY", model="")
+                captured: dict[str, Any] = {}
+
+                def fake_run(argv, **kw):
+                    captured["env"] = dict(kw["env"])
+                    findings = Path(kw["cwd"]) / reviewer.FINDINGS_JSON_REL
+                    findings.parent.mkdir(parents=True, exist_ok=True)
+                    findings.write_text(json.dumps({"summary": "s", "findings": []}))
+                    return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+                with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                    reviewer.subprocess, "run", side_effect=fake_run
+                ), mock.patch.object(reviewer, "log"):
+                    provider.run_review(
+                        pr_context=_make_pr_context(), review_instructions="R",
+                        workspace=Path(tmp), output_dir=Path(tmp),
+                    )
+                env = captured["env"]
+                extra = {k for k in env if k not in reviewer._CLI_ENV_ALLOWLIST}
+                self.assertEqual(extra, lanes, pid)
+                self.assertFalse(any(k.startswith("AIPRR_") for k in env), pid)
+                self.assertNotIn("ghp_leak_value", " ".join(env.values()), pid)
+        finally:
+            os.environ.clear(); os.environ.update(prev)
+
+
+class CursorApiBaseWarningTests(unittest.TestCase):
+    def test_cursor_warns_and_ignores_api_base(self) -> None:
+        with mock.patch.object(reviewer, "log") as fake_log:
+            provider = reviewer.build_provider(
+                "cursor", api_key="k", model="", api_base="https://gw.example.com/v1"
+            )
+        msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+        self.assertIn("api-base", msgs)
+        self.assertIn("WARNING", msgs)
+        self.assertEqual(provider.profile.host, "gw.example.com")
+
+    def test_cursor_default_is_silent(self) -> None:
+        with mock.patch.object(reviewer, "log") as fake_log:
+            reviewer.build_provider("cursor", api_key="k", model="")
+        self.assertFalse(any("api-base" in str(c.args[0]) for c in fake_log.call_args_list))
+
+
 class SecurityInvariantsTests(unittest.TestCase):
     """No shell=True, all agent-extra-args go through shlex.split."""
 

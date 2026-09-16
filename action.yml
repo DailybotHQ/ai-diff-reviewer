@@ -295,6 +295,14 @@ runs:
         CURSOR_VERSION: ${{ inputs.cursor-version }}
       run: |
         set -euo pipefail
+        # Self-hosted / pre-provisioned runners: honour an existing binary
+        # instead of fetching the vendor installer again (supply-chain
+        # control — see docs/SECURITY.md § "installer supply chain").
+        if command -v cursor-agent >/dev/null 2>&1; then
+          echo "cursor-agent already on PATH ($(command -v cursor-agent)) — skipping installer"
+          cursor-agent --version || true
+          exit 0
+        fi
         # Cursor's official installer script places the binary in
         # ~/.local/bin. We forward VERSION when the consumer pins it.
         installer_url="https://cursor.com/install"
@@ -317,6 +325,14 @@ runs:
         GROK_VERSION: ${{ inputs.grok-version }}
       run: |
         set -euo pipefail
+        # Self-hosted / pre-provisioned runners: honour an existing binary
+        # instead of fetching the vendor installer again (supply-chain
+        # control — see docs/SECURITY.md § "installer supply chain").
+        if command -v grok >/dev/null 2>&1; then
+          echo "grok already on PATH ($(command -v grok)) — skipping installer"
+          grok --version || true
+          exit 0
+        fi
         # Official installer (https://x.ai/cli/install.sh). It installs a
         # single static binary into ~/.grok/bin (override: GROK_BIN_DIR) and
         # accepts an explicit version as `bash -s <X.Y.Z>`; with no argument

@@ -42,6 +42,20 @@ overrides the base prompt for the patterns most likely to slip a review.
   contracts on **already-posted** PR comments across every consumer repo;
   renaming silently breaks `collapse-previous` and idempotency
   (`docs/STANDARDS.md § "Marker constants"`).
+- **Always `critical`:** any backend URL built outside
+  `resolve_endpoint_profile()` / `EndpointProfile.base_url` — a provider
+  that concatenates its own host, reads `AIPRR_API_BASE` directly, or
+  skips `validate_api_base()` breaks the "the key goes to exactly one
+  configured host" guarantee (`docs/SECURITY.md § "Custom endpoints"`).
+- **Always `critical`:** a new credential-bearing value (API key, OAuth
+  token, bearer for a gateway) that is not passed through
+  `register_secret()` before any text can reach a PR body, or a new
+  subprocess `extra_vars` entry carrying a credential under a name the
+  runner does not need.
+- **Always `critical`:** a temp file that holds a prompt, a config with a
+  base URL, or a credential (`auth.json`, `config.toml`, `prompt.md`)
+  that is not created inside a `tempfile.mkdtemp()` directory, chmod'ed
+  `0o600`, and removed in a `finally` block.
 - **Always `critical`:** any `print(os.environ["AIPRR_API_KEY"])` /
   `log(f"key={api_key}")` / logging path that echoes an env var matching
   the redaction substrings (`token`, `key`, `secret`, `password`,
@@ -49,6 +63,13 @@ overrides the base prompt for the patterns most likely to slip a review.
   `register_secret` + `scrub_secrets` are the outbound gate for anything
   posted to a PR body.
 
+- **Always `warning`:** a parser over vendor stdout / a vendor-written
+  file (`_scan_json_lines`, `parse_*_usage`, `parse_findings_file`) that
+  reads or scans without a byte cap (`CLI_STDOUT_SCAN_MAX_BYTES`,
+  `MAX_FINDINGS_FILE_BYTES`), or a consumer-supplied pattern
+  (`ignore-paths`) matched with a backtracking regex instead of the
+  segment-DP `_GlobMatcher` (`fnmatch.translate` has the same ReDoS) —
+  hostile output must not be able to exhaust memory or CPU on the runner.
 - **Always `warning`:** missing type hints on new function signatures in
   `scripts/**.py` (Rule #3, `docs/DEVELOPMENT_GUIDELINES.md § "Type hints
   (mandatory)"`). Includes parameters, return type, and meaningful local

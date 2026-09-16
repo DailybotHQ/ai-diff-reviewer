@@ -76,6 +76,7 @@ Environment (set by the composite action's `env:` block; see action.yml):
 from __future__ import annotations
 
 import hashlib
+import functools
 import json
 import os
 import re
@@ -313,6 +314,10 @@ CACHE_READ_PRICE_FACTOR: float = 0.10
 CACHE_WRITE_PRICE_FACTOR: float = 1.25
 # Bound on how much vendor-CLI stdout the usage parsers scan (tail).
 CLI_STDOUT_SCAN_MAX_BYTES: int = 2_000_000
+# Upper bound on the agent-runner findings file. The file is written by a
+# vendor CLI running attacker-influenced input; a larger file is refused
+# (summary-only failure) instead of being parsed into memory.
+MAX_FINDINGS_FILE_BYTES: int = 5_000_000
 
 # Agent-runner CLIs whose turn cap is enforced natively from `agent-max-turns`.
 AGENT_MAX_TURNS_NATIVE_PROVIDERS: tuple[str, ...] = ("grok",)
@@ -506,6 +511,11 @@ MAX_DIFF_CHARS: int = 200_000
 # the basename anywhere. IAR's own git inputs (range hash, new-lines %) are
 # computed from unshaped git output and are unaffected.
 IGNORE_PATHS_ENV: str = "AIPRR_IGNORE_PATHS"
+# Caps on consumer-supplied globs: bounded regex count/length keeps the
+# per-file match loop cheap even for pathological patterns.
+MAX_IGNORE_GLOBS: int = 200
+MAX_IGNORE_GLOB_LEN: int = 256
+GLOB_ANY_DIRS: str = "**"
 DEFAULT_IGNORE_PATH_GLOBS: tuple[str, ...] = (
     # JavaScript / TypeScript lockfiles
     "package-lock.json",
@@ -1613,6 +1623,14 @@ def validate_api_base(raw: str) -> str:
             "api-base must not embed credentials (user:pass@host); pass the "
             "key via the `api-key` input."
         )
+    if not host.isascii():
+        # Internationalised hostnames are classified and sent as typed;
+        # a homoglyph host would look like a vendor domain in logs while
+        # resolving elsewhere. Require the explicit punycode (`xn--`) form.
+        raise ValueError(
+            f"api-base host {host!r} must be ASCII — use the punycode "
+            "(`xn--…`) form of an internationalised domain."
+        )
     if parts.query or parts.fragment:
         raise ValueError(
             f"api-base {value!r} must not carry a query string or fragment."
@@ -1694,6 +1712,22 @@ def resolve_endpoint_profile(api_base: str, provider_id: str) -> EndpointProfile
         host=host,
         is_default=False,
     )
+
+
+def log_backend_selection(profile: EndpointProfile) -> None:
+    """One log line naming the backend; a WARNING when the host is not a
+    recognised vendor, because the `api-key` credential is sent to it."""
+    log(
+        f"Backend: kind={profile.kind} host={profile.host or 'default'}"
+        + ("" if profile.is_default else " (custom api-base)")
+    )
+    if not profile.is_default and profile.kind == ENDPOINT_KIND_CUSTOM:
+        log(
+            f"WARNING: api-base host {profile.host!r} is not a recognised "
+            "vendor endpoint. The `api-key` credential will be sent to this "
+            "host on every request — make sure you control it or trust it "
+            "(gateway / proxy). See docs/SECURITY.md § \"Custom endpoints\"."
+        )
 
 
 def resolve_model(
@@ -2850,6 +2884,12 @@ class CursorProvider(AgentRunnerProvider):
             if profile is not None
             else resolve_endpoint_profile("", self.PROVIDER_ID)
         )
+        if not self.profile.is_default:
+            log(
+                "WARNING: api-base is set but provider=cursor has no "
+                "bring-your-own-endpoint lane (Cursor CLI talks to Cursor's "
+                f"own service). Ignoring api-base={self.profile.base_url!r}."
+            )
 
     def install(self) -> None:
         result = run_cmd([self.CLI_BIN, "--version"])
@@ -3775,6 +3815,22 @@ def new_iteration_state(
     )
 
 
+GIT_SHA_PATTERN: "re.Pattern[str]" = re.compile(r"[0-9a-f]{4,64}")
+
+
+def _coerce_git_sha(raw: Any) -> str:
+    """Accept only a lowercase hex object id (4–64 chars) from persisted
+    marker state; anything else becomes `""`. The value is later passed to
+    `git diff` / `git merge-base` as its own argv token, so a poisoned
+    marker must never be able to smuggle an option such as
+    `--output=<path>` (argument injection) — `""` simply disables the
+    delta fast path, which is the safe direction (over-review)."""
+    if not isinstance(raw, str):
+        return ""
+    value: str = raw.strip().lower()
+    return value if GIT_SHA_PATTERN.fullmatch(value) else ""
+
+
 def _parse_state_from_marker_body(
     marker_body: str,
 ) -> IterationState | None:
@@ -3861,8 +3917,8 @@ def _parse_state_from_marker_body(
                 data.get("open_fingerprints_this_gen", [])
             ),
             history=_coerce_history(data.get("history", [])),
-            base_sha=str(data.get("base_sha", "")),
-            head_sha=str(data.get("head_sha", "")),
+            base_sha=_coerce_git_sha(data.get("base_sha", "")),
+            head_sha=_coerce_git_sha(data.get("head_sha", "")),
             reviewed_label_applied=reviewed_label_applied,
         )
     except IterationStateParseError as exc:
@@ -6466,46 +6522,115 @@ def parse_ignore_paths(raw: str) -> tuple[str, ...]:
         glob: str = chunk.strip().strip("\"'")
         if not glob or glob.startswith("#") or glob in seen:
             continue
+        if len(glob) > MAX_IGNORE_GLOB_LEN:
+            log(
+                f"ignore-paths: dropping glob longer than {MAX_IGNORE_GLOB_LEN} "
+                f"characters ({glob[:40]!r}…)."
+            )
+            continue
         seen.add(glob)
         out.append(glob)
+        if len(out) >= MAX_IGNORE_GLOBS:
+            log(
+                f"ignore-paths: keeping the first {MAX_IGNORE_GLOBS} globs; "
+                "the rest are ignored."
+            )
+            break
     return tuple(out)
 
 
-def _glob_to_regex(glob: str) -> "re.Pattern[str]":
-    """Compile a gitignore-style glob against repo-relative POSIX paths.
+class _GlobMatcher:
+    """A gitignore-style glob compiled into a backtracking-free matcher.
 
-    `**` spans path separators (`**/` also matches "no directory"); `*` and
-    `?` never cross `/`; a pattern without `/` is anchored to the basename
-    anywhere in the tree; a leading `/` anchors to the repo root.
+    Semantics: `**` as a whole segment spans zero or more directories; `*`
+    and `?` never cross `/`; a pattern without `/` matches the basename
+    anywhere in the tree; a leading `/` anchors to the repo root; a
+    trailing `/` matches everything under that directory. Matching is a
+    small dynamic programme over path segments plus the classic two-pointer
+    wildcard match inside a segment — worst case O(segments² · chars), never
+    exponential, so a PR-controlled file name cannot stall the run
+    (regex-based compilers, including `fnmatch.translate`, backtrack
+    catastrophically on `*.*.*.*…` patterns).
     """
-    pattern: str = glob.strip()
-    anchored: bool = pattern.startswith("/")
-    pattern = pattern.lstrip("/")
-    if not anchored and "/" not in pattern.rstrip("/"):
-        pattern = "**/" + pattern
-    regex: list[str] = []
-    i: int = 0
-    while i < len(pattern):
-        ch: str = pattern[i]
-        if ch == "*":
-            if pattern.startswith("**/", i):
-                regex.append("(?:.*/)?")
-                i += 3
+
+    __slots__ = ("segments", "anchored", "dir_only")
+
+    def __init__(self, glob: str) -> None:
+        pattern: str = glob.strip()
+        self.anchored: bool = pattern.startswith("/")
+        pattern = pattern.strip("/")
+        self.dir_only: bool = glob.strip().endswith("/") and bool(pattern)
+        raw_segments: list[str] = [seg for seg in pattern.split("/") if seg]
+        segments: list[str] = []
+        for seg in raw_segments:
+            # `**` is special only as a whole segment; inside a segment any
+            # run of `*` is a single `*`. Consecutive `**` segments collapse.
+            normalised: str = seg if seg == GLOB_ANY_DIRS else re.sub(r"\*{2,}", "*", seg)
+            if normalised == GLOB_ANY_DIRS and segments and segments[-1] == GLOB_ANY_DIRS:
                 continue
-            if pattern.startswith("**", i):
-                regex.append(".*")
-                i += 2
-                continue
-            regex.append("[^/]*")
-        elif ch == "?":
-            regex.append("[^/]")
-        else:
-            regex.append(re.escape(ch))
-        i += 1
-    body: str = "".join(regex)
-    if pattern.endswith("/"):
-        body += ".*"
-    return re.compile("^" + body + "$")
+            segments.append(normalised)
+        if not self.anchored and len(segments) == 1:
+            segments.insert(0, GLOB_ANY_DIRS)
+        self.segments: tuple[str, ...] = tuple(segments)
+
+    @staticmethod
+    def _segment_match(pat: str, text: str) -> bool:
+        """`*` / `?` wildcard match within one path segment (two-pointer)."""
+        p: int = 0
+        t: int = 0
+        star: int = -1
+        mark: int = 0
+        while t < len(text):
+            if p < len(pat) and (pat[p] == "?" or pat[p] == text[t]):
+                p += 1
+                t += 1
+            elif p < len(pat) and pat[p] == "*":
+                star = p
+                mark = t
+                p += 1
+            elif star != -1:
+                p = star + 1
+                mark += 1
+                t = mark
+            else:
+                return False
+        while p < len(pat) and pat[p] == "*":
+            p += 1
+        return p == len(pat)
+
+    def match(self, path: str) -> bool:
+        parts: list[str] = [seg for seg in path.split("/") if seg]
+        segs: tuple[str, ...] = self.segments
+        m: int = len(segs)
+        n: int = len(parts)
+        if not segs:
+            return False
+        # dp[i][j]: segs[i:] matches parts[j:].
+        dp: list[list[bool]] = [[False] * (n + 1) for _ in range(m + 1)]
+        for j in range(n + 1):
+            dp[m][j] = (j < n) if self.dir_only else (j == n)
+        for i in range(m - 1, -1, -1):
+            seg: str = segs[i]
+            for j in range(n, -1, -1):
+                if seg == GLOB_ANY_DIRS:
+                    dp[i][j] = dp[i + 1][j] or (j < n and dp[i][j + 1])
+                else:
+                    dp[i][j] = (
+                        j < n
+                        and self._segment_match(seg, parts[j])
+                        and dp[i + 1][j + 1]
+                    )
+        return dp[0][0]
+
+
+@functools.lru_cache(maxsize=1024)
+def _compile_glob(glob: str) -> _GlobMatcher:
+    """Compile (and memoise) one `ignore-paths` glob."""
+    return _GlobMatcher(glob)
+
+
+# Historical name kept for callers/tests written against the regex version.
+_glob_to_regex = _compile_glob
 
 
 def path_is_ignored(path: str, globs: tuple[str, ...]) -> bool:
@@ -6514,7 +6639,7 @@ def path_is_ignored(path: str, globs: tuple[str, ...]) -> bool:
     while normalized.startswith("./"):
         normalized = normalized[2:]
     for glob in globs:
-        if _glob_to_regex(glob).match(normalized):
+        if _compile_glob(glob).match(normalized):
             return True
     return False
 
@@ -8258,6 +8383,14 @@ def parse_findings_file(
             "missing the write-to-file directive, or the workspace path is "
             "wrong. See docs/PROVIDERS.md for the contract."
         )
+    size: int = path.stat().st_size
+    if size > MAX_FINDINGS_FILE_BYTES:
+        raise ValueError(
+            f"Agent-runner findings file {path} is {size} bytes, above the "
+            f"{MAX_FINDINGS_FILE_BYTES}-byte cap; refusing to parse it. A "
+            "review never needs a findings file this large — the CLI was "
+            "likely tricked into dumping content into it."
+        )
     raw_text: str = path.read_text(encoding="utf-8")
     try:
         raw: Any = json.loads(raw_text)
@@ -8841,11 +8974,7 @@ def main() -> int:
     backend_profile: EndpointProfile = resolve_endpoint_profile(
         api_base, provider_id
     )
-    log(
-        f"Backend: kind={backend_profile.kind} "
-        f"host={backend_profile.host or 'default'}"
-        + ("" if backend_profile.is_default else " (custom api-base)")
-    )
+    log_backend_selection(backend_profile)
 
     # Model: empty → provider default; tier word → cost-controls table;
     # anything else → explicit id (v2.1.0+ tier aliases).
