@@ -96,6 +96,21 @@ The default prompt keeps its severity model, its "what NOT to comment on" list a
 
 v3.1.1 (v2.2.0) adds one sentence to the tool-substitution note so agent-runner CLIs know that their output contract (the findings file) *is* how they post findings and the summary — the prompt's `submit_review` instruction no longer contradicts the file contract; the agent-runner directive now also states the effective inline cap and shows an escaped suggestion-block example. Before/after evidence for the change (offline, same four merged PRs, same backend) ships with the plan that introduced it. The first v3 draft showed severity inflation and one run that ended without calling `submit_review`; a calibration pass (the `prompt-engineer` agent) produced the shipped v3.1 text, which separates triage from severity, restores "verify or don't post", and always closes with `submit_review`. Net on the evaluation set: same or better recall on risky paths, inflation back to v2 levels, every run posting a summary, cost roughly neutral. If a review round still looks expensive, check the `**Usage:**` line in the tracking comment before touching the prompt.
 
+### Starter extension: reviews in another language
+
+No input is needed — the extension file composes after the base prompt, so an output-language rule belongs there:
+
+```markdown
+# .review/extension.md
+## Output language
+Write every inline comment and the summary in Spanish (es-ES). Keep code,
+identifiers, file paths and the severity words `critical` / `warning` /
+`info` in English exactly as the base prompt defines them — the strictness
+gate and the findings table parse those.
+```
+
+The severity vocabulary and the summary structure stay English so the runtime keeps parsing them; only the prose changes.
+
 ## How the action loads your prompt
 
 You have three levers, from least to most invasive:
