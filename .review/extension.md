@@ -1,7 +1,7 @@
 # Review overrides for ai-diff-reviewer
 
 This repo IS the AI Diff Reviewer — a stdlib-only Python composite GitHub
-Action (`scripts/reviewer.py`, ~4000 LOC in one file) that ships to a global
+Action (`scripts/reviewer.py`, ~10k LOC in one file) that ships to a global
 audience via the GitHub Marketplace. Every finding here is high-stakes:
 runtime changes affect thousands of PRs; contract changes break consumers;
 security regressions leak tokens on public runners. Calibrate accordingly.
@@ -113,7 +113,7 @@ overrides the base prompt for the patterns most likely to slip a review.
   description. These caps are billing decisions for every consumer.
 
 - **De-escalate to `info`:** `scripts/reviewer.py` line count creeping
-  toward the ~4000 LOC soft ceiling (`docs/STANDARDS.md § "File size"`).
+  past the historical ~4500 LOC soft ceiling (`docs/STANDARDS.md § "File size"` — the split is a scheduled decision, not a per-PR blocker).
   The ceiling is a prompt for a "should we split" conversation, not a
   merge blocker. Same for test files past 500 LOC.
 - **De-escalate to `info`:** the byte-copy of `prompts/default.md` at

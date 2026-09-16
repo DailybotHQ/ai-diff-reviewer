@@ -118,14 +118,15 @@ class FetchPriorFindingsTests(unittest.TestCase):
         with mock.patch.object(reviewer, "gh_graphql", side_effect=RuntimeError("boom")):
             self.assertEqual(reviewer.fetch_prior_findings(token="t", repo="o/r", pr_number=1, bot_login="b"), [])
 
-    def test_full_page_is_logged(self) -> None:
+    def test_missing_pagination_cursor_falls_back_to_full(self) -> None:
         with mock.patch.object(reviewer, "gh_graphql", return_value=_gql([_thread()], True)), mock.patch.object(reviewer, "log") as fake_log:
-            reviewer.fetch_prior_findings(token="t", repo="o/r", pr_number=1, bot_login="github-actions")
-        self.assertTrue(any("more than" in str(c.args[0]) for c in fake_log.call_args_list))
+            result = reviewer.fetch_prior_findings(token="t", repo="o/r", pr_number=1, bot_login="github-actions")
+        self.assertEqual(result, [], "partial history must not enable incremental mode")
+        self.assertTrue(any("incomplete review-thread pagination" in str(c.args[0]) for c in fake_log.call_args_list))
 
 
 class DeltaTests(unittest.TestCase):
-    def _run(self, ancestor_rc: int, names: str = "src/x.py\nsrc/y.py\n") -> Any:
+    def _run(self, ancestor_rc: int, names: str = "src/x.py\0src/y.py\0") -> Any:
         def fake_run(argv: list[str], **kw: Any) -> Any:
             if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
                 return subprocess.CompletedProcess(argv, ancestor_rc, stdout="", stderr="")
@@ -189,7 +190,7 @@ class PreLlmIntegrationTests(unittest.TestCase):
             if argv[:3] == ["git", "merge-base", "--is-ancestor"]:
                 return subprocess.CompletedProcess(argv, ancestor_rc, stdout="", stderr="")
             if argv[:3] == ["git", "diff", "--name-only"]:
-                return subprocess.CompletedProcess(argv, 0, stdout="src/x.py\n", stderr="")
+                return subprocess.CompletedProcess(argv, 0, stdout="src/x.py\0", stderr="")
             if argv[:3] == ["git", "diff", "--numstat"]:
                 # three-dot = whole PR (200 lines); two-dot = new since prior head (20 lines) → 10 % (< 30 % safety net)
                 whole = any("..." in a for a in argv)
@@ -318,14 +319,15 @@ class ReconciliationTests(unittest.TestCase):
                                                      current_fingerprints={"a" * 16} if fp_present else set(),
                                                      delta=_delta(files=("src/x.py",) if file_changed else ("other.py",)), workspace=Path(td))
 
-    def test_verified_resolution_matrix(self) -> None:
-        self.assertEqual(len(self._recon("resolved").resolved), 1)
+    def test_resolution_claims_require_maintainer_confirmation(self) -> None:
+        r = self._recon("resolved")
+        self.assertEqual((len(r.resolved), len(r.still_open), len(r.unverified)), (0, 1, 1))
         r = self._recon("resolved", fp_present=True)
         self.assertEqual((len(r.resolved), len(r.still_open), len(r.unverified)), (0, 1, 1))
         r = self._recon("resolved", file_changed=False)
         self.assertEqual((len(r.resolved), len(r.unverified)), (0, 1))
         r = self._recon("resolved", file_changed=False, file_exists=False)
-        self.assertEqual(len(r.resolved), 1, "a deleted file counts as changed")
+        self.assertEqual((len(r.resolved), len(r.still_open)), (0, 1), "deletion alone does not prove the failure was fixed")
         r = self._recon("open")
         self.assertEqual((len(r.still_open), len(r.resolved)), (1, 0))
         r = self._recon("regressed")

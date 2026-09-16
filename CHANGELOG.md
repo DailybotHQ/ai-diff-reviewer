@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review only what changed and close the threads you fixed, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
+**Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review the actual new diff and carry outstanding findings forward, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
 
 ### Added
 
@@ -127,9 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed since its last review, one-liners for the other files, and a
   table of its own still-open findings read back from the PR threads. The
   model classifies each prior finding (`update_prior_finding` tool /
-  `prior_findings` array) and the runtime **verifies** resolutions
-  (fingerprint absent **and** file changed) before replying on and
-  resolving the GitHub thread. Inline cap and `max-turns` scale with the
+  `prior_findings` array). Resolution claims are advisory until a
+  maintainer resolves the thread; outstanding findings retain their
+  blocking severity without duplicate comments. Inline cap and `max-turns` scale with the
   delta (floors 3 / 6; prior criticals never starve). Summary footer
   `Since last review: resolved N · still open M · regressed K · new J`;
   marker annotation `mode=incremental`. Every inline comment now carries
@@ -195,6 +195,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Incremental review safety:** preserve outstanding criticals in the gate and marker state, use the actual previous-head delta before truncation, paginate prior threads, and force full review on base movement. File edits and absent fingerprints no longer auto-resolve threads.
+- **Backend isolation and credential routing:** custom endpoints have separate tracking, collapse and IAR scopes; the in-process HTTP client refuses redirects, and endpoint validation rejects raw control characters.
+- **Usage accounting:** include uncached input, cache reads, cache writes and output exactly once; normalize Codex cached-input subsets. Add offline safety regressions, including the one-selected-CLI installation invariant.
+
 - **Skill descriptions fit the 1,024-character Open Agent Skills limit.**
   Pi printed `description exceeds 1024 characters (1695)` for the
   vendored skill; the parent `SKILL.md` and `apply-review/SKILL.md`
@@ -224,6 +228,14 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Dogfood follow-ups from the first self-review of the release PR.** An
+  `api-base` given with a trailing `/v1` (as many vendor docs show it) no
+  longer produces `/v1/v1/messages` (`join_endpoint_path`); the Grok
+  installer steps carry their trust justification inline; the runtime's
+  size is stated honestly (~10k LOC, historical soft ceiling crossed
+  deliberately — `docs/STANDARDS.md`). CI actions bumped:
+  `actions/setup-node` and `actions/setup-python` to v7 (supersedes the
+  Dependabot PR #48).
 - **`setup` wizard knows runners × backends.** Q1 is now *runner* +
   *backend* with a resolution table (`api-base`, secret name, suggested
   `model` per pair, incl. Azure Foundry, xAI, Z.ai, self-hosted

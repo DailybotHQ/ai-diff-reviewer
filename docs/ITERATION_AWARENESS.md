@@ -87,7 +87,7 @@ All three would fail CI. This is by design.
 | `iteration-round` | integer string | Round number within the current generation. `1` on first review, resets to `1` on generation change. Empty string if the IAR pipeline crashed. |
 | `iteration-generation` | integer string | Generation counter. Increments on new commits or rebase. Empty string if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive`, and the escape label overrides it to `escape-label-forced-full-review`. Consumers should key on the full override string (grep `policy=\`safety-net-forced-` / `policy=\`escape-label-forced-`), not the short policy name. Empty string if the IAR pipeline crashed. |
-| `iteration-tokens-used` | integer string | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | integer string | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | string | Coarse cost-delta heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small prompt-addendum flag. Always non-negative today: `"0%"` when no cap expansion fires; `"+N%"` when round 1 of `first-pass-exhaustive` or the safety net raises the cap. Silenced-finding savings are not yet modelled (see § 9.5); the promised `"-N%"` / `"unknown"` values do NOT ship in this cost function today — do not gate CI steps on them. Empty string if the IAR pipeline crashed. |
 
 ### 3.3 Environment variable mapping
@@ -520,7 +520,7 @@ Usage: source=estimated in=41200 cache_read=300000 cache_write=0 out=2100 turns=
 ```
 
 Two outputs allow programmatic access:
-- `iteration-tokens-used` — **real since v2.1.0**: input + output tokens captured from the provider (see § 3.2 for the per-provider source). The end-of-run `Usage:` log line and the tracking comment add cache reads/writes, turns and an indicative cost (`INDICATIVE_PRICES_USD_PER_MTOK`, dated in `scripts/reviewer.py`) or the vendor-reported cost when the CLI gives one (Claude Code, Grok). Estimates are for humans and dashboards — never gate CI on them.
+- `iteration-tokens-used` — **real since v2.1.0**: all input partitions (uncached, cache-read and cache-write, counted once) + output tokens captured from the provider (see § 3.2 for the per-provider source). The end-of-run `Usage:` log line and the tracking comment add cache reads/writes, turns and an indicative cost (`INDICATIVE_PRICES_USD_PER_MTOK`, dated in `scripts/reviewer.py`) or the vendor-reported cost when the CLI gives one (Claude Code, Grok). Estimates are for humans and dashboards — never gate CI on them.
 - `iteration-cost-vs-baseline-estimate` — a **coarse, always-non-negative** heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small addendum flag (`+5%` when the IAR exhaustive prompt addendum is spliced). Today the function returns either `"0%"` (no cap expansion) or `"+N%"` (round 1 of `first-pass-exhaustive` / safety net raises the cap). **The signal savings from silenced findings and `state.history[]` averages are not yet modelled** — a future revision may extend the function to emit `"-N%"` / `"unknown"` as originally sketched, but consumers today MUST NOT gate CI steps on those values (the condition will simply never fire).
 
 Example: gate a downstream CI step on IAR cost:
@@ -776,7 +776,7 @@ Rounds 2+ no longer re-review the whole PR. When a prior review exists and the d
 
 All of the following must hold — otherwise the run is a **full** review (the reason is logged as `IAR pre-LLM: … mode=full (<reason>)`):
 
-- a prior IAR state exists and the transition is not `first_review` / `user_forced_reset`;
+- a prior IAR state exists and the transition is not `first_review` / `user_forced_reset` / `rebased` (including base movement);
 - no policy override forced an exhaustive pass (`escape-label-forced-full-review`, `safety-net-forced-first-pass-exhaustive`);
 - the previously reviewed head is an **ancestor** of the current HEAD (`git merge-base --is-ancestor`) — a rebase, force-push or amend makes the delta untrustworthy;
 - at least one of the reviewer's own inline findings is still **open** on the PR.
@@ -787,7 +787,7 @@ There is no input to enable it; the `iteration-escape-label` is the per-PR off s
 
 The `## Full Diff` section is replaced by:
 
-1. `## Changes since your last review (<prior> → <head>)` — only the `diff --git` sections of files changed since the prior head (from the already-shaped PR diff);
+1. `## Changes since your last review (<prior> → <head>)` — the actual two-tree delta between those heads, respecting file omissions before applying its own size limit;
 2. `## Other files changed in this PR (unchanged since your last review)` — one line per remaining file;
 3. `## Your prior findings still open (N)` — a table (criticals first, capped at 40) with the fingerprint, severity, location, a summary and whether the file changed since; read back from the PR's review threads (`fetch_prior_findings`: first comment authored by the bot, parent review carrying this provider's marker, inline marker present, thread not resolved).
 
@@ -797,9 +797,11 @@ The system prompt gains the incremental addendum instead of the exhaustive one, 
 
 Every inline comment now ends with a hidden, **stable** marker: `<!-- ai-pr-reviewer-finding: fp=<fingerprint> sev=<severity> -->` (registered in `docs/STANDARDS.md`). It is how prior findings are matched back without growing the tracking-marker state. Comments posted before v2.1.0 have no marker and are skipped (logged).
 
-### 14.4 Verdicts and verified resolution
+### 14.4 Verdicts and conservative resolution
 
-The model reports one verdict per prior finding — `resolved`, `open` or `regressed` — through `update_prior_finding` (chat-completions tool, exposed only in incremental mode) or the `prior_findings` array in `.aiprr/findings.json` (agent-runners). The runtime then **verifies**: a finding is resolved only when the model said so **and** its fingerprint is absent from this round **and** its file changed since the prior head (or no longer exists). Verified threads get a reply (`✅ Resolved in <sha> — verified …`) and are resolved via GraphQL `resolveReviewThread`, best-effort. Claims that fail verification stay open and are counted as *unverified* in the footer. Regressions are model-asserted and re-reported as regular findings.
+The model reports `resolved`, `open` or `regressed` through `update_prior_finding` or the findings file. A resolution claim is **advisory**, not proof: an edited/deleted file and an absent fingerprint do not establish that the concrete bug disappeared. Claims stay open and appear as *unverified* until a maintainer resolves the thread. The runtime does not automatically reply to or resolve review threads.
+
+Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them. An incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
 
 The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J`, and the tracking marker annotation carries `mode=incremental`.
 
@@ -809,4 +811,8 @@ The review summary ends with `Since last review (<prior> → <head>): resolved N
 
 ### 14.6 Failure semantics
 
-Every failure path degrades to a **full** review, never to silence: unreadable threads, git errors, a non-ancestor prior head, or a crash inside the incremental reconciliation (logged as non-fatal — the review still posts). The dedup engine, the 30 % safety net, the escape label and the critical-always-surfaces rail are unchanged.
+Unreadable or incomplete thread pagination, Git errors, a non-ancestor prior head and base movement select a **full** review. Reconciliation failures are logged; previously known severity is retained by the post-review gate, not cleared by absence of new comments. The dedup engine, the 30 % safety net, the escape label and the critical-always-surfaces rail are unchanged.
+
+### Incremental context and history completeness
+
+The focused body is `git diff <last-reviewed-head> <current-head>`, filtered before its own size limit, not filtered from an already-truncated full PR diff. Old hunks in the same file are not retransmitted solely because that file changed. Review-thread history uses bounded cursor pagination; incomplete pagination cannot enable incremental mode. Base changes also force full mode even when the old head remains an ancestor.

@@ -114,7 +114,7 @@ The public contract. Declares every input the consumer can set and every output 
 
 ### `scripts/reviewer.py`
 
-The entire runtime in one file (~4000 LOC, fully type-hinted, stdlib-only). Sections, in source order:
+The entire runtime in one file (~10k LOC as of v2.1.0, fully type-hinted, stdlib-only). Sections, in source order:
 
 1. **Constants** — every magic number is a named module-level constant. URLs, timeouts, retry delays, severity ranks.
 2. **Logging utilities** — `log()`, `redact_for_log()`, `truncate_for_tool()`. The redaction list is the gate that prevents accidental token leakage in tool-arg logging.
@@ -222,6 +222,8 @@ The runtime supports two disjoint provider families, unified by the `ReviewResul
 - Pros: better code comprehension out of the box; MCP passthrough; vendor keeps their tool set current.
 - Cons: install step on the runner; larger LOC-per-review cost since the CLI can spend more turns.
 - Shipping: `ClaudeCodeProvider`, `CursorProvider`, `CodexProvider`, `GrokProvider` (v2.1.0).
+
+**Review identity (v2.1.0+).** The default backend retains its runner marker. A non-empty `api-base` adds a stable hash of the normalized endpoint to the review scope. Tracking, IAR history, label-once state and collapse use that scope; provider construction still uses the runner id. Different models on the same endpoint share a scope.
 
 **Endpoint profiles (v2.1.0+).** Orthogonal to the family: `resolve_endpoint_profile(api_base, provider_id)` turns the optional `api-base` input into an `EndpointProfile` (kind `anthropic` / `openai` / `azure` / `xai` / `zai` / `custom`, base URL, auth style, cache flags, Codex wire API and TOML extras). Every provider receives its profile at construction and never builds a URL of its own; empty `api-base` yields the runner's default profile, so existing consumers are byte-identical. Model tier aliases (`balanced` / `economy` / `deep`) resolve per `(runner, kind)` from `MODEL_TIER_TABLE`.
 

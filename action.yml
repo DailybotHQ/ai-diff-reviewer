@@ -247,7 +247,7 @@ runs:
     # ---------------------------------------------------------------
     - name: Set up Node.js (Claude Code)
       if: inputs.provider == 'claude-code'
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         node-version: '20'
     - name: Install Claude Code CLI
@@ -269,7 +269,7 @@ runs:
 
     - name: Set up Node.js (Codex)
       if: inputs.provider == 'codex'
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       with:
         node-version: '20'
     - name: Install OpenAI Codex CLI
@@ -333,7 +333,11 @@ runs:
           grok --version || true
           exit 0
         fi
-        # Official installer (https://x.ai/cli/install.sh). It installs a
+        # Official installer (https://x.ai/cli/install.sh) — a host outside the
+        # GitHub/npm trust set by necessity (xAI does not publish the CLI on
+        # npm); consequences and mitigations (provider-gated, version pin,
+        # skip-if-present) in docs/SECURITY.md § "installer supply chain".
+        # It installs a
         # single static binary into ~/.grok/bin (override: GROK_BIN_DIR) and
         # accepts an explicit version as `bash -s <X.Y.Z>`; with no argument
         # it resolves the latest stable release.

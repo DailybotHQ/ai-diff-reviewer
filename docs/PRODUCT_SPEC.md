@@ -101,7 +101,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 ## Quality bar
 
 - **Stdlib-only runtime** — no install phase, no supply-chain surface beyond Python itself.
-- **Single-file implementation** — `scripts/reviewer.py` is ~4000 LOC, fully type-hinted, runnable directly without the action wrapper for local debugging.
+- **Single-file implementation** — `scripts/reviewer.py` is ~10k LOC after v2.1.0 (past the historical soft ceiling — the module split is an open, deliberate decision; see `docs/STANDARDS.md § "File size"`), fully type-hinted, runnable directly without the action wrapper for local debugging.
 - **Compile-checked in CI** on every PR, plus a **700+-test stdlib `unittest` suite** across 16 files covering the pure logic (core runtime, `api-base` profiles and the runner × backend matrix, the OpenAI translation layer, model tiers, telemetry, the findings-file schema, CLI providers with subprocess-security invariants and a back-compat snapshot table captured from `main`, cross-family serialization, and the Iteration-Aware Review subsystem) — see [TESTING_GUIDE.md](TESTING_GUIDE.md).
 - **CLI installers smoke-tested** — a matrix job exercises each agent-runner CLI installer on a fresh runner before it reaches consumers.
 - **Prompt sync enforced** — `Skills — prompt-sync invariant` in `code_check.yml` fails any PR where the skill's `prompt.md` byte-copy has drifted from the Action's `prompts/default.md`. Local↔CI parity is a hard CI gate, not a convention.

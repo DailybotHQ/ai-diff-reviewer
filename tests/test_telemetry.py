@@ -62,7 +62,8 @@ class NormaliseUsageTests(unittest.TestCase):
     def test_codex_keys(self) -> None:
         u = reviewer.normalise_usage({"input_tokens": 100, "cached_input_tokens": 60, "cache_write_input_tokens": 5, "output_tokens": 3})
         assert u is not None
-        self.assertEqual((u.input_tokens, u.cache_read_tokens, u.cache_write_tokens, u.output_tokens), (100, 60, 5, 3))
+        self.assertEqual((u.input_tokens, u.cache_read_tokens, u.cache_write_tokens, u.output_tokens), (35, 60, 5, 3))
+        self.assertEqual(u.total_tokens, 103)
 
     def test_garbage_is_none(self) -> None:
         for raw in (None, {}, [], "x", {"foo": 1}, {"input_tokens": "abc"}):
@@ -89,7 +90,8 @@ class CliParsersTests(unittest.TestCase):
     def test_codex_turns_are_summed(self) -> None:
         u = reviewer.parse_codex_usage(CODEX_JSONL)
         assert u is not None
-        self.assertEqual((u.input_tokens, u.cache_read_tokens, u.output_tokens, u.turns), (14403, 900, 30, 2))
+        self.assertEqual((u.input_tokens, u.cache_read_tokens, u.output_tokens, u.turns), (13503, 900, 30, 2))
+        self.assertEqual(u.total_tokens, 14433)
         self.assertIsNone(u.cost_usd)
         self.assertEqual(u.source, reviewer.USAGE_SOURCE_CLI)
 

@@ -587,6 +587,7 @@ GH_REQUEST_TIMEOUT: int = 60
 # Page size for GitHub connection queries (REST `per_page` and the GraphQL
 # `first:` argument). 100 is GitHub's hard ceiling for both.
 GH_CONNECTION_PAGE_SIZE: int = 100
+GH_MAX_REVIEW_THREAD_PAGES: int = 100
 
 # Truncation caps (characters) for text we echo into logs or comments, so a
 # single large error body or payload can't flood the workflow log / a comment.
@@ -1600,6 +1601,8 @@ def validate_api_base(raw: str) -> str:
     actionable message — the credential in `api-key` is sent to this host,
     so a malformed or ambiguous value must never be guessed at.
     """
+    if any(ord(char) < 32 or ord(char) == 127 for char in (raw or "")):
+        raise ValueError("api-base must not contain control characters.")
     value: str = (raw or "").strip()
     if not value:
         return ""
@@ -1638,6 +1641,15 @@ def validate_api_base(raw: str) -> str:
     path: str = parts.path.rstrip("/")
     netloc: str = parts.netloc
     return f"{scheme}://{netloc}{path}"
+
+
+def review_scope_id(provider_id: str, api_base: str) -> str:
+    """Separate custom backend state while retaining historical default markers."""
+    if not api_base:
+        return provider_id
+    endpoint: str = validate_api_base(api_base)
+    digest: str = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
+    return f"{provider_id}:{digest}"
 
 
 def classify_endpoint_host(host: str) -> str:
@@ -1730,6 +1742,19 @@ def log_backend_selection(profile: EndpointProfile) -> None:
         )
 
 
+def join_endpoint_path(base_url: str, path: str) -> str:
+    """Join a backend base URL and a protocol path without doubling the
+    version segment: `https://api.anthropic.com/v1` + `/v1/messages` →
+    `…/v1/messages` (many vendor docs show the base *with* `/v1`; the
+    canonical values in docs/PROVIDERS.md are without). A base that does
+    not end in the path's leading segment is joined verbatim."""
+    base: str = base_url.rstrip("/")
+    first_segment: str = "/" + path.lstrip("/").split("/", 1)[0]
+    if path.startswith(first_segment + "/") and base.endswith(first_segment):
+        return base + path[len(first_segment):]
+    return base + path
+
+
 def resolve_model(
     provider_id: str, profile: EndpointProfile, raw_model: str
 ) -> str:
@@ -1810,11 +1835,15 @@ class UsageTelemetry:
 
     @property
     def total_tokens(self) -> int:
-        return self.input_tokens + self.output_tokens
+        return self.total_input_tokens + self.output_tokens
+
+    @property
+    def total_input_tokens(self) -> int:
+        return self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
 
     @property
     def cached_ratio(self) -> float:
-        denominator: int = self.input_tokens + self.cache_read_tokens
+        denominator: int = self.total_input_tokens
         return (self.cache_read_tokens / denominator) if denominator else 0.0
 
     def add(self, other: "UsageTelemetry") -> None:
@@ -1869,8 +1898,13 @@ def normalise_usage(raw: Any) -> UsageTelemetry | None:
                 "cache_creation_input_tokens", raw.get("cache_write_input_tokens")
             )
         )
+        input_tokens: int = _as_int(raw.get("input_tokens"))
+        if "cached_input_tokens" in raw:
+            # Codex includes cached input in input_tokens, unlike Anthropic's
+            # disjoint input/cache-read/cache-creation partitions.
+            input_tokens = max(input_tokens - cache_read - cache_write, 0)
         return UsageTelemetry(
-            input_tokens=_as_int(raw.get("input_tokens")),
+            input_tokens=input_tokens,
             output_tokens=_as_int(raw.get("output_tokens")),
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
@@ -2003,7 +2037,7 @@ def format_usage_line(
     cached: str = (
         f" ({usage.cached_ratio:.0%} cached)" if usage.cache_read_tokens else ""
     )
-    parts.append(f"{_fmt_tokens(usage.input_tokens + usage.cache_read_tokens)} in{cached}")
+    parts.append(f"{_fmt_tokens(usage.total_input_tokens)} in{cached}")
     parts.append(f"{_fmt_tokens(usage.output_tokens)} out")
     if usage.cost_usd is not None:
         label: str = "" if usage.source == USAGE_SOURCE_CLI else " (indicative)"
@@ -2013,6 +2047,19 @@ def format_usage_line(
     if wall_clock_ms:
         parts.append(f"{wall_clock_ms // 1000}s")
     return "**Usage:** " + " · ".join(parts)
+
+
+class ProviderRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward provider credentials or private review context to a redirect."""
+
+    def redirect_request(
+        self, req: urllib.request.Request, fp: Any, code: int, msg: str,
+        headers: Any, newurl: str,
+    ) -> urllib.request.Request | None:
+        raise urllib.error.HTTPError(
+            req.full_url, code, "Provider redirects are disabled; configure api-base directly",
+            headers, fp,
+        )
 
 
 def _post_json_with_retries(
@@ -2026,6 +2073,7 @@ def _post_json_with_retries(
     and host in logs/errors — never the credential.
     """
     last_error: Exception | None = None
+    opener: urllib.request.OpenerDirector = urllib.request.build_opener(ProviderRedirectHandler())
     for attempt, delay in enumerate((0,) + API_RETRY_DELAYS_S):
         if delay:
             log(f"{api_label} retry attempt {attempt} after {delay}s")
@@ -2034,7 +2082,7 @@ def _post_json_with_retries(
             url, data=body, headers=headers, method="POST"
         )
         try:
-            with urllib.request.urlopen(
+            with opener.open(
                 request, timeout=API_REQUEST_TIMEOUT
             ) as response:
                 return json.loads(response.read())
@@ -2197,7 +2245,7 @@ class AnthropicProvider(Provider):
             # documents x-api-key); sending both is harmless and avoids a
             # per-gateway matrix.
             headers["Authorization"] = f"Bearer {self.api_key}"
-        url: str = f"{self.profile.base_url}{ANTHROPIC_MESSAGES_PATH}"
+        url: str = join_endpoint_path(self.profile.base_url, ANTHROPIC_MESSAGES_PATH)
         api_label: str = (
             "Anthropic API"
             if self.profile.is_default
@@ -2458,7 +2506,7 @@ class OpenAIProvider(Provider):
                 system_prompt=system_prompt, messages=messages, tools=tools
             )
         ).encode("utf-8")
-        url: str = f"{self.profile.base_url}{OPENAI_CHAT_COMPLETIONS_PATH}"
+        url: str = join_endpoint_path(self.profile.base_url, OPENAI_CHAT_COMPLETIONS_PATH)
         api_label: str = (
             f"{self.profile.kind} chat completions API ({self.profile.host})"
         )
@@ -4091,7 +4139,7 @@ def _fetch_latest_marker_body(
         # Untagged legacy markers (posted before the provider marker
         # was introduced, or by callers that omit it) match every
         # provider — preserves back-compat.
-        return PROVIDER_MARKER_PREFIX not in body_
+        return provider_id in DEFAULT_MODELS and PROVIDER_MARKER_PREFIX not in body_
 
     non_minimized_with_state: list[dict[str, Any]] = []
     minimized_with_state: list[dict[str, Any]] = []
@@ -5452,11 +5500,11 @@ def fetch_prior_findings(
         return []
     owner, name = repo.split("/", 1)
     query: str = (
-        "query($owner:String!, $repo:String!, $number:Int!, $page:Int!) {"
+        "query($owner:String!, $repo:String!, $number:Int!, $page:Int!, $after:String) {"
         "  repository(owner:$owner, name:$repo) {"
         "    pullRequest(number:$number) {"
-        "      reviewThreads(first:$page) {"
-        "        pageInfo { hasNextPage }"
+        "      reviewThreads(first:$page, after:$after) {"
+        "        pageInfo { hasNextPage endCursor }"
         "        nodes {"
         "          id isResolved isOutdated path line originalLine"
         "          comments(first:1) {"
@@ -5468,31 +5516,39 @@ def fetch_prior_findings(
         "  }"
         "}"
     )
-    try:
-        data: Any = gh_graphql(
-            query,
-            {
-                "owner": owner,
-                "repo": name,
-                "number": pr_number,
-                "page": GH_CONNECTION_PAGE_SIZE,
-            },
-            token=token,
-        )
-    except Exception as e:  # noqa: BLE001 — best-effort GH API call
-        log(f"IAR: could not list review threads for prior findings: {e}")
+    threads: list[dict[str, Any]] = []
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    for _page in range(GH_MAX_REVIEW_THREAD_PAGES):
+        try:
+            data: Any = gh_graphql(
+                query,
+                {"owner": owner, "repo": name, "number": pr_number,
+                 "page": GH_CONNECTION_PAGE_SIZE, "after": cursor},
+                token=token,
+            )
+            threads_conn: dict[str, Any] = (
+                ((data or {}).get("repository") or {}).get("pullRequest") or {}
+            ).get("reviewThreads") or {}
+            threads.extend(threads_conn.get("nodes") or [])
+            page_info: dict[str, Any] = threads_conn.get("pageInfo") or {}
+            if not page_info.get("hasNextPage"):
+                break
+            next_cursor: Any = page_info.get("endCursor")
+            if not isinstance(next_cursor, str) or not next_cursor or next_cursor in seen_cursors:
+                log("IAR: incomplete review-thread pagination — falling back to full review.")
+                return []
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+        except Exception as e:  # noqa: BLE001 — best-effort GH API call
+            log(f"IAR: could not list complete prior review threads: {e}")
+            return []
+    else:
+        log("IAR: review-thread page limit reached — falling back to full review.")
         return []
-    threads_conn: dict[str, Any] = (
-        ((data or {}).get("repository") or {}).get("pullRequest") or {}
-    ).get("reviewThreads") or {}
-    if (threads_conn.get("pageInfo") or {}).get("hasNextPage"):
-        log(
-            f"IAR: PR has more than {GH_CONNECTION_PAGE_SIZE} review threads; "
-            "prior findings beyond the first page are not carried forward."
-        )
     out: list[PriorFinding] = []
     skipped_unmarked: int = 0
-    for thread in threads_conn.get("nodes") or []:
+    for thread in threads:
         if not isinstance(thread, dict) or thread.get("isResolved"):
             continue
         first: list[dict[str, Any]] = (
@@ -5550,6 +5606,7 @@ class IncrementalDelta:
     head_sha: str
     changed_files: tuple[str, ...]
     delta_ratio: float  # 0..1 — share of the PR's lines that are new
+    diff: str | None = None  # two-tree delta, before full-PR truncation
 
 
 def compute_incremental_delta(
@@ -5565,10 +5622,8 @@ def compute_incremental_delta(
     if not prior_head_sha or not head_sha:
         return None
     try:
-        ancestor = subprocess.run(
+        ancestor: subprocess.CompletedProcess[str] = run_cmd(
             ["git", "merge-base", "--is-ancestor", prior_head_sha, head_sha],
-            capture_output=True,
-            text=True,
             cwd=repo_root,
             check=False,
         )
@@ -5578,10 +5633,13 @@ def compute_incremental_delta(
                 f"{head_sha[:8]} (rebase / force-push) — full review."
             )
             return None
-        names = subprocess.run(
-            ["git", "diff", "--name-only", prior_head_sha, head_sha],
-            capture_output=True,
-            text=True,
+        names: subprocess.CompletedProcess[str] = run_cmd(
+            ["git", "diff", "--name-only", "-z", prior_head_sha, head_sha, "--"],
+            cwd=repo_root,
+            check=True,
+        )
+        diff: subprocess.CompletedProcess[str] = run_cmd(
+            ["git", "diff", "--no-color", "--unified=3", prior_head_sha, head_sha, "--"],
             cwd=repo_root,
             check=True,
         )
@@ -5589,7 +5647,7 @@ def compute_incremental_delta(
         log(f"IAR: could not compute the incremental delta ({e}) — full review.")
         return None
     files: tuple[str, ...] = tuple(
-        line.strip() for line in names.stdout.splitlines() if line.strip()
+        path for path in names.stdout.split("\0") if path
     )
     ratio: float = max(0.0, min(1.0, float(new_lines_pct) / 100.0))
     return IncrementalDelta(
@@ -5597,6 +5655,7 @@ def compute_incremental_delta(
         head_sha=head_sha,
         changed_files=files,
         delta_ratio=ratio,
+        diff=diff.stdout,
     )
 
 
@@ -5620,6 +5679,7 @@ def select_iar_mode(
     if transition in (
         GenerationTransition.FIRST_REVIEW,
         GenerationTransition.USER_FORCED_RESET,
+        GenerationTransition.REBASED,
     ):
         return IAR_MODE_FULL, f"transition {transition.value}"
     if pre_policy_result.policy_applied in (
@@ -5894,17 +5954,13 @@ def reconcile_prior_findings(
     delta: IncrementalDelta | None,
     workspace: Path | None = None,
 ) -> PriorFindingReconciliation:
-    """Runtime-verified resolution (docs/ITERATION_AWARENESS.md § 14).
+    """Classify model verdicts without mistaking diff changes for proof of a fix.
 
-    A prior finding counts as `resolved` only when the model said so AND
-    its fingerprint is absent from this round AND its file changed since
-    the last reviewed head (or no longer exists). A `resolved` claim that
-    fails verification stays open and is listed as `unverified`. `regressed`
-    is model-asserted (the regression itself is re-reported as a finding).
-    No verdict → still open.
+    A missing fingerprint, edited file or deleted path cannot establish that
+    the concrete failure disappeared. Resolution claims remain unverified and
+    blocking until the thread is explicitly resolved by a maintainer. Keep the
+    keyword parameters for callers; no arbitrary filesystem probe is needed.
     """
-    changed: set[str] = set(delta.changed_files) if delta is not None else set()
-    root: Path = workspace if workspace is not None else Path.cwd()
     out = PriorFindingReconciliation()
     for pf in prior_findings:
         status, _note = updates.get(pf.fingerprint, ("", ""))
@@ -5912,11 +5968,6 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
-            file_changed: bool = pf.path in changed
-            file_gone: bool = bool(pf.path) and not (root / pf.path).exists()
-            if pf.fingerprint not in current_fingerprints and (file_changed or file_gone):
-                out.resolved.append(pf)
-                continue
             out.unverified.append(pf)
         out.still_open.append(pf)
     return out
@@ -6366,6 +6417,13 @@ def run_iar_post_llm(
         result.overall_severity = overall_severity(
             [f.severity for f in result.findings]
         )
+    # The incremental prompt explicitly forbids reposting prior findings.
+    # Their absence from this run's new comments must not clear the gate.
+    if pre_context.prior_findings:
+        result.overall_severity = overall_severity(
+            [result.overall_severity]
+            + [pf.severity for pf in pre_context.prior_findings]
+        )
     # Escape-label short-circuit: preserve prior state exactly, no
     # mutations. This is the contract from Task 7 — persisted state must
     # survive an escape-label run so the next normal run resumes the
@@ -6437,8 +6495,19 @@ def run_iar_post_llm(
         )
     else:
         newly_resolved = []
+    if pre_context.mode == IAR_MODE_INCREMENTAL:
+        # A focused pass did not re-review every old finding. Do not infer
+        # resolution from absence; retain the full outstanding fingerprint set.
+        outstanding: set[str] = {
+            pf.fingerprint for pf in pre_context.prior_findings
+        }
+        if pre_context.prior_state is not None:
+            outstanding.update(pre_context.prior_state.open_fingerprints_this_gen)
+        next_open = sorted(set(next_open) | outstanding)
+        newly_resolved = []
     next_resolved: list[str] = sorted(
-        set(state_before_fp_update.resolved_fingerprints) | set(newly_resolved)
+        (set(state_before_fp_update.resolved_fingerprints) | set(newly_resolved))
+        - set(next_open)
     )
     state_final: IterationState = IterationState(
         version=state_before_fp_update.version,
@@ -6762,7 +6831,14 @@ def render_incremental_sections(
     delta: IncrementalDelta | None = pre.delta
     assert delta is not None  # callers check pre.mode first
     changed: set[str] = set(delta.changed_files)
-    delta_diff: str = filter_diff_to_paths(ctx.diff, changed)
+    omitted: set[str] = {
+        str(f.get("path")) for f in ctx.changed_files if f.get("omitted")
+    }
+    # Filtering an already-truncated full PR diff can lose new edits entirely
+    # and includes old hunks in every touched file. Use the actual tree delta.
+    delta_diff: str = filter_diff_to_paths(
+        delta.diff if delta.diff is not None else ctx.diff, changed - omitted
+    )
     if len(delta_diff) > MAX_DIFF_CHARS:
         delta_diff = (
             delta_diff[:MAX_DIFF_CHARS]
@@ -7968,7 +8044,7 @@ def _read_github_event_repo_visibility() -> str:
 
 
 def _read_existing_tracking_state(
-    *, token: str, repo: str, pr_number: int
+    *, token: str, repo: str, pr_number: int, provider_id: str = ""
 ) -> dict[str, Any]:
     """Fetch prior ai-pr-reviewer tracking-comment state, or `{}`.
 
@@ -7996,6 +8072,10 @@ def _read_existing_tracking_state(
         body: str = str(comment.get("body") or "")
         if marker not in body:
             continue
+        if provider_id and provider_marker(provider_id) not in body:
+            # Only historical default lanes may adopt an untagged marker.
+            if provider_id not in DEFAULT_MODELS or PROVIDER_MARKER_PREFIX in body:
+                continue
         return read_trigger_state(body)
     return {}
 
@@ -8974,6 +9054,7 @@ def main() -> int:
     backend_profile: EndpointProfile = resolve_endpoint_profile(
         api_base, provider_id
     )
+    review_scope: str = review_scope_id(provider_id, api_base)
     log_backend_selection(backend_profile)
 
     # Model: empty → provider default; tier word → cost-controls table;
@@ -9220,7 +9301,7 @@ def main() -> int:
 
     if trigger_mode == TRIGGER_LABEL_ONCE:
         prior_state: dict[str, Any] = _read_existing_tracking_state(
-            token=gh_token, repo=repo, pr_number=pr_number
+            token=gh_token, repo=repo, pr_number=pr_number, provider_id=review_scope
         )
         try:
             last_reviewed_generation = int(
@@ -9324,7 +9405,7 @@ def main() -> int:
                     body=render_tracking_body_skipped_by_label(
                         head_sha=head_sha,
                         skip_label=skip_review_label,
-                        provider=provider_id,
+                        provider=review_scope,
                     ),
                 )
             except Exception as e:  # noqa: BLE001 — audit trail is
@@ -9386,7 +9467,7 @@ def main() -> int:
                 bot_login=bot_login,
                 # Scope collapsing to THIS provider's prior artefacts so
                 # concurrent multi-provider reviews don't collapse each other.
-                provider_marker_text=provider_marker(provider_id),
+                provider_marker_text=provider_marker(review_scope),
             )
         except Exception as e:  # noqa: BLE001
             log(f"Collapse-previous step failed (non-fatal): {e}")
@@ -9404,7 +9485,7 @@ def main() -> int:
                 body=render_tracking_body_working(
                     head_sha,
                     collapse_previous=collapse_previous,
-                    provider=provider_id,
+                    provider=review_scope,
                 ),
             )
             log(f"Tracking comment id: {tracking_id}")
@@ -9439,7 +9520,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not read prompt file: {e}",
-                provider=provider_id,
+                provider=review_scope,
             ),
         )
         write_all_outputs(skipped=False)
@@ -9463,7 +9544,7 @@ def main() -> int:
                 body=render_tracking_body_failed(
                     head_sha=head_sha,
                     error=f"Could not read prompt extension file: {e}",
-                    provider=provider_id,
+                    provider=review_scope,
                 ),
             )
             write_all_outputs(skipped=False)
@@ -9491,7 +9572,7 @@ def main() -> int:
             head_sha=head_sha,
             base_max_inline_comments=max_inline_comments,
             applied_label=applied_label,
-            provider_id=provider_id,
+            provider_id=review_scope,
             bot_login=bot_login,
             max_turns=max_turns,
         )
@@ -9640,7 +9721,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"{type(e).__name__}: {e}",
-                provider=provider_id,
+                provider=review_scope,
             ),
         )
         write_all_outputs(skipped=False)
@@ -9713,10 +9794,17 @@ def main() -> int:
             )
             iar_state_final = None
             iar_policy_final = None
+            # The model may have omitted known findings as instructed even
+            # when post-processing fails. A bookkeeping error must not turn
+            # that omission into a passing strictness gate.
+            result.overall_severity = overall_severity(
+                [result.overall_severity]
+                + [pf.severity for pf in iar_pre_context.prior_findings]
+            )
 
     # ------------------------------------------------------------------
-    # Incremental mode: verify the model's verdicts on prior findings,
-    # resolve fixed threads (best-effort) and append the footer.
+    # Incremental mode: classify advisory verdicts and append the footer.
+    # Human thread resolution is required to retire an outstanding finding.
     # ------------------------------------------------------------------
     if (
         iar_pre_context is not None
@@ -9735,13 +9823,8 @@ def main() -> int:
                 current_fingerprints=current_fps,
                 delta=iar_pre_context.delta,
             )
-            close_resolved_prior_findings(
-                token=gh_token,
-                repo=repo,
-                pr_number=pr_number,
-                head_sha=head_sha,
-                reconciliation=reconciliation,
-            )
+            # Model-only resolution is advisory. Never mutate human review
+            # threads based on a missing fingerprint or unrelated file edit.
             result.summary = (result.summary or "").rstrip() + render_incremental_footer(
                 delta=iar_pre_context.delta,
                 reconciliation=reconciliation,
@@ -9798,7 +9881,7 @@ def main() -> int:
     # Embed the provider marker (an invisible HTML comment) at the top of the
     # review body so `collapse-previous` can scope to this provider's own
     # prior reviews — see provider_marker / gh_collapse_previous_reviews.
-    result.summary = f"{provider_marker(provider_id)}\n\n{result.summary}"
+    result.summary = f"{provider_marker(review_scope)}\n\n{result.summary}"
 
     log(
         f"Submitting review: {len(result.findings)} inline comment(s), "
@@ -9822,7 +9905,7 @@ def main() -> int:
             body=render_tracking_body_failed(
                 head_sha=head_sha,
                 error=f"Could not post the review: {e}",
-                provider=provider_id,
+                provider=review_scope,
             ),
         )
         write_all_outputs(skipped=False)
@@ -9931,7 +10014,7 @@ def main() -> int:
         severity=severity,
         blocked=blocked,
         block_reason=block_reason,
-        provider=provider_id,
+        provider=review_scope,
         usage_line=format_usage_line(
             run_usage, model=model, wall_clock_ms=iar_telemetry.wall_clock_ms()
         ),

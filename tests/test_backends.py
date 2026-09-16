@@ -158,6 +158,32 @@ class BackendSelectionLogTests(unittest.TestCase):
             self.assertIn("Backend:", msgs)
 
 
+class JoinEndpointPathTests(unittest.TestCase):
+    """A base URL given with a trailing `/v1` must not produce `/v1/v1/…`
+    (dogfood finding on PR #50)."""
+
+    def test_trailing_v1_is_not_doubled_for_anthropic(self) -> None:
+        self.assertEqual(reviewer.join_endpoint_path("https://api.anthropic.com/v1", "/v1/messages"), "https://api.anthropic.com/v1/messages")
+        self.assertEqual(reviewer.join_endpoint_path("https://api.x.ai", "/v1/messages"), "https://api.x.ai/v1/messages")
+        self.assertEqual(reviewer.join_endpoint_path("https://api.z.ai/api/anthropic", "/v1/messages"), "https://api.z.ai/api/anthropic/v1/messages")
+
+    def test_openai_style_bases_join_verbatim(self) -> None:
+        self.assertEqual(reviewer.join_endpoint_path("https://api.x.ai/v1", "/chat/completions"), "https://api.x.ai/v1/chat/completions")
+        self.assertEqual(reviewer.join_endpoint_path("https://r.openai.azure.com/openai/v1/", "/chat/completions"), "https://r.openai.azure.com/openai/v1/chat/completions")
+
+    def test_anthropic_provider_uses_the_join(self) -> None:
+        captured: dict = {}
+        def fake_post(**kw):
+            captured["url"] = kw["url"]; return {"stop_reason": "end_turn", "content": [], "usage": {}}
+        prov = reviewer.build_provider("anthropic", api_key="sk-ant-api-TEST", model="m", api_base="https://api.anthropic.com/v1")
+        with mock.patch.object(reviewer, "_post_json_with_retries", side_effect=fake_post), mock.patch.object(reviewer, "log"):
+            try:
+                prov.complete(system_prompt="s", messages=[{"role": "user", "content": "x"}], tools=[])
+            except Exception:
+                pass
+        self.assertEqual(captured.get("url"), "https://api.anthropic.com/v1/messages")
+
+
 class ClassifyEndpointHostTests(unittest.TestCase):
     def test_truth_table(self) -> None:
         cases = {
@@ -331,7 +357,7 @@ def _complete_and_capture(provider: object) -> object:
             json.dumps({"stop_reason": "end_turn", "content": []}).encode()
         )
 
-    with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen):
+    with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
         provider.complete(  # type: ignore[attr-defined]
             system_prompt="SYS", messages=[{"role": "user", "content": "hi"}], tools=[]
         )
@@ -424,7 +450,7 @@ class AnthropicProviderBackendTests(unittest.TestCase):
                 request.full_url, 401, "Unauthorized", None, io.BytesIO(b"nope")  # type: ignore[attr-defined]
             )
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
             with self.assertRaises(RuntimeError) as ctx:
                 prov.complete(system_prompt="S", messages=[], tools=[])
         msg = str(ctx.exception)
@@ -439,7 +465,7 @@ class AnthropicProviderBackendTests(unittest.TestCase):
         def fake_urlopen(request: object, timeout: float = 0) -> _FakeResponse:
             raise urllib.error.HTTPError(request.full_url, 400, "Bad", None, io.BytesIO(b"x"))  # type: ignore[attr-defined]
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
             with self.assertRaises(RuntimeError) as ctx:
                 prov.complete(system_prompt="S", messages=[], tools=[])
         self.assertIn("Anthropic API HTTP 400", str(ctx.exception))
@@ -454,7 +480,7 @@ class AnthropicProviderBackendTests(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, 429, "slow", None, io.BytesIO(b""))  # type: ignore[attr-defined]
             return _FakeResponse(json.dumps({"stop_reason": "end_turn", "content": []}).encode())
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), \
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen), \
              mock.patch.object(reviewer.time, "sleep", lambda s: None):
             resp = prov.complete(system_prompt="S", messages=[], tools=[])
         self.assertEqual(resp["stop_reason"], "end_turn")
@@ -498,7 +524,7 @@ class DiffCacheBreakpointTests(unittest.TestCase):
             captured["body"] = json.loads(request.data)  # type: ignore[attr-defined]
             return _FakeResponse(json.dumps({"stop_reason": "end_turn", "content": [], "usage": {"input_tokens": 10, "cache_read_input_tokens": 8, "output_tokens": 1}}).encode())
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
             prov.complete(system_prompt="S", messages=messages, tools=[])
         self.assertEqual(messages, [{"role": "user", "content": "DIFF"}])
         self.assertIn("cache_control", captured["body"]["messages"][0]["content"][0])  # type: ignore[index]
@@ -518,7 +544,7 @@ class DiffCacheBreakpointTests(unittest.TestCase):
         def fake_urlopen(request: object, timeout: float = 0) -> _FakeResponse:
             return _FakeResponse(json.dumps({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 20, "completion_tokens": 2, "prompt_tokens_details": {"cached_tokens": 15}}}).encode())
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
             prov.complete(system_prompt="S", messages=[{"role": "user", "content": "u"}], tools=[])
         msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
         self.assertIn("usage: in=20 cache_read=15 out=2", msgs)
@@ -582,4 +608,3 @@ class RunnerBackendMatrixTests(unittest.TestCase):
             provider = reviewer.build_provider("claude-code", api_key="sk-ant-oat01-abc", model="", api_base="https://api.z.ai/api/anthropic")
         with self.assertRaises(ValueError):
             self._run(provider)
-

@@ -259,7 +259,7 @@ Every run writes five outputs (empty strings only if the IAR pipeline crashed):
 | `iteration-round` | Round number in the current generation (1, 2, …). | `if: steps.review.outputs.iteration-round == '1'` for round-1-only steps. |
 | `iteration-generation` | Monotonic generation counter across the PR's lifetime. | Track how many force-pushes / rebases the PR has seen. |
 | `iteration-policy-applied` | The policy actually applied (may differ from configured — safety net or escape label can override). | Detect when the safety net fired. |
-| `iteration-tokens-used` | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic derived from cap expansion + a small prompt-addendum flag. Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled, so a `"-N%"` value never appears (see [`docs/ITERATION_AWARENESS.md § 13.3`](ITERATION_AWARENESS.md)). Never gate CI on `== '-N%'`. |
 
 The tracking comment on the PR shows the human version on every run — e.g. `**Usage:** 341.2k in (88% cached) · 2.1k out · est. $0.05 (indicative) · 6 turns · 71s` — so the effect of diff shaping, the diff cache breakpoint and the model tier is visible per review without opening the logs.
@@ -276,6 +276,12 @@ Example CI dashboard snippet — surface cost telemetry as a workflow annotation
     cost=${{ steps.review.outputs.iteration-cost-vs-baseline-estimate }} \
     tokens=${{ steps.review.outputs.iteration-tokens-used }}"
 ```
+
+## Complete token accounting and focused context
+
+Token totals include all input partitions (uncached, cache-read and cache-write) plus output, exactly once. OpenAI and Codex report cached input as a subset of input; Anthropic reports disjoint input/cache partitions. The displayed cache ratio uses total input as its denominator. Cost estimates remain indicative, not billing records.
+
+Incremental reviews construct the actual previous-head-to-current-head diff before truncation, instead of reusing a truncated full PR diff. This reduces repeated old hunks without losing new edits merely because their files appeared late in the original PR diff. Outstanding prior issues still gate the check.
 
 ## Related docs
 

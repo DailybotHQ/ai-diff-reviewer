@@ -692,6 +692,14 @@ class HeadShaRoundTripTests(unittest.TestCase):
 
 class RunIarPreLlmTests(unittest.TestCase):
 
+    def setUp(self) -> None:
+        # These legacy policy tests do not exercise incremental I/O. Keep the
+        # newly added GitHub/Git seams offline; their own suite tests them.
+        for name in ("fetch_prior_findings", "compute_incremental_delta"):
+            patcher = patch.object(reviewer, name, return_value=[] if name == "fetch_prior_findings" else None)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def _iar_config(self, *, policy: str = IAR_POLICY_ITERATIVE) -> IARConfig:
         return IARConfig(
             policy=policy,

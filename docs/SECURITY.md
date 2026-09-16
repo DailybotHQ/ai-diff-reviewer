@@ -63,6 +63,8 @@ The host is then classified into an endpoint kind by exact host or registrable-d
 WARNING: api-base host 'gw.example.com' is not a recognised vendor endpoint. The `api-key` credential will be sent to this host on every request …
 ```
 
+The shared in-process provider client refuses HTTP redirects, so credentials and private review context cannot be forwarded to a redirected endpoint. Configure the final endpoint directly. URL control characters are rejected before parsing; this prevents silent normalization of an ambiguous URL.
+
 Every URL the runtime calls with the credential is derived from that one profile (`resolve_endpoint_profile`); providers never build backend URLs on their own. The consequences to keep in mind:
 
 - **`api-base` is a trust decision by the workflow author.** Whoever can edit the workflow can already exfiltrate the secret; `api-base` adds nothing for that actor. What it must not do — and does not — is let PR content, labels or an `agent-extra-args` string change the host.
@@ -408,7 +410,7 @@ For organisations that need to audit before adopting:
 
 - [ ] Read `scripts/reviewer.py` end-to-end (single file).
 - [ ] Verify zero non-stdlib imports.
-- [ ] Verify no outbound network calls beyond GitHub and the backend host resolved from `api-base` (three `urlopen` sites: two GitHub helpers, one shared provider client).
+- [ ] Verify no outbound network calls beyond GitHub and the backend host resolved from `api-base` (two GitHub `urlopen` helpers and the shared provider opener with redirects disabled).
 - [ ] Verify `api-base` handling: `validate_api_base` (https, ASCII host, no userinfo/query/fragment), `classify_endpoint_host`, the custom-host WARNING.
 - [ ] Verify the vendor-CLI env allowlist (`_CLI_ENV_ALLOWLIST`) and the per-runner credential lanes table above.
 - [ ] Verify per-run files are 0600 inside 0700 temp dirs and removed in `finally` (`codex`, `grok`).

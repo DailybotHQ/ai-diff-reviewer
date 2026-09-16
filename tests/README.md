@@ -21,9 +21,10 @@
 | [`test_model_tiers.py`](test_model_tiers.py) | `model` tier aliases (`balanced` / `economy` / `deep`), the dated defaults matrix, legacy-default hints, `agent-max-turns` parsing and native caps (17) |
 | [`test_openai_provider.py`](test_openai_provider.py) | `provider: openai` (20) |
 | [`test_reviewer.py`](test_reviewer.py) | Core runtime (192) |
+| [`test_review_safety_regressions.py`](test_review_safety_regressions.py) | Incremental, backend, HTTP, usage and modular-install safety regressions (14) |
 | [`test_telemetry.py`](test_telemetry.py) | Usage telemetry (22) |
 
-Every file imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). Total: **703** tests.
+Every file imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). Total: **717** tests.
 
 ## What is (and isn't) covered
 

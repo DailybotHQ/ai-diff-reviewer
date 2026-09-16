@@ -179,7 +179,7 @@ class RequestShapeTests(unittest.TestCase):
             captured["request"] = request
             return _FakeResponse(json.dumps(_oa(content="ok")).encode())
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen):
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
             prov.complete(system_prompt="S", messages=[{"role": "user", "content": "u"}], tools=reviewer.tools_schema(3))
         return captured["request"]
 
@@ -237,7 +237,7 @@ class RequestShapeTests(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, 503, "busy", None, io.BytesIO(b"busy"))
             return _FakeResponse(json.dumps(_oa(content="ok")).encode())
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), \
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen), \
              mock.patch.object(reviewer.time, "sleep", lambda s: None):
             r = prov.complete(system_prompt="S", messages=[], tools=[])
         self.assertEqual(r["stop_reason"], "end_turn")
@@ -246,7 +246,7 @@ class RequestShapeTests(unittest.TestCase):
         def fake_401(request: Any, timeout: float = 0) -> _FakeResponse:
             raise urllib.error.HTTPError(request.full_url, 401, "no", None, io.BytesIO(b"denied"))
 
-        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_401):
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_401):
             with self.assertRaises(RuntimeError) as ctx:
                 prov.complete(system_prompt="S", messages=[], tools=[])
         msg = str(ctx.exception)
@@ -291,7 +291,7 @@ class DriveReviewEndToEndTests(unittest.TestCase):
             messages: list[dict[str, Any]] = [{"role": "user", "content": "review this"}]
             cwd = os.getcwd(); os.chdir(tmp)
             try:
-                with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen):
+                with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
                     reviewer.drive_review(
                         provider=prov, system_prompt="S", messages=messages,
                         tools=reviewer.tools_schema(10), state=state, max_turns=5,
