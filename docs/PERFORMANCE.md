@@ -256,8 +256,10 @@ Every run writes five outputs (empty strings only if the IAR pipeline crashed):
 | `iteration-round` | Round number in the current generation (1, 2, …). | `if: steps.review.outputs.iteration-round == '1'` for round-1-only steps. |
 | `iteration-generation` | Monotonic generation counter across the PR's lifetime. | Track how many force-pushes / rebases the PR has seen. |
 | `iteration-policy-applied` | The policy actually applied (may differ from configured — safety net or escape label can override). | Detect when the safety net fired. |
-| `iteration-tokens-used` | Cost-telemetry placeholder. Always emits `"0"` today because the per-provider usage-metadata capture path into `RunTelemetry.tokens_used` is not yet wired (see [`docs/ITERATION_AWARENESS.md § 13.2`](ITERATION_AWARENESS.md)). Safe to surface on dashboards; MUST NOT be gated on numeric thresholds until the follow-up lands. |
+| `iteration-tokens-used` | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic derived from cap expansion + a small prompt-addendum flag. Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled, so a `"-N%"` value never appears (see [`docs/ITERATION_AWARENESS.md § 13.3`](ITERATION_AWARENESS.md)). Never gate CI on `== '-N%'`. |
+
+The tracking comment on the PR shows the human version on every run — e.g. `**Usage:** 341.2k in (88% cached) · 2.1k out · est. $0.05 (indicative) · 6 turns · 71s` — so the effect of diff shaping, the diff cache breakpoint and the model tier is visible per review without opening the logs.
 
 Example CI dashboard snippet — surface cost telemetry as a workflow annotation:
 

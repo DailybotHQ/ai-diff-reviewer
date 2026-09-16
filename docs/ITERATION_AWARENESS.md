@@ -87,7 +87,7 @@ All three would fail CI. This is by design.
 | `iteration-round` | integer string | Round number within the current generation. `1` on first review, resets to `1` on generation change. Empty string if the IAR pipeline crashed. |
 | `iteration-generation` | integer string | Generation counter. Increments on new commits or rebase. Empty string if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive`, and the escape label overrides it to `escape-label-forced-full-review`. Consumers should key on the full override string (grep `policy=\`safety-net-forced-` / `policy=\`escape-label-forced-`), not the short policy name. Empty string if the IAR pipeline crashed. |
-| `iteration-tokens-used` | integer string | Cost-telemetry placeholder. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata into `RunTelemetry.tokens_used`; see § 13.2 for the follow-up plan. Stable enough to surface on dashboards without gating on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | integer string | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | string | Coarse cost-delta heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small prompt-addendum flag. Always non-negative today: `"0%"` when no cap expansion fires; `"+N%"` when round 1 of `first-pass-exhaustive` or the safety net raises the cap. Silenced-finding savings are not yet modelled (see § 9.5); the promised `"-N%"` / `"unknown"` values do NOT ship in this cost function today — do not gate CI steps on them. Empty string if the IAR pipeline crashed. |
 
 ### 3.3 Environment variable mapping
@@ -473,7 +473,7 @@ The bit becomes `False` only when NONE of these hold — i.e., the reviewer has 
 ### 9.1 Design principles
 
 - **DON'T #9 compliance:** IAR does NOT modify `max_tokens` or `MAX_TURNS` defaults. The `exhaustive-first-pass-cap-multiplier` raises `max-inline-comments` (the tool-call ceiling), which affects output token DEMAND but does not change the per-call `max_tokens` budget.
-- **Cost telemetry is free (zero LLM tokens).** `iteration-cost-vs-baseline-estimate` is derived locally from cap expansion + a small addendum flag. `iteration-tokens-used` is a stable placeholder that always emits `"0"` today — the metadata-capture path from provider responses is not yet wired (see § 13.2). Neither output adds LLM cost.
+- **Cost telemetry is free (zero LLM tokens).** `iteration-cost-vs-baseline-estimate` is derived locally from cap expansion + a small addendum flag. `iteration-tokens-used` is read from the provider's own usage report (v2.1.0+). Neither output adds LLM cost.
 
 ### 9.2 Lifetime cost matrix (theoretical — validated by dogfooding)
 
@@ -515,11 +515,12 @@ For a typical PR that would converge in 5 rounds without dedup:
 Every IAR-enabled run emits a debug log line at end-of-run:
 
 ```
-IAR cost: input_tokens=0, output_tokens=0, git_ops_ms=1250, total_wall_clock_ms=47320, findings_surfaced=8, findings_silenced=3
+IAR cost: tokens=41234, git_ops_ms=1250, total_wall_clock_ms=47320, findings_surfaced=8, findings_silenced=3
+Usage: source=estimated in=41200 cache_read=300000 cache_write=0 out=2100 turns=6 cost_usd=0.05
 ```
 
 Two outputs allow programmatic access:
-- `iteration-tokens-used` — **stable placeholder**. Always emits `"0"` today because the per-provider usage-metadata capture path into `RunTelemetry.tokens_used` is not yet wired (see § 13.2 for the follow-up plan). The debug-log `input_tokens=` / `output_tokens=` fields report the same `0` values. Consumers can safely surface this output on dashboards but MUST NOT gate CI steps on numeric thresholds until the follow-up lands.
+- `iteration-tokens-used` — **real since v2.1.0**: input + output tokens captured from the provider (see § 3.2 for the per-provider source). The end-of-run `Usage:` log line and the tracking comment add cache reads/writes, turns and an indicative cost (`INDICATIVE_PRICES_USD_PER_MTOK`, dated in `scripts/reviewer.py`) or the vendor-reported cost when the CLI gives one (Claude Code, Grok). Estimates are for humans and dashboards — never gate CI on them.
 - `iteration-cost-vs-baseline-estimate` — a **coarse, always-non-negative** heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small addendum flag (`+5%` when the IAR exhaustive prompt addendum is spliced). Today the function returns either `"0%"` (no cap expansion) or `"+N%"` (round 1 of `first-pass-exhaustive` / safety net raises the cap). **The signal savings from silenced findings and `state.history[]` averages are not yet modelled** — a future revision may extend the function to emit `"-N%"` / `"unknown"` as originally sketched, but consumers today MUST NOT gate CI steps on those values (the condition will simply never fire).
 
 Example: gate a downstream CI step on IAR cost:
@@ -729,13 +730,11 @@ The tool-call cap enforcement in the agent-runner code path (Claude Code / Curso
 
 **Follow-up:** the clean fix is either (a) plumb `code_contexts` to the agent-runner truncation site so `finding_fingerprint` can produce merge-compatible hashes, or (b) move the cap enforcement into `run_iar_post_llm` so the pipeline is single-path. Either resolves the semantic mismatch of `code_context=None` fingerprints from the truncation site vs `code_context=<real>` fingerprints from the post-LLM stage.
 
-### 13.2 Per-generation telemetry stays at placeholder values
+### 13.2 Per-generation telemetry — token capture resolved (v2.1.0), history attribution still pending
 
-`state.history[]` entries carry `tokens_used=0` + `wall_clock_ms=0` placeholders that are never populated. On a `NEW_COMMITS` / `REBASED` transition, `advance_generation` closes the prior generation's `history[]` entry and IAR could — but currently does not — backfill telemetry into that closed entry. The previous approach (backfilling with the CURRENT run's telemetry at post-LLM time) was incorrect because the current run is round 1 of the NEW generation, so its tokens / wall-clock belong to the new gen, not the closed one. Attributing them backward misreports per-generation cost history and poisons the cost-vs-baseline estimate once token accounting lands.
+**Resolved in v2.1.0:** the metadata-capture path from provider responses into `RunTelemetry.tokens_used` is wired for every provider (API `usage` for `anthropic` / `openai`; Claude Code stream-json `result`; Codex `--json` `turn.completed`; Grok JSON document; Cursor reports nothing). `iteration-tokens-used` is real, and the tracking comment carries a `**Usage:**` line (tokens, cache ratio, turns, indicative or vendor-reported cost).
 
-**Scope:** the `tokens_used` gap is systemic — the metadata-capture path from provider responses into `RunTelemetry.tokens_used` is not yet wired, so BOTH the per-generation `history[]` field AND the `iteration-tokens-used` action output emit `0` on every run (documented as such on both surfaces to keep consumers from gating on the value). `wall_clock_ms` DOES capture correctly for the current run at output-writing time, but shows the same mis-attribution symptom in `history[]` on a generation change (the current run's wall clock lands in the CLOSED entry rather than the new one).
-
-**Follow-up:** two coordinated pieces: (a) capture per-provider usage metadata into `RunTelemetry.tokens_used` at the LLM-response boundary in each Provider implementation, and (b) accumulate telemetry across a generation's rounds (add `tokens_used_this_gen` + `wall_clock_ms_this_gen` accumulators to `IterationState`, increment on every post-LLM step, and only fold the accumulators into `history[-1]` when `advance_generation` closes the entry). Non-blocking for the shipped runtime; both matter most when cost dashboards get built on the outputs.
+**Still pending:** per-generation attribution in `state.history[]`. On a `NEW_COMMITS` / `REBASED` transition `advance_generation` closes the prior generation's entry, and the current run's tokens belong to the *new* generation — so the closed entry keeps `tokens_used=0` rather than being back-filled with the wrong run. The clean fix remains accumulators on `IterationState` (`tokens_used_this_gen`, `wall_clock_ms_this_gen`) folded into `history[-1]` when the entry closes; deferred because the state schema is closed (`additionalProperties: false`) and a new field needs a schema generation bump.
 
 ### 13.3 Cost-vs-baseline heuristic is coarse and non-negative
 

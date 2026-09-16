@@ -333,6 +333,21 @@ The official `grok` CLI as an agent-runner, kept inside the action's review cont
 
 Copy-paste workflow: [`examples/provider-grok.yml`](../examples/provider-grok.yml).
 
+## Usage telemetry per provider (v2.1.0+)
+
+Every review reports what its provider can tell us. The tracking comment ends with a `**Usage:**` line and the run log prints `Usage: source=… in=… cache_read=… cache_write=… out=… turns=… cost_usd=…`; the `iteration-tokens-used` output carries input + output tokens.
+
+| Provider | Usage source | Cache stats | Cost |
+|---|---|---|---|
+| `anthropic` | API `usage` on every turn, summed | reads + writes | indicative estimate from list prices |
+| `openai` | API `usage` on every turn, summed (`prompt_tokens_details.cached_tokens` → cache reads) | reads | indicative estimate |
+| `claude-code` | stream-json `result` event | reads + writes | **vendor-reported** `total_cost_usd` |
+| `codex` | `--json` `turn.completed` events, summed | reads + writes | indicative estimate (Codex reports none) |
+| `grok` | JSON document (`usage`, `num_turns`, `total_cost_usd`) | reads + writes | **vendor-reported** |
+| `cursor` | not exposed by the CLI | — | `not reported by this provider` |
+
+Estimates use `INDICATIVE_PRICES_USD_PER_MTOK` (dated in `scripts/reviewer.py`; cache reads at 10 % and writes at 125 % of the input price) and are labelled `(indicative)`; vendor-reported costs are shown as-is. Unknown model ids (Azure deployment names, custom gateways) show tokens without a cost. Nothing here is meant to gate CI.
+
 ## Cursor CLI — billing and model selection
 
 The `provider: cursor` leg has a materially different cost profile from the chat-completions providers, and its subscription-only model surprises consumers who assume they can bring their own API key. This section clarifies what to expect.

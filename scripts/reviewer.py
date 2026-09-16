@@ -91,7 +91,7 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +299,21 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
 LEGACY_DEFAULT_MODEL_HINTS: dict[str, str] = {
     "claude-sonnet-4-6": "claude-sonnet-5",
 }
+# Usage telemetry (v2.1.0+). Every provider reports what it can; the source
+# tag says how trustworthy the numbers are. Cost is an INDICATIVE estimate
+# from `INDICATIVE_PRICES_USD_PER_MTOK` unless the CLI reported its own.
+USAGE_SOURCE_API: str = "api"            # summed from API `usage` objects
+USAGE_SOURCE_CLI: str = "cli"            # reported by the vendor CLI
+USAGE_SOURCE_ESTIMATED: str = "estimated"
+USAGE_SOURCE_UNAVAILABLE: str = "unavailable"
+# Cache economics used by the estimate: reads ≈ 10 % of the input price
+# (Anthropic's published ratio; OpenAI/xAI are in the same range), writes
+# ≈ 125 % (Anthropic 5-minute cache). Indicative only.
+CACHE_READ_PRICE_FACTOR: float = 0.10
+CACHE_WRITE_PRICE_FACTOR: float = 1.25
+# Bound on how much vendor-CLI stdout the usage parsers scan (tail).
+CLI_STDOUT_SCAN_MAX_BYTES: int = 2_000_000
+
 # Agent-runner CLIs whose turn cap is enforced natively from `agent-max-turns`.
 AGENT_MAX_TURNS_NATIVE_PROVIDERS: tuple[str, ...] = ("grok",)
 GROK_MAX_TURNS_FLAG: str = "--max-turns"
@@ -1701,6 +1716,230 @@ def parse_agent_max_turns(raw: str) -> int:
     return turns
 
 
+@dataclass
+class UsageTelemetry:
+    """Token/cost usage for one review, accumulated across turns.
+
+    `source` ∈ {`api`, `cli`, `estimated`, `unavailable`}; `cost_usd` is the
+    vendor-reported cost when the CLI gives one, else an indicative estimate
+    (`estimate_cost_usd`) or None. Never gate CI on these numbers.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    turns: int = 0
+    cost_usd: float | None = None
+    source: str = USAGE_SOURCE_UNAVAILABLE
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    @property
+    def cached_ratio(self) -> float:
+        denominator: int = self.input_tokens + self.cache_read_tokens
+        return (self.cache_read_tokens / denominator) if denominator else 0.0
+
+    def add(self, other: "UsageTelemetry") -> None:
+        self.input_tokens += other.input_tokens
+        self.output_tokens += other.output_tokens
+        self.cache_read_tokens += other.cache_read_tokens
+        self.cache_write_tokens += other.cache_write_tokens
+        self.turns += other.turns
+        if other.cost_usd is not None:
+            self.cost_usd = (self.cost_usd or 0.0) + other.cost_usd
+        if other.source != USAGE_SOURCE_UNAVAILABLE:
+            self.source = other.source
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def normalise_usage(raw: Any) -> UsageTelemetry | None:
+    """Map any vendor `usage` object to `UsageTelemetry` (one call).
+
+    Accepts the Anthropic / Claude Code / Grok key set (`input_tokens`,
+    `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`),
+    the OpenAI key set (`prompt_tokens`, `completion_tokens`,
+    `prompt_tokens_details.cached_tokens`) and the Codex `--json` key set
+    (`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
+    `output_tokens`). Returns None when nothing usable is present.
+    """
+    if not isinstance(raw, dict) or not raw:
+        return None
+    if "prompt_tokens" in raw or "completion_tokens" in raw:
+        details: Any = raw.get("prompt_tokens_details") or {}
+        cached: int = (
+            _as_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
+        )
+        return UsageTelemetry(
+            input_tokens=max(_as_int(raw.get("prompt_tokens")) - cached, 0),
+            output_tokens=_as_int(raw.get("completion_tokens")),
+            cache_read_tokens=cached,
+            turns=1,
+            source=USAGE_SOURCE_API,
+        )
+    if "input_tokens" in raw or "output_tokens" in raw:
+        cache_read: int = _as_int(
+            raw.get("cache_read_input_tokens", raw.get("cached_input_tokens"))
+        )
+        cache_write: int = _as_int(
+            raw.get(
+                "cache_creation_input_tokens", raw.get("cache_write_input_tokens")
+            )
+        )
+        return UsageTelemetry(
+            input_tokens=_as_int(raw.get("input_tokens")),
+            output_tokens=_as_int(raw.get("output_tokens")),
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
+            turns=1,
+            source=USAGE_SOURCE_API,
+        )
+    return None
+
+
+def lookup_indicative_price(model: str) -> tuple[float, float] | None:
+    """Longest-prefix match into `INDICATIVE_PRICES_USD_PER_MTOK`."""
+    best: str = ""
+    for prefix in INDICATIVE_PRICES_USD_PER_MTOK:
+        if model.startswith(prefix) and len(prefix) > len(best):
+            best = prefix
+    return INDICATIVE_PRICES_USD_PER_MTOK.get(best) if best else None
+
+
+def estimate_cost_usd(model: str, usage: UsageTelemetry) -> float | None:
+    """Indicative cost from list prices; None when the model is unknown."""
+    price: tuple[float, float] | None = lookup_indicative_price(model or "")
+    if price is None:
+        return None
+    in_price, out_price = price
+    cost: float = (
+        usage.input_tokens * in_price
+        + usage.cache_read_tokens * in_price * CACHE_READ_PRICE_FACTOR
+        + usage.cache_write_tokens * in_price * CACHE_WRITE_PRICE_FACTOR
+        + usage.output_tokens * out_price
+    ) / 1_000_000
+    return round(cost, 6)
+
+
+def _scan_json_lines(stdout: str) -> list[dict[str, Any]]:
+    """Parse JSON objects line by line from a (bounded) stdout tail."""
+    text: str = stdout[-CLI_STDOUT_SCAN_MAX_BYTES:] if stdout else ""
+    out: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj: Any = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out
+
+
+def parse_claude_code_usage(stdout: str) -> UsageTelemetry | None:
+    """Claude Code `--output-format stream-json`: the final `result` event
+    carries `usage` (Anthropic key set) and `total_cost_usd`."""
+    result: dict[str, Any] | None = None
+    for obj in _scan_json_lines(stdout):
+        if obj.get("type") == "result":
+            result = obj
+    if result is None:
+        return None
+    usage: UsageTelemetry | None = normalise_usage(result.get("usage"))
+    if usage is None:
+        return None
+    usage.source = USAGE_SOURCE_CLI
+    usage.turns = _as_int(result.get("num_turns")) or usage.turns
+    cost: Any = result.get("total_cost_usd")
+    if isinstance(cost, (int, float)):
+        usage.cost_usd = float(cost)
+    return usage
+
+
+def parse_codex_usage(stdout: str) -> UsageTelemetry | None:
+    """Codex `exec --json`: one `turn.completed` event per turn with `usage`
+    (`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
+    `output_tokens`). Summed across turns; Codex reports no cost."""
+    total: UsageTelemetry | None = None
+    for obj in _scan_json_lines(stdout):
+        if obj.get("type") != "turn.completed":
+            continue
+        one: UsageTelemetry | None = normalise_usage(obj.get("usage"))
+        if one is None:
+            continue
+        if total is None:
+            total = UsageTelemetry(source=USAGE_SOURCE_CLI)
+        total.add(one)
+        total.source = USAGE_SOURCE_CLI
+    return total
+
+
+def parse_grok_usage(stdout: str) -> UsageTelemetry | None:
+    """Grok `--output-format json`: a single JSON document (possibly
+    pretty-printed) with `usage`, `num_turns` and `total_cost_usd`."""
+    text: str = (stdout or "")[-CLI_STDOUT_SCAN_MAX_BYTES:].strip()
+    doc: Any = None
+    if text.startswith("{"):
+        try:
+            doc = json.loads(text)
+        except json.JSONDecodeError:
+            doc = None
+    if not isinstance(doc, dict):
+        # Fall back to a JSON-lines scan (streaming formats).
+        for obj in _scan_json_lines(stdout):
+            if isinstance(obj.get("usage"), dict):
+                doc = obj
+    if not isinstance(doc, dict):
+        return None
+    usage: UsageTelemetry | None = normalise_usage(doc.get("usage"))
+    if usage is None:
+        return None
+    usage.source = USAGE_SOURCE_CLI
+    usage.turns = _as_int(doc.get("num_turns")) or usage.turns
+    cost: Any = doc.get("total_cost_usd")
+    if isinstance(cost, (int, float)):
+        usage.cost_usd = float(cost)
+    return usage
+
+
+def _fmt_tokens(n: int) -> str:
+    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+
+
+def format_usage_line(
+    usage: UsageTelemetry | None, *, model: str, wall_clock_ms: int
+) -> str:
+    """Human line for the tracking comment / log. Honest about the source:
+    no `$` when nothing is known, `(indicative)` when estimated."""
+    if usage is None or usage.source == USAGE_SOURCE_UNAVAILABLE:
+        secs: str = f" · {wall_clock_ms // 1000}s" if wall_clock_ms else ""
+        return f"**Usage:** not reported by this provider{secs}"
+    parts: list[str] = []
+    cached: str = (
+        f" ({usage.cached_ratio:.0%} cached)" if usage.cache_read_tokens else ""
+    )
+    parts.append(f"{_fmt_tokens(usage.input_tokens + usage.cache_read_tokens)} in{cached}")
+    parts.append(f"{_fmt_tokens(usage.output_tokens)} out")
+    if usage.cost_usd is not None:
+        label: str = "" if usage.source == USAGE_SOURCE_CLI else " (indicative)"
+        parts.append(f"est. ${usage.cost_usd:.2f}{label}" if usage.cost_usd >= 0.005 else f"est. <$0.01{label}")
+    if usage.turns:
+        parts.append(f"{usage.turns} turn{'s' if usage.turns != 1 else ''}")
+    if wall_clock_ms:
+        parts.append(f"{wall_clock_ms // 1000}s")
+    return "**Usage:** " + " · ".join(parts)
+
+
 def _post_json_with_retries(
     *, url: str, body: bytes, headers: dict[str, str], api_label: str
 ) -> dict[str, Any]:
@@ -2284,6 +2523,7 @@ def _invoke_cli_agent(
     env: dict[str, str],
     cli_name: str,
     stdin_input: str | None = None,
+    usage_parser: "Callable[[str], UsageTelemetry | None] | None" = None,
 ) -> ReviewResult:
     """Run a CLI agent subprocess and parse its findings.json output.
 
@@ -2324,9 +2564,18 @@ def _invoke_cli_agent(
             f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
         )
 
-    return parse_findings_file(
+    parsed: ReviewResult = parse_findings_file(
         findings_path, allow_malformed_summary_fallback=True
     )
+    if usage_parser is not None:
+        try:
+            parsed.usage = usage_parser(result.stdout or "")
+        except Exception as e:  # noqa: BLE001 — telemetry must never fail a review
+            log(f"{cli_name}: usage parse failed (non-fatal): {e}")
+            parsed.usage = None
+        if parsed.usage is None:
+            log(f"{cli_name}: no usage reported in CLI output.")
+    return parsed
 
 
 class ClaudeCodeProvider(AgentRunnerProvider):
@@ -2506,6 +2755,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
                 env=env,
                 cli_name=self.CLI_NAME,
                 stdin_input=user_prompt,
+                usage_parser=parse_claude_code_usage,
             )
         finally:
             _restore_mcp_config(mcp_dest, mcp_backup)
@@ -2995,6 +3245,9 @@ class CodexProvider(AgentRunnerProvider):
             argv: list[str] = [
                 self.CLI_BIN,
                 "exec",
+                # JSONL event stream on stdout (`turn.completed` carries usage);
+                # findings still arrive via the file contract.
+                "--json",
                 "--skip-git-repo-check",
                 "--dangerously-bypass-approvals-and-sandbox",
             ]
@@ -3021,6 +3274,7 @@ class CodexProvider(AgentRunnerProvider):
                 env=env,
                 cli_name=self.CLI_NAME,
                 stdin_input=user_prompt,
+                usage_parser=parse_codex_usage,
             )
         finally:
             # Best-effort cleanup of the isolated CODEX_HOME. The temp dir
@@ -3156,6 +3410,7 @@ class GrokProvider(AgentRunnerProvider):
                 findings_path=findings_path,
                 env=env,
                 cli_name=self.CLI_NAME,
+                usage_parser=parse_grok_usage,
             )
         finally:
             try:
@@ -4133,6 +4388,8 @@ class ReviewResult:
     summary: str = ""
     findings: list[Finding] = field(default_factory=list)
     overall_severity: str = SEVERITY_NONE
+    # Token/cost usage captured for this review (None = not captured).
+    usage: UsageTelemetry | None = None
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
@@ -5031,6 +5288,8 @@ class RunTelemetry:
     start_time_monotonic: float = 0.0
     tokens_used: int = 0
     estimated_baseline_tokens: int = 0
+    # Real usage captured this run (v2.1.0+); `tokens_used` mirrors its total.
+    usage: UsageTelemetry = field(default_factory=UsageTelemetry)
 
     def wall_clock_ms(self) -> int:
         """Elapsed wall-clock ms since `start_time_monotonic` was set."""
@@ -6193,6 +6452,8 @@ class ReviewState:
     # Populated by `set_pr_complexity` tool (only when complexity labeling
     # is enabled). Values: `low`, `medium`, `high`. None = not proposed.
     proposed_pr_complexity: str | None = None
+    # Accumulated API usage across the chat-completions loop (v2.1.0+).
+    usage: UsageTelemetry = field(default_factory=UsageTelemetry)
 
 
 def safe_repo_path(rel: str) -> Path:
@@ -7142,6 +7403,7 @@ def state_to_review_result(state: "ReviewState") -> ReviewResult:
         )
     severities: list[str] = [f.severity for f in findings]
     return ReviewResult(
+        usage=state.usage if state.usage.turns else None,
         summary=state.final_summary or "",
         findings=findings,
         overall_severity=overall_severity(severities),
@@ -7561,6 +7823,9 @@ def drive_review(
         )
         stop_reason: str = resp.get("stop_reason", "")
         content_blocks: list[dict[str, Any]] = resp.get("content", [])
+        turn_usage: UsageTelemetry | None = normalise_usage(resp.get("usage"))
+        if turn_usage is not None:
+            state.usage.add(turn_usage)
 
         # Append assistant turn verbatim — the API requires us to echo back
         # the same content blocks (including tool_use ids) on the next call.
@@ -7652,8 +7917,10 @@ def render_tracking_body_done(
     blocked: bool,
     block_reason: str,
     provider: str = "",
+    usage_line: str = "",
 ) -> str:
-    """The terminal 'done' tracking-comment body."""
+    """The terminal 'done' tracking-comment body. `usage_line` (v2.1.0+) is
+    the pre-formatted `**Usage:** …` line from `format_usage_line`."""
     status_emoji: str = "✅" if not blocked else "🚫"
     block_line: str = (
         f"\n\n**Strictness gate:** 🚫 {block_reason}"
@@ -7676,6 +7943,7 @@ def render_tracking_body_done(
         f"[View review →]({review_url})\n\n"
         f"**Highest severity:** `{severity}`{block_line}\n\n"
         f"{inline_line}"
+        + (f"\n\n{usage_line}" if usage_line else "")
     )
 
 
@@ -8464,6 +8732,30 @@ def main() -> int:
         return 1
 
     # ------------------------------------------------------------------
+    # Usage telemetry (v2.1.0+): real numbers from the provider, indicative
+    # cost when the vendor did not report one. Never fatal, never gated on.
+    # ------------------------------------------------------------------
+    run_usage: UsageTelemetry = result.usage or UsageTelemetry()
+    if (
+        run_usage.source != USAGE_SOURCE_UNAVAILABLE
+        and run_usage.cost_usd is None
+    ):
+        estimated: float | None = estimate_cost_usd(model, run_usage)
+        if estimated is not None:
+            run_usage.cost_usd = estimated
+            if run_usage.source == USAGE_SOURCE_API:
+                run_usage.source = USAGE_SOURCE_ESTIMATED
+    iar_telemetry.usage = run_usage
+    iar_telemetry.tokens_used = run_usage.total_tokens
+    log(
+        f"Usage: source={run_usage.source} in={run_usage.input_tokens} "
+        f"cache_read={run_usage.cache_read_tokens} "
+        f"cache_write={run_usage.cache_write_tokens} "
+        f"out={run_usage.output_tokens} turns={run_usage.turns} "
+        f"cost_usd={run_usage.cost_usd}"
+    )
+
+    # ------------------------------------------------------------------
     # IAR post-LLM: filter findings + build the state to persist.
     #
     # When the pre-LLM step failed (`iar_pre_context is None`) this block
@@ -8666,6 +8958,9 @@ def main() -> int:
         blocked=blocked,
         block_reason=block_reason,
         provider=provider_id,
+        usage_line=format_usage_line(
+            run_usage, model=model, wall_clock_ms=iar_telemetry.wall_clock_ms()
+        ),
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".

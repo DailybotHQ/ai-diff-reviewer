@@ -108,6 +108,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `api.anthropic.com`) makes turns 2..N read the PR diff from cache.
   Both chat-completions providers now log a compact per-call
   `usage: in=… cache_read=… cache_write=… out=…` line.
+- **Real usage telemetry and cost surfacing on every review.**
+  `UsageTelemetry` is captured from the provider: API `usage` objects
+  (`anthropic`, `openai`), the Claude Code stream-json `result` event
+  (incl. vendor cost), Codex `--json` `turn.completed` events (the
+  provider now passes `--json`), the Grok JSON document (incl. vendor
+  cost); Cursor reports nothing and says so. The tracking comment gains a
+  `**Usage:** 341.2k in (88% cached) · 2.1k out · est. $0.05 (indicative)
+  · 6 turns · 71s` line, the run log prints the same, and the
+  `iteration-tokens-used` output is real (no longer `"0"`). Cost is
+  vendor-reported when available, otherwise an indicative estimate from
+  the dated price table; never gate CI on it.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 
