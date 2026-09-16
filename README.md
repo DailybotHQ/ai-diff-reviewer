@@ -265,9 +265,11 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `agent-extra-args` | | `''` | Raw string appended to the CLI invocation. Parsed with `shlex.split` (never `shell=True`). Escape hatch for provider-specific flags. |
 | `mcp-config-file` | | `''` | Path inside the consumer checkout to an MCP servers JSON config. If set, the file is copied to the CLI's expected location before invocation. |
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
-| `cursor-version` | | `''` | Pin the Cursor Agent CLI version. Empty = latest stable. |
+| `cursor-version` | | `''` | Pin the Cursor Agent CLI version (e.g. `2026.09.15-d2fe57e`). A pinned version installs the versioned package directly — the vendor's installer script ignores version hints. Empty = the current release. |
 | `codex-version` | | `''` | Pin the OpenAI Codex CLI version (npm semver). Empty = latest. |
 | `grok-version` | | `''` | Pin the xAI Grok CLI version (`bash -s <X.Y.Z>` on the official installer). Only used when `provider: grok`. |
+| `cursor-installer-sha256` | | `''` | SHA-256 of the artefact the Cursor install step downloads (the versioned package when `cursor-version` is set, else the installer script). When set, a mismatch fails the step before anything runs; when empty, the step logs the observed hash so you can pin it. |
+| `grok-installer-sha256` | | `''` | SHA-256 of the xAI Grok installer script. When set, a mismatch fails the step before anything runs; when empty, the step logs the observed hash. Pair with `grok-version` to pin the binary too. |
 | `convergence-policy` | | `first-pass-exhaustive` | Iteration-Aware Review policy. Default `first-pass-exhaustive` (exhaustive round 1 + higher cap, dedup on rounds 2+) — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, cost-neutral), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
 | `max-review-rounds` | | `0` | Hard cap for `round-capped`. `0` = unlimited. After N rounds only critical severity findings surface. Ignored by other policies. |
 | `exhaustive-first-pass-cap-multiplier` | | `3` | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Set to `1` to keep exhaustive prompting without amplification. |

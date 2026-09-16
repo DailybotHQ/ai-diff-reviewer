@@ -53,3 +53,6 @@ jobs:
           # agent-max-turns: '12'        # native --max-turns cap
           # grok-version: '1.0.30'       # optional CLI pin
           # agent-extra-args: '--reasoning-effort high'   # any vendor flag; re-enable web search with '--allow web_search' at your own risk
+          # Optional supply-chain pin: sha256 of the artefact the grok install
+          # step downloads (logged on every run). A mismatch fails the step.
+          # grok-installer-sha256: <64-hex>

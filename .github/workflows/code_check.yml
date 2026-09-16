@@ -155,8 +155,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::Install cursor-agent"
-          curl -fsSL https://cursor.com/install | bash
+          echo "::group::Install cursor-agent (via verified_install.sh, unpinned)"
+          bash .github/scripts/verified_install.sh cursor "" ""
           echo "::endgroup::"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/cursor-agent" --version
@@ -166,15 +166,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::Install grok (xAI)"
           # Vendor-official installer for the Grok CLI (same trust class as the
           # Cursor installer above): host outside the GitHub/npm trust set by
           # necessity — documented with its consequences and mitigations in
           # docs/SECURITY.md § "Cursor and Grok installer supply chain".
-          curl -fsSL https://x.ai/cli/install.sh | bash
+          echo "::group::Install grok (via verified_install.sh, unpinned)"
+          bash .github/scripts/verified_install.sh grok "" ""
           echo "::endgroup::"
           echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
           "$HOME/.grok/bin/grok" --version
+
+      - name: Verify the sha256 gate of verified_install.sh (grok script, dry run)
+        if: matrix.provider == 'grok'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"; curl -fsSL https://x.ai/cli/install.sh -o "$tmp"; good="$(sha256sum "$tmp" | awk '{print $1}')"
+          VERIFIED_INSTALL_DRY_RUN=1 bash .github/scripts/verified_install.sh grok "" "$good"
+          if VERIFIED_INSTALL_DRY_RUN=1 bash .github/scripts/verified_install.sh grok "" "0000000000000000000000000000000000000000000000000000000000000000"; then
+            echo "::error::a wrong sha256 was accepted"; exit 1
+          else
+            echo "wrong sha256 refused as expected"
+          fi
 
       - name: Sanity — reviewer.py imports the provider class
         shell: bash

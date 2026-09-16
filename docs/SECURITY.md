@@ -92,11 +92,12 @@ Usage telemetry is parsed from each CLI's stdout (`--json` / `stream-json` / `--
 
 ### Cursor and Grok installer supply chain
 
-The `provider: cursor` install step in `action.yml` runs `curl -fsSL https://cursor.com/install | bash`, and the `provider: grok` step runs `curl -fsSL https://x.ai/cli/install.sh | bash -s "<grok-version>"`. These are the vendors' officially-supported installer paths and are used by every consumer of those CLIs. Consequences:
+The `provider: cursor` and `provider: grok` install steps fetch the vendors' official installers (`https://cursor.com/install`, `https://x.ai/cli/install.sh`). Since v2.1.1 neither is piped straight into `bash`: the shared script `.github/scripts/verified_install.sh` downloads the artefact to a file, **prints its SHA-256**, verifies it against the optional `cursor-installer-sha256` / `grok-installer-sha256` inputs when they are set, and only then executes or extracts it. Both steps run **only** when the provider is selected and are skipped when the binary is already on `PATH`.
 
-- Compromise of `cursor.com` / `x.ai` or the CDN serving the script would execute arbitrary code on every runner that invokes the action with that provider. Both steps run **only** when the provider is selected — a consumer on `anthropic` / `openai` / `claude-code` / `codex` never fetches them.
-- `grok-version` pins the CLI version the installer resolves, but not the installer script itself.
-- Consumers on regulated networks should either (a) mirror the installer script in-house and pre-install the CLI on a self-hosted runner (the action skips installation when the binary is already on `PATH`), or (b) stay on `provider: anthropic` / `provider: openai` (in-process, no CLI) / `provider: claude-code` and `provider: codex` (npm — integrity metadata) until the vendors publish signed installer artefacts.
+- **What the pin covers.** Grok: the installer script (its logic); the binary is pinned separately with `grok-version` — the script itself performs no checksum verification of the binary it downloads. Cursor: when `cursor-version` is set, the versioned package (`downloads.cursor.com/lab/<version>/<os>/<arch>/agent-cli-package.tar.gz`) is downloaded and installed directly — the vendor's installer script ignores version hints, so before v2.1.1 `cursor-version` had no effect; when unpinned, the installer script, which is stamped with the current release (its hash therefore pins a version).
+- **What is not covered.** Neither vendor publishes signed artefacts or checksums; a pin protects you against a changed artefact, not against a compromised one you pinned. Compromise of `cursor.com` / `x.ai` / their CDN would execute arbitrary code on runners that select those providers and have no pin.
+- **Regulated networks:** pre-install the CLI on a self-hosted runner (the step skips the installer when the binary is on `PATH`), or stay on `provider: anthropic` / `provider: openai` (in-process, no CLI) / `provider: claude-code` and `provider: codex` (npm — integrity metadata).
+- **How to pin:** run once unpinned, copy the `sha256:` value from the step log into the input; the CI smoke matrix exercises the gate on every PR (correct hash accepted, wrong hash refused, dry run).
 
 ### MCP config passthrough on self-hosted runners
 

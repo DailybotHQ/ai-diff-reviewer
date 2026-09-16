@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Checksum-verified installers.** New optional inputs
+  `cursor-installer-sha256` and `grok-installer-sha256`: the Cursor and
+  Grok install steps now download the vendor artefact to a file through
+  `.github/scripts/verified_install.sh`, log its SHA-256 on every run,
+  and — when a hash is configured — refuse to run an artefact whose hash
+  differs. The CI smoke matrix proves the gate (right hash accepted, wrong
+  hash refused). `docs/SECURITY.md § installer supply chain` states what
+  a pin does and does not cover.
+
+### Fixed
+
+- **`cursor-version` now takes effect.** The vendor's installer script
+  ignores version hints, so the pin was silently a no-op; a pinned version
+  now installs the versioned package directly from Cursor's download host
+  (same layout and symlinks as the official installer).
 
 ## [2.1.0] — 2026-09-16
 

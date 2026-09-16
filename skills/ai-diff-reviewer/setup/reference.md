@@ -466,9 +466,12 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 ### `cursor-version`
 
-- **Default:** `''` (empty — resolves to latest stable).
-- **What it is:** Pin the Cursor Agent CLI version. Forwarded to
-  Cursor's installer via `VERSION` env var.
+- **Default:** `''` (empty — the current release).
+- **What it is:** pin the Cursor Agent CLI version (format `YYYY.MM.DD-<sha>`,
+  e.g. `2026.09.15-d2fe57e`). A pinned version installs the versioned
+  package directly from Cursor's download host; the vendor's installer
+  script ignores version hints, so this is the only way a pin takes effect.
+- **Only used when:** `provider: cursor`.
 
 ### `codex-version`
 
@@ -480,6 +483,26 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 - **Default:** `''` (latest stable).
 - **What it is:** version pin for the xAI Grok CLI, passed to the official
   installer as `bash -s <X.Y.Z>` (e.g. `1.0.30`).
+- **Only used when:** `provider: grok`.
+
+### `cursor-installer-sha256`
+
+- **Default:** `''` (unverified — the step logs the observed hash).
+- **What it is:** SHA-256 of the artefact the Cursor install step downloads:
+  the versioned package when `cursor-version` is set, otherwise the
+  installer script from `cursor.com/install` (stamped with the current
+  release, so its hash also pins a version). A mismatch fails the step
+  before anything is executed or extracted.
+- **How to pin:** run once without it, copy the `sha256:` value from the
+  step log, set it. Update it when you move the version.
+- **Only used when:** `provider: cursor`.
+
+### `grok-installer-sha256`
+
+- **Default:** `''` (unverified — the step logs the observed hash).
+- **What it is:** SHA-256 of the xAI Grok installer script
+  (`x.ai/cli/install.sh`). A mismatch fails the step before it runs. Pin
+  the binary with `grok-version`; pin the installer logic with this.
 - **Only used when:** `provider: grok`.
 
 ---
