@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [2.2.0] — 2026-09-16
+
 ### Changed
 
 - **Dogfood: the Grok leg runs on `economy` (grok-4.3) again**, deliberately, to
