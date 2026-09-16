@@ -305,7 +305,20 @@ class AnthropicProviderBackendTests(unittest.TestCase):
                         "cache_control": {"type": "ephemeral"},
                     }
                 ],
-                "messages": [{"role": "user", "content": "hi"}],
+                # v2.1.0: the diff-bearing first user message carries the
+                # second cache breakpoint (block form on the wire).
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "hi",
+                                "cache_control": {"type": "ephemeral"},
+                            }
+                        ],
+                    }
+                ],
                 "tools": [],
             },
         )
@@ -321,6 +334,9 @@ class AnthropicProviderBackendTests(unittest.TestCase):
         body = json.loads(req.data)
         self.assertNotIn("cache_control", body["system"][0])
         self.assertEqual(body["system"][0]["text"], "SYS")
+        # no breakpoint on the user message either — and the plain string
+        # form is kept as-is for gateways without cache_control support
+        self.assertEqual(body["messages"], [{"role": "user", "content": "hi"}])
 
     def test_xai_anthropic_compatible_profile_url(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.x.ai", "anthropic")
@@ -379,6 +395,69 @@ class AnthropicProviderBackendTests(unittest.TestCase):
             resp = prov.complete(system_prompt="S", messages=[], tools=[])
         self.assertEqual(resp["stop_reason"], "end_turn")
         self.assertEqual(len(calls), 2)
+
+
+class DiffCacheBreakpointTests(unittest.TestCase):
+    """Task 9: the first user message gets a cache breakpoint on Anthropic,
+    without mutating the in-memory conversation."""
+
+    def test_string_first_message_becomes_cached_block(self) -> None:
+        messages = [{"role": "user", "content": "DIFF"}, {"role": "assistant", "content": []}]
+        wire = reviewer._with_first_user_cache_breakpoint(messages)
+        self.assertEqual(wire[0]["content"], [{"type": "text", "text": "DIFF", "cache_control": {"type": "ephemeral"}}])
+        self.assertEqual(wire[1], messages[1])
+        # caller's list untouched
+        self.assertEqual(messages[0], {"role": "user", "content": "DIFF"})
+
+    def test_block_list_marks_last_text_block_only(self) -> None:
+        messages = [{"role": "user", "content": [{"type": "text", "text": "a"}, {"type": "image", "source": {}}, {"type": "text", "text": "b"}]}]
+        wire = reviewer._with_first_user_cache_breakpoint(messages)
+        blocks = wire[0]["content"]
+        self.assertNotIn("cache_control", blocks[0])
+        self.assertNotIn("cache_control", blocks[1])
+        self.assertIn("cache_control", blocks[2])
+        self.assertNotIn("cache_control", messages[0]["content"][2])
+
+    def test_non_user_first_or_empty_is_passthrough(self) -> None:
+        self.assertEqual(reviewer._with_first_user_cache_breakpoint([]), [])
+        msgs = [{"role": "assistant", "content": "x"}]
+        self.assertIs(reviewer._with_first_user_cache_breakpoint(msgs), msgs)
+        msgs2 = [{"role": "user", "content": []}]
+        self.assertIs(reviewer._with_first_user_cache_breakpoint(msgs2), msgs2)
+
+    def test_provider_never_mutates_caller_messages(self) -> None:
+        prov = reviewer.AnthropicProvider(api_key="k", model="m")
+        messages = [{"role": "user", "content": "DIFF"}]
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request: object, timeout: float = 0) -> _FakeResponse:
+            captured["body"] = json.loads(request.data)  # type: ignore[attr-defined]
+            return _FakeResponse(json.dumps({"stop_reason": "end_turn", "content": [], "usage": {"input_tokens": 10, "cache_read_input_tokens": 8, "output_tokens": 1}}).encode())
+
+        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
+            prov.complete(system_prompt="S", messages=messages, tools=[])
+        self.assertEqual(messages, [{"role": "user", "content": "DIFF"}])
+        self.assertIn("cache_control", captured["body"]["messages"][0]["content"][0])  # type: ignore[index]
+        msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+        self.assertIn("usage: in=10 cache_read=8", msgs)
+
+    def test_exactly_two_breakpoints_on_anthropic(self) -> None:
+        prov = reviewer.AnthropicProvider(api_key="k", model="m")
+        req = _complete_and_capture(prov)
+        body = json.loads(req.data)
+        count = json.dumps(body).count('"cache_control"')
+        self.assertEqual(count, 2)
+
+    def test_openai_usage_logged(self) -> None:
+        prov = reviewer.OpenAIProvider(api_key="k", model="m")
+
+        def fake_urlopen(request: object, timeout: float = 0) -> _FakeResponse:
+            return _FakeResponse(json.dumps({"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 20, "completion_tokens": 2, "prompt_tokens_details": {"cached_tokens": 15}}}).encode())
+
+        with mock.patch.object(reviewer.urllib.request, "urlopen", fake_urlopen), mock.patch.object(reviewer, "log") as fake_log:
+            prov.complete(system_prompt="S", messages=[{"role": "user", "content": "u"}], tools=[])
+        msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+        self.assertIn("usage: in=20 cache_read=15 out=2", msgs)
 
 
 if __name__ == "__main__":

@@ -163,7 +163,7 @@ If you need the exact same behaviour across providers, use the chat-completions 
 
 ## Prompt caching
 
-The action sends the system prompt with `cache_control: ephemeral` on every Anthropic call, so a long, opinionated prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. **Don't worry about prompt length** — go as long as you need to be specific.
+The action sends **two** cache breakpoints on every Anthropic call: one on the system prompt and, since v2.1.0, one on the diff-bearing first user message. A long, opinionated prompt *and* the PR diff therefore pay the full token cost only on the first turn of each review; turns 2..N (within the ~5-minute cache TTL) read both from cache — the run logs `usage: in=… cache_read=… cache_write=… out=…` per call so you can see the hit rate. The loop never prunes the first message, so the cached prefix stays stable. **Don't worry about prompt length** — go as long as you need to be specific. On Anthropic-compatible gateways (Z.ai, xAI) the breakpoints are not sent — those cache server-side automatically.
 
 Agent-runner providers do their own caching internally (Claude Code, Cursor Agent and Codex all cache their system prompts with the underlying model provider), so the same "long, opinionated prompt is free after the first call" principle applies — you just don't set the cache flag yourself.
 

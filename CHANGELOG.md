@@ -102,6 +102,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   globs (`**` spans directories; a bare pattern matches basenames). Saves
   tokens on every turn. IAR's range hash and new-lines % still use raw
   git output and are unaffected.
+- **Anthropic path caches the diff message too.** A second
+  `cache_control` breakpoint on the first user message (added on a copy at
+  the provider boundary; the in-memory conversation is untouched; sent only
+  to `api.anthropic.com`) makes turns 2..N read the PR diff from cache.
+  Both chat-completions providers now log a compact per-call
+  `usage: in=… cache_read=… cache_write=… out=…` line.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

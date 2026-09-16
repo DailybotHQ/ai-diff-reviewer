@@ -2594,5 +2594,30 @@ class IarInputsUnaffectedByShapingTests(unittest.TestCase):
         self.assertNotEqual(h1, h2, "sanity: the hash depends on the raw text git returns")
 
 
+class CachePrefixStabilityTests(unittest.TestCase):
+    """The cached prefix (system + first user message) must survive pruning:
+    drive_review only ever drops turn-pairs from index 1 onward."""
+
+    def test_message_zero_survives_many_turns(self) -> None:
+        class ChattyProvider:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def complete(self, *, system_prompt: str, messages: list, tools: list) -> dict:
+                self.calls += 1
+                # assert the seed is still message 0 on every call
+                assert messages[0] == {"role": "user", "content": "SEED"}, messages[0]
+                if self.calls > reviewer.MAX_CONVERSATION_TURNS_RETAINED + 5:
+                    return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "done"}]}
+                return {"stop_reason": "tool_use", "content": [{"type": "tool_use", "id": f"t{self.calls}", "name": "glob", "input": {"pattern": "*.nope"}}]}
+
+        prov = ChattyProvider()
+        messages: list = [{"role": "user", "content": "SEED"}]
+        state = reviewer.ReviewState()
+        reviewer.drive_review(provider=prov, system_prompt="S", messages=messages, tools=[], state=state, max_turns=reviewer.MAX_CONVERSATION_TURNS_RETAINED + 10)
+        self.assertEqual(messages[0], {"role": "user", "content": "SEED"})
+        self.assertLessEqual(len(messages), 1 + 2 * reviewer.MAX_CONVERSATION_TURNS_RETAINED + 2)
+
+
 if __name__ == "__main__":
     unittest.main()

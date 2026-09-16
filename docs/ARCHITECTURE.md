@@ -202,7 +202,7 @@ Distinguishing 1 from 2 lets the consumer's workflow `if:` clauses tell "the bot
 
 ### 7. Prompt caching
 
-The Anthropic provider sends the system prompt with `cache_control: ephemeral` so a long custom prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. This is what makes long, opinionated prompts economically viable.
+The Anthropic provider sends two `cache_control: ephemeral` breakpoints: on the system prompt and (v2.1.0+) on the last text block of the **first user message**, which carries the PR diff — by far the largest input. Anthropic caches prefixes in order tools → system → messages, and `drive_review` never prunes message 0, so turns 2..N of a review read both the prompt and the diff from cache (~10 % of the input price). The breakpoint is added on a copy at the provider boundary (`_with_first_user_cache_breakpoint`), so the in-memory conversation stays plain; it is sent only to `api.anthropic.com` (compatible gateways cache server-side). Each call logs a compact `usage:` line with cache reads/writes.
 
 ### 8. Two provider families (v1.1.0+)
 

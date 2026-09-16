@@ -1758,6 +1758,63 @@ class Provider:
         raise NotImplementedError
 
 
+def _with_first_user_cache_breakpoint(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return a COPY of `messages` whose first user message carries a
+    `cache_control` breakpoint on its last text block.
+
+    Anthropic caches prefixes in order tools → system → messages; the system
+    breakpoint alone leaves the diff-bearing first user message (up to
+    `MAX_DIFF_CHARS`) re-billed on every turn. `drive_review` never prunes
+    message 0, so the prefix stays stable across the loop and turns 2..N
+    read it from cache. The caller's list is never mutated — the in-memory
+    conversation stays plain.
+    """
+    if not messages or messages[0].get("role") != "user":
+        return messages
+    first: dict[str, Any] = messages[0]
+    content: Any = first.get("content")
+    if isinstance(content, str):
+        new_content: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": content,
+                "cache_control": dict(ANTHROPIC_CACHE_CONTROL),
+            }
+        ]
+    elif isinstance(content, list) and content:
+        new_content = [dict(b) if isinstance(b, dict) else b for b in content]
+        for block in reversed(new_content):
+            if isinstance(block, dict) and block.get("type") == "text":
+                block["cache_control"] = dict(ANTHROPIC_CACHE_CONTROL)
+                break
+    else:
+        return messages
+    return [{**first, "content": new_content}] + list(messages[1:])
+
+
+def _log_usage(api_label: str, resp: dict[str, Any]) -> None:
+    """One compact usage line per call (Anthropic or OpenAI key sets)."""
+    usage: Any = resp.get("usage")
+    if not isinstance(usage, dict) or not usage:
+        return
+    if "input_tokens" in usage or "output_tokens" in usage:
+        log(
+            f"{api_label} usage: in={usage.get('input_tokens', 0)} "
+            f"cache_read={usage.get('cache_read_input_tokens', 0)} "
+            f"cache_write={usage.get('cache_creation_input_tokens', 0)} "
+            f"out={usage.get('output_tokens', 0)}"
+        )
+        return
+    details: Any = usage.get("prompt_tokens_details") or {}
+    cached: Any = details.get("cached_tokens", 0) if isinstance(details, dict) else 0
+    log(
+        f"{api_label} usage: in={usage.get('prompt_tokens', 0)} "
+        f"cache_read={cached} out={usage.get('completion_tokens', 0)}"
+    )
+
+
 class AnthropicProvider(Provider):
     """Anthropic Messages API client with prompt caching + bounded retries.
 
@@ -1799,12 +1856,20 @@ class AnthropicProvider(Provider):
         system_block: dict[str, Any] = {"type": "text", "text": system_prompt}
         if self.profile.supports_anthropic_cache_control:
             system_block["cache_control"] = dict(ANTHROPIC_CACHE_CONTROL)
+        # Second breakpoint: the diff-bearing first user message (see
+        # `_with_first_user_cache_breakpoint`). Only where the profile
+        # supports cache_control; the caller's list is never mutated.
+        wire_messages: list[dict[str, Any]] = (
+            _with_first_user_cache_breakpoint(messages)
+            if self.profile.supports_anthropic_cache_control
+            else messages
+        )
         body: bytes = json.dumps(
             {
                 "model": self.model,
                 "max_tokens": ANTHROPIC_MAX_TOKENS,
                 "system": [system_block],
-                "messages": messages,
+                "messages": wire_messages,
                 "tools": tools,
             }
         ).encode("utf-8")
@@ -1824,9 +1889,11 @@ class AnthropicProvider(Provider):
             if self.profile.is_default
             else f"{self.profile.kind} messages API ({self.profile.host})"
         )
-        return _post_json_with_retries(
+        resp: dict[str, Any] = _post_json_with_retries(
             url=url, body=body, headers=headers, api_label=api_label
         )
+        _log_usage(api_label, resp)
+        return resp
 
 
 # ---------------------------------------------------------------------------
@@ -2084,6 +2151,7 @@ class OpenAIProvider(Provider):
         raw: dict[str, Any] = _post_json_with_retries(
             url=url, body=body, headers=self.build_headers(), api_label=api_label
         )
+        _log_usage(api_label, raw)
         return openai_response_to_anthropic(raw)
 
 
