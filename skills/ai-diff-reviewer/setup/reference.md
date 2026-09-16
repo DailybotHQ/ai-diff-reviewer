@@ -59,10 +59,13 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `provider`
 
 - **Default:** `anthropic`
-- **Choices:** `anthropic` | `claude-code` | `cursor` | `codex`
+- **Choices:** `anthropic` | `openai` | `claude-code` | `cursor` | `codex`
 - **Behavior:**
   - `anthropic` — chat-completions API. Zero install overhead. Sonnet-tier
     default model. Best baseline.
+  - `openai` — OpenAI-compatible chat-completions API, in-process (zero
+    install, bounded turns). With `api-base` the same runner covers Azure
+    Foundry, xAI and Z.ai. `gpt-5.6-luna` default.
   - `claude-code` — Claude Code CLI, headless agent mode. Same Anthropic
     models; accepts subscription token via `api-key` (see above).
   - `cursor` — Cursor Agent CLI, headless. `model: auto` is unlimited on
@@ -74,6 +77,9 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Default:** `''` (empty — provider default; see below).
 - **Provider-specific defaults:**
   - `anthropic` → `claude-sonnet-4-6`
+  - `openai` → `gpt-5.6-luna` (same reasoning as Codex; on a non-default
+    `api-base` pin the backend's own id — `grok-4.3`, `glm-5.3`, or an
+    Azure deployment name).
   - `claude-code` → `claude-sonnet-4-6` (quality/price sweet spot; NEVER
     `auto`, which can silently be Opus; use `claude-haiku-4-5` for a
     cheaper/shallower smoke review).

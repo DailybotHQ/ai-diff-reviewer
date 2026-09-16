@@ -217,7 +217,7 @@ class ConstantWiringTests(unittest.TestCase):
         self.assertEqual(r.overall_severity, reviewer.SEVERITY_NONE)
 
     def test_all_shipping_providers_have_default_models(self) -> None:
-        for p in ("anthropic", "claude-code", "cursor", "codex"):
+        for p in ("anthropic", "openai", "claude-code", "cursor", "codex"):
             self.assertIn(p, reviewer.DEFAULT_MODELS)
 
 

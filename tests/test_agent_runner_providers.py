@@ -81,7 +81,7 @@ class BuildProviderDispatchTests(unittest.TestCase):
         self.assertIn("Unsupported provider", str(ctx.exception))
 
     def test_default_models_covers_all_shipping_providers(self) -> None:
-        for provider_id in ("anthropic", "claude-code", "cursor", "codex"):
+        for provider_id in ("anthropic", "openai", "claude-code", "cursor", "codex"):
             self.assertIn(provider_id, reviewer.DEFAULT_MODELS)
             self.assertTrue(reviewer.DEFAULT_MODELS[provider_id])
 

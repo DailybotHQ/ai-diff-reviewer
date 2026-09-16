@@ -38,11 +38,11 @@ inputs:
     required: true
 
   provider:
-    description: 'LLM provider. `anthropic` (default, chat-completions), `claude-code` (Claude Code CLI, agent-runner), `cursor` (Cursor Agent CLI, agent-runner), `codex` (OpenAI Codex CLI, agent-runner).'
+    description: 'LLM provider — the RUNNER that owns the review loop. `anthropic` (default, chat-completions), `openai` (OpenAI-compatible chat-completions; covers OpenAI, Azure Foundry, xAI, Z.ai and self-hosted gateways via `api-base`), `claude-code` (Claude Code CLI, agent-runner), `cursor` (Cursor Agent CLI, agent-runner), `codex` (OpenAI Codex CLI, agent-runner). Combine with `api-base` to pick WHERE the model lives.'
     required: false
     default: 'anthropic'
   model:
-    description: 'Model id for the chosen provider. Empty = provider default. Defaults balance review quality against cost: Anthropic → `claude-sonnet-4-6`; Claude Code → `claude-sonnet-4-6` (the quality/price sweet spot for code review; never `auto`, which can silently be Opus; pin `claude-haiku-4-5` for a cheaper/shallower smoke review); Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model); Codex → `gpt-5.6-luna` (current-gen budget model, the OpenAI parallel of the Sonnet-class choice — `gpt-5-codex` is deprecated; pin the cheaper `gpt-5.4-mini` for a shallower smoke review). Note the `api-key` input for Claude Code also accepts a `claude setup-token` subscription OAuth token (`sk-ant-oat…`) to bill against a Claude Pro/Max plan instead of API usage. See docs/PROVIDERS.md § "Choosing a cost-efficient model".'
+    description: 'Model id for the chosen provider. Empty = provider default. Defaults balance review quality against cost: Anthropic → `claude-sonnet-4-6`; Claude Code → `claude-sonnet-4-6` (the quality/price sweet spot for code review; never `auto`, which can silently be Opus; pin `claude-haiku-4-5` for a cheaper/shallower smoke review); Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model); Codex → `gpt-5.6-luna` (current-gen budget model, the OpenAI parallel of the Sonnet-class choice — `gpt-5-codex` is deprecated; pin the cheaper `gpt-5.4-mini` for a shallower smoke review); OpenAI (`provider: openai`) → `gpt-5.6-luna` as well; on a non-default `api-base` pin the backend''s own id (e.g. `grok-4.3`, `glm-5.3`, or an Azure deployment name). Note the `api-key` input for Claude Code also accepts a `claude setup-token` subscription OAuth token (`sk-ant-oat…`) to bill against a Claude Pro/Max plan instead of API usage. See docs/PROVIDERS.md § "Choosing a cost-efficient model".'
     required: false
     default: ''
 

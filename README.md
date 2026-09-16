@@ -115,16 +115,18 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 
 ## Providers
 
-The action ships **four LLM providers** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen provider. The default (`anthropic`) needs no CLI install; the three agent-runner CLIs are installed automatically by the action only when you select them.
+The action ships **five LLM providers (runners)** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen backend, and the optional `api-base` input points a runner at a different backend (Azure Foundry, xAI, Z.ai, self-hosted). The in-process providers (`anthropic`, `openai`) need no CLI install; the three agent-runner CLIs are installed automatically by the action only when you select them.
 
 | `provider` | Family | `api-key` value | Default model | Billing |
 |---|---|---|---|---|
 | `anthropic` *(default)* | chat-completions | Anthropic API key (`sk-ant-api…`) | `claude-sonnet-4-6` | metered API |
+| `openai` | chat-completions | OpenAI API key — or the key of the `api-base` backend (Azure Foundry, xAI, Z.ai) | `gpt-5.6-luna` | metered API (flat-rate on Z.ai Coding Plan) |
 | `claude-code` | agent-runner CLI | Anthropic API key **or** a `claude setup-token` token (`sk-ant-oat…`) | `claude-sonnet-4-6` | metered API **or** Claude Pro/Max subscription |
 | `cursor` | agent-runner CLI | Cursor subscription key | `auto` | Cursor subscription (unlimited on Pro) |
 | `codex` | agent-runner CLI | OpenAI API key | `gpt-5.6-luna` | metered API |
 
 - **`anthropic`** is the simplest and cheapest to run — no install, a bounded tool-use loop, prompt caching. Recommended for most repos.
+- **`openai`** is the same bounded, zero-install loop for OpenAI-compatible backends — OpenAI itself, or Azure Foundry / xAI / Z.ai through `api-base`.
 - **The CLI providers** hand the review to a vendor coding agent (deeper code comprehension, vendor-tuned tools) at the cost of an install step and higher token use. They run with broad local access — on public repos use them only on trusted (non-fork) PRs.
 
 ### Switching provider
@@ -147,7 +149,7 @@ The action ships **four LLM providers** in two families. Pick one with the `prov
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Ready-to-copy workflows per provider: [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
+Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
 
@@ -623,7 +625,7 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRO
 | Claude Code CLI | agent-runner | ✅ shipping (v1.2.1+) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. Works with subscription auth. |
 | Cursor Agent CLI | agent-runner | ✅ shipping (v1.2.1+) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. Default model `auto` — unlimited on Cursor Pro. |
 | OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
-| OpenAI (raw API) | chat-completions | 🛠 roadmap | Direct chat-completions, no CLI install. |
+| OpenAI-compatible (raw API) | chat-completions | ✅ shipping (v2.1.0+) | `provider: openai` — direct chat-completions, no CLI install. Covers OpenAI, Azure Foundry, xAI and Z.ai through `api-base`. |
 | Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |
 

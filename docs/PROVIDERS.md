@@ -5,11 +5,11 @@
 | Provider | Status | Default model | Tracking issue |
 |---|---|---|---|
 | Anthropic | ✅ shipping in v1 | `claude-sonnet-4-6` | n/a |
-| OpenAI | 🛠 roadmap (v1.1) | tbd (`gpt-4o`?) | tbd |
-| Azure OpenAI | 🛠 roadmap (v1.1) | tbd | tbd |
+| OpenAI-compatible (`openai`) | ✅ shipping (v2.1.0) | `gpt-5.6-luna` | n/a |
+| Azure Foundry / Azure OpenAI | ✅ via `api-base` (`openai`, `codex`) | deployment name | n/a |
 | Google Gemini | 🛠 roadmap (v1.2) | tbd (`gemini-2.5-pro`?) | tbd |
 | AWS Bedrock | 🤔 considering | claude via Bedrock | tbd |
-| Self-hosted (vLLM/Ollama) | 🤔 considering | tbd | tbd |
+| Self-hosted (vLLM/Ollama, any OpenAI- or Anthropic-compatible gateway) | ✅ via `api-base` (custom host) | gateway-defined | n/a |
 
 The roadmap is loose and contributor-driven. If you want a provider sooner than the order above suggests, send a PR.
 
@@ -57,15 +57,18 @@ Then register the implementation in `build_provider()` and add a default model i
 
 ## Specific gotchas per planned provider
 
-### OpenAI
+### OpenAI / Azure / OpenAI-compatible — shipped as `provider: openai`
 
-- OpenAI's `tools` schema accepts `function` items with `parameters` (JSONSchema). Anthropic's `tools` schema accepts top-level items with `input_schema` (also JSONSchema). The translation is mostly trivial; the biggest landmine is **tool_call id matching**: Anthropic's `tool_use_id` is paired with `tool_result.tool_use_id` in the next message; OpenAI's `tool_call_id` is paired with the `tool_call.id` of an `assistant`-role message containing a `tool_calls` array. Different message envelope shapes; same underlying mechanic.
-- OpenAI does prompt caching automatically (no header needed) for prompts ≥1024 tokens. Just send the prompt; you get the discount.
-- OpenAI response: `choices[0].message` has either `content` (text) or `tool_calls`. Translate to Anthropic-shape `content` blocks before returning.
+Implemented in v2.1.0 (`OpenAIProvider` + `anthropic_tools_to_openai` / `anthropic_messages_to_openai` / `openai_response_to_anthropic`). The translation notes that used to live here are now behaviour:
 
-### Azure OpenAI
+- Tools: Anthropic `input_schema` ↔ OpenAI `function.parameters`; `tool_choice: auto` whenever tools are present.
+- Messages: system prompt → leading `system` message; each assistant `tool_use` block → a `tool_calls[]` entry (arguments JSON-encoded); each user `tool_result` block → its **own** `role: tool` message keyed by `tool_call_id`, in order.
+- Responses: `choices[0].message.content` → `text` block; `tool_calls[]` → `tool_use` blocks (malformed JSON arguments are surfaced to the model as a tool error instead of crashing the loop); `finish_reason` → `stop_reason` (`tool_calls`→`tool_use`, `stop`→`end_turn`, `length`→`max_tokens`).
+- Output ceiling: `max_completion_tokens` on OpenAI and Azure (current-gen models reject `max_tokens`), `max_tokens` on xAI / Z.ai / custom gateways.
+- Azure: the v1 endpoint (`https://<resource>.services.ai.azure.com/openai/v1`) is OpenAI-shaped; the runtime sends both `Authorization: Bearer` and the `api-key` header. `model` is the **deployment name**.
+- Caching is automatic on OpenAI/xAI (≥ 1,024-token prefixes); nothing to send.
 
-- Same protocol as OpenAI but the URL is `https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=...`. Add inputs `azure-resource`, `azure-deployment`, `azure-api-version`.
+See § "OpenAI-compatible backends" below for the consumer-facing matrix.
 
 ### Google Gemini
 
@@ -117,6 +120,22 @@ How the profile changes the request:
 - **Errors and logs** name the endpoint kind and host (`zai messages API (api.z.ai) HTTP 401 …`), never the key.
 
 Copy-paste workflow: [`examples/provider-anthropic-zai.yml`](../examples/provider-anthropic-zai.yml). Validation rules for `api-base` (https only, no embedded credentials) and the security note live in the README inputs table and [`SECURITY.md`](SECURITY.md).
+
+---
+
+## OpenAI-compatible backends (`provider: openai` + `api-base`, v2.1.0+)
+
+The in-process OpenAI-compatible runner is the most portable path: zero install, a bounded loop, and one input to move between vendors.
+
+| Backend | `api-base` | `api-key` | Models | Notes |
+|---|---|---|---|---|
+| OpenAI (default) | *(empty)* | OpenAI API key | `gpt-5.6-luna` (default), `gpt-5.4-mini` (smoke) | `max_completion_tokens`; automatic prompt caching. |
+| Azure Foundry (v1) | `https://<resource>.services.ai.azure.com/openai/v1` | Azure key | your **deployment names** (e.g. `gpt-5.4-mini-azure`) | Bearer + `api-key` headers; `max_completion_tokens`. |
+| xAI Grok | `https://api.x.ai/v1` | xAI API key | `grok-4.3`, `grok-4.6` | `max_tokens`; automatic caching. |
+| Z.ai GLM (Coding Plan) | `https://api.z.ai/api/coding/paas/v4` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | `max_tokens`; flat-rate plan. |
+| Self-hosted / other | `https://<gateway>/v1` (or `http://localhost:…` for local dev) | gateway key | gateway-defined | Plain OpenAI-compatible behaviour; the run logs the host. |
+
+Copy-paste workflow with all four variants: [`examples/provider-openai.yml`](../examples/provider-openai.yml). Errors and logs name the endpoint kind and host, never the key.
 
 ---
 

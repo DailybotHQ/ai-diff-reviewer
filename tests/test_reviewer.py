@@ -1871,8 +1871,10 @@ class BuildProviderTests(unittest.TestCase):
         self.assertIsInstance(p, reviewer.AnthropicProvider)
 
     def test_unknown_provider_raises(self) -> None:
+        # `openai` became a real runner in v2.1.0; use an id that will never
+        # exist so the test keeps asserting the unknown-provider path.
         with self.assertRaises(ValueError):
-            reviewer.build_provider("openai", api_key="k", model="m")
+            reviewer.build_provider("mystery-llm", api_key="k", model="m")
 
 
 class ToolsSchemaTests(unittest.TestCase):

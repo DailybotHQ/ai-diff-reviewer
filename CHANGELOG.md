@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to `api.anthropic.com`; errors name the endpoint kind and host, never the
   key. The default profile's request is byte-identical to before (locked by
   a snapshot test). New example `examples/provider-anthropic-zai.yml`.
+- **`openai` provider — OpenAI-compatible chat-completions runner.** A
+  second in-process runner (zero install, bounded turns) that translates
+  the Anthropic-shaped loop at the boundary: tools ↔ function tools, tool
+  results ↔ `role: tool` messages, `tool_calls` ↔ `tool_use` blocks,
+  `finish_reason` ↔ `stop_reason`; malformed tool arguments are surfaced
+  to the model instead of crashing. Default model `gpt-5.6-luna`. With
+  `api-base` the same runner covers Azure Foundry (v1 endpoint; Bearer +
+  `api-key` headers; `max_completion_tokens`), xAI (`https://api.x.ai/v1`)
+  and Z.ai (`https://api.z.ai/api/coding/paas/v4`) — `max_tokens` on those.
+  Shared retrying HTTP client (`_post_json_with_retries`) now backs both
+  chat-completions providers. New example `examples/provider-openai.yml`.
 
 ### Fixed
 
