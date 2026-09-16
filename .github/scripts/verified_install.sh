@@ -33,7 +33,7 @@ if [ -n "$expected" ] && ! [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
   echo "::error::<cli>-installer-sha256 must be a 64-hex SHA-256, got ${#expected} characters" >&2; exit 2
 fi
 if [ -n "$version" ] && ! [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "::error::<cli>-version must match ^[A-Za-z0-9._-]+$ (it is used as a URL and path segment), got ${version@Q}" >&2; exit 2
+  echo "::error::<cli>-version must match ^[A-Za-z0-9._-]+$ (it is used as a URL and path segment), got '${version}'" >&2; exit 2
 fi
 tmpdir="$(mktemp -d)"; trap 'rm -rf "$tmpdir"' EXIT
 
