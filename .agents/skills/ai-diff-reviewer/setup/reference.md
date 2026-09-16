@@ -59,31 +59,81 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `provider`
 
 - **Default:** `anthropic`
-- **Choices:** `anthropic` | `claude-code` | `cursor` | `codex`
+- **Choices:** `anthropic` | `openai` | `claude-code` | `cursor` | `codex` | `grok`
 - **Behavior:**
   - `anthropic` — chat-completions API. Zero install overhead. Sonnet-tier
     default model. Best baseline.
+  - `openai` — OpenAI-compatible chat-completions API, in-process (zero
+    install, bounded turns). With `api-base` the same runner covers Azure
+    Foundry, xAI and Z.ai. `gpt-5.6-luna` default.
   - `claude-code` — Claude Code CLI, headless agent mode. Same Anthropic
     models; accepts subscription token via `api-key` (see above).
   - `cursor` — Cursor Agent CLI, headless. `model: auto` is unlimited on
     Cursor Pro plans.
   - `codex` — OpenAI Codex CLI, headless. GPT-5.6-luna default.
+  - `grok` — xAI Grok CLI, headless, through the full review contract
+    (no GitHub token to the agent, web search/subagents off by default,
+    native `--max-turns`). `grok-4.3` default.
 
 ### `model`
 
 - **Default:** `''` (empty — provider default; see below).
-- **Provider-specific defaults:**
+- **Tier aliases (v2.1.0+):** `balanced` (recommended), `economy` (smoke),
+  `deep` (high-risk PRs) — resolved per runner × backend from the dated
+  matrix in `docs/PROVIDERS.md § "Cost-efficient defaults matrix"`; the run
+  logs the concrete id. Azure deployments / custom gateways have no tier
+  rows — pass the explicit name. Any other value is an explicit model id.
+- **Provider-specific defaults (empty `model`):**
   - `anthropic` → `claude-sonnet-4-6`
+  - `openai` → `gpt-5.6-luna` (same reasoning as Codex; on a non-default
+    `api-base` pin the backend's own id — `grok-4.3`, `glm-5.3`, or an
+    Azure deployment name).
   - `claude-code` → `claude-sonnet-4-6` (quality/price sweet spot; NEVER
     `auto`, which can silently be Opus; use `claude-haiku-4-5` for a
     cheaper/shallower smoke review).
   - `cursor` → `auto` (unlimited on Pro; pin `composer-2.5` etc. to
     force a specific model).
   - `codex` → `gpt-5.6-luna` (current-gen budget model; the parallel of
-    the Sonnet-class choice above; `gpt-5-codex` is deprecated; pin
-    `gpt-5.4-mini` for a shallower smoke review).
+    the Sonnet-class choice above; `gpt-5-codex` is deprecated; use
+    `model: economy` for the cheap tier — as of 2026-09-16 `gpt-5.4-mini`
+    is no longer cheaper than `gpt-5.6-luna`, so pin it only if you
+    specifically want that model).
+  - `grok` → `grok-4.3` (daily tier; `grok-4.6` for a deeper reasoning
+    pass; never `auto` on a metered CLI).
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
+
+### `api-base`
+
+- **Default:** `''` (empty — the provider's default endpoint; behaviour
+  identical to releases before `api-base` existed).
+- **What it is:** the backend base URL for the chosen provider (runner).
+  The `provider` input says *who runs the review loop*; `api-base` says
+  *where the model lives*. The host of the URL selects an endpoint
+  profile automatically (auth header style, prompt-caching flags, Codex
+  wire API, Azure workarounds).
+- **Well-known values:**
+  - Z.ai GLM (Anthropic-compatible) → `https://api.z.ai/api/anthropic`
+    with `provider: claude-code` (recommended for GLM) or `anthropic`.
+  - xAI Grok → `https://api.x.ai` (Anthropic-compatible, for
+    `anthropic` / `claude-code`) or `https://api.x.ai/v1`
+    (OpenAI-compatible, for `codex` / `openai`).
+  - Azure Foundry v1 → `https://<resource>.services.ai.azure.com/openai/v1`
+    with `provider: codex` or `openai`; `model` is the **deployment name**.
+  - Z.ai via Codex (Responses API) → `https://api.z.ai/api/v1`;
+    Z.ai via `openai` → `https://api.z.ai/api/coding/paas/v4`.
+  - Any other host → treated as a plain protocol-compatible gateway
+    (Anthropic-shaped for `anthropic` / `claude-code`, OpenAI-shaped for
+    `codex` / `openai`); the run logs a warning naming the host.
+- **Rules:** absolute `https://` URL (plain `http://` only for
+  `localhost` / `127.0.0.1`), no embedded credentials, no query string or
+  fragment; a trailing slash is stripped. Invalid values abort the run
+  before any LLM or GitHub call.
+- **Security:** the credential in `api-key` is sent to this host. Only
+  point it at endpoints you trust; a subscription OAuth token
+  (`sk-ant-oat…`) cannot be used against a non-Anthropic host.
+- **Ignored by:** `cursor` (subscription-only CLI; a warning is logged).
+- **See:** `docs/PROVIDERS.md` in the action repo (runner × backend matrix).
 
 ---
 
@@ -118,6 +168,28 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Combining both inputs:** if `prompt-file` is also set,
   `prompt-file` becomes the new base and `prompt-extension-file` is
   appended to it.
+
+### `ignore-paths`
+
+- **Default:** `''` — the built-in list still applies.
+- **What it is:** extra path globs whose diff sections are omitted from
+  the review prompt, additive to the built-in exclusions: lockfiles
+  (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`,
+  `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Cargo.lock`, `go.sum`,
+  `composer.lock`, `Gemfile.lock`, `mix.lock`, `pubspec.lock`, …),
+  minified bundles and source maps (`*.min.js`, `*.min.css`, `*.map`),
+  vendored trees (`node_modules/`, `vendor/`, `dist/`) and test snapshots
+  (`__snapshots__/`, `*.snap`).
+- **Glob rules:** comma- or newline-separated; `**` spans directories,
+  `*` / `?` do not cross `/`, a pattern without `/` matches the basename
+  anywhere, a leading `/` anchors to the repo root.
+- **What the model sees:** omitted files are listed with their diff line
+  counts and flagged in the changed-files list, with an instruction not to
+  report on them. Exclusion happens **before** the diff-size cap, so a huge
+  lockfile can no longer push real changes out of the window.
+- **Why:** every omitted line is saved on every turn of the review loop.
+- **No opt-out this release:** the built-in list is deliberately minimal;
+  open an issue if a built-in glob hides something you need reviewed.
 
 ---
 
@@ -348,13 +420,14 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 ### `agent-max-turns`
 
-- **Default:** `''` (empty).
-- **What it is:** Reserved budget hint for CLI providers. Currently
-  logs a warning instead of enforcing a cap, because the shipping
-  CLIs do not yet expose a single stable cross-provider turn-count
-  flag.
-- **Status:** placeholder for future enforcement; setting it today is
-  informational only.
+- **Default:** `''` (unset).
+- **What it is:** turn cap for agent-runner CLIs. **Enforced natively on
+  `grok`** (`--max-turns N`). Claude Code, Cursor and Codex expose no
+  turn-count flag: the run logs a per-provider warning (Claude Code: use
+  `--max-budget-usd <amount>` via `agent-extra-args`; otherwise the 900 s
+  invocation timeout is the bound). Must be a whole number; junk aborts.
+- **Ignored by:** chat-completions providers (`anthropic`, `openai`) —
+  they use `max-turns`.
 
 ### `agent-extra-args`
 
@@ -398,6 +471,13 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 - **Default:** `''` (empty — resolves to `latest`).
 - **What it is:** Pin the OpenAI Codex CLI version (npm semver).
 
+### `grok-version`
+
+- **Default:** `''` (latest stable).
+- **What it is:** version pin for the xAI Grok CLI, passed to the official
+  installer as `bash -s <X.Y.Z>` (e.g. `1.0.30`).
+- **Only used when:** `provider: grok`.
+
 ---
 
 ## Iteration-Aware Review (IAR)
@@ -408,6 +488,14 @@ consumers who don't configure anything get IAR automatically with the
 recommended profile. Critical severity findings ALWAYS surface
 unconditionally — a hardcoded safety rail that no policy can bypass.
 Full spec: [docs/ITERATION_AWARENESS.md](../../../docs/ITERATION_AWARENESS.md).
+
+**Incremental follow-up mode (v2.1.0+, no input needed):** on rounds 2+
+with a trusted delta (the previously reviewed head is an ancestor of
+HEAD) the model sees only the changed hunks plus its own still-open
+findings, must classify each as resolved / open / regressed, and the
+runtime keeps resolution claims advisory until a maintainer resolves the thread. Still-open prior findings continue to gate the check even when no duplicate comment is posted. The
+`iteration-escape-label` is the per-PR off switch (forces a full pass);
+rebases, force-pushes and the 30% safety net also force full mode.
 
 ### `convergence-policy`
 
@@ -476,7 +564,7 @@ downstream steps to consume.
 | `iteration-round` | IAR round number within the current generation. Populated on every successful IAR pipeline run. Empty string if the pipeline crashed (caught by the try/except safety net). |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | Cost-telemetry counter. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata into `RunTelemetry.tokens_used`; safe placeholder that consumers can surface without gating on. Empty ONLY if the IAR pipeline crashed. See `docs/ITERATION_AWARENESS.md § 13.2`. |
+| `iteration-tokens-used` | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic (cap expansion + addendum flag). Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled. Empty if the IAR pipeline crashed. |
 
 ---
