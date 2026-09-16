@@ -41,8 +41,9 @@ The rest of this skill has two implementation branches; run the one matching the
 - `provider_family` — `"chat-completions"` or `"agent-runner"`.
 - `default_model` — recommended default model id for the provider (or `"auto"` sentinel for agent-runner if the CLI picks its own default).
 - `provider_inputs` — optional list of new `action.yml` inputs (e.g. `["azure-resource", "azure-deployment", "azure-api-version"]` for Azure, or the per-CLI version pin like `<provider_id>-version`).
-- For chat-completions: `api_url` — the provider's HTTP endpoint.
+- For chat-completions: `api_url` — the provider's default HTTP endpoint (becomes the runner's `PROVIDER_DEFAULT_API_BASE` entry).
 - For agent-runner: `cli_bin` (binary name on `PATH`), `mcp_dest` (relative path under `$HOME`, e.g. `.claude/mcp.json`), `install_command` (npm-install or curl-installer snippet).
+- `endpoint_kind` — the `EndpointProfile.kind` the runner uses by default (`anthropic`, `openai`, `xai`, `zai`, `azure`, or `custom`). **Ask first whether this is a new runner or only a new backend host**: a host that speaks an existing protocol needs no provider class — add its suffix to `ENDPOINT_HOST_SUFFIXES`, its quirks to `_profile_for_kind`, and a tier row; consumers reach it through `api-base` (v2.1.0+).
 
 ## Pre-flight
 
@@ -50,8 +51,14 @@ The rest of this skill has two implementation branches; run the one matching the
 # Read the contract (both families)
 cat docs/PROVIDERS.md
 
-# Read the reference impl(s)
-grep -n "class AnthropicProvider\|class ClaudeCodeProvider\|class CursorProvider\|class CodexProvider" scripts/reviewer.py
+# Read the reference impl(s) — OpenAIProvider / GrokProvider are the v2.1.0 templates
+grep -n "class AnthropicProvider\|class OpenAIProvider\|class ClaudeCodeProvider\|class CursorProvider\|class CodexProvider\|class GrokProvider" scripts/reviewer.py
+
+# Read the backend contract every provider must honour (never build a URL yourself)
+grep -n "def resolve_endpoint_profile\|class EndpointProfile\|^ENDPOINT_HOST_SUFFIXES\|^PROVIDER_DEFAULT_API_BASE\|^PROVIDER_DEFAULT_ENDPOINT_KIND\|^MODEL_TIER_TABLE" scripts/reviewer.py
+
+# The end-to-end checklist (code → action.yml → CI → tests → docs → live evidence)
+sed -n '/^## Adding a runner or backend/,/^## /p' docs/PROVIDERS.md
 
 # Confirm we have an [Unreleased] section ready
 grep -A1 "^## \[Unreleased\]" CHANGELOG.md
@@ -61,12 +68,17 @@ If `docs/PROVIDERS.md` doesn't list the new provider in its roadmap table, ask t
 
 ## Steps — chat-completions family
 
-### 1. Add URL constants near `ANTHROPIC_API_URL`
+### 1. Register the default backend (constants block, v2.1.0 layout)
 
 ```python
-<NAME>_API_URL: str = "<api_url>"
-# Add any version/auth headers as further constants here.
+# Default endpoint for the runner when `api-base` is empty.
+PROVIDER_DEFAULT_API_BASE["<provider_id>"] = "<api_url>"
+PROVIDER_DEFAULT_ENDPOINT_KIND["<provider_id>"] = "<endpoint_kind>"
+# Cost tiers (balanced / economy / deep) per (runner, kind) + dated prices.
+MODEL_TIER_TABLE[("<provider_id>", "<endpoint_kind>")] = _<NAME>_TIERS
 ```
+
+The request URL is always `profile.base_url` + the protocol path constant — never a literal host inside the class (`.review/extension.md` flags that as `critical`).
 
 ### 2. Add the provider class after `AnthropicProvider`
 
@@ -82,9 +94,23 @@ class <Name>Provider(Provider):
     agentic loop in `drive_review()`.
     """
 
-    def __init__(self, *, api_key: str, model: str) -> None:
+    PROVIDER_ID: str = "<provider_id>"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        profile: EndpointProfile | None = None,
+    ) -> None:
         self.api_key: str = api_key
         self.model: str = model
+        # Backend profile; `None` = the runner's default endpoint.
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
 
     def complete(
         self,
@@ -115,13 +141,17 @@ DEFAULT_MODELS: dict[str, str] = {
 ### 4. Register in `build_provider()`
 
 ```python
-def build_provider(provider_id: str, *, api_key: str, model: str) -> Provider:
-    if provider_id == "anthropic":
-        return AnthropicProvider(api_key=api_key, model=model)
+def build_provider(
+    provider_id: str, *, api_key: str, model: str, api_base: str = ""
+) -> Provider | AgentRunnerProvider:
+    profile: EndpointProfile = resolve_endpoint_profile(api_base, provider_id)
+    ...
     if provider_id == "<provider_id>":
-        return <Name>Provider(api_key=api_key, model=model)
+        return <Name>Provider(api_key=api_key, model=model, profile=profile)
     raise ValueError(...)
 ```
+
+Then lock it: add the runner to `tests/test_backends.py::RunnerBackendMatrixTests.RUNNERS`, a default-profile snapshot in `tests/test_agent_runner_providers.py::DefaultProfileBackCompatSnapshotTests` (agent-runners), the credential lane in `HardeningRegressionTests.test_credential_lanes_per_agent_runner`, and a telemetry fixture in `tests/test_telemetry.py`.
 
 ### 5. Add provider-specific inputs to `action.yml` (if any)
 
@@ -187,6 +217,8 @@ class <Name>Provider(AgentRunnerProvider):
     CLI_BIN: str = "<cli_bin>"
     MCP_DEST: str = "<mcp_dest>"  # e.g. ".<vendor>/mcp.json"
 
+    PROVIDER_ID: str = "<provider_id>"
+
     def __init__(
         self,
         *,
@@ -194,10 +226,15 @@ class <Name>Provider(AgentRunnerProvider):
         model: str,
         extra_args: str,
         mcp_config_file: str,
+        profile: EndpointProfile | None = None,
     ) -> None:
         self.api_key: str = api_key
         self.model: str = model
         self.extra_args: str = extra_args
+        self.profile: EndpointProfile = (
+            profile if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )  # warn and ignore, or map to the CLI's env/config contract (see Claude Code / Codex)
         self.mcp_config_file: str = mcp_config_file
 
     def install(self) -> None:
@@ -268,7 +305,7 @@ if provider_id == "<provider_id>":
 
 ### 5. Add install step in `action.yml`
 
-Guarded by `if: inputs.provider == '<provider_id>'`. Follow the shape of the existing Claude Code / Cursor / Codex install steps — set up Node if needed, npm-install (or curl-installer) the CLI, honour the optional `<provider_id>-version` input.
+Guarded by `if: inputs.provider == '<provider_id>'`. Follow the shape of the existing Claude Code / Cursor / Codex / Grok install steps — set up Node if needed, npm-install (or curl-installer) the CLI, honour the optional `<provider_id>-version` input, and **skip the installer when the binary is already on `PATH`** (pre-provisioned runners; see the `grok` step). Credential goes to the CLI through `_build_cli_env(extra_vars={...})` only — one env var the CLI needs, nothing else; temp files (prompt/config) live in a `tempfile.mkdtemp()` dir, `0o600`, removed in `finally`; stdout parsers scan a bounded tail. Add the lane to `docs/SECURITY.md § "Credential lanes"`.
 
 ### 6. Add the `<provider_id>-version` input in `action.yml`
 
