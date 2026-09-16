@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`api-base` input — bring your own endpoint (the backend contract).**
+  `provider` keeps naming the *runner* (who owns the review loop); the new
+  optional `api-base` names the *backend* (where the model lives). The
+  host is classified into an endpoint profile (`anthropic`, `openai`,
+  `azure`, `xai`, `zai`, or `custom`) that carries the per-runner quirks
+  (auth header style, prompt-caching flags, Codex wire API, Azure
+  workarounds). Empty keeps every existing provider byte-identical.
+  Values are validated before any outward call: absolute `https://` URL
+  (plain `http://` for localhost only), no embedded credentials, no
+  query/fragment. This entry ships the contract and the resolver
+  (`EndpointProfile`, `resolve_endpoint_profile`, `validate_api_base`);
+  the runners honour it in the follow-up entries below as they land.
+  Ignored by `cursor` (subscription-only).
+
 ### Fixed
 
 - **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).

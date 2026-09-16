@@ -27,6 +27,12 @@ Environment (set by the composite action's `env:` block; see action.yml):
     AIPRR_API_KEY            Provider API key.
     AIPRR_GH_TOKEN           GitHub token for PR/review operations.
     AIPRR_MODEL              Model id (empty = provider default).
+    AIPRR_API_BASE           Optional backend base URL (`api-base` input).
+                            Empty = the provider's default endpoint. Lets a
+                            runner talk to an Anthropic- or OpenAI-compatible
+                            backend (Z.ai, xAI, Azure Foundry, self-hosted).
+                            Resolved into an `EndpointProfile`; ignored by
+                            `cursor`.
     AIPRR_PROMPT_FILE        Path to a markdown system prompt (empty =
                             bundled `prompts/default.md`). Fully replaces
                             the base prompt.
@@ -136,6 +142,93 @@ DEFAULT_MODELS: dict[str, str] = {
 DEFAULT_MAX_TURNS: int = 30
 DEFAULT_MAX_INLINE_COMMENTS: int = 10
 DEFAULT_BASE_REF: str = "main"
+
+# ---------------------------------------------------------------------------
+# Backends / endpoint profiles (v2.1.0+)
+# ---------------------------------------------------------------------------
+# `provider` names the RUNNER (who owns the tool-use loop); the optional
+# `api-base` input names the BACKEND (where the model lives). The host of the
+# base URL is classified into an endpoint *kind*, and an `EndpointProfile`
+# carries the per-kind quirks every runner needs (auth header style, whether
+# Anthropic `cache_control` may be sent, Codex wire API, Azure workarounds).
+# An empty `api-base` resolves to the runner's default profile, which keeps
+# every existing consumer byte-identical. See docs/PROVIDERS.md.
+API_BASE_ENV: str = "AIPRR_API_BASE"
+
+ENDPOINT_KIND_ANTHROPIC: str = "anthropic"
+ENDPOINT_KIND_OPENAI: str = "openai"
+ENDPOINT_KIND_AZURE: str = "azure"
+ENDPOINT_KIND_XAI: str = "xai"
+ENDPOINT_KIND_ZAI: str = "zai"
+ENDPOINT_KIND_CUSTOM: str = "custom"
+ENDPOINT_KINDS: tuple[str, ...] = (
+    ENDPOINT_KIND_ANTHROPIC,
+    ENDPOINT_KIND_OPENAI,
+    ENDPOINT_KIND_AZURE,
+    ENDPOINT_KIND_XAI,
+    ENDPOINT_KIND_ZAI,
+    ENDPOINT_KIND_CUSTOM,
+)
+
+# Host → kind classification. A suffix starting with `.` matches any
+# subdomain; a bare host matches exactly. Order is irrelevant (no overlaps).
+ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
+    ("api.anthropic.com", ENDPOINT_KIND_ANTHROPIC),
+    ("api.openai.com", ENDPOINT_KIND_OPENAI),
+    (".openai.azure.com", ENDPOINT_KIND_AZURE),
+    (".services.ai.azure.com", ENDPOINT_KIND_AZURE),
+    (".cognitiveservices.azure.com", ENDPOINT_KIND_AZURE),
+    ("api.x.ai", ENDPOINT_KIND_XAI),
+    ("api.z.ai", ENDPOINT_KIND_ZAI),
+)
+
+# Well-known base URLs (documentation + runner defaults). The Anthropic base
+# deliberately has no `/v1` — the Messages path is appended by the provider.
+ANTHROPIC_DEFAULT_API_BASE: str = "https://api.anthropic.com"
+OPENAI_DEFAULT_API_BASE: str = "https://api.openai.com/v1"
+XAI_OPENAI_COMPAT_API_BASE: str = "https://api.x.ai/v1"
+XAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.x.ai"
+ZAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.z.ai/api/anthropic"
+ZAI_OPENAI_COMPAT_API_BASE: str = "https://api.z.ai/api/coding/paas/v4"
+ZAI_RESPONSES_API_BASE: str = "https://api.z.ai/api/v1"
+
+# Azure Foundry + Codex quirk: plain text turns fail unless an image-generation
+# deployment header is present and the feature is disabled (see
+# docs/PROVIDERS.md § Codex on Azure Foundry).
+AZURE_IMAGE_GEN_HEADER: str = "x-ms-oai-image-generation-deployment"
+AZURE_IMAGE_GEN_DUMMY_DEPLOYMENT: str = "gpt-image-1"
+
+# Auth header styles per protocol family.
+ANTHROPIC_AUTH_STYLE_X_API_KEY: str = "x-api-key"
+ANTHROPIC_AUTH_STYLE_BOTH: str = "both"          # x-api-key + Authorization
+OPENAI_AUTH_STYLE_BEARER: str = "bearer"
+OPENAI_AUTH_STYLE_AZURE: str = "azure"           # Bearer + `api-key` header
+CODEX_WIRE_API_RESPONSES: str = "responses"
+
+# `api-base` validation: https only, except loopback for local dev gateways.
+API_BASE_ALLOWED_SCHEMES: tuple[str, ...] = ("https",)
+API_BASE_LOCAL_HOSTS: tuple[str, ...] = ("localhost", "127.0.0.1", "::1")
+
+# Runner → default endpoint kind / base when `api-base` is empty. `cursor`
+# has no bring-your-own endpoint (subscription-only), hence the custom kind
+# with an empty base.
+PROVIDER_DEFAULT_ENDPOINT_KIND: dict[str, str] = {
+    "anthropic": ENDPOINT_KIND_ANTHROPIC,
+    "claude-code": ENDPOINT_KIND_ANTHROPIC,
+    "codex": ENDPOINT_KIND_OPENAI,
+    "openai": ENDPOINT_KIND_OPENAI,
+    "grok": ENDPOINT_KIND_XAI,
+    "cursor": ENDPOINT_KIND_CUSTOM,
+}
+PROVIDER_DEFAULT_API_BASE: dict[str, str] = {
+    "anthropic": ANTHROPIC_DEFAULT_API_BASE,
+    "claude-code": ANTHROPIC_DEFAULT_API_BASE,
+    "codex": OPENAI_DEFAULT_API_BASE,
+    "openai": OPENAI_DEFAULT_API_BASE,
+    "grok": XAI_OPENAI_COMPAT_API_BASE,
+    "cursor": "",
+}
+PROVIDERS_WITHOUT_API_BASE: tuple[str, ...] = ("cursor",)
 
 # Tool-use loop guardrails.
 MAX_TOOL_OUTPUT_BYTES: int = 32_000
@@ -1102,6 +1195,158 @@ def gh_submit_review_with_fallback(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Endpoint profiles — the backend contract (v2.1.0+)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class EndpointProfile:
+    """Where the model lives and how a runner must talk to it.
+
+    - `kind`: one of `ENDPOINT_KINDS`.
+    - `base_url`: normalised base (scheme + host + path, no trailing slash,
+      no query/fragment). Empty only for runners without a BYO endpoint.
+    - `host`: the hostname (logged; the credential never is).
+    - `is_default`: True when `api-base` was empty (byte-identical legacy
+      behaviour for the four v1/v2 runners).
+    - `supports_anthropic_cache_control`: send `cache_control` blocks only
+      to api.anthropic.com; compatible gateways cache server-side.
+    - `anthropic_auth_style`: `x-api-key` or `both` (adds a Bearer header for
+      gateways that document bearer auth).
+    - `openai_auth_style`: `bearer` or `azure` (adds the `api-key` header).
+    - `codex_wire_api`: Codex `model_providers.*.wire_api` value.
+    - `codex_extra_toml`: extra TOML appended to the Codex provider block
+      (Azure image-generation workaround); empty otherwise.
+    """
+
+    kind: str
+    base_url: str
+    host: str
+    is_default: bool
+    supports_anthropic_cache_control: bool
+    anthropic_auth_style: str
+    openai_auth_style: str
+    codex_wire_api: str
+    codex_extra_toml: str
+
+
+def validate_api_base(raw: str) -> str:
+    """Validate and normalise the `api-base` input.
+
+    Empty → `""` (provider default). Otherwise the value must be an absolute
+    `https://` URL (plain `http://` is accepted only for loopback hosts, so a
+    local dev gateway still works) with a host, no userinfo, no query and no
+    fragment. A trailing slash is stripped. Raises `ValueError` with an
+    actionable message — the credential in `api-key` is sent to this host,
+    so a malformed or ambiguous value must never be guessed at.
+    """
+    value: str = (raw or "").strip()
+    if not value:
+        return ""
+    parts = urllib.parse.urlsplit(value)
+    host: str = parts.hostname or ""
+    if not parts.scheme or not host:
+        raise ValueError(
+            f"api-base {value!r} is not an absolute URL — expected e.g. "
+            f"{ZAI_ANTHROPIC_COMPAT_API_BASE!r} or {XAI_OPENAI_COMPAT_API_BASE!r}."
+        )
+    scheme: str = parts.scheme.lower()
+    if scheme not in API_BASE_ALLOWED_SCHEMES and not (
+        scheme == "http" and host in API_BASE_LOCAL_HOSTS
+    ):
+        raise ValueError(
+            f"api-base {value!r} must use https:// (plain http is allowed "
+            f"only for {', '.join(API_BASE_LOCAL_HOSTS)})."
+        )
+    if parts.username is not None or parts.password is not None:
+        raise ValueError(
+            "api-base must not embed credentials (user:pass@host); pass the "
+            "key via the `api-key` input."
+        )
+    if parts.query or parts.fragment:
+        raise ValueError(
+            f"api-base {value!r} must not carry a query string or fragment."
+        )
+    path: str = parts.path.rstrip("/")
+    netloc: str = parts.netloc
+    return f"{scheme}://{netloc}{path}"
+
+
+def classify_endpoint_host(host: str) -> str:
+    """Map a hostname to an endpoint kind via `ENDPOINT_HOST_SUFFIXES`."""
+    h: str = (host or "").lower()
+    for suffix, kind in ENDPOINT_HOST_SUFFIXES:
+        if suffix.startswith("."):
+            if h.endswith(suffix):
+                return kind
+        elif h == suffix:
+            return kind
+    return ENDPOINT_KIND_CUSTOM
+
+
+def _profile_for_kind(
+    kind: str, *, base_url: str, host: str, is_default: bool
+) -> EndpointProfile:
+    """Build the profile carrying the per-kind quirks."""
+    extra_toml: str = ""
+    if kind == ENDPOINT_KIND_AZURE:
+        extra_toml = (
+            "http_headers = { "
+            f'"{AZURE_IMAGE_GEN_HEADER}" = "{AZURE_IMAGE_GEN_DUMMY_DEPLOYMENT}"'
+            " }\n"
+            "\n"
+            "[features]\n"
+            "image_generation = false\n"
+        )
+    return EndpointProfile(
+        kind=kind,
+        base_url=base_url,
+        host=host,
+        is_default=is_default,
+        supports_anthropic_cache_control=(kind == ENDPOINT_KIND_ANTHROPIC),
+        anthropic_auth_style=(
+            ANTHROPIC_AUTH_STYLE_X_API_KEY
+            if kind == ENDPOINT_KIND_ANTHROPIC
+            else ANTHROPIC_AUTH_STYLE_BOTH
+        ),
+        openai_auth_style=(
+            OPENAI_AUTH_STYLE_AZURE
+            if kind == ENDPOINT_KIND_AZURE
+            else OPENAI_AUTH_STYLE_BEARER
+        ),
+        codex_wire_api=CODEX_WIRE_API_RESPONSES,
+        codex_extra_toml=extra_toml,
+    )
+
+
+def resolve_endpoint_profile(api_base: str, provider_id: str) -> EndpointProfile:
+    """Resolve the backend profile for a runner.
+
+    Empty `api_base` → the runner's default profile (`is_default=True`).
+    Otherwise the host is classified; unknown hosts become `custom` (plain
+    protocol behaviour for the runner's family). Never raises on
+    classification — `validate_api_base` is the place that rejects input.
+    """
+    if not api_base:
+        kind: str = PROVIDER_DEFAULT_ENDPOINT_KIND.get(
+            provider_id, ENDPOINT_KIND_CUSTOM
+        )
+        base: str = PROVIDER_DEFAULT_API_BASE.get(provider_id, "")
+        host: str = urllib.parse.urlsplit(base).hostname or "" if base else ""
+        return _profile_for_kind(
+            kind, base_url=base, host=host, is_default=True
+        )
+    parts = urllib.parse.urlsplit(api_base)
+    host = parts.hostname or ""
+    return _profile_for_kind(
+        classify_endpoint_host(host),
+        base_url=api_base,
+        host=host,
+        is_default=False,
+    )
+
+
 class Provider:
     """Minimal interface every LLM provider must implement.
 
@@ -1126,9 +1371,24 @@ class Provider:
 class AnthropicProvider(Provider):
     """Anthropic Messages API client with prompt caching + bounded retries."""
 
-    def __init__(self, *, api_key: str, model: str) -> None:
+    PROVIDER_ID: str = "anthropic"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        profile: EndpointProfile | None = None,
+    ) -> None:
         self.api_key: str = api_key
         self.model: str = model
+        # Backend profile (Task 1 of the multi-backend plan stores it; the
+        # request path honours it from Task 2 on). `None` = default endpoint.
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
 
     def complete(
         self,
@@ -1372,6 +1632,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
     in `action.yml` when `provider: claude-code`.
     """
 
+    PROVIDER_ID: str = "claude-code"
     CLI_NAME: str = "Claude Code"
     CLI_BIN: str = "claude"
     MCP_DEST: Path = Path.home() / ".claude" / "mcp.json"
@@ -1383,11 +1644,18 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         model: str,
         extra_args: str = "",
         mcp_config_file: str = "",
+        profile: EndpointProfile | None = None,
     ) -> None:
         self.api_key: str = api_key
         self.model: str = model
         self.extra_args: str = extra_args
         self.mcp_config_file: str = mcp_config_file
+        # Backend profile; `None` = the runner's default endpoint.
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
 
     def auth_env_vars(self) -> dict[str, str]:
         """Map the consumer's `api-key` input to the right Claude Code auth
@@ -1516,6 +1784,7 @@ class CursorProvider(AgentRunnerProvider):
     CLI operates against `workspace` directly.
     """
 
+    PROVIDER_ID: str = "cursor"
     CLI_NAME: str = "Cursor Agent"
     CLI_BIN: str = "cursor-agent"
     MCP_DEST: Path = Path.home() / ".cursor" / "mcp.json"
@@ -1527,11 +1796,18 @@ class CursorProvider(AgentRunnerProvider):
         model: str,
         extra_args: str = "",
         mcp_config_file: str = "",
+        profile: EndpointProfile | None = None,
     ) -> None:
         self.api_key: str = api_key
         self.model: str = model
         self.extra_args: str = extra_args
         self.mcp_config_file: str = mcp_config_file
+        # Backend profile; `None` = the runner's default endpoint.
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
 
     def install(self) -> None:
         result = run_cmd([self.CLI_BIN, "--version"])
@@ -1640,6 +1916,7 @@ class CodexProvider(AgentRunnerProvider):
     `provider: codex`.
     """
 
+    PROVIDER_ID: str = "codex"
     CLI_NAME: str = "OpenAI Codex"
     CLI_BIN: str = "codex"
     MCP_DEST: Path = Path.home() / ".codex" / "mcp.json"
@@ -1681,11 +1958,18 @@ class CodexProvider(AgentRunnerProvider):
         model: str,
         extra_args: str = "",
         mcp_config_file: str = "",
+        profile: EndpointProfile | None = None,
     ) -> None:
         self.api_key: str = api_key
         self.model: str = model
         self.extra_args: str = extra_args
         self.mcp_config_file: str = mcp_config_file
+        # Backend profile; `None` = the runner's default endpoint.
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
 
     def install(self) -> None:
         result = run_cmd([self.CLI_BIN, "--version"])
@@ -1800,16 +2084,24 @@ class CodexProvider(AgentRunnerProvider):
 
 
 def build_provider(
-    provider_id: str, *, api_key: str, model: str
+    provider_id: str, *, api_key: str, model: str, api_base: str = ""
 ) -> Provider | AgentRunnerProvider:
     """Construct the provider implementation for `provider_id`.
 
     Returns either a `Provider` (chat-completions family, action owns the
     tool-use loop) or an `AgentRunnerProvider` (vendor CLI owns the loop).
-    `main()` dispatches on the returned instance type.
+    `main()` dispatches on the returned instance type. `api_base` (already
+    validated by `validate_api_base`) selects the backend profile; empty
+    keeps the runner's default endpoint.
     """
+    profile: EndpointProfile = resolve_endpoint_profile(api_base, provider_id)
+    if api_base and provider_id in PROVIDERS_WITHOUT_API_BASE:
+        log(
+            f"WARNING: api-base is set but provider {provider_id!r} has no "
+            "bring-your-own endpoint (subscription-only CLI) — ignoring it."
+        )
     if provider_id == "anthropic":
-        return AnthropicProvider(api_key=api_key, model=model)
+        return AnthropicProvider(api_key=api_key, model=model, profile=profile)
 
     # Agent-runner providers share a common constructor shape — extra_args
     # and mcp_config_file come from the AIPRR_* env vars set by action.yml.
@@ -1835,6 +2127,7 @@ def build_provider(
             model=model,
             extra_args=extra_args,
             mcp_config_file=mcp_config,
+            profile=profile,
         )
     if provider_id == "cursor":
         return CursorProvider(
@@ -1842,6 +2135,7 @@ def build_provider(
             model=model,
             extra_args=extra_args,
             mcp_config_file=mcp_config,
+            profile=profile,
         )
     if provider_id == "codex":
         return CodexProvider(
@@ -1849,6 +2143,7 @@ def build_provider(
             model=model,
             extra_args=extra_args,
             mcp_config_file=mcp_config,
+            profile=profile,
         )
     raise ValueError(
         f"Unsupported provider: {provider_id!r}. Currently supported: "
@@ -6228,6 +6523,23 @@ def main() -> int:
         write_all_outputs(skipped=False)
         return 1
 
+    # Backend selection (v2.1.0+). Validate before anything outward-facing
+    # happens: the credential in `api-key` will be sent to this host.
+    try:
+        api_base: str = validate_api_base(os.environ.get(API_BASE_ENV, ""))
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    backend_profile: EndpointProfile = resolve_endpoint_profile(
+        api_base, provider_id
+    )
+    log(
+        f"Backend: kind={backend_profile.kind} "
+        f"host={backend_profile.host or 'default'}"
+        + ("" if backend_profile.is_default else " (custom api-base)")
+    )
+
     prompt_file: str = os.environ.get("AIPRR_PROMPT_FILE", "").strip()
     prompt_extension_file: str = os.environ.get(
         "AIPRR_PROMPT_EXTENSION_FILE", ""
@@ -6781,7 +7093,7 @@ def main() -> int:
             )
 
         provider: Provider | AgentRunnerProvider = build_provider(
-            provider_id, api_key=api_key, model=model
+            provider_id, api_key=api_key, model=model, api_base=api_base
         )
 
         # v1.2.0 dispatch caveat: `set_pr_description` autocomplete is

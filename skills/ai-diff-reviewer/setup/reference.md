@@ -85,6 +85,38 @@ Every workflow using AI Diff Reviewer sets these two.
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
 
+### `api-base`
+
+- **Default:** `''` (empty — the provider's default endpoint; behaviour
+  identical to releases before `api-base` existed).
+- **What it is:** the backend base URL for the chosen provider (runner).
+  The `provider` input says *who runs the review loop*; `api-base` says
+  *where the model lives*. The host of the URL selects an endpoint
+  profile automatically (auth header style, prompt-caching flags, Codex
+  wire API, Azure workarounds).
+- **Well-known values:**
+  - Z.ai GLM (Anthropic-compatible) → `https://api.z.ai/api/anthropic`
+    with `provider: claude-code` (recommended for GLM) or `anthropic`.
+  - xAI Grok → `https://api.x.ai` (Anthropic-compatible, for
+    `anthropic` / `claude-code`) or `https://api.x.ai/v1`
+    (OpenAI-compatible, for `codex` / `openai`).
+  - Azure Foundry v1 → `https://<resource>.services.ai.azure.com/openai/v1`
+    with `provider: codex` or `openai`; `model` is the **deployment name**.
+  - Z.ai via Codex (Responses API) → `https://api.z.ai/api/v1`;
+    Z.ai via `openai` → `https://api.z.ai/api/coding/paas/v4`.
+  - Any other host → treated as a plain protocol-compatible gateway
+    (Anthropic-shaped for `anthropic` / `claude-code`, OpenAI-shaped for
+    `codex` / `openai`); the run logs a warning naming the host.
+- **Rules:** absolute `https://` URL (plain `http://` only for
+  `localhost` / `127.0.0.1`), no embedded credentials, no query string or
+  fragment; a trailing slash is stripped. Invalid values abort the run
+  before any LLM or GitHub call.
+- **Security:** the credential in `api-key` is sent to this host. Only
+  point it at endpoints you trust; a subscription OAuth token
+  (`sk-ant-oat…`) cannot be used against a non-Anthropic host.
+- **Ignored by:** `cursor` (subscription-only CLI; a warning is logged).
+- **See:** `docs/PROVIDERS.md` in the action repo (runner × backend matrix).
+
 ---
 
 ## Prompt customization
