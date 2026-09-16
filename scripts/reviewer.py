@@ -804,6 +804,47 @@ IAR_STATE_TAG_CLOSE: str = "-->"
 # sourced from user input — this constant is the security surface
 # (docs/ITERATION_AWARENESS.md § 6.2). Kept short; ~150 tokens
 # (matches the budget quoted in docs/PROMPTS.md + docs/PERFORMANCE.md).
+# ---- Incremental review mode (v2.1.0+) ----
+# Rounds 2+ send the model only what changed since its last review plus its
+# own prior open findings (read back from the PR's review threads), ask it to
+# verify each, and scale the budget to the delta. Every failure path falls
+# back to a full review — never to silence.
+IAR_MODE_FULL: str = "full"
+IAR_MODE_INCREMENTAL: str = "incremental"
+# Hidden, STABLE marker appended to every inline comment body so prior
+# findings can be matched back from the PR itself (survives collapse; no
+# marker-state growth). Never rename (docs/STANDARDS.md § Marker constants).
+INLINE_FINDING_MARKER_PREFIX: str = "<!-- ai-pr-reviewer-finding:"
+INLINE_FINDING_MARKER_CLOSE: str = " -->"
+IAR_INCREMENTAL_MIN_CAP: int = 3
+IAR_INCREMENTAL_MIN_TURNS: int = 6
+IAR_INCREMENTAL_MIN_DELTA_RATIO: float = 0.1
+PRIOR_FINDINGS_MAX_LISTED: int = 40
+PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
+PRIOR_FINDING_STATUS_OPEN: str = "open"
+PRIOR_FINDING_STATUS_REGRESSED: str = "regressed"
+PRIOR_FINDING_STATUSES: tuple[str, ...] = (
+    PRIOR_FINDING_STATUS_RESOLVED,
+    PRIOR_FINDING_STATUS_OPEN,
+    PRIOR_FINDING_STATUS_REGRESSED,
+)
+IAR_INCREMENTAL_DIFF_HEADING: str = "## Changes since your last review"
+IAR_UNCHANGED_FILES_HEADING: str = (
+    "## Other files changed in this PR (unchanged since your last review)"
+)
+PRIOR_FINDINGS_HEADING: str = "## Your prior findings still open"
+IAR_INCREMENTAL_PROMPT_ADDENDUM: str = (
+    "\n\n[Iteration-Aware Review — incremental follow-up mode active]\n"
+    "You reviewed an earlier revision of this pull request. The user\n"
+    "message shows only the hunks that changed since then plus your own\n"
+    "prior findings that are still open. For each prior finding decide\n"
+    "whether the new commits resolved it, left it open, or made it worse,\n"
+    "and report that decision through the prior-findings channel described\n"
+    "in the output contract — do NOT re-post an open prior finding as a\n"
+    "new one. Review the new hunks with the normal rubric and severity\n"
+    "model. Prior critical findings must be addressed first.\n"
+)
+
 IAR_EXHAUSTIVE_PROMPT_ADDENDUM: str = (
     "\n\n[Iteration-Aware Review — exhaustive first-pass mode active]\n"
     "This is round 1 of a fresh review generation. Prioritize exhaustive\n"
@@ -2694,6 +2735,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             review_instructions,
             findings_path,
             require_complexity=require_complexity_in_findings,
+            prior_findings_expected=pr_context_is_incremental(pr_context),
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
@@ -2836,6 +2878,7 @@ class CursorProvider(AgentRunnerProvider):
             review_instructions,
             findings_path,
             require_complexity=require_complexity_in_findings,
+            prior_findings_expected=pr_context_is_incremental(pr_context),
         )
         user_prompt: str = (
             enriched_instructions
@@ -3169,6 +3212,7 @@ class CodexProvider(AgentRunnerProvider):
             review_instructions,
             findings_path,
             require_complexity=require_complexity_in_findings,
+            prior_findings_expected=pr_context_is_incremental(pr_context),
         )
         user_prompt: str = (
             enriched_instructions
@@ -3380,6 +3424,7 @@ class GrokProvider(AgentRunnerProvider):
             review_instructions,
             findings_path,
             require_complexity=require_complexity_in_findings,
+            prior_findings_expected=pr_context_is_incremental(pr_context),
         )
         if self.mcp_config_file:
             log(
@@ -4379,6 +4424,10 @@ class Finding:
     severity: str = SEVERITY_INFO
     start_line: int | None = None
     side: str | None = "RIGHT"
+    # Content-anchored fingerprint (set by the IAR post-LLM step). When
+    # present, the inline comment carries it in a hidden marker so the next
+    # round can match the finding back from the PR thread.
+    fingerprint: str | None = None
 
 
 @dataclass
@@ -4390,6 +4439,8 @@ class ReviewResult:
     overall_severity: str = SEVERITY_NONE
     # Token/cost usage captured for this review (None = not captured).
     usage: UsageTelemetry | None = None
+    # Incremental mode: the model's verdict per prior finding fingerprint.
+    prior_finding_updates: dict[str, tuple[str, str]] = field(default_factory=dict)
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
@@ -5299,6 +5350,253 @@ class RunTelemetry:
 
 
 @dataclass(frozen=True)
+class PriorFinding:
+    """One of the bot's own inline findings still open on the PR, read back
+    from a review thread (v2.1.0+ incremental mode)."""
+
+    thread_id: str
+    comment_id: str          # GraphQL node id
+    comment_database_id: int  # REST id (for `/replies`)
+    path: str
+    line: int
+    severity: str
+    fingerprint: str
+    body_excerpt: str
+    is_outdated: bool
+
+
+def _bot_login_matches(bot_login: str, author_login: str) -> bool:
+    """GraphQL Bot nodes report `github-actions` while REST reports
+    `github-actions[bot]`; accept both (same rule as collapse-previous).
+    An empty `bot_login` disables the filter (escape hatch for tests)."""
+    if not bot_login:
+        return True
+    accepted: set[str] = {bot_login}
+    if bot_login.endswith("[bot]"):
+        accepted.add(bot_login[: -len("[bot]")])
+    return author_login in accepted
+
+
+def fetch_prior_findings(
+    *,
+    token: str,
+    repo: str,
+    pr_number: int,
+    bot_login: str,
+    provider_marker_text: str = "",
+) -> list[PriorFinding]:
+    """Read the bot's still-open inline findings from the PR's review threads.
+
+    Filters: first comment authored by the bot, parent review body carrying
+    this provider's marker (when given), inline marker present (older
+    comments without one are skipped), thread not resolved. Best-effort:
+    returns `[]` on any API failure (the caller falls back to full mode).
+    """
+    if "/" not in repo or pr_number <= 0:
+        return []
+    owner, name = repo.split("/", 1)
+    query: str = (
+        "query($owner:String!, $repo:String!, $number:Int!, $page:Int!) {"
+        "  repository(owner:$owner, name:$repo) {"
+        "    pullRequest(number:$number) {"
+        "      reviewThreads(first:$page) {"
+        "        pageInfo { hasNextPage }"
+        "        nodes {"
+        "          id isResolved isOutdated path line originalLine"
+        "          comments(first:1) {"
+        "            nodes { id databaseId body author { login } pullRequestReview { body } }"
+        "          }"
+        "        }"
+        "      }"
+        "    }"
+        "  }"
+        "}"
+    )
+    try:
+        data: Any = gh_graphql(
+            query,
+            {
+                "owner": owner,
+                "repo": name,
+                "number": pr_number,
+                "page": GH_CONNECTION_PAGE_SIZE,
+            },
+            token=token,
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort GH API call
+        log(f"IAR: could not list review threads for prior findings: {e}")
+        return []
+    threads_conn: dict[str, Any] = (
+        ((data or {}).get("repository") or {}).get("pullRequest") or {}
+    ).get("reviewThreads") or {}
+    if (threads_conn.get("pageInfo") or {}).get("hasNextPage"):
+        log(
+            f"IAR: PR has more than {GH_CONNECTION_PAGE_SIZE} review threads; "
+            "prior findings beyond the first page are not carried forward."
+        )
+    out: list[PriorFinding] = []
+    skipped_unmarked: int = 0
+    for thread in threads_conn.get("nodes") or []:
+        if not isinstance(thread, dict) or thread.get("isResolved"):
+            continue
+        first: list[dict[str, Any]] = (
+            (thread.get("comments") or {}).get("nodes") or []
+        )
+        if not first:
+            continue
+        comment: dict[str, Any] = first[0] or {}
+        author: str = str((comment.get("author") or {}).get("login") or "")
+        if not _bot_login_matches(bot_login, author):
+            continue
+        review_body: str = str(
+            (comment.get("pullRequestReview") or {}).get("body") or ""
+        )
+        if provider_marker_text and provider_marker_text not in review_body:
+            continue
+        body: str = str(comment.get("body") or "")
+        parsed: tuple[str, str] | None = parse_inline_finding_marker(body)
+        if parsed is None:
+            skipped_unmarked += 1
+            continue
+        fingerprint, severity = parsed
+        excerpt: str = body.split(INLINE_FINDING_MARKER_PREFIX, 1)[0].strip()
+        excerpt = " ".join(excerpt.split())[:160]
+        line_value: Any = thread.get("line")
+        if line_value is None:
+            line_value = thread.get("originalLine")
+        out.append(
+            PriorFinding(
+                thread_id=str(thread.get("id") or ""),
+                comment_id=str(comment.get("id") or ""),
+                comment_database_id=_as_int(comment.get("databaseId")),
+                path=str(thread.get("path") or ""),
+                line=_as_int(line_value),
+                severity=severity,
+                fingerprint=fingerprint,
+                body_excerpt=excerpt,
+                is_outdated=bool(thread.get("isOutdated")),
+            )
+        )
+    if skipped_unmarked:
+        log(
+            f"IAR: skipped {skipped_unmarked} prior bot comment(s) without an "
+            "inline finding marker (posted before v2.1.0)."
+        )
+    log(f"IAR: {len(out)} prior open finding(s) read from review threads.")
+    return out
+
+
+@dataclass(frozen=True)
+class IncrementalDelta:
+    """What changed since the last reviewed head (v2.1.0+)."""
+
+    prior_head_sha: str
+    head_sha: str
+    changed_files: tuple[str, ...]
+    delta_ratio: float  # 0..1 — share of the PR's lines that are new
+
+
+def compute_incremental_delta(
+    *,
+    prior_head_sha: str,
+    head_sha: str,
+    new_lines_pct: float,
+    repo_root: str | None = None,
+) -> IncrementalDelta | None:
+    """Return the trusted delta since `prior_head_sha`, or None when the
+    delta cannot be trusted (unknown prior head; prior head is not an
+    ancestor of HEAD after a rebase / force-push / amend; git failure)."""
+    if not prior_head_sha or not head_sha:
+        return None
+    try:
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", prior_head_sha, head_sha],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=False,
+        )
+        if ancestor.returncode != 0:
+            log(
+                f"IAR: prior head {prior_head_sha[:8]} is not an ancestor of "
+                f"{head_sha[:8]} (rebase / force-push) — full review."
+            )
+            return None
+        names = subprocess.run(
+            ["git", "diff", "--name-only", prior_head_sha, head_sha],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        log(f"IAR: could not compute the incremental delta ({e}) — full review.")
+        return None
+    files: tuple[str, ...] = tuple(
+        line.strip() for line in names.stdout.splitlines() if line.strip()
+    )
+    ratio: float = max(0.0, min(1.0, float(new_lines_pct) / 100.0))
+    return IncrementalDelta(
+        prior_head_sha=prior_head_sha,
+        head_sha=head_sha,
+        changed_files=files,
+        delta_ratio=ratio,
+    )
+
+
+def select_iar_mode(
+    *,
+    prior_state: IterationState | None,
+    transition: "GenerationTransition",
+    pre_policy_result: "PolicyResult",
+    prior_findings: list[PriorFinding],
+    delta: IncrementalDelta | None,
+) -> tuple[str, str]:
+    """Decide full vs incremental. Returns `(mode, reason)`.
+
+    Incremental only when: a prior state exists, the transition is not a
+    fresh start, no policy override forced an exhaustive pass (escape
+    label, 30 % safety net), the delta is trusted, and there is at least
+    one prior open finding to carry forward. Everything else → full.
+    """
+    if prior_state is None:
+        return IAR_MODE_FULL, "no prior state"
+    if transition in (
+        GenerationTransition.FIRST_REVIEW,
+        GenerationTransition.USER_FORCED_RESET,
+    ):
+        return IAR_MODE_FULL, f"transition {transition.value}"
+    if pre_policy_result.policy_applied in (
+        IAR_POLICY_ESCAPE_LABEL_FORCED,
+        IAR_POLICY_SAFETY_NET_FORCED,
+    ):
+        return IAR_MODE_FULL, f"policy override {pre_policy_result.policy_applied}"
+    if delta is None:
+        return IAR_MODE_FULL, "delta not trusted"
+    if not prior_findings:
+        return IAR_MODE_FULL, "no prior open findings to carry forward"
+    return IAR_MODE_INCREMENTAL, (
+        f"{len(prior_findings)} prior open finding(s), "
+        f"{len(delta.changed_files)} file(s) changed since {delta.prior_head_sha[:8]}"
+    )
+
+
+def scale_incremental_budget(
+    *, base_cap: int, base_turns: int, delta_ratio: float, prior_critical: int
+) -> tuple[int, int]:
+    """Delta-scaled inline cap and turn budget with floors (criticals never
+    starve). Returns `(effective_cap, effective_turns)`."""
+    ratio: float = max(IAR_INCREMENTAL_MIN_DELTA_RATIO, min(1.0, delta_ratio))
+    cap: int = max(
+        IAR_INCREMENTAL_MIN_CAP,
+        int(-(-base_cap * ratio // 1)),
+        prior_critical,
+    )
+    turns: int = max(IAR_INCREMENTAL_MIN_TURNS, int(-(-base_turns * ratio // 1)))
+    return min(cap, max(base_cap, IAR_INCREMENTAL_MIN_CAP)), min(turns, max(base_turns, IAR_INCREMENTAL_MIN_TURNS))
+
+
+@dataclass(frozen=True)
 class IARPreLLMContext:
     """Bundle returned by `run_iar_pre_llm()`. Carries everything the
     caller needs to (a) shape the LLM call and (b) hand back to
@@ -5318,6 +5616,13 @@ class IARPreLLMContext:
     new_lines_pct: float
     pr_labels: list[str]
     pre_policy_result: PolicyResult
+    # Incremental mode (v2.1.0+). Defaults keep every existing caller on
+    # the full-review path.
+    mode: str = IAR_MODE_FULL
+    mode_reason: str = ""
+    delta: IncrementalDelta | None = None
+    prior_findings: tuple[PriorFinding, ...] = ()
+    effective_max_turns: int = 0  # 0 = leave the caller's max_turns as is
 
 
 def _resolve_base_sha(*, base_ref: str, repo_root: str | None = None) -> str:
@@ -5515,11 +5820,153 @@ def compute_reviewed_label_applied(
     return label_stamped or label_currently_on_pr or prior_bit
 
 
+@dataclass
+class PriorFindingReconciliation:
+    """Outcome of `reconcile_prior_findings` (incremental mode)."""
+
+    resolved: list[PriorFinding] = field(default_factory=list)
+    still_open: list[PriorFinding] = field(default_factory=list)
+    regressed: list[PriorFinding] = field(default_factory=list)
+    unverified: list[PriorFinding] = field(default_factory=list)  # claimed resolved, not verified
+
+
+def reconcile_prior_findings(
+    *,
+    prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
+    updates: dict[str, tuple[str, str]],
+    current_fingerprints: set[str],
+    delta: IncrementalDelta | None,
+    workspace: Path | None = None,
+) -> PriorFindingReconciliation:
+    """Runtime-verified resolution (docs/ITERATION_AWARENESS.md § 14).
+
+    A prior finding counts as `resolved` only when the model said so AND
+    its fingerprint is absent from this round AND its file changed since
+    the last reviewed head (or no longer exists). A `resolved` claim that
+    fails verification stays open and is listed as `unverified`. `regressed`
+    is model-asserted (the regression itself is re-reported as a finding).
+    No verdict → still open.
+    """
+    changed: set[str] = set(delta.changed_files) if delta is not None else set()
+    root: Path = workspace if workspace is not None else Path.cwd()
+    out = PriorFindingReconciliation()
+    for pf in prior_findings:
+        status, _note = updates.get(pf.fingerprint, ("", ""))
+        if status == PRIOR_FINDING_STATUS_REGRESSED:
+            out.regressed.append(pf)
+            continue
+        if status == PRIOR_FINDING_STATUS_RESOLVED:
+            file_changed: bool = pf.path in changed
+            file_gone: bool = bool(pf.path) and not (root / pf.path).exists()
+            if pf.fingerprint not in current_fingerprints and (file_changed or file_gone):
+                out.resolved.append(pf)
+                continue
+            out.unverified.append(pf)
+        out.still_open.append(pf)
+    return out
+
+
+def gh_resolve_review_thread(*, token: str, thread_id: str) -> bool:
+    """Best-effort GraphQL `resolveReviewThread`. Returns True on success."""
+    if not thread_id:
+        return False
+    mutation: str = (
+        "mutation($id:ID!) {"
+        "  resolveReviewThread(input:{threadId:$id}) { thread { isResolved } }"
+        "}"
+    )
+    try:
+        data: Any = gh_graphql(mutation, {"id": thread_id}, token=token)
+    except Exception as e:  # noqa: BLE001 — best-effort GH API call
+        log(f"IAR: could not resolve thread {thread_id}: {e}")
+        return False
+    return bool(
+        (((data or {}).get("resolveReviewThread") or {}).get("thread") or {}).get(
+            "isResolved"
+        )
+    )
+
+
+def gh_reply_to_review_comment(
+    *, token: str, repo: str, pr_number: int, comment_database_id: int, body: str
+) -> bool:
+    """Best-effort REST reply on a review-comment thread."""
+    if comment_database_id <= 0 or "/" not in repo:
+        return False
+    owner, name = repo.split("/", 1)
+    try:
+        gh_request(
+            "POST",
+            f"/repos/{owner}/{name}/pulls/{pr_number}/comments/"
+            f"{comment_database_id}/replies",
+            token=token,
+            body={"body": body},
+        )
+    except Exception as e:  # noqa: BLE001 — best-effort GH API call
+        log(f"IAR: could not reply on comment {comment_database_id}: {e}")
+        return False
+    return True
+
+
+def close_resolved_prior_findings(
+    *,
+    token: str,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    reconciliation: PriorFindingReconciliation,
+) -> int:
+    """Reply + resolve every verified-resolved prior thread. Returns the
+    number of threads resolved. Never raises."""
+    resolved_count: int = 0
+    reply: str = (
+        f"✅ Resolved in `{head_sha[:7]}` — verified by the reviewer: the file "
+        "changed since the previous review and the finding was not reported again."
+    )
+    for pf in reconciliation.resolved:
+        gh_reply_to_review_comment(
+            token=token,
+            repo=repo,
+            pr_number=pr_number,
+            comment_database_id=pf.comment_database_id,
+            body=reply,
+        )
+        if gh_resolve_review_thread(token=token, thread_id=pf.thread_id):
+            resolved_count += 1
+    if reconciliation.resolved:
+        log(
+            f"IAR: resolved {resolved_count}/{len(reconciliation.resolved)} "
+            "prior finding thread(s)."
+        )
+    return resolved_count
+
+
+def render_incremental_footer(
+    *,
+    delta: IncrementalDelta,
+    reconciliation: PriorFindingReconciliation,
+    new_findings: int,
+) -> str:
+    """One-line summary footer for incremental rounds."""
+    unverified_note: str = (
+        f" · {len(reconciliation.unverified)} claimed resolved but unverified"
+        if reconciliation.unverified
+        else ""
+    )
+    return (
+        f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
+        f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
+        f"still open {len(reconciliation.still_open)} · regressed "
+        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}._"
+    )
+
+
 def _render_iar_marker_annotation(
     *,
     state: IterationState,
     policy_result: PolicyResult,
     transition: GenerationTransition,
+    mode: str = IAR_MODE_FULL,
 ) -> str:
     """Short human-readable line appended to the tracking marker body so a
     developer glancing at the comment sees the iteration status without
@@ -5546,7 +5993,9 @@ def _render_iar_marker_annotation(
         f"\n\n_Iteration-Aware Review: gen {state.generation}, "
         f"round {state.round_in_generation}, "
         f"policy=`{policy_result.policy_applied}` "
-        f"({transition.value}) — {surfaced} surfaced{detail}._"
+        f"({transition.value}"
+        + (", mode=incremental" if mode == IAR_MODE_INCREMENTAL else "")
+        + f") — {surfaced} surfaced{detail}._"
         f"{critical_note}"
     )
 
@@ -5603,6 +6052,7 @@ def run_iar_pre_llm(
     applied_label: str = "",
     provider_id: str = "",
     bot_login: str = "",
+    max_turns: int = 0,
 ) -> IARPreLLMContext:
     """Prepare IAR context BEFORE the LLM call.
 
@@ -5718,6 +6168,54 @@ def run_iar_pre_llm(
         new_lines_pct=new_lines_pct,
         pr_labels=pr_labels,
     )
+    # ---- Incremental mode selection (v2.1.0+) ----
+    prior_findings: list[PriorFinding] = []
+    delta: IncrementalDelta | None = None
+    if prior_state is not None and transition not in (
+        GenerationTransition.FIRST_REVIEW,
+        GenerationTransition.USER_FORCED_RESET,
+    ):
+        prior_findings = fetch_prior_findings(
+            token=gh_token,
+            repo=repo,
+            pr_number=pr_number,
+            bot_login=bot_login,
+            provider_marker_text=provider_marker(provider_id) if provider_id else "",
+        )
+        delta = compute_incremental_delta(
+            prior_head_sha=prior_state.head_sha,
+            head_sha=head_sha,
+            new_lines_pct=new_lines_pct,
+        )
+    mode, mode_reason = select_iar_mode(
+        prior_state=prior_state,
+        transition=transition,
+        pre_policy_result=pre_policy_result,
+        prior_findings=prior_findings,
+        delta=delta,
+    )
+    effective_max_turns: int = 0
+    if mode == IAR_MODE_INCREMENTAL and delta is not None:
+        prior_critical: int = sum(
+            1 for pf in prior_findings if pf.severity == SEVERITY_CRITICAL
+        )
+        cap, turns = scale_incremental_budget(
+            base_cap=base_max_inline_comments,
+            base_turns=max_turns,
+            delta_ratio=delta.delta_ratio,
+            prior_critical=prior_critical,
+        )
+        effective_max_turns = turns if max_turns else 0
+        # Replace the exhaustive addendum (if any) with the incremental one
+        # and the cap with the delta-scaled one; the policy label is kept
+        # so dedup semantics downstream are unchanged.
+        pre_policy_result = PolicyResult(
+            findings_to_surface=[],
+            findings_silenced=[],
+            effective_max_inline_comments=cap,
+            prompt_addendum=IAR_INCREMENTAL_PROMPT_ADDENDUM,
+            policy_applied=pre_policy_result.policy_applied,
+        )
     log(
         f"IAR pre-LLM: transition={transition.value}, "
         f"gen={prior_state.generation if prior_state else 0}, "
@@ -5726,7 +6224,10 @@ def run_iar_pre_llm(
         f"effective_cap={pre_policy_result.effective_max_inline_comments} "
         f"(base={base_max_inline_comments}), "
         f"prompt_addendum={'yes' if pre_policy_result.prompt_addendum else 'no'}, "
-        f"new_lines_pct={new_lines_pct:.1f}%."
+        f"new_lines_pct={new_lines_pct:.1f}%, "
+        f"mode={mode} ({mode_reason})"
+        + (f", effective_max_turns={effective_max_turns}" if effective_max_turns else "")
+        + "."
     )
     return IARPreLLMContext(
         prior_state=prior_state,
@@ -5737,6 +6238,11 @@ def run_iar_pre_llm(
         new_lines_pct=new_lines_pct,
         pr_labels=pr_labels,
         pre_policy_result=pre_policy_result,
+        mode=mode,
+        mode_reason=mode_reason,
+        delta=delta,
+        prior_findings=tuple(prior_findings),
+        effective_max_turns=effective_max_turns,
     )
 
 
@@ -5747,9 +6253,16 @@ def run_iar_post_llm(
     result: ReviewResult,
     base_max_inline_comments: int,
     telemetry: RunTelemetry,
+    surface_cap: int = 0,
 ) -> tuple[IterationState, PolicyResult]:
     """Apply IAR filtering AFTER the LLM call and return the state to
     embed + the surfacing decision.
+
+    `surface_cap` (v2.1.0+, agent-runner path): the effective inline cap
+    is enforced HERE, after fingerprinting, so overflow findings are still
+    recorded as open (docs/ITERATION_AWARENESS.md § 13.1) instead of
+    silently dropped before IAR sees them. `0` = no cap (chat-completions
+    enforces the cap in the tool handler).
 
     Side effects:
     - Mutates `result.findings` in place to the surfaced subset.
@@ -5779,7 +6292,17 @@ def run_iar_post_llm(
         pr_labels=pre_context.pr_labels,
     )
     original_finding_count: int = len(result.findings)
-    result.findings = list(policy_result.findings_to_surface)
+    surfaced: list[Finding] = list(policy_result.findings_to_surface)
+    overflow: list[Finding] = []
+    if surface_cap > 0 and len(surfaced) > surface_cap:
+        prioritized: list[Finding] = _sort_findings_criticals_first(surfaced)
+        surfaced, overflow = prioritized[:surface_cap], prioritized[surface_cap:]
+        log(
+            f"IAR post-LLM: capped {len(prioritized)} surfaced findings to "
+            f"{surface_cap} (criticals first); {len(overflow)} overflow "
+            "finding(s) recorded as open for dedup."
+        )
+    result.findings = surfaced
     # Recompute severity when the filter dropped findings — the strictness
     # gate downstream reads `overall_severity`, so a silenced warning
     # would otherwise still block the check.
@@ -5792,6 +6315,10 @@ def run_iar_post_llm(
     # survive an escape-label run so the next normal run resumes the
     # dedup timeline as if the escape never happened.
     if policy_result.policy_applied == IAR_POLICY_ESCAPE_LABEL_FORCED:
+        for finding in result.findings:
+            finding.fingerprint = finding_fingerprint(
+                finding=finding, code_context=code_contexts.get(finding.path)
+            )
         log(
             "IAR post-LLM: escape-label run — persisted state unchanged. "
             f"Surfaced {len(policy_result.findings_to_surface)} "
@@ -5829,14 +6356,19 @@ def run_iar_post_llm(
     # ORIGINAL LLM findings (surfaced + silenced) — a silenced finding
     # is still "open in reality"; only findings the LLM stopped producing
     # count as resolved.
-    all_original_findings: list[Finding] = list(
-        policy_result.findings_to_surface
-    ) + [sf.finding for sf in policy_result.findings_silenced]
+    all_original_findings: list[Finding] = (
+        list(surfaced)
+        + list(overflow)
+        + [sf.finding for sf in policy_result.findings_silenced]
+    )
     current_fps: dict[int, str] = {}
     for i, finding in enumerate(all_original_findings):
         current_fps[i] = finding_fingerprint(
             finding=finding, code_context=code_contexts.get(finding.path)
         )
+        # Stamp surfaced findings so their inline comments carry the hidden
+        # marker the next round matches against (incremental mode).
+        finding.fingerprint = current_fps[i]
     current_fp_set: set[str] = set(current_fps.values())
     next_open: list[str] = sorted(current_fp_set)
     # `newly_resolved` = prior open that are no longer in the current run.
@@ -5917,6 +6449,11 @@ class PRContext:
     diff: str = ""
     # (path, line_count) for diff sections removed by `shape_diff`.
     omitted_files: list[tuple[str, int]] = field(default_factory=list)
+    # Incremental mode (v2.1.0+): the IAR pre-LLM context, when the run is
+    # a follow-up review. `render_user_prompt` reads it when its own
+    # `incremental` argument is None, so agent-runner providers need no
+    # signature change.
+    incremental: "IARPreLLMContext | None" = None
 
 
 def parse_ignore_paths(raw: str) -> tuple[str, ...]:
@@ -6029,6 +6566,109 @@ def shape_diff(
     return "".join(kept), omitted
 
 
+def filter_diff_to_paths(diff_text: str, paths: set[str]) -> str:
+    """Keep only the `diff --git` sections whose post-image path is in
+    `paths` (incremental mode: the files that changed since the last
+    reviewed head). Text before the first header is dropped."""
+    if not diff_text or not paths:
+        return ""
+    kept: list[str] = []
+    section: list[str] = []
+    section_path: str | None = None
+
+    def flush() -> None:
+        if section and section_path is not None and section_path in paths:
+            kept.extend(section)
+
+    for line in diff_text.splitlines(keepends=True):
+        if line.startswith(DIFF_SECTION_HEADER_PREFIX):
+            flush()
+            section = [line]
+            section_path = _diff_section_path(line.rstrip("\n"))
+        else:
+            section.append(line)
+    flush()
+    return "".join(kept)
+
+
+def render_prior_findings_block(
+    prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
+    *,
+    changed_files: set[str],
+) -> str:
+    """The `## Your prior findings still open` table (criticals first,
+    capped at `PRIOR_FINDINGS_MAX_LISTED`)."""
+    if not prior_findings:
+        return ""
+    ordered: list[PriorFinding] = sorted(
+        prior_findings,
+        key=lambda pf: (-SEVERITY_RANK.get(pf.severity, 0), pf.path, pf.line),
+    )
+    rows: list[str] = [
+        "| # | fingerprint | severity | location | summary | file changed since? |",
+        "|---|---|---|---|---|---|",
+    ]
+    for index, pf in enumerate(ordered[:PRIOR_FINDINGS_MAX_LISTED], start=1):
+        changed: str = "yes" if pf.path in changed_files else "no"
+        summary: str = pf.body_excerpt.replace("|", "\\|")[:120]
+        rows.append(
+            f"| {index} | `{pf.fingerprint}` | {pf.severity} | "
+            f"`{pf.path}:{pf.line}` | {summary} | {changed} |"
+        )
+    more: int = len(ordered) - PRIOR_FINDINGS_MAX_LISTED
+    tail: str = f"\n\n… and {more} more (listed on the PR threads)." if more > 0 else ""
+    return (
+        f"{PRIOR_FINDINGS_HEADING} ({len(ordered)})\n\n"
+        "For EACH row decide `resolved` (the new commits fixed it), `open` "
+        "(still present) or `regressed` (worse now), citing the fingerprint. "
+        "Do not re-post an open one as a new finding. Prior `critical` rows "
+        "come first and must be addressed.\n\n"
+        + "\n".join(rows)
+        + tail
+        + "\n\n"
+    )
+
+
+def render_incremental_sections(
+    ctx: "PRContext", pre: "IARPreLLMContext"
+) -> str:
+    """Replacement for the `## Full Diff` section in incremental mode:
+    delta hunks in full, other PR files as one-liners, prior findings."""
+    delta: IncrementalDelta | None = pre.delta
+    assert delta is not None  # callers check pre.mode first
+    changed: set[str] = set(delta.changed_files)
+    delta_diff: str = filter_diff_to_paths(ctx.diff, changed)
+    if len(delta_diff) > MAX_DIFF_CHARS:
+        delta_diff = (
+            delta_diff[:MAX_DIFF_CHARS]
+            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters]"
+        )
+    unchanged_lines: list[str] = [
+        f"- {f['path']} ({f['status']}) +{f['additions']}/-{f['deletions']}"
+        for f in ctx.changed_files
+        if f.get("path") not in changed and not f.get("omitted")
+    ]
+    heading_range: str = f"({delta.prior_head_sha[:7]} → {delta.head_sha[:7]})"
+    out: list[str] = [
+        f"{IAR_INCREMENTAL_DIFF_HEADING} {heading_range}\n\n"
+        + (
+            f"```diff\n{delta_diff}\n```\n\n"
+            if delta_diff.strip()
+            else "_No code changes since your last review — only verify the prior findings below._\n\n"
+        )
+    ]
+    if unchanged_lines:
+        out.append(
+            f"{IAR_UNCHANGED_FILES_HEADING}\n\n"
+            "Not shown again; read them with your file tools only if a prior "
+            "finding or a new hunk depends on them.\n\n"
+            + "\n".join(unchanged_lines)
+            + "\n\n"
+        )
+    out.append(render_prior_findings_block(pre.prior_findings, changed_files=changed))
+    return "".join(out)
+
+
 def fetch_pr_context(
     *,
     repo: str,
@@ -6122,8 +6762,18 @@ def fetch_pr_context(
     )
 
 
-def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str:
+def render_user_prompt(
+    ctx: PRContext,
+    *,
+    for_agent_runner: bool = False,
+    incremental: "IARPreLLMContext | None" = None,
+) -> str:
     """Produce the first user message — PR metadata + diff.
+
+    In incremental mode (`incremental.mode == IAR_MODE_INCREMENTAL`) the
+    `## Full Diff` section is replaced by the delta since the last reviewed
+    head, one-line summaries of the other files, and the prior-findings
+    table (`render_incremental_sections`).
 
     The closing paragraph differs by provider family:
       - Chat-completions (`for_agent_runner=False`): references the built-in
@@ -6180,6 +6830,17 @@ def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str
             "`submit_review` exactly once with the summary markdown — that "
             "signals the end of the session and posts the review."
         )
+    if incremental is None:
+        incremental = ctx.incremental
+    diff_section: str
+    if (
+        incremental is not None
+        and incremental.mode == IAR_MODE_INCREMENTAL
+        and incremental.delta is not None
+    ):
+        diff_section = render_incremental_sections(ctx, incremental)
+    else:
+        diff_section = f"## Full Diff\n\n```diff\n{ctx.diff}\n```\n\n"
     return (
         f"# PR Context\n\n"
         f"**Title:** {ctx.title}\n"
@@ -6189,7 +6850,7 @@ def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str
         f"{len(ctx.changed_files)} files in {ctx.commits} commit(s)\n\n"
         f"## Description\n\n{body_block}\n\n"
         f"## Changed Files\n\n{files_block or '(none)'}\n\n"
-        f"## Full Diff\n\n```diff\n{ctx.diff}\n```\n\n"
+        + diff_section
         + omitted_block
         + "---\n\n"
         + closing
@@ -6206,6 +6867,7 @@ def tools_schema(
     *,
     allow_set_pr_description: bool = False,
     allow_set_pr_complexity: bool = False,
+    allow_update_prior_finding: bool = False,
 ) -> list[dict[str, Any]]:
     """JSONSchema for every tool the model can call.
 
@@ -6429,6 +7091,41 @@ def tools_schema(
                 },
             }
         )
+    if allow_update_prior_finding:
+        base.append(
+            {
+                "name": "update_prior_finding",
+                "description": (
+                    "Incremental follow-up mode only. Record your verdict on "
+                    "ONE prior finding from the `Your prior findings still "
+                    "open` table: `resolved` (the new commits fixed it), "
+                    "`open` (still present — do NOT re-post it as a new "
+                    "comment) or `regressed` (worse now). Call once per row, "
+                    "citing the fingerprint verbatim."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "fingerprint": {
+                            "type": "string",
+                            "description": "The fingerprint column of the row.",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": list(PRIOR_FINDING_STATUSES),
+                        },
+                        "note": {
+                            "type": "string",
+                            "description": (
+                                "One line of evidence (which hunk fixed it, "
+                                "or why it is still open)."
+                            ),
+                        },
+                    },
+                    "required": ["fingerprint", "status"],
+                },
+            }
+        )
     return base
 
 
@@ -6454,6 +7151,8 @@ class ReviewState:
     proposed_pr_complexity: str | None = None
     # Accumulated API usage across the chat-completions loop (v2.1.0+).
     usage: UsageTelemetry = field(default_factory=UsageTelemetry)
+    # Incremental mode: fingerprint → (status, note) from `update_prior_finding`.
+    prior_finding_updates: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 def safe_repo_path(rel: str) -> Path:
@@ -6643,6 +7342,22 @@ def tool_set_pr_complexity(
     )
 
 
+def tool_update_prior_finding(args: dict[str, Any], state: ReviewState) -> str:
+    """Record the model's verdict on one prior finding (incremental mode)."""
+    fingerprint: str = str(args.get("fingerprint") or "").strip()
+    status: str = str(args.get("status") or "").strip().lower()
+    note: str = str(args.get("note") or "").strip()[:300]
+    if not fingerprint:
+        return "Error: `fingerprint` is required (copy it from the prior-findings table)."
+    if status not in PRIOR_FINDING_STATUSES:
+        return (
+            f"Error: status {status!r} is not one of "
+            f"{', '.join(PRIOR_FINDING_STATUSES)}."
+        )
+    state.prior_finding_updates[fingerprint] = (status, note)
+    return f"Recorded prior finding {fingerprint} as {status}."
+
+
 def execute_tool(name: str, args: dict[str, Any], state: ReviewState) -> str:
     """Dispatch a tool call to its handler and return a tool_result string."""
     try:
@@ -6660,6 +7375,8 @@ def execute_tool(name: str, args: dict[str, Any], state: ReviewState) -> str:
             return tool_set_pr_description(args, state)
         if name == "set_pr_complexity":
             return tool_set_pr_complexity(args, state)
+        if name == "update_prior_finding":
+            return tool_update_prior_finding(args, state)
         return f"Error: unknown tool `{name}`"
     except Exception as e:  # noqa: BLE001 — surface to model rather than crash
         return f"Tool `{name}` raised {type(e).__name__}: {e}"
@@ -7404,6 +8121,7 @@ def state_to_review_result(state: "ReviewState") -> ReviewResult:
     severities: list[str] = [f.severity for f in findings]
     return ReviewResult(
         usage=state.usage if state.usage.turns else None,
+        prior_finding_updates=dict(state.prior_finding_updates),
         summary=state.final_summary or "",
         findings=findings,
         overall_severity=overall_severity(severities),
@@ -7634,6 +8352,27 @@ def parse_findings_file(
             )
         )
 
+    # Incremental mode (v2.1.0+): optional `prior_findings` verdicts.
+    prior_updates: dict[str, tuple[str, str]] = {}
+    raw_prior: Any = raw.get("prior_findings")
+    if isinstance(raw_prior, list):
+        for entry in raw_prior:
+            if not isinstance(entry, dict):
+                continue
+            pf_fingerprint: str = str(entry.get("fingerprint") or "").strip()
+            pf_status: str = str(entry.get("status") or "").strip().lower()
+            if not pf_fingerprint or pf_status not in PRIOR_FINDING_STATUSES:
+                log(
+                    "findings.json: ignoring prior_findings entry with "
+                    f"fingerprint={pf_fingerprint!r} status={pf_status!r}."
+                )
+                continue
+            prior_updates[pf_fingerprint] = (
+                pf_status,
+                str(entry.get("note") or "")[:300],
+            )
+    elif raw_prior is not None:
+        log("findings.json: `prior_findings` must be a list — ignored.")
     severities: list[str] = [f.severity for f in findings]
     complexity_level: str | None = parse_complexity_level(raw.get("complexity"))
     if raw.get("complexity") is not None and complexity_level is None:
@@ -7643,6 +8382,7 @@ def parse_findings_file(
             "ignoring."
         )
     return ReviewResult(
+        prior_finding_updates=prior_updates,
         summary=summary,
         findings=findings,
         overall_severity=overall_severity(severities),
@@ -7655,6 +8395,7 @@ def write_findings_prompt_directive(
     findings_path: Path,
     *,
     require_complexity: bool = False,
+    prior_findings_expected: bool = False,
 ) -> str:
     """Append the "write your findings to this file" directive to the
     review instructions handed to an agent-runner CLI.
@@ -7703,6 +8444,14 @@ def write_findings_prompt_directive(
         + "    }\n"
         + "  ]"
         + complexity_schema
+        + (
+            ',\n  "prior_findings": [\n'
+            '    {"fingerprint": "<from the prior-findings table>", '
+            '"status": "resolved | open | regressed", "note": "one line of evidence"}\n'
+            "  ]\n"
+            if prior_findings_expected
+            else ""
+        )
         + "}\n"
         + "```\n\n"
         + "Rules:\n"
@@ -7720,7 +8469,51 @@ def write_findings_prompt_directive(
         + "JSON when the content contains Markdown, quotes, or code blocks; "
         + "use a JSON serializer so strings are escaped correctly."
         + complexity_rule
+        + (
+            "\n- `prior_findings` is **required** for this run: one entry per "
+            "row of the `Your prior findings still open` table, with the "
+            "fingerprint copied verbatim. Do not re-post an `open` prior "
+            "finding inside `findings`."
+            if prior_findings_expected
+            else ""
+        )
     )
+
+
+def pr_context_is_incremental(ctx: "PRContext") -> bool:
+    """True when the run is an incremental follow-up review."""
+    pre: Any = getattr(ctx, "incremental", None)
+    return bool(
+        pre is not None and pre.mode == IAR_MODE_INCREMENTAL and pre.delta is not None
+    )
+
+
+def render_inline_finding_marker(fingerprint: str | None, severity: str) -> str:
+    """The hidden per-comment marker: `<!-- ai-pr-reviewer-finding: fp=… sev=… -->`."""
+    if not fingerprint:
+        return ""
+    return (
+        f"\n\n{INLINE_FINDING_MARKER_PREFIX} fp={fingerprint} "
+        f"sev={severity}{INLINE_FINDING_MARKER_CLOSE}"
+    )
+
+
+def parse_inline_finding_marker(body: str) -> tuple[str, str] | None:
+    """Extract `(fingerprint, severity)` from an inline comment body, or
+    None when the comment predates the marker."""
+    if not body or INLINE_FINDING_MARKER_PREFIX not in body:
+        return None
+    match = re.search(
+        re.escape(INLINE_FINDING_MARKER_PREFIX)
+        + r"\s*fp=([0-9a-f]{8,64})\s+sev=([a-z]+)\s*-->",
+        body,
+    )
+    if not match:
+        return None
+    severity: str = match.group(2)
+    if severity not in ALLOWED_SEVERITIES:
+        severity = SEVERITY_INFO
+    return match.group(1), severity
 
 
 def findings_to_gh_inline_comments(
@@ -7736,7 +8529,11 @@ def findings_to_gh_inline_comments(
     for f in findings:
         comment: dict[str, Any] = {
             "path": f.path,
-            "body": f.body,
+            "body": (
+                f.body + render_inline_finding_marker(f.fingerprint, f.severity)
+                if f.fingerprint
+                else f.body
+            ),
             "line": f.line,
             "side": f.side or "RIGHT",
         }
@@ -8565,10 +9362,13 @@ def main() -> int:
             applied_label=applied_label,
             provider_id=provider_id,
             bot_login=bot_login,
+            max_turns=max_turns,
         )
         effective_max_inline_comments = (
             iar_pre_context.pre_policy_result.effective_max_inline_comments
         )
+        if iar_pre_context.effective_max_turns:
+            max_turns = iar_pre_context.effective_max_turns
         iar_effective_cap = effective_max_inline_comments
         if iar_pre_context.pre_policy_result.prompt_addendum:
             system_prompt = compose_system_prompt(
@@ -8609,6 +9409,14 @@ def main() -> int:
             f"PR loaded: +{pr_ctx.additions}/-{pr_ctx.deletions} across "
             f"{len(pr_ctx.changed_files)} files"
         )
+        # Incremental follow-up (v2.1.0+): hand the pre-LLM context to the
+        # prompt renderer (agent-runners render inside their providers).
+        if iar_pre_context is not None and iar_pre_context.mode == IAR_MODE_INCREMENTAL:
+            pr_ctx.incremental = iar_pre_context
+            log(
+                f"IAR: incremental mode — {iar_pre_context.mode_reason}; "
+                f"cap={effective_max_inline_comments}, max_turns={max_turns}."
+            )
 
         # PR description verdict (only computed when the mode is not `off`,
         # to keep the log clean when the feature is disabled).
@@ -8653,36 +9461,11 @@ def main() -> int:
                 output_dir=workspace,
                 require_complexity_in_findings=complexity_labels_enabled,
             )
-            # Enforce max_inline_comments on the agent-runner path too. The
-            # tool handler enforces this for chat-completions providers; the
-            # cap is a documented safety control (docs/SECURITY.md) that
-            # applies to every provider family. On round 1 of a new
-            # generation under `first-pass-exhaustive` (or when the 30%
-            # safety net fires), IAR raises the effective cap via
-            # `exhaustive-first-pass-cap-multiplier` so the LLM can
-            # surface a more complete initial pass; subsequent rounds
-            # converge back to the baseline cap.
-            if len(result.findings) > effective_max_inline_comments:
-                dropped: int = (
-                    len(result.findings) - effective_max_inline_comments
-                )
-                log(
-                    f"Agent-runner provider produced {len(result.findings)} "
-                    f"findings; capping to effective-max-inline-comments="
-                    f"{effective_max_inline_comments} ({dropped} dropped)"
-                )
-                # Criticals-first before truncation — same load-bearing
-                # invariant as apply_first_pass_exhaustive_policy round 1:
-                # never let a naive `[:cap]` silently drop a critical
-                # finding past the cap. See docs/ITERATION_AWARENESS.md
-                # § 7.1 (critical-always-surfaces safety rail).
-                result.findings = _sort_findings_criticals_first(
-                    result.findings
-                )[:effective_max_inline_comments]
-                # Recompute overall_severity — dropping the tail may lower it.
-                result.overall_severity = overall_severity(
-                    [f.severity for f in result.findings]
-                )
+            # The inline cap for the agent-runner path is enforced in
+            # `run_iar_post_llm` AFTER fingerprinting (single path; overflow
+            # findings stay known to IAR — docs/ITERATION_AWARENESS.md
+            # § 13.1). If the IAR pipeline is unavailable this run, the
+            # fallback further down caps here instead.
         else:
             # Chat-completions path: this action owns the tool-use loop.
             messages: list[dict[str, Any]] = [
@@ -8705,6 +9488,7 @@ def main() -> int:
                     and PR_DESC_AUTOCOMPLETE_MARKER not in (pr_ctx.body or "")
                 ),
                 allow_set_pr_complexity=complexity_labels_enabled,
+                allow_update_prior_finding=pr_context_is_incremental(pr_ctx),
             )
 
             drive_review(
@@ -8764,6 +9548,18 @@ def main() -> int:
     # stash the new state + policy result for marker embedding + output
     # writing further down.
     # ------------------------------------------------------------------
+    if (
+        iar_pre_context is None
+        and isinstance(provider, AgentRunnerProvider)
+        and len(result.findings) > effective_max_inline_comments
+    ):
+        # IAR unavailable this run — keep the documented safety control.
+        result.findings = _sort_findings_criticals_first(result.findings)[
+            :effective_max_inline_comments
+        ]
+        result.overall_severity = overall_severity(
+            [f.severity for f in result.findings]
+        )
     if iar_pre_context is not None:
         try:
             iar_state_final, iar_policy_final = run_iar_post_llm(
@@ -8772,6 +9568,11 @@ def main() -> int:
                 result=result,
                 base_max_inline_comments=max_inline_comments,
                 telemetry=iar_telemetry,
+                surface_cap=(
+                    effective_max_inline_comments
+                    if isinstance(provider, AgentRunnerProvider)
+                    else 0
+                ),
             )
         except Exception as exc:  # noqa: BLE001 — best-effort IAR wrap
             log(
@@ -8781,6 +9582,48 @@ def main() -> int:
             )
             iar_state_final = None
             iar_policy_final = None
+
+    # ------------------------------------------------------------------
+    # Incremental mode: verify the model's verdicts on prior findings,
+    # resolve fixed threads (best-effort) and append the footer.
+    # ------------------------------------------------------------------
+    if (
+        iar_pre_context is not None
+        and iar_pre_context.mode == IAR_MODE_INCREMENTAL
+        and iar_pre_context.delta is not None
+    ):
+        try:
+            current_fps: set[str] = set(
+                iar_state_final.open_fingerprints_this_gen
+                if iar_state_final is not None
+                else [f.fingerprint for f in result.findings if f.fingerprint]
+            )
+            reconciliation: PriorFindingReconciliation = reconcile_prior_findings(
+                prior_findings=iar_pre_context.prior_findings,
+                updates=result.prior_finding_updates,
+                current_fingerprints=current_fps,
+                delta=iar_pre_context.delta,
+            )
+            close_resolved_prior_findings(
+                token=gh_token,
+                repo=repo,
+                pr_number=pr_number,
+                head_sha=head_sha,
+                reconciliation=reconciliation,
+            )
+            result.summary = (result.summary or "").rstrip() + render_incremental_footer(
+                delta=iar_pre_context.delta,
+                reconciliation=reconciliation,
+                new_findings=len(result.findings),
+            )
+            log(
+                f"IAR incremental: resolved={len(reconciliation.resolved)} "
+                f"open={len(reconciliation.still_open)} "
+                f"regressed={len(reconciliation.regressed)} "
+                f"unverified={len(reconciliation.unverified)} new={len(result.findings)}"
+            )
+        except Exception as exc:  # noqa: BLE001 — never block the review on bookkeeping
+            log(f"IAR incremental reconciliation failed (non-fatal): {exc}")
 
     # ------------------------------------------------------------------
     # Post the review (with 422 fallback)
@@ -9027,6 +9870,7 @@ def main() -> int:
             state=iar_state_final,
             policy_result=iar_policy_final,
             transition=iar_pre_context.transition,
+            mode=iar_pre_context.mode,
         )
         tracking_body = embed_iteration_state(tracking_body, iar_state_final)
     gh_update_issue_comment(

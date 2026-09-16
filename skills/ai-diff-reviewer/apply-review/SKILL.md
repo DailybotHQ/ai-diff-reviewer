@@ -468,12 +468,24 @@ Never fabricate findings when the review is missing or stale.
 
 ### 2e. Extract per-finding severity
 
-GitHub inline review comments carry `body` only —
-`findings_to_gh_inline_comments()` in `scripts/reviewer.py` does
-**not** prefix severity into the comment body, so severity is **not**
-recoverable from the inline comment itself. The authoritative
-per-finding severity lives in the **review summary body's findings
-table**:
+**Since v2.1.0** every inline comment body ends with a hidden, stable
+marker:
+
+```
+<!-- ai-pr-reviewer-finding: fp=<16-hex fingerprint> sev=<critical|warning|info> -->
+```
+
+Prefer `sev=` from that marker when present — it is per-comment and
+exact. **Strip the whole `<!-- ai-pr-reviewer-finding: … -->` marker
+before presenting the body verbatim** (Step 4), and keep the `fp=`
+value in your working notes: it is the same fingerprint the CI runtime
+uses to de-duplicate and, in incremental follow-up rounds, to verify
+and resolve fixed threads — so a thread that is already resolved on
+GitHub is one the reviewer confirmed fixed.
+
+For reviews posted **before v2.1.0** the inline comment carries `body`
+only — `findings_to_gh_inline_comments()` did not encode severity —
+so fall back to the **review summary body's findings table**:
 
 ```markdown
 ### 2. Findings table
@@ -626,7 +638,8 @@ when present, otherwise inferred from the highest-severity finding.>
 
 ### 1. `src/auth.ts:55` — 🚨 critical
 <the finding body verbatim from the inline comment, including any
-```suggestion block```>
+```suggestion block```, with the trailing
+`<!-- ai-pr-reviewer-finding: … -->` marker removed>
 
 ### 2. `src/cache.ts:120` — ⚠️ warning
 <...>

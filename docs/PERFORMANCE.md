@@ -46,6 +46,7 @@ Agent-runner providers don't hit this section — they own their own loop intern
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
 - Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed diff (capped at `MAX_DIFF_CHARS = 200 000` chars — see below).
+- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, and both the inline cap and `max-turns` scale with the delta (floors: 3 comments, 6 turns). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14`.
 - Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
 

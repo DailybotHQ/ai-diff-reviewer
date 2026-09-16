@@ -487,6 +487,14 @@ recommended profile. Critical severity findings ALWAYS surface
 unconditionally — a hardcoded safety rail that no policy can bypass.
 Full spec: [docs/ITERATION_AWARENESS.md](../../../docs/ITERATION_AWARENESS.md).
 
+**Incremental follow-up mode (v2.1.0+, no input needed):** on rounds 2+
+with a trusted delta (the previously reviewed head is an ancestor of
+HEAD) the model sees only the changed hunks plus its own still-open
+findings, must classify each as resolved / open / regressed, and the
+runtime resolves verified-fixed threads on GitHub. The
+`iteration-escape-label` is the per-PR off switch (forces a full pass);
+rebases, force-pushes and the 30% safety net also force full mode.
+
 ### `convergence-policy`
 
 - **Default:** `first-pass-exhaustive`.

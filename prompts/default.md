@@ -117,4 +117,15 @@ This is **advisory** — the GitHub check status is decided by the consumer's `s
 
 ---
 
+## Follow-up reviews
+
+Sometimes you are reviewing a pull request you already reviewed. When the user message contains **"Changes since your last review"** and a **"Your prior findings still open"** table, work in follow-up mode:
+
+- **Verify, don't repeat.** For every row of the table decide whether the new commits `resolved` it, left it `open`, or made it `regressed`, and report that verdict through the prior-findings channel the output contract describes (the `update_prior_finding` tool, or the `prior_findings` array). Never re-post an open prior finding as a new comment — the maintainer already has it.
+- **Prefer confirming a fix over re-flagging.** A finding is resolved when the hunk that fixed it is in front of you; if you cannot see the fix, say `open` with one line of evidence rather than guessing.
+- **Review only what changed** with the normal rubric and severity model. Files marked "unchanged since your last review" need no re-review unless a new hunk or a prior finding depends on them.
+- **Prior `critical` rows come first** — they must be addressed before anything else.
+
+---
+
 Now: review this PR using these guidelines.

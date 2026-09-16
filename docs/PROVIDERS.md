@@ -203,6 +203,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 | `summary` | string | recommended | Markdown for the top-level review body. Empty string is legal (produces a default fallback summary). |
 | `complexity` | string | optional* | Exactly one of `low`, `medium`, `high` (case-insensitive). Drives `complexity-labels-enabled` when set. *Required in the output contract when the consumer enables complexity labeling. |
 | `findings` | array | required | May be empty (means "no issues"). |
+| `prior_findings` | array | optional* | Incremental follow-up mode (v2.1.0+): one `{"fingerprint", "status": "resolved\|open\|regressed", "note"}` per row of the *Your prior findings still open* table the prompt showed. *Required by the output contract when the run is a follow-up review; ignored otherwise. Unknown fingerprints and statuses are logged and dropped. |
 | `findings[].path` | string | required | Repo-relative file path. Must appear in the PR diff. |
 | `findings[].line` | integer | required | Line number (end line for multi-line). Must appear in the diff. |
 | `findings[].body` | string | required | Non-empty markdown body of the inline comment. |

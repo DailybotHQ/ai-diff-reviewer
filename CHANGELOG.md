@@ -119,6 +119,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iteration-tokens-used` output is real (no longer `"0"`). Cost is
   vendor-reported when available, otherwise an indicative estimate from
   the dated price table; never gate CI on it.
+- **Incremental follow-up reviews.** Rounds 2+ with a trusted delta (prior
+  reviewed head is an ancestor of HEAD, no escape/safety-net override, at
+  least one prior finding still open) send the model only the hunks that
+  changed since its last review, one-liners for the other files, and a
+  table of its own still-open findings read back from the PR threads. The
+  model classifies each prior finding (`update_prior_finding` tool /
+  `prior_findings` array) and the runtime **verifies** resolutions
+  (fingerprint absent **and** file changed) before replying on and
+  resolving the GitHub thread. Inline cap and `max-turns` scale with the
+  delta (floors 3 / 6; prior criticals never starve). Summary footer
+  `Since last review: resolved N · still open M · regressed K · new J`;
+  marker annotation `mode=incremental`. Every inline comment now carries
+  a stable hidden marker `<!-- ai-pr-reviewer-finding: fp=… sev=… -->`.
+  Full review remains the fallback on rebase / force-push, the escape
+  label, the 30 % safety net, or any error.
+- **§ 13.1 closed:** the agent-runner inline cap is enforced inside the
+  IAR post-LLM step after fingerprinting, so overflow findings are known
+  to dedup instead of re-surfacing as new.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

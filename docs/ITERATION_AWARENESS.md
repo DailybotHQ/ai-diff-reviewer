@@ -720,15 +720,9 @@ No schema version is ever removed. Marker state written by prior versions will a
 
 Documented edge cases and follow-up items that consumers should be aware of. None of these break the primary IAR contract (convergence + critical-always-surfaces + failure-fallback); they are quality-of-implementation gaps tracked for future work.
 
-### 13.1 Agent-runner overflow findings are not fingerprinted
+### 13.1 Agent-runner overflow findings — resolved (v2.1.0)
 
-The tool-call cap enforcement in the agent-runner code path (Claude Code / Cursor / Codex integrations) truncates any surplus findings the CLI emits above `effective-max-inline-comments` — after the criticals-first sort, so the safety rail still holds — BEFORE `run_iar_post_llm` fingerprints them. This means overflow findings do not enter `open_fingerprints_this_gen`, so if the next round's LLM re-emits the same findings the dedup engine cannot suppress them and they re-surface.
-
-**Failure mode:** an agent-runner provider emits 40 findings in round 1 (effective cap 30, so 10 dropped after criticals-first sort). Round 2 re-emits the same 40; the 30 previously surfaced are correctly deduped, but the 10 that were dropped surface as "new" findings — the very "infinite loop" symptom IAR is designed to prevent, scoped to the overflow tail.
-
-**Scope:** only bites when the agent-runner CLI overshoots the cap (typical LLM output stays under 30 findings, so the failure mode is a tail-risk edge case). Does not affect the chat-completions Provider path (Anthropic / OpenAI / Gemini) which fingerprints the full result set before the pipeline caps it.
-
-**Follow-up:** the clean fix is either (a) plumb `code_contexts` to the agent-runner truncation site so `finding_fingerprint` can produce merge-compatible hashes, or (b) move the cap enforcement into `run_iar_post_llm` so the pipeline is single-path. Either resolves the semantic mismatch of `code_context=None` fingerprints from the truncation site vs `code_context=<real>` fingerprints from the post-LLM stage.
+The inline cap for the agent-runner path is now enforced **inside `run_iar_post_llm`, after fingerprinting** (`surface_cap` argument): every finding the CLI emitted is fingerprinted and recorded in `open_fingerprints_this_gen`, then the surfaced list is truncated criticals-first. Overflow findings are therefore known to the dedup engine on the next round instead of re-surfacing as "new". If the IAR pipeline is unavailable for a run, `main()` falls back to the previous pre-IAR truncation so the documented safety control still holds.
 
 ### 13.2 Per-generation telemetry — token capture resolved (v2.1.0), history attribution still pending
 
@@ -771,3 +765,48 @@ Both paths deferred to a dedicated refactor PR that can be reviewed on its own w
 ## Change log
 
 - **v1 (2026-07-16):** initial spec authored during Task 1 of `PLAN_iteration_aware_review`. Post-launch corrections in the same day (three-dot generation range hash, five-condition USER_FORCED_RESET guard with three-signal `reviewed_label_applied` write logic + `label_fetch_ok` transient-failure guard, § 13 known-limitations catalogue) folded in during self-review dogfooding.
+
+---
+
+## 14. Incremental follow-up mode (v2.1.0+)
+
+Rounds 2+ no longer re-review the whole PR. When a prior review exists and the delta can be trusted, the run switches to **incremental mode**:
+
+### 14.1 When it engages
+
+All of the following must hold — otherwise the run is a **full** review (the reason is logged as `IAR pre-LLM: … mode=full (<reason>)`):
+
+- a prior IAR state exists and the transition is not `first_review` / `user_forced_reset`;
+- no policy override forced an exhaustive pass (`escape-label-forced-full-review`, `safety-net-forced-first-pass-exhaustive`);
+- the previously reviewed head is an **ancestor** of the current HEAD (`git merge-base --is-ancestor`) — a rebase, force-push or amend makes the delta untrustworthy;
+- at least one of the reviewer's own inline findings is still **open** on the PR.
+
+There is no input to enable it; the `iteration-escape-label` is the per-PR off switch (one full pass, state preserved).
+
+### 14.2 What the model receives
+
+The `## Full Diff` section is replaced by:
+
+1. `## Changes since your last review (<prior> → <head>)` — only the `diff --git` sections of files changed since the prior head (from the already-shaped PR diff);
+2. `## Other files changed in this PR (unchanged since your last review)` — one line per remaining file;
+3. `## Your prior findings still open (N)` — a table (criticals first, capped at 40) with the fingerprint, severity, location, a summary and whether the file changed since; read back from the PR's review threads (`fetch_prior_findings`: first comment authored by the bot, parent review carrying this provider's marker, inline marker present, thread not resolved).
+
+The system prompt gains the incremental addendum instead of the exhaustive one, and the bundled prompt's "Follow-up reviews" section tells the model to verify rather than repeat.
+
+### 14.3 The inline finding marker
+
+Every inline comment now ends with a hidden, **stable** marker: `<!-- ai-pr-reviewer-finding: fp=<fingerprint> sev=<severity> -->` (registered in `docs/STANDARDS.md`). It is how prior findings are matched back without growing the tracking-marker state. Comments posted before v2.1.0 have no marker and are skipped (logged).
+
+### 14.4 Verdicts and verified resolution
+
+The model reports one verdict per prior finding — `resolved`, `open` or `regressed` — through `update_prior_finding` (chat-completions tool, exposed only in incremental mode) or the `prior_findings` array in `.aiprr/findings.json` (agent-runners). The runtime then **verifies**: a finding is resolved only when the model said so **and** its fingerprint is absent from this round **and** its file changed since the prior head (or no longer exists). Verified threads get a reply (`✅ Resolved in <sha> — verified …`) and are resolved via GraphQL `resolveReviewThread`, best-effort. Claims that fail verification stay open and are counted as *unverified* in the footer. Regressions are model-asserted and re-reported as regular findings.
+
+The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J`, and the tracking marker annotation carries `mode=incremental`.
+
+### 14.5 Budget scaling
+
+`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)` and `max-turns = max(6, ceil(max-turns × delta ratio))`, both capped at the base values; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+
+### 14.6 Failure semantics
+
+Every failure path degrades to a **full** review, never to silence: unreadable threads, git errors, a non-ancestor prior head, or a crash inside the incremental reconciliation (logged as non-fatal — the review still posts). The dedup engine, the 30 % safety net, the escape label and the critical-always-surfaces rail are unchanged.
