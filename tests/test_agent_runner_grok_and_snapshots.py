@@ -169,7 +169,8 @@ class DefaultProfileBackCompatSnapshotTests(unittest.TestCase):
             "stdin": True,
         },
         "cursor": {
-            "argv": ["cursor-agent", "-p", "--output-format", "text", "--force", "--trust"],
+            # v2.2.0: `text` → `json` so usage telemetry can be read (findings still come from the file).
+            "argv": ["cursor-agent", "-p", "--output-format", "json", "--force", "--trust"],
             "env": {"CURSOR_API_KEY": "sk-test-KEY"},
             "stdin": True,
         },
@@ -197,7 +198,7 @@ class DefaultProfileBackCompatSnapshotTests(unittest.TestCase):
 
         keep = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME")}
         with mock.patch.dict(os.environ, keep, clear=True), tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+                mock.patch.object(reviewer, "_run_cli_process", side_effect=fake_run), mock.patch.object(reviewer, "log"):
             provider = reviewer.build_provider(pid, api_key="sk-test-KEY", model="")
             provider.run_review(pr_context=_make_pr_context(), review_instructions="R", workspace=Path(tmp), output_dir=Path(tmp))
         argv = ["<TEXT>" if len(x) >= 200 else x for x in captured["argv"]]

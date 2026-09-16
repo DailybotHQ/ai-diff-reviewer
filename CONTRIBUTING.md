@@ -69,6 +69,9 @@ python3 scripts/reviewer.py
 
 Tagged releases follow SemVer (`v1.2.3`). The `release.yml` workflow auto-updates the major-version moving tag for the current line (`v2`) when a new `v2.x.y` is published, so consumers pinning `@v2` get patches and minor features automatically.
 
+- The squash merge's **subject** decides the version bump (`feat:` → minor, `fix:`/`perf:` → patch, `!`/`BREAKING CHANGE` → major): give PRs a Conventional Commits title.
+- Never write the literal `[skip release]` marker in a commit body unless you want to suppress the release. Squash merges carry every commit body into the merge commit and the release job reads the whole message (see `docs/RELEASE_RECOVERY.md`). In prose, write "skip-release marker".
+
 ## Code of conduct
 
 Be kind. Assume good faith. Reviewers should treat contributors with the same charity the bundled default prompt asks of the reviewer model: assume the author has more context than you, frame findings as questions, prefer signal over volume.

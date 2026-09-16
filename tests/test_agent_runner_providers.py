@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -236,6 +237,78 @@ class InvokeCliAgentTests(unittest.TestCase):
             self.assertIn("without writing its findings file", res.summary)
             self.assertIn("incomplete review", res.summary)
             self.assertTrue(any("WARNING" in str(c.args[0]) and "did not write" in str(c.args[0]) for c in fake_log.call_args_list))
+            self.assertTrue(any("retrying once" in str(c.args[0]) for c in fake_log.call_args_list), "one fresh attempt before giving up")
+
+    def test_retry_recovers_when_the_second_attempt_writes_the_file(self) -> None:
+        """v2.2.0: exit 0 without a findings file is retried once; a findings
+        file from the second attempt yields a normal review with a note."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td); fp = tmp / ".aiprr" / "findings.json"; marker = tmp / "first-attempt-done"
+            argv = ["python3", "-c",
+                    "import pathlib, sys, json; m = pathlib.Path(sys.argv[1]); p = pathlib.Path(sys.argv[2])\n"
+                    "if m.exists():\n    p.parent.mkdir(parents=True, exist_ok=True); p.write_text(json.dumps({'summary': 'second', 'findings': []}))\n"
+                    "else:\n    m.write_text('x')\n"
+                    "print(json.dumps({'usage': {'input_tokens': 10, 'output_tokens': 1}}))",
+                    str(marker), str(fp)]
+            with mock.patch.object(reviewer, "log"):
+                res = reviewer._invoke_cli_agent(argv=argv, workspace=tmp, findings_path=fp, env={**os.environ}, cli_name="TestCLI", usage_parser=reviewer.parse_cursor_usage)
+            self.assertFalse(res.incomplete)
+            self.assertIn("second", res.summary)
+            self.assertIn("Retried once", res.summary)
+            assert res.usage is not None
+            self.assertEqual(res.usage.input_tokens, 20, "both attempts are billed and both are reported")
+
+    def test_hung_cli_that_never_reads_stdin_still_times_out(self) -> None:
+        """The deadline covers the stdin write: a CLI that sleeps without
+        reading a large prompt is killed and reported as a timeout."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with mock.patch.object(reviewer, "CLI_INVOCATION_TIMEOUT", 2), mock.patch.object(reviewer, "log"):
+                started = time.monotonic()
+                with self.assertRaises(RuntimeError) as ctx:
+                    reviewer._invoke_cli_agent(argv=["python3", "-c", "import time; time.sleep(30)"], workspace=tmp,
+                                               findings_path=tmp / ".aiprr" / "findings.json", env={**os.environ},
+                                               cli_name="TestCLI", stdin_input="x" * 1_500_000)
+            self.assertIn("exceeded the timeout", str(ctx.exception))
+            self.assertLess(time.monotonic() - started, 15)
+
+    def test_cli_that_exits_before_reading_stdin_reports_its_exit_code(self) -> None:
+        """A fast crash must surface the CLI's exit code, not a BrokenPipeError."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with mock.patch.object(reviewer, "log"), self.assertRaises(RuntimeError) as ctx:
+                reviewer._invoke_cli_agent(argv=["python3", "-c", "import sys; sys.exit(7)"], workspace=tmp,
+                                           findings_path=tmp / ".aiprr" / "findings.json", env={**os.environ},
+                                           cli_name="TestCLI", stdin_input="x" * 1_500_000)
+            self.assertIn("exited with code 7", str(ctx.exception))
+
+    def test_no_retry_when_the_first_attempt_used_most_of_the_time_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with mock.patch.object(reviewer, "CLI_INVOCATION_TIMEOUT", 1), mock.patch.object(reviewer, "log") as fake_log:
+                res = reviewer._invoke_cli_agent(argv=["python3", "-c", "import time; time.sleep(0.6)"], workspace=tmp,
+                                                 findings_path=tmp / ".aiprr" / "findings.json", env={**os.environ}, cli_name="TestCLI")
+            self.assertTrue(res.incomplete)
+            self.assertTrue(any("no time budget for a retry" in str(c.args[0]) for c in fake_log.call_args_list))
+            self.assertFalse(any("retrying once" in str(c.args[0]) for c in fake_log.call_args_list))
+
+    def test_cli_output_is_captured_bounded_and_large_stdin_does_not_deadlock(self) -> None:
+        """S-02: a chatty CLI cannot grow memory without bound; the usage line at
+        the tail survives; a >1 MB stdin prompt is delivered in full."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td); fp = tmp / ".aiprr" / "findings.json"
+            prompt = "x" * 1_500_000
+            argv = ["python3", "-c",
+                    "import sys, json, pathlib; data = sys.stdin.read(); p = pathlib.Path(sys.argv[1]); p.parent.mkdir(parents=True, exist_ok=True)\n"
+                    "p.write_text(json.dumps({'summary': 'len=%d' % len(data), 'findings': []}))\n"
+                    "sys.stdout.write('y' * 6_000_000 + '\\n'); sys.stdout.write(json.dumps({'usage': {'input_tokens': 7, 'output_tokens': 2}}) + '\\n')",
+                    str(fp)]
+            with mock.patch.object(reviewer, "log") as fake_log:
+                res = reviewer._invoke_cli_agent(argv=argv, workspace=tmp, findings_path=fp, env={**os.environ}, cli_name="TestCLI", stdin_input=prompt, usage_parser=reviewer.parse_cursor_usage)
+            self.assertEqual(res.summary, "len=1500000")
+            assert res.usage is not None
+            self.assertEqual(res.usage.input_tokens, 7)
+            self.assertTrue(any("kept the tail" in str(c.args[0]) for c in fake_log.call_args_list))
 
     def test_stale_findings_file_is_removed_before_the_cli_runs(self) -> None:
         """A findings file left by a previous step or a persistent workspace

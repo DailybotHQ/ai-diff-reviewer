@@ -115,7 +115,7 @@ class HardeningRegressionTests(unittest.TestCase):
                     return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
                 with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
-                    reviewer.subprocess, "run", side_effect=fake_run
+                    reviewer, "_run_cli_process", side_effect=fake_run
                 ), mock.patch.object(reviewer, "log"):
                     provider.run_review(
                         pr_context=_make_pr_context(), review_instructions="R",
@@ -324,7 +324,7 @@ class ContractFixesTests(unittest.TestCase):
             fp.parent.mkdir(parents=True, exist_ok=True); fp.write_text(json.dumps({"summary": "s", "findings": []}))
             return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
         prov = reviewer.build_provider("claude-code", api_key="zai-key", model="glm-5.3", api_base="https://api.z.ai/api/anthropic")
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://gw.example.com"}), mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://gw.example.com"}), mock.patch.object(reviewer, "_run_cli_process", side_effect=fake_run), mock.patch.object(reviewer, "log"):
             prov.run_review(pr_context=_make_pr_context(), review_instructions="R", workspace=Path(tmp), output_dir=Path(tmp))
         self.assertEqual(captured["env"]["ANTHROPIC_BASE_URL"], "https://api.z.ai/api/anthropic")
 

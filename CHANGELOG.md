@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dogfood: the Grok leg runs on `economy` (grok-4.3) again**, deliberately, to
+  re-test the cheaper tier on live PRs after the corpus run found nothing with
+  it; the `balanced` tier itself stays on grok-4.6 until that re-test says
+  otherwise.
+- **Agent-runner retry:** a CLI that exits 0 without writing its findings
+  file gets one fresh attempt before the run is posted as an incomplete
+  review; both attempts' usage is reported and the summary says
+  `Retried once` (`CLI_INCOMPLETE_RETRIES`).
+- **Bounded CLI output capture:** stdout/stderr of agent-runner CLIs are
+  drained by reader threads that keep only the last 4 MB of each stream
+  (`CLI_OUTPUT_TAIL_MAX_BYTES`); large stdin prompts can no longer deadlock
+  against a full stdout pipe.
+- **Cursor usage telemetry (parse-or-ignore):** `provider: cursor` now runs
+  with `--output-format json` and reads any `usage` object the CLI prints
+  (`parse_cursor_usage`); when nothing is found the tracking comment keeps
+  saying `not reported by this provider`. Not verified live in this release
+  (no Cursor key in the dogfood matrix).
+- **Release hygiene:** documented that a squash body quoting `[skip release]` suppresses the release (PR #51 shipped untagged), with the recovery and the commit-message rule (`docs/RELEASE_RECOVERY.md`, `CONTRIBUTING.md`).
+
 - **Releases stamp the CHANGELOG.** `auto-release.yml` now turns
   `## [Unreleased]` into `## [X.Y.Z] — date` (and opens a fresh empty
   section) in the same sync commit that bumps the skill version, via

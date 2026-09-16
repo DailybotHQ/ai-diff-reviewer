@@ -84,6 +84,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import tempfile
 import time
 import urllib.error
@@ -332,6 +333,9 @@ CACHE_READ_PRICE_FACTOR: float = 0.10
 CACHE_WRITE_PRICE_FACTOR: float = 1.25
 # Bound on how much vendor-CLI stdout the usage parsers scan (tail).
 CLI_STDOUT_SCAN_MAX_BYTES: int = 2_000_000
+# Agent-runner CLIs can stream megabytes of transcript to stdout; only the
+# tail is kept in memory (usage summaries and error context live there).
+CLI_OUTPUT_TAIL_MAX_BYTES: int = 4_000_000
 # Upper bound on the agent-runner findings file. The file is written by a
 # vendor CLI running attacker-influenced input; a larger file is refused
 # (summary-only failure) instead of being parsed into memory.
@@ -767,6 +771,9 @@ ALLOWED_SIDES: tuple[str, ...] = ("LEFT", "RIGHT")
 # Timeout for a single agent-runner CLI invocation (seconds). Aligns with the
 # recommended workflow `timeout-minutes: 15` in examples/*.yml.
 CLI_INVOCATION_TIMEOUT: int = 900
+# An agent that exits 0 without writing its findings file gets this many
+# fresh attempts before the run is posted as an incomplete review.
+CLI_INCOMPLETE_RETRIES: int = 1
 
 # ---------------------------------------------------------------------------
 # Iteration-Aware Review (IAR) — subsystem constants
@@ -2040,6 +2047,39 @@ def parse_codex_usage(stdout: str) -> UsageTelemetry | None:
     return total
 
 
+def parse_cursor_usage(stdout: str) -> UsageTelemetry | None:
+    """Cursor Agent `--output-format json` (parse-or-ignore).
+
+    The CLI's JSON shape is not documented for CI; this reads any `usage`
+    object it finds (whole document or the last JSON line carrying one) and
+    returns None otherwise — the tracking comment then prints
+    `not reported by this provider` exactly as before v2.2.0.
+    """
+    text: str = (stdout or "")[-CLI_STDOUT_SCAN_MAX_BYTES:].strip()
+    doc: Any = None
+    if text.startswith("{"):
+        try:
+            doc = json.loads(text)
+        except json.JSONDecodeError:
+            doc = None
+    if not (isinstance(doc, dict) and isinstance(doc.get("usage"), dict)):
+        doc = None
+        for obj in _scan_json_lines(stdout):
+            if isinstance(obj.get("usage"), dict):
+                doc = obj
+    if not isinstance(doc, dict):
+        return None
+    usage: UsageTelemetry | None = normalise_usage(doc.get("usage"))
+    if usage is None:
+        return None
+    usage.source = USAGE_SOURCE_CLI
+    usage.turns = _as_int(doc.get("num_turns") or doc.get("turns")) or usage.turns
+    cost: Any = doc.get("total_cost_usd", doc.get("cost_usd"))
+    if isinstance(cost, (int, float)):
+        usage.cost_usd = float(cost)
+    return usage
+
+
 def parse_grok_usage(stdout: str) -> UsageTelemetry | None:
     """Grok `--output-format json`: a single JSON document (possibly
     pretty-printed) with `usage`, `num_turns` and `total_cost_usd`."""
@@ -2712,6 +2752,97 @@ def _build_cli_env(
     return scrubbed
 
 
+def _drain_tail(stream: Any, sink: dict[str, Any], key: str) -> None:
+    """Read `stream` to EOF keeping only the last CLI_OUTPUT_TAIL_MAX_BYTES."""
+    buf: bytearray = bytearray()
+    dropped: int = 0
+    while True:
+        chunk: bytes = stream.read(65536)
+        if not chunk:
+            break
+        buf += chunk
+        if len(buf) > CLI_OUTPUT_TAIL_MAX_BYTES:
+            excess: int = len(buf) - CLI_OUTPUT_TAIL_MAX_BYTES
+            del buf[:excess]
+            dropped += excess
+    sink[key] = bytes(buf).decode("utf-8", errors="replace")
+    sink[key + "_dropped"] = dropped
+
+
+def _feed_stdin(proc: "subprocess.Popen[bytes]", data: bytes) -> None:
+    """Write the prompt to the CLI's stdin and close it, tolerating a CLI
+    that exits (or never reads) before consuming it — like `communicate()`."""
+    assert proc.stdin is not None
+    try:
+        proc.stdin.write(data)
+    except (BrokenPipeError, OSError):
+        pass  # the CLI's exit code says why it stopped reading
+    try:
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+
+
+def _run_cli_process(
+    argv: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    input: str | None,
+    timeout: int,
+) -> "subprocess.CompletedProcess[str]":
+    """`subprocess.run(..., timeout=)` semantics with bounded output capture.
+
+    stdout/stderr are drained by reader threads that keep only the last
+    CLI_OUTPUT_TAIL_MAX_BYTES of each stream, so a chatty CLI cannot grow
+    the reviewer's memory without bound; stdin is fed by its own thread so
+    a CLI that never reads its prompt cannot block the deadline. One
+    deadline covers the write, the wait and the drain; on expiry the CLI is
+    killed and `subprocess.TimeoutExpired` is raised as `run()` would.
+    """
+    deadline: float = time.monotonic() + timeout
+    proc: "subprocess.Popen[bytes]" = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    sink: dict[str, Any] = {}
+    workers: list[threading.Thread] = [
+        threading.Thread(target=_drain_tail, args=(proc.stdout, sink, "stdout"), daemon=True),
+        threading.Thread(target=_drain_tail, args=(proc.stderr, sink, "stderr"), daemon=True),
+    ]
+    if input is not None:
+        workers.append(
+            threading.Thread(target=_feed_stdin, args=(proc, input.encode("utf-8")), daemon=True)
+        )
+    for t in workers:
+        t.start()
+    try:
+        returncode: int = proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise
+    for t in workers:
+        t.join(timeout=max(0.0, deadline - time.monotonic()))
+    if any(t.is_alive() for t in workers):
+        # A grandchild kept the pipes open past the deadline: report what
+        # was captured so far rather than hang the action.
+        log(f"{argv[0]}: output pipes still open after the CLI exited; using the captured tail.")
+    for key in ("stdout", "stderr"):
+        if sink.get(key + "_dropped"):
+            log(
+                f"{argv[0]}: {key} exceeded {CLI_OUTPUT_TAIL_MAX_BYTES} bytes; "
+                f"kept the tail, dropped {sink[key + '_dropped']} bytes."
+            )
+    return subprocess.CompletedProcess(
+        argv, returncode, stdout=sink.get("stdout", ""), stderr=sink.get("stderr", "")
+    )
+
+
 def _invoke_cli_agent(
     *,
     argv: list[str],
@@ -2735,27 +2866,62 @@ def _invoke_cli_agent(
     large prompt this way instead of via a positional CLI argument.
     """
     log(f"Invoking {cli_name}: {' '.join(shlex.quote(a) for a in argv[:2])} …")
-    # A findings file that exists AFTER the subprocess must have been written
-    # by THIS run — a leftover from a previous step or a persistent
-    # self-hosted workspace would otherwise be posted as a review.
-    findings_path.unlink(missing_ok=True)
-    try:
-        result = subprocess.run(
-            argv,
-            cwd=str(workspace),
-            env=env,
-            timeout=CLI_INVOCATION_TIMEOUT,
-            check=False,
-            capture_output=True,
-            text=True,
-            input=stdin_input,
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(
-            f"{cli_name} CLI exceeded the timeout of "
-            f"{CLI_INVOCATION_TIMEOUT}s. Consider lowering `agent-max-turns` "
-            f"or narrowing the PR scope."
-        ) from e
+    attempts: int = 1 + CLI_INCOMPLETE_RETRIES
+    carried_usage: UsageTelemetry | None = None
+    retry_note: str = ""
+    result: "subprocess.CompletedProcess[str]"
+    for attempt in range(1, attempts + 1):
+        # A findings file that exists AFTER the subprocess must have been
+        # written by THIS attempt — a leftover from a previous step or a
+        # persistent self-hosted workspace would otherwise be posted as a
+        # review.
+        findings_path.unlink(missing_ok=True)
+        started: float = time.monotonic()
+        try:
+            result = _run_cli_process(
+                argv,
+                cwd=str(workspace),
+                env=env,
+                input=stdin_input,
+                timeout=CLI_INVOCATION_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(
+                f"{cli_name} CLI exceeded the timeout of "
+                f"{CLI_INVOCATION_TIMEOUT}s. Consider lowering `agent-max-turns` "
+                f"or narrowing the PR scope."
+            ) from e
+        if result.returncode == 0 and not findings_path.exists() and attempt < attempts:
+            elapsed: float = time.monotonic() - started
+            if elapsed > CLI_INVOCATION_TIMEOUT / 2:
+                # A second full-length attempt would overrun the job's
+                # `timeout-minutes`; post the incomplete review instead.
+                log(
+                    f"WARNING: {cli_name} CLI exited 0 without a findings file "
+                    f"after {elapsed:.0f}s — no time budget for a retry."
+                )
+                break
+            # The agent ended its session without the contract output
+            # (observed live with the Grok CLI). One fresh attempt is
+            # cheaper than a failed check; its usage is carried over.
+            stdout_tail_retry: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+            log(
+                f"WARNING: {cli_name} CLI exited 0 but did not write "
+                f"{findings_path} (attempt {attempt}/{attempts}); retrying once. "
+                f"stdout tail: {stdout_tail_retry!r}."
+            )
+            if usage_parser is not None:
+                try:
+                    carried_usage = usage_parser(result.stdout or "")
+                except Exception as exc:  # noqa: BLE001 — telemetry never fails a run
+                    log(f"Usage parse skipped ({cli_name}, attempt {attempt}): {type(exc).__name__}: {exc}")
+                    carried_usage = None
+            retry_note = (
+                "\n\n---\n\n_Retried once: the first attempt ended without "
+                "a findings file._"
+            )
+            continue
+        break
 
     partial_note: str = ""
     if result.returncode != 0:
@@ -2779,23 +2945,22 @@ def _invoke_cli_agent(
             f"{result.returncode}; findings recovered from the findings file._"
         )
     elif not findings_path.exists():
-        # Exit 0 without a findings file: the agent ended its session
-        # without producing the contract output (observed live with the
-        # Grok CLI). Post an explicit summary-only review rather than a
-        # failed run; the tracking comment and log both name the cause.
+        # Exit 0 without a findings file on the last attempt: post an
+        # explicit summary-only review; `main()` treats it as incomplete
+        # (gate fails under any blocking strictness, no reviewed label).
         stdout_tail_ok: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
         log(
             f"WARNING: {cli_name} CLI exited 0 but did not write "
-            f"{findings_path}; posting a summary-only review. "
-            f"stdout tail: {stdout_tail_ok!r}."
+            f"{findings_path} after {attempts} attempt(s); posting a "
+            f"summary-only review. stdout tail: {stdout_tail_ok!r}."
         )
         incomplete_result: ReviewResult = ReviewResult(
             summary=(
                 "## Code Review Summary\n\n"
                 f"_The {cli_name} agent finished without writing its findings "
-                "file, so this round carries no findings. This is an incomplete "
-                "review — re-run (toggle the label) or check the workflow log "
-                "for the agent's own output._"
+                f"file ({attempts} attempt(s)), so this round carries no "
+                "findings. This is an incomplete review — re-run (toggle the "
+                "label) or check the workflow log for the agent's own output._"
             ),
             findings=[],
             incomplete=True,
@@ -2805,13 +2970,18 @@ def _invoke_cli_agent(
                 incomplete_result.usage = usage_parser(result.stdout or "")
             except Exception as exc:  # noqa: BLE001 — telemetry never fails a run
                 log(f"Usage parse skipped ({cli_name}): {type(exc).__name__}: {exc}")
+        if carried_usage is not None:
+            if incomplete_result.usage is None:
+                incomplete_result.usage = carried_usage
+            else:
+                incomplete_result.usage.add(carried_usage)
         return incomplete_result
 
     parsed: ReviewResult = parse_findings_file(
         findings_path, allow_malformed_summary_fallback=True
     )
-    if partial_note:
-        parsed.summary = (parsed.summary or "").rstrip() + partial_note
+    if partial_note or retry_note:
+        parsed.summary = (parsed.summary or "").rstrip() + partial_note + retry_note
     if usage_parser is not None:
         try:
             parsed.usage = usage_parser(result.stdout or "")
@@ -2820,6 +2990,13 @@ def _invoke_cli_agent(
             parsed.usage = None
         if parsed.usage is None:
             log(f"{cli_name}: no usage reported in CLI output.")
+    if carried_usage is not None:
+        # Both attempts were billed; the tracking comment must say so.
+        if parsed.usage is None:
+            parsed.usage = carried_usage
+        else:
+            parsed.usage.add(carried_usage)
+            parsed.usage.source = USAGE_SOURCE_CLI
     return parsed
 
 
@@ -3112,8 +3289,11 @@ class CursorProvider(AgentRunnerProvider):
             argv: list[str] = [
                 self.CLI_BIN,
                 "-p",
+                # `json` (v2.2.0+, was `text`): findings still travel through
+                # the findings file; stdout is only read for usage telemetry
+                # (`parse_cursor_usage`, parse-or-ignore).
                 "--output-format",
-                "text",
+                "json",
                 # Headless-CI defaults per Cursor's own documentation:
                 # `--force` skips interactive tool approvals, `--trust` marks
                 # the workspace as trusted for the run. Without these the
@@ -3141,6 +3321,7 @@ class CursorProvider(AgentRunnerProvider):
                 env=env,
                 cli_name=self.CLI_NAME,
                 stdin_input=user_prompt,
+                usage_parser=parse_cursor_usage,
             )
         finally:
             _restore_mcp_config(mcp_dest, mcp_backup)
