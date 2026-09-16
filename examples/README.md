@@ -18,6 +18,7 @@
 | [`provider-cursor.yml`](provider-cursor.yml) | Use the Cursor Agent CLI (agent-runner) for review. |
 | [`provider-codex.yml`](provider-codex.yml) | Use the OpenAI Codex CLI (agent-runner) for review. |
 | [`provider-openai.yml`](provider-openai.yml) | **OpenAI-compatible in-process runner** (`provider: openai`, v2.1.0+): zero install, bounded turns. Default backend OpenAI; commented variants for Azure Foundry, xAI and Z.ai via `api-base`. |
+| [`provider-claude-code-glm.yml`](provider-claude-code-glm.yml) | **Recommended GLM runner:** Claude Code CLI on Z.ai's Anthropic-compatible endpoint via `api-base` (flat-rate Coding Plan, vendor-tuned agent loop). `model` required. |
 | [`provider-anthropic-zai.yml`](provider-anthropic-zai.yml) | **Bring your own endpoint** (`api-base`, v2.1.0+): the direct Anthropic-compatible loop against Z.ai GLM (zero install, flat-rate Coding Plan). Same shape works for xAI's Anthropic-compatible endpoint. |
 | [`mcp-passthrough.yml`](mcp-passthrough.yml) | Inject a custom MCP servers config into whichever CLI provider you picked. |
 | [`trigger-always.yml`](trigger-always.yml) | Run on every push (v1.1 behaviour, explicit). |

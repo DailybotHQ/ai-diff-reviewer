@@ -891,5 +891,75 @@ class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_API_KEY", env)
 
 
+class ClaudeCodeCustomBackendTests(unittest.TestCase):
+    """`api-base` on claude-code switches to the Anthropic-compatible-backend
+    env contract (Z.ai GLM / xAI). The default profile must stay
+    byte-identical — locked by snapshot assertions below."""
+
+    ZAI = "https://api.z.ai/api/anthropic"
+
+    def _zai_provider(self, *, api_key: str = "zai-KEY", model: str = "glm-5.3") -> Any:
+        prof = reviewer.resolve_endpoint_profile(self.ZAI, "claude-code")
+        return reviewer.ClaudeCodeProvider(api_key=api_key, model=model, profile=prof)
+
+    def test_default_profile_env_snapshot_api_key(self) -> None:
+        captured = _capture_provider_call(
+            reviewer.ClaudeCodeProvider(api_key="sk-ant-api03-x", model="")
+        )
+        env = captured["kwargs"]["env"]
+        self.assertEqual(env.get("ANTHROPIC_API_KEY"), "sk-ant-api03-x")
+        for name in (reviewer.CLAUDE_CODE_AUTH_TOKEN_ENV, reviewer.CLAUDE_CODE_BASE_URL_ENV,
+                     reviewer.CLAUDE_CODE_API_TIMEOUT_ENV, *reviewer.CLAUDE_CODE_DEFAULT_MODEL_ENVS):
+            self.assertNotIn(name, env)
+        self.assertNotIn("--model", captured["argv"])
+
+    def test_default_profile_env_snapshot_oauth(self) -> None:
+        captured = _capture_provider_call(
+            reviewer.ClaudeCodeProvider(api_key="sk-ant-oat01-tok", model="auto")
+        )
+        env = captured["kwargs"]["env"]
+        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-tok")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("--model", captured["argv"])
+
+    def test_zai_profile_env_contract(self) -> None:
+        env = self._zai_provider().auth_env_vars()
+        self.assertEqual(env[reviewer.CLAUDE_CODE_AUTH_TOKEN_ENV], "zai-KEY")
+        self.assertEqual(env[reviewer.CLAUDE_CODE_BASE_URL_ENV], self.ZAI)
+        self.assertEqual(env[reviewer.CLAUDE_CODE_API_TIMEOUT_ENV], reviewer.CLAUDE_CODE_CUSTOM_BACKEND_TIMEOUT_MS)
+        for name in reviewer.CLAUDE_CODE_DEFAULT_MODEL_ENVS:
+            self.assertEqual(env[name], "glm-5.3")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", env)
+
+    def test_zai_profile_forces_model_flag_and_env_reaches_subprocess(self) -> None:
+        captured = _capture_provider_call(self._zai_provider())
+        argv, env = captured["argv"], captured["kwargs"]["env"]
+        self.assertIn("--model", argv)
+        self.assertEqual(argv[argv.index("--model") + 1], "glm-5.3")
+        self.assertEqual(env.get(reviewer.CLAUDE_CODE_BASE_URL_ENV), self.ZAI)
+        self.assertNotIn("AIPRR_GH_TOKEN", env)
+        self.assertNotIn("AIPRR_API_KEY", env)
+
+    def test_auto_model_on_custom_backend_fails_fast(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._zai_provider(model="auto").auth_env_vars()
+        self.assertIn("glm-5.3", str(ctx.exception))
+        with self.assertRaises(ValueError):
+            self._zai_provider(model="").auth_env_vars()
+
+    def test_subscription_token_on_custom_backend_fails_fast(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._zai_provider(api_key="sk-ant-oat01-tok").auth_env_vars()
+        self.assertIn("api.z.ai", str(ctx.exception))
+        self.assertNotIn("sk-ant-oat01-tok", str(ctx.exception))
+
+    def test_xai_anthropic_compatible_profile(self) -> None:
+        prof = reviewer.resolve_endpoint_profile("https://api.x.ai", "claude-code")
+        env = reviewer.ClaudeCodeProvider(api_key="xai-KEY", model="grok-4.3", profile=prof).auth_env_vars()
+        self.assertEqual(env[reviewer.CLAUDE_CODE_BASE_URL_ENV], "https://api.x.ai")
+        self.assertEqual(env["ANTHROPIC_DEFAULT_SONNET_MODEL"], "grok-4.3")
+
+
 if __name__ == "__main__":
     unittest.main()

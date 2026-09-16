@@ -123,6 +123,24 @@ Copy-paste workflow: [`examples/provider-anthropic-zai.yml`](../examples/provide
 
 ---
 
+## Z.ai GLM — recommended runner and why (v2.1.0+)
+
+GLM models are reachable from three runners. The recommendation, in order:
+
+| Rank | Runner | `api-base` | Why |
+|---|---|---|---|
+| **1 — recommended** | `claude-code` | `https://api.z.ai/api/anthropic` | Z.ai's Coding Plan is **flat-rate**, so the marginal cost of a review is ≈ 0 — the same economics that make Cursor `auto` attractive. Z.ai's first-class integration target is the Claude Code harness, so GLM's tool use is tuned for this loop, and you get the vendor coding-agent prompt, LSP and semantic tools. Deepest GLM review available. |
+| 2 | `anthropic` | `https://api.z.ai/api/anthropic` | Zero install, bounded turns, most predictable. Same flat-rate billing. Pick this when you want the review to be cheap **and** deterministic, or on untrusted PRs where you do not want an agent CLI with local access. |
+| 3 | `codex` / `openai` | `https://api.z.ai/api/v1` (Codex, Responses API) / `https://api.z.ai/api/coding/paas/v4` (`openai`) | Supported for teams standardised on the OpenAI-shaped stack; less battle-tested than the Anthropic-shaped path for GLM. |
+
+**Models:** `glm-5.3` is the balanced default for GLM backends; `glm-5.3-flash` is the cheaper smoke tier. Always pin `model` explicitly — on a custom backend `auto` is rejected (it only means something on Anthropic's own endpoint, where it can silently select Opus).
+
+**How the `claude-code` runner talks to Z.ai.** When `api-base` is set the action switches Claude Code to the backend env contract Z.ai documents: `ANTHROPIC_BASE_URL=<api-base>`, `ANTHROPIC_AUTH_TOKEN=<api-key>` (bearer-style; `ANTHROPIC_API_KEY` is deliberately **not** set), `API_TIMEOUT_MS=3000000`, and `ANTHROPIC_DEFAULT_OPUS_MODEL` / `SONNET_MODEL` / `HAIKU_MODEL` all pinned to `model` so Claude Code's internal aliases resolve to the chosen GLM model; `--model` is always passed. A Claude subscription token (`sk-ant-oat…`) is rejected against a non-Anthropic host with an actionable error. xAI's Anthropic-compatible surface (`https://api.x.ai`, e.g. `grok-4.3`) uses the identical contract.
+
+Copy-paste workflows: [`examples/provider-claude-code-glm.yml`](../examples/provider-claude-code-glm.yml) (recommended) and [`examples/provider-anthropic-zai.yml`](../examples/provider-anthropic-zai.yml) (zero-install).
+
+---
+
 ## OpenAI-compatible backends (`provider: openai` + `api-base`, v2.1.0+)
 
 The in-process OpenAI-compatible runner is the most portable path: zero install, a bounded loop, and one input to move between vendors.

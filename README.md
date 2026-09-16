@@ -149,7 +149,18 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
+```yaml
+# Z.ai GLM through Claude Code — the recommended GLM runner (flat-rate Coding Plan)
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: claude-code
+    api-base: https://api.z.ai/api/anthropic
+    api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: glm-5.3          # required on a custom backend
+```
+
+Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
 

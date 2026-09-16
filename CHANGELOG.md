@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and Z.ai (`https://api.z.ai/api/coding/paas/v4`) — `max_tokens` on those.
   Shared retrying HTTP client (`_post_json_with_retries`) now backs both
   chat-completions providers. New example `examples/provider-openai.yml`.
+- **`claude-code` runner honours `api-base` (Z.ai GLM — the recommended
+  GLM runner; xAI Anthropic-compatible too).** On a custom backend the CLI
+  receives the documented env contract (`ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN`, `API_TIMEOUT_MS`, the three
+  `ANTHROPIC_DEFAULT_*_MODEL` aliases pinned to `model`) and `--model` is
+  always passed; `ANTHROPIC_API_KEY` is not set there. `model: auto` and
+  Claude subscription tokens fail fast on non-Anthropic hosts. Default
+  profile env/argv unchanged (snapshot tests). New example
+  `examples/provider-claude-code-glm.yml`; `docs/PROVIDERS.md` § "Z.ai GLM —
+  recommended runner and why".
 
 ### Fixed
 

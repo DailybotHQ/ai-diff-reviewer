@@ -138,6 +138,21 @@ OPENAI_FINISH_REASON_TO_STOP_REASON: dict[str, str] = {
 # Claude Code CLI reads the token from the `CLAUDE_CODE_OAUTH_TOKEN` env var.
 CLAUDE_OAUTH_TOKEN_PREFIX: str = "sk-ant-oat"
 CLAUDE_CODE_OAUTH_TOKEN_ENV: str = "CLAUDE_CODE_OAUTH_TOKEN"
+# Claude Code on a custom Anthropic-compatible backend (`api-base`, v2.1.0+).
+# The env contract Z.ai documents for its Claude Code integration (and that
+# xAI's Anthropic-compatible surface accepts): bearer-style auth token, base
+# URL, a generous API timeout, and the three model-alias env vars pinned to
+# the chosen model so Claude Code's internal opus/sonnet/haiku aliases all
+# resolve to it.
+CLAUDE_CODE_BASE_URL_ENV: str = "ANTHROPIC_BASE_URL"
+CLAUDE_CODE_AUTH_TOKEN_ENV: str = "ANTHROPIC_AUTH_TOKEN"
+CLAUDE_CODE_API_TIMEOUT_ENV: str = "API_TIMEOUT_MS"
+CLAUDE_CODE_CUSTOM_BACKEND_TIMEOUT_MS: str = "3000000"
+CLAUDE_CODE_DEFAULT_MODEL_ENVS: tuple[str, ...] = (
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+)
 
 GITHUB_REST_BASE: str = "https://api.github.com"
 GITHUB_GRAPHQL_URL: str = "https://api.github.com/graphql"
@@ -1996,10 +2011,41 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         their subscription instead of API usage — the same "use my
         subscription" model Cursor uses. Detection is by token prefix, so no
         new input and no change to the public contract.
+
+        On a custom `api-base` (non-default profile) the mapping switches to
+        the Anthropic-compatible-backend contract: `ANTHROPIC_AUTH_TOKEN` +
+        `ANTHROPIC_BASE_URL` + `API_TIMEOUT_MS` + the three default-model
+        alias env vars pinned to `self.model`. `ANTHROPIC_API_KEY` is
+        deliberately NOT set there (no dual-auth ambiguity). A subscription
+        token or `model: auto` on a custom backend fails fast.
         """
+        if self.profile.is_default:
+            if self.api_key.startswith(CLAUDE_OAUTH_TOKEN_PREFIX):
+                return {CLAUDE_CODE_OAUTH_TOKEN_ENV: self.api_key}
+            return {"ANTHROPIC_API_KEY": self.api_key}
+        # Custom Anthropic-compatible backend (Z.ai GLM, xAI, gateway).
         if self.api_key.startswith(CLAUDE_OAUTH_TOKEN_PREFIX):
-            return {CLAUDE_CODE_OAUTH_TOKEN_ENV: self.api_key}
-        return {"ANTHROPIC_API_KEY": self.api_key}
+            raise ValueError(
+                "api-key looks like a Claude subscription token "
+                f"({CLAUDE_OAUTH_TOKEN_PREFIX}…) but api-base points at "
+                f"{self.profile.host}. A subscription token can only "
+                "authenticate against Anthropic; pass the backend's own API "
+                "key instead."
+            )
+        if not self.model or self.model == "auto":
+            raise ValueError(
+                "model is required when claude-code runs on a custom "
+                f"api-base ({self.profile.host}): `auto` has no meaning "
+                "there. Examples: `glm-5.3` (Z.ai), `grok-4.3` (xAI)."
+            )
+        env: dict[str, str] = {
+            CLAUDE_CODE_AUTH_TOKEN_ENV: self.api_key,
+            CLAUDE_CODE_BASE_URL_ENV: self.profile.base_url,
+            CLAUDE_CODE_API_TIMEOUT_ENV: CLAUDE_CODE_CUSTOM_BACKEND_TIMEOUT_MS,
+        }
+        for name in CLAUDE_CODE_DEFAULT_MODEL_ENVS:
+            env[name] = self.model
+        return env
 
     def install(self) -> None:
         result = run_cmd([self.CLI_BIN, "--version"])
@@ -2069,7 +2115,12 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             # file directly so the passthrough actually takes effect.
             if self.mcp_config_file:
                 argv += ["--mcp-config", self.mcp_config_file]
-            if self.model and self.model != "auto":
+            # Default backend: `auto` defers to the CLI's own default. Custom
+            # backend: the model is always explicit (auth_env_vars() already
+            # rejected `auto`), so it is always forwarded.
+            if self.model and (
+                self.model != "auto" or not self.profile.is_default
+            ):
                 argv += ["--model", self.model]
             if self.extra_args:
                 argv += shlex.split(self.extra_args)
@@ -2077,6 +2128,11 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             env: dict[str, str] = _build_cli_env(
                 extra_vars=self.auth_env_vars()
             )
+            if not self.profile.is_default:
+                log(
+                    f"Claude Code backend: {self.profile.kind} "
+                    f"({self.profile.host}), model={self.model}"
+                )
             return _invoke_cli_agent(
                 argv=argv,
                 workspace=workspace,
