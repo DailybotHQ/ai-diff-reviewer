@@ -797,13 +797,18 @@ The system prompt gains the incremental addendum instead of the exhaustive one, 
 
 Every inline comment now ends with a hidden, **stable** marker: `<!-- ai-pr-reviewer-finding: fp=<fingerprint> sev=<severity> -->` (registered in `docs/STANDARDS.md`). It is how prior findings are matched back without growing the tracking-marker state. Comments posted before v2.1.0 have no marker and are skipped (logged).
 
-### 14.4 Verdicts and conservative resolution
+### 14.4 Verdicts and the resolution policy
 
-The model reports `resolved`, `open` or `regressed` through `update_prior_finding` or the findings file. A resolution claim is **advisory**, not proof: an edited/deleted file and an absent fingerprint do not establish that the concrete bug disappeared. Claims stay open and appear as *unverified* until a maintainer resolves the thread. The runtime does not automatically reply to or resolve review threads.
+The model reports `resolved`, `open` or `regressed` for each prior finding through `update_prior_finding` (chat-completions) or the `prior_findings` array of the findings file (agent-runners). What happens next is governed by the `prior-findings-resolution` input (v2.2.0+):
 
-Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them. An incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+| Policy | A `resolved` verdict… | Thread on GitHub | Strictness gate |
+|---|---|---|---|
+| `advisory` (**default**, byte-identical to v2.1.0) | is reported in the summary footer as *claimed resolved but unverified*; the finding stays in the outstanding set | untouched — a maintainer resolves it | the finding keeps counting |
+| `verified` | is honoured only when the runtime can corroborate it: the fingerprint is absent from this round **and** the file changed since the last reviewed head (or no longer exists) | the runtime replies (`✅ Resolved in <sha> — verified by the reviewer…`) and resolves the thread, best-effort | the finding stops counting; `resolved_fingerprints` gains it |
 
-The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J`, and the tracking marker annotation carries `mode=incremental`.
+Under both policies an edited file and an absent fingerprint are **not** taken as proof on their own: under `advisory` nothing is; under `verified` they are the corroboration required *in addition to* the model's verdict, and anything the runtime cannot corroborate stays open and is listed as unverified. `regressed` is model-asserted in both. Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them; an incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+
+The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J` (plus `· policy: verified` when opted in), and the tracking marker annotation carries `mode=incremental`.
 
 ### 14.5 Budget scaling
 

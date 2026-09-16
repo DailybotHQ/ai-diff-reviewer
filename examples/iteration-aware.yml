@@ -65,6 +65,10 @@ jobs:
           # for that specific run. Persisted state is preserved so the
           # next normal run resumes the dedup timeline.
           iteration-escape-label: full-review-please       # DEFAULT
+          # Incremental rounds (v2.2.0+): `advisory` (DEFAULT) leaves fixed
+          # threads to a maintainer; `verified` lets the runtime resolve a
+          # thread it can corroborate (fingerprint gone + file changed).
+          prior-findings-resolution: advisory              # DEFAULT
 
       # OPTIONAL — surface IAR telemetry as workflow annotations for
       # dashboards. Non-blocking; safe to remove.

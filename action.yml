@@ -204,6 +204,10 @@ inputs:
     description: 'Label name a human can apply to a PR to force a full review regardless of IAR state — dedup is skipped for that run only, persisted state is NOT mutated. Default `full-review-please`. When the label is removed, subsequent reviews resume normal IAR behavior. See docs/ITERATION_AWARENESS.md § 8.'
     required: false
     default: 'full-review-please'
+  prior-findings-resolution:
+    description: 'How the model''s verdicts on prior findings are treated in incremental follow-up rounds. `advisory` (default): a `resolved` verdict is reported in the summary but never retires the finding — a maintainer resolves the thread and the finding keeps counting toward the strictness gate. `verified`: a `resolved` verdict is honoured only when the runtime can corroborate it (fingerprint absent from this round AND the file changed since the last reviewed head or no longer exists); the thread is then replied to and resolved, and the finding stops gating. Unverifiable claims stay open under both policies.'
+    required: false
+    default: 'advisory'
 
 outputs:
   review-url:
@@ -405,6 +409,7 @@ runs:
         AIPRR_MAX_REVIEW_ROUNDS: ${{ inputs.max-review-rounds }}
         AIPRR_EXHAUSTIVE_FIRST_PASS_CAP_MULTIPLIER: ${{ inputs.exhaustive-first-pass-cap-multiplier }}
         AIPRR_ITERATION_ESCAPE_LABEL: ${{ inputs.iteration-escape-label }}
+        AIPRR_PRIOR_FINDINGS_RESOLUTION: ${{ inputs.prior-findings-resolution }}
 
         # Repo / PR context — pulled from the consumer's `pull_request` event.
         AIPRR_REPO: ${{ github.repository }}

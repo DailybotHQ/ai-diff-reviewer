@@ -484,9 +484,12 @@ before presenting the body verbatim** (Step 4), and keep the `fp=`
 value in your working notes: it is the same fingerprint the CI runtime
 uses to de-duplicate and, in incremental follow-up rounds, to carry
 the finding forward and report whether the model still sees it. That
-report is **advisory**: the runtime does not resolve review threads on
-the model's word, so an open thread is open until a maintainer resolves
-it — even when the round-2 summary lists the finding as resolved.
+report is **advisory** by default: the runtime does not resolve review
+threads on the model's word, so an open thread is open until a maintainer
+resolves it — even when the round-2 summary lists the finding as
+resolved. Repos that opted into `prior-findings-resolution: verified`
+see corroborated fixes closed by the runtime (reply + resolve); treat a
+thread that is still open as still open either way.
 
 For reviews posted **before v2.1.0** the inline comment carries `body`
 only — `findings_to_gh_inline_comments()` did not encode severity —

@@ -834,6 +834,16 @@ PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
 PRIOR_FINDING_STATUS_REGRESSED: str = "regressed"
+# Prior-finding resolution policy (v2.2.0+). `advisory` (default, byte-identical
+# to v2.1.0): the model's `resolved` verdicts are reported but never retire a
+# finding — a maintainer resolves the thread. `verified`: a `resolved` verdict
+# is honoured only when the runtime can corroborate it (fingerprint absent
+# from this round AND the file changed since the last reviewed head or no
+# longer exists); the thread is then replied to and resolved.
+PRIOR_FINDINGS_RESOLUTION_ENV: str = "AIPRR_PRIOR_FINDINGS_RESOLUTION"
+RESOLUTION_POLICY_ADVISORY: str = "advisory"
+RESOLUTION_POLICY_VERIFIED: str = "verified"
+RESOLUTION_POLICIES: tuple[str, ...] = (RESOLUTION_POLICY_ADVISORY, RESOLUTION_POLICY_VERIFIED)
 PRIOR_FINDING_STATUSES: tuple[str, ...] = (
     PRIOR_FINDING_STATUS_RESOLVED,
     PRIOR_FINDING_STATUS_OPEN,
@@ -5946,6 +5956,20 @@ class PriorFindingReconciliation:
     unverified: list[PriorFinding] = field(default_factory=list)  # claimed resolved, not verified
 
 
+def parse_resolution_policy(raw: str) -> str:
+    """`prior-findings-resolution` input → policy id. Empty → advisory;
+    anything else must be one of `RESOLUTION_POLICIES` (case-insensitive)."""
+    value: str = (raw or "").strip().lower()
+    if not value:
+        return RESOLUTION_POLICY_ADVISORY
+    if value not in RESOLUTION_POLICIES:
+        raise ValueError(
+            f"prior-findings-resolution must be one of "
+            f"{', '.join(RESOLUTION_POLICIES)}; got {raw!r}."
+        )
+    return value
+
+
 def reconcile_prior_findings(
     *,
     prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
@@ -5953,14 +5977,22 @@ def reconcile_prior_findings(
     current_fingerprints: set[str],
     delta: IncrementalDelta | None,
     workspace: Path | None = None,
+    policy: str = RESOLUTION_POLICY_ADVISORY,
 ) -> PriorFindingReconciliation:
-    """Classify model verdicts without mistaking diff changes for proof of a fix.
+    """Classify the model's verdicts on prior findings.
 
-    A missing fingerprint, edited file or deleted path cannot establish that
-    the concrete failure disappeared. Resolution claims remain unverified and
-    blocking until the thread is explicitly resolved by a maintainer. Keep the
-    keyword parameters for callers; no arbitrary filesystem probe is needed.
+    `advisory` (default): a `resolved` claim is recorded as *unverified* and
+    the finding stays open — a diff change is not proof that the concrete
+    failure disappeared; a maintainer resolves the thread.
+
+    `verified`: a `resolved` claim is honoured only when the runtime can
+    corroborate it — the fingerprint is absent from this round AND the file
+    changed since the last reviewed head (or no longer exists). Anything the
+    runtime cannot corroborate stays open and is listed as unverified.
+    `regressed` is model-asserted in both policies; no verdict → still open.
     """
+    changed: set[str] = set(delta.changed_files) if delta is not None else set()
+    root: Path = workspace if workspace is not None else Path.cwd()
     out = PriorFindingReconciliation()
     for pf in prior_findings:
         status, _note = updates.get(pf.fingerprint, ("", ""))
@@ -5968,6 +6000,14 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
+            if policy == RESOLUTION_POLICY_VERIFIED:
+                file_changed: bool = pf.path in changed
+                file_gone: bool = bool(pf.path) and not (root / pf.path).exists()
+                if pf.fingerprint not in current_fingerprints and (
+                    file_changed or file_gone
+                ):
+                    out.resolved.append(pf)
+                    continue
             out.unverified.append(pf)
         out.still_open.append(pf)
     return out
@@ -6053,6 +6093,7 @@ def render_incremental_footer(
     delta: IncrementalDelta,
     reconciliation: PriorFindingReconciliation,
     new_findings: int,
+    policy: str = RESOLUTION_POLICY_ADVISORY,
 ) -> str:
     """One-line summary footer for incremental rounds."""
     unverified_note: str = (
@@ -6060,11 +6101,37 @@ def render_incremental_footer(
         if reconciliation.unverified
         else ""
     )
+    policy_note: str = (
+        f" · policy: {policy}" if policy != RESOLUTION_POLICY_ADVISORY else ""
+    )
     return (
         f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
         f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
         f"still open {len(reconciliation.still_open)} · regressed "
-        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}._"
+        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}{policy_note}._"
+    )
+
+
+def apply_resolution_policy(
+    *,
+    policy: str,
+    reconciliation: PriorFindingReconciliation,
+    token: str,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+) -> int:
+    """Side effects of the resolution policy on GitHub. `advisory` never
+    touches review threads; `verified` replies on and resolves every thread
+    the runtime corroborated (best-effort). Returns threads resolved."""
+    if policy != RESOLUTION_POLICY_VERIFIED or not reconciliation.resolved:
+        return 0
+    return close_resolved_prior_findings(
+        token=token,
+        repo=repo,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        reconciliation=reconciliation,
     )
 
 
@@ -6361,9 +6428,16 @@ def run_iar_post_llm(
     base_max_inline_comments: int,
     telemetry: RunTelemetry,
     surface_cap: int = 0,
+    resolution_policy: str = RESOLUTION_POLICY_ADVISORY,
+    workspace: Path | None = None,
 ) -> tuple[IterationState, PolicyResult]:
     """Apply IAR filtering AFTER the LLM call and return the state to
     embed + the surfacing decision.
+
+    `resolution_policy` (v2.2.0+): under `verified`, prior findings the
+    runtime can corroborate as resolved (see `reconcile_prior_findings`)
+    leave the outstanding set and stop contributing to the gate; under
+    `advisory` (default) every prior finding stays outstanding.
 
     `surface_cap` (v2.1.0+, agent-runner path): the effective inline cap
     is enforced HERE, after fingerprinting, so overflow findings are still
@@ -6418,11 +6492,34 @@ def run_iar_post_llm(
             [f.severity for f in result.findings]
         )
     # The incremental prompt explicitly forbids reposting prior findings.
-    # Their absence from this run's new comments must not clear the gate.
+    # Their absence from this run's new comments must not clear the gate —
+    # except, under the `verified` policy, for findings the runtime can
+    # corroborate as resolved.
+    verified_resolved_fps: set[str] = set()
+    if (
+        pre_context.prior_findings
+        and resolution_policy == RESOLUTION_POLICY_VERIFIED
+        and pre_context.mode == IAR_MODE_INCREMENTAL
+    ):
+        verified_resolved_fps = {
+            pf.fingerprint
+            for pf in reconcile_prior_findings(
+                prior_findings=pre_context.prior_findings,
+                updates=result.prior_finding_updates,
+                current_fingerprints={f.fingerprint for f in result.findings if f.fingerprint},
+                delta=pre_context.delta,
+                workspace=workspace,
+                policy=resolution_policy,
+            ).resolved
+        }
     if pre_context.prior_findings:
         result.overall_severity = overall_severity(
             [result.overall_severity]
-            + [pf.severity for pf in pre_context.prior_findings]
+            + [
+                pf.severity
+                for pf in pre_context.prior_findings
+                if pf.fingerprint not in verified_resolved_fps
+            ]
         )
     # Escape-label short-circuit: preserve prior state exactly, no
     # mutations. This is the contract from Task 7 — persisted state must
@@ -6503,8 +6600,9 @@ def run_iar_post_llm(
         }
         if pre_context.prior_state is not None:
             outstanding.update(pre_context.prior_state.open_fingerprints_this_gen)
-        next_open = sorted(set(next_open) | outstanding)
-        newly_resolved = []
+        outstanding -= verified_resolved_fps
+        next_open = sorted((set(next_open) | outstanding) - verified_resolved_fps)
+        newly_resolved = sorted(verified_resolved_fps)
     next_resolved: list[str] = sorted(
         (set(state_before_fp_update.resolved_fingerprints) | set(newly_resolved))
         - set(next_open)
@@ -9067,6 +9165,16 @@ def main() -> int:
         log(f"CONFIGURATION ERROR: {e} Aborting.")
         write_all_outputs(skipped=False)
         return 1
+    try:
+        resolution_policy: str = parse_resolution_policy(
+            os.environ.get(PRIOR_FINDINGS_RESOLUTION_ENV, "")
+        )
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    if resolution_policy != RESOLUTION_POLICY_ADVISORY:
+        log(f"Prior-finding resolution policy: {resolution_policy}")
     if not model:
         log(f"No default model for provider {provider_id!r} — aborting.")
         write_all_outputs(skipped=False)
@@ -9785,6 +9893,8 @@ def main() -> int:
                     if isinstance(provider, AgentRunnerProvider)
                     else 0
                 ),
+                resolution_policy=resolution_policy,
+                workspace=Path.cwd(),
             )
         except Exception as exc:  # noqa: BLE001 — best-effort IAR wrap
             log(
@@ -9822,13 +9932,25 @@ def main() -> int:
                 updates=result.prior_finding_updates,
                 current_fingerprints=current_fps,
                 delta=iar_pre_context.delta,
+                workspace=Path.cwd(),
+                policy=resolution_policy,
             )
-            # Model-only resolution is advisory. Never mutate human review
-            # threads based on a missing fingerprint or unrelated file edit.
+            # `advisory` (default): model-only resolution never mutates human
+            # review threads. `verified`: reply on + resolve the threads the
+            # runtime corroborated (best-effort).
+            apply_resolution_policy(
+                policy=resolution_policy,
+                reconciliation=reconciliation,
+                token=gh_token,
+                repo=repo,
+                pr_number=pr_number,
+                head_sha=head_sha,
+            )
             result.summary = (result.summary or "").rstrip() + render_incremental_footer(
                 delta=iar_pre_context.delta,
                 reconciliation=reconciliation,
                 new_findings=len(result.findings),
+                policy=resolution_policy,
             )
             log(
                 f"IAR incremental: resolved={len(reconciliation.resolved)} "

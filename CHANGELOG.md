@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`prior-findings-resolution` input (`advisory` | `verified`).** Incremental
+  follow-up rounds keep the v2.1.0 default: a `resolved` verdict is reported
+  but a maintainer resolves the thread and the finding keeps gating. Opting
+  into `verified` restores runtime-corroborated auto-resolution — the thread
+  is replied to and resolved only when the fingerprint is gone **and** the
+  file changed or was deleted; unverifiable claims stay open. Footer names
+  the policy when it is not the default.
 - **Checksum-verified installers.** New optional inputs
   `cursor-installer-sha256` and `grok-installer-sha256`: the Cursor and
   Grok install steps now download the vendor artefact to a file through

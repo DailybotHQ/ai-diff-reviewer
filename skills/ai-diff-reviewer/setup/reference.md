@@ -520,7 +520,7 @@ Full spec: [docs/ITERATION_AWARENESS.md](../../../docs/ITERATION_AWARENESS.md).
 with a trusted delta (the previously reviewed head is an ancestor of
 HEAD) the model sees only the changed hunks plus its own still-open
 findings, must classify each as resolved / open / regressed, and the
-runtime keeps resolution claims advisory until a maintainer resolves the thread. Still-open prior findings continue to gate the check even when no duplicate comment is posted. The
+runtime keeps resolution claims advisory until a maintainer resolves the thread (opt into `prior-findings-resolution: verified` to let corroborated fixes close their threads). Still-open prior findings continue to gate the check even when no duplicate comment is posted. The
 `iteration-escape-label` is the per-PR off switch (forces a full pass);
 rebases, force-pushes and the 30% safety net also force full mode.
 
@@ -573,6 +573,23 @@ rebases, force-pushes and the 30% safety net also force full mode.
   removing `applied-label` is "start clean, state discarded". Full spec
   in [docs/ITERATION_AWARENESS.md § 8.5](https://github.com/DailybotHQ/ai-diff-reviewer/blob/v1/docs/ITERATION_AWARENESS.md).
 
+
+### `prior-findings-resolution`
+
+- **Default:** `advisory`.
+- **Choices:** `advisory` | `verified`.
+- **What it is:** what a `resolved` verdict from the model does in incremental
+  follow-up rounds (v2.2.0+). `advisory`: reported in the summary as
+  *claimed resolved but unverified*; the thread is left to a maintainer and
+  the finding keeps counting toward the strictness gate. `verified`: the
+  runtime resolves the thread (with a reply) **only** when it can corroborate
+  the verdict — fingerprint absent from this round **and** the file changed
+  since the last reviewed head or was deleted; the finding then stops gating.
+  Unverifiable claims stay open under both policies.
+- **Recommendation:** keep `advisory` on public repos and on runners with
+  broad local access; use `verified` on trusted repos where the review loop
+  should close its own threads.
+- **See:** `docs/ITERATION_AWARENESS.md § 14.4`.
 ---
 
 ## Outputs
