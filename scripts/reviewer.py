@@ -198,6 +198,108 @@ DEFAULT_MODELS: dict[str, str] = {
     "grok": "grok-4.3",
 }
 
+# ---------------------------------------------------------------------------
+# Cost controls (v2.1.0+): model tier aliases + indicative prices
+# ---------------------------------------------------------------------------
+# `model` accepts three tier words resolved per (runner, backend kind) —
+# the one-word cost profile Cursor's `auto` proved people actually use.
+# Empty `model` keeps resolving to DEFAULT_MODELS (no behaviour change for
+# existing consumers); explicit ids pass through untouched. Azure and custom
+# hosts have no rows (deployment names are consumer-defined) and fail fast.
+MODEL_TIER_BALANCED: str = "balanced"
+MODEL_TIER_ECONOMY: str = "economy"
+MODEL_TIER_DEEP: str = "deep"
+MODEL_TIERS: tuple[str, ...] = (
+    MODEL_TIER_BALANCED,
+    MODEL_TIER_ECONOMY,
+    MODEL_TIER_DEEP,
+)
+# Verified against the vendors' model/pricing pages on this date. Ids and
+# prices move — re-verify when bumping. Rationale per row lives in
+# docs/PROVIDERS.md § "Cost-efficient defaults matrix".
+MODEL_TIERS_VERIFIED_ON: str = "2026-09-16"
+_ANTHROPIC_TIERS: dict[str, str] = {
+    # Sonnet 5 ($2/$10) is current and cheaper than the legacy
+    # claude-sonnet-4-6 ($3/$15) that DEFAULT_MODELS still names for
+    # back-compat; Haiku 4.5 ($1/$5) for smoke; Opus 5 ($5/$25) for deep.
+    MODEL_TIER_BALANCED: "claude-sonnet-5",
+    MODEL_TIER_ECONOMY: "claude-haiku-4-5",
+    MODEL_TIER_DEEP: "claude-opus-5",
+}
+_OPENAI_TIERS: dict[str, str] = {
+    # gpt-5.6-luna ($0.20/$1.20) is both the balanced AND the economy pick:
+    # gpt-5.4-mini ($0.75/$4.50) is no longer cheaper. Terra ($2/$12) deep.
+    MODEL_TIER_BALANCED: "gpt-5.6-luna",
+    MODEL_TIER_ECONOMY: "gpt-5.6-luna",
+    MODEL_TIER_DEEP: "gpt-5.6-terra",
+}
+_XAI_TIERS: dict[str, str] = {
+    # grok-4.3 ($1.25/$2.50 under 200k) daily tier; grok-4.6 ($2/$6) deep.
+    MODEL_TIER_BALANCED: "grok-4.3",
+    MODEL_TIER_ECONOMY: "grok-4.3",
+    MODEL_TIER_DEEP: "grok-4.6",
+}
+_ZAI_TIERS: dict[str, str] = {
+    # glm-5.3 ($1.40/$4.40) flagship; glm-5.3-flash ($0.15/$0.50) smoke.
+    # Flat-rate Coding Plan makes the marginal cost ≈ 0 either way.
+    MODEL_TIER_BALANCED: "glm-5.3",
+    MODEL_TIER_ECONOMY: "glm-5.3-flash",
+    MODEL_TIER_DEEP: "glm-5.3",
+}
+_CURSOR_TIERS: dict[str, str] = {
+    # `auto` is flat-rate on Pro and routes well; `composer-2.5` is the
+    # premium in-house coding model (burns credits) for deep passes.
+    MODEL_TIER_BALANCED: "auto",
+    MODEL_TIER_ECONOMY: "auto",
+    MODEL_TIER_DEEP: "composer-2.5",
+}
+# Keyed by (provider id, endpoint kind). Kind literals match ENDPOINT_KIND_*
+# (defined below with the backend constants; a test asserts the agreement).
+MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
+    ("anthropic", "anthropic"): _ANTHROPIC_TIERS,
+    ("claude-code", "anthropic"): _ANTHROPIC_TIERS,
+    ("anthropic", "zai"): _ZAI_TIERS,
+    ("claude-code", "zai"): _ZAI_TIERS,
+    ("anthropic", "xai"): _XAI_TIERS,
+    ("claude-code", "xai"): _XAI_TIERS,
+    ("openai", "openai"): _OPENAI_TIERS,
+    ("codex", "openai"): _OPENAI_TIERS,
+    ("openai", "xai"): _XAI_TIERS,
+    ("codex", "xai"): _XAI_TIERS,
+    ("openai", "zai"): _ZAI_TIERS,
+    ("codex", "zai"): _ZAI_TIERS,
+    ("grok", "xai"): _XAI_TIERS,
+    ("cursor", "custom"): _CURSOR_TIERS,
+}
+# Indicative list prices, USD per 1M tokens (input, output), matched by the
+# longest model-id prefix. Shared by the tier docs and the usage telemetry;
+# estimates only — consumers must never gate CI on them.
+INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-opus-5": (5.0, 25.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+    "gpt-5.6-luna": (0.20, 1.20),
+    "gpt-5.6-terra": (2.0, 12.0),
+    "gpt-5.6-sol": (4.0, 20.0),
+    "gpt-5.4-mini": (0.75, 4.50),
+    "gpt-5.3-codex": (1.75, 14.0),
+    "grok-4.6": (2.0, 6.0),
+    "grok-4.5": (2.0, 6.0),
+    "grok-4.3": (1.25, 2.50),
+    "glm-5.3-flash": (0.15, 0.50),
+    "glm-5.3": (1.40, 4.40),
+}
+# Legacy defaults that still ship for back-compat but have a cheaper,
+# current successor in the tier table — the run logs a one-line hint.
+LEGACY_DEFAULT_MODEL_HINTS: dict[str, str] = {
+    "claude-sonnet-4-6": "claude-sonnet-5",
+}
+# Agent-runner CLIs whose turn cap is enforced natively from `agent-max-turns`.
+AGENT_MAX_TURNS_NATIVE_PROVIDERS: tuple[str, ...] = ("grok",)
+GROK_MAX_TURNS_FLAG: str = "--max-turns"
+
 DEFAULT_MAX_TURNS: int = 30
 DEFAULT_MAX_INLINE_COMMENTS: int = 10
 DEFAULT_BASE_REF: str = "main"
@@ -1483,6 +1585,67 @@ def resolve_endpoint_profile(api_base: str, provider_id: str) -> EndpointProfile
         host=host,
         is_default=False,
     )
+
+
+def resolve_model(
+    provider_id: str, profile: EndpointProfile, raw_model: str
+) -> str:
+    """Resolve the `model` input to a concrete model id.
+
+    - empty → `DEFAULT_MODELS[provider_id]` (unchanged legacy behaviour);
+    - a tier word (`balanced` / `economy` / `deep`, case-insensitive) → the
+      `MODEL_TIER_TABLE` row for `(provider_id, profile.kind)`; Azure and
+      custom hosts have no rows and raise with guidance;
+    - anything else → passed through as an explicit model id.
+    Logs the resolution so the effective model is always visible.
+    """
+    value: str = (raw_model or "").strip()
+    if not value:
+        default: str = DEFAULT_MODELS.get(provider_id, "")
+        hint: str = LEGACY_DEFAULT_MODEL_HINTS.get(default, "")
+        if default and hint and profile.is_default:
+            log(
+                f"Model: {default} (built-in default, kept for compatibility). "
+                f"Tip: `model: {MODEL_TIER_BALANCED}` selects {hint}, the "
+                "current and cheaper balanced tier — see docs/PROVIDERS.md."
+            )
+        elif default:
+            log(f"Model: {default} (built-in default)")
+        return default
+    tier: str = value.lower()
+    if tier in MODEL_TIERS:
+        row: dict[str, str] | None = MODEL_TIER_TABLE.get(
+            (provider_id, profile.kind)
+        )
+        if row is None:
+            raise ValueError(
+                f"model tier {value!r} has no entry for provider "
+                f"{provider_id!r} on backend kind {profile.kind!r} "
+                f"(host {profile.host or 'default'}). Azure deployments and "
+                "custom gateways name their own models — set `model` to the "
+                "explicit id or deployment name."
+            )
+        resolved: str = row[tier]
+        log(f"Model: {resolved} (tier={tier}, backend={profile.kind})")
+        return resolved
+    log(f"Model: {value} (explicit)")
+    return value
+
+
+def parse_agent_max_turns(raw: str) -> int:
+    """`agent-max-turns` → non-negative int (0 = unset). Junk is an error."""
+    value: str = (raw or "").strip()
+    if not value:
+        return 0
+    try:
+        turns: int = int(value)
+    except ValueError as e:
+        raise ValueError(
+            f"agent-max-turns must be a whole number, got {value!r}."
+        ) from e
+    if turns < 0:
+        raise ValueError(f"agent-max-turns must not be negative, got {turns}.")
+    return turns
 
 
 def _post_json_with_retries(
@@ -2781,6 +2944,7 @@ class GrokProvider(AgentRunnerProvider):
         extra_args: str = "",
         mcp_config_file: str = "",
         profile: EndpointProfile | None = None,
+        max_turns: int = 0,
     ) -> None:
         self.api_key: str = api_key
         self.model: str = model
@@ -2791,6 +2955,8 @@ class GrokProvider(AgentRunnerProvider):
             if profile is not None
             else resolve_endpoint_profile("", self.PROVIDER_ID)
         )
+        # `agent-max-turns` → native `--max-turns` (0 = unset).
+        self.max_turns: int = max_turns
 
     def install(self) -> None:
         result = run_cmd([self.CLI_BIN, "--version"])
@@ -2813,6 +2979,8 @@ class GrokProvider(AgentRunnerProvider):
         ]
         if self.model and self.model != "auto":
             argv += ["-m", self.model]
+        if self.max_turns > 0:
+            argv += [GROK_MAX_TURNS_FLAG, str(self.max_turns)]
         if self.extra_args:
             argv += shlex.split(self.extra_args)
         return argv
@@ -2901,19 +3069,25 @@ def build_provider(
     # and mcp_config_file come from the AIPRR_* env vars set by action.yml.
     extra_args: str = os.environ.get("AIPRR_AGENT_EXTRA_ARGS", "").strip()
     mcp_config: str = os.environ.get("AIPRR_MCP_CONFIG_FILE", "").strip()
-    # `agent-max-turns` has no universal enforcement point: none of the
-    # shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag
-    # on their current versions. Rather than silently ignore the input, warn
-    # so the consumer knows the effective bound is CLI_INVOCATION_TIMEOUT and
-    # can use `agent-extra-args` for a vendor-native limit. See docs/PROVIDERS.md.
-    agent_max_turns: str = os.environ.get("AIPRR_AGENT_MAX_TURNS", "").strip()
-    if agent_max_turns:
+    # `agent-max-turns` is enforced natively where the CLI exposes a turn cap
+    # (Grok: `--max-turns`). Elsewhere warn — accurately, per provider — so the
+    # consumer knows the effective bound is CLI_INVOCATION_TIMEOUT and which
+    # vendor-native lever exists. See docs/PROVIDERS.md.
+    agent_max_turns: int = parse_agent_max_turns(
+        os.environ.get("AIPRR_AGENT_MAX_TURNS", "")
+    )
+    if agent_max_turns and provider_id not in AGENT_MAX_TURNS_NATIVE_PROVIDERS:
+        alternative: str = {
+            "claude-code": "Claude Code's `--max-budget-usd <amount>` via agent-extra-args",
+            "codex": "no vendor cap flag on `codex exec`",
+            "cursor": "no vendor cap flag on `cursor-agent`",
+        }.get(provider_id, "no vendor cap flag")
         log(
-            f"WARNING: agent-max-turns={agent_max_turns!r} is set but is not "
-            f"forwarded to the {provider_id} CLI — no turn-cap flag is "
-            f"available on the shipping CLI. The effective bound is the "
-            f"{CLI_INVOCATION_TIMEOUT}s invocation timeout. Use agent-extra-args "
-            "for a vendor-native limit (e.g. Claude Code's --max-budget-usd)."
+            f"WARNING: agent-max-turns={agent_max_turns} is set but the "
+            f"{provider_id} CLI has no turn-count flag to forward it to "
+            f"({alternative}). The effective bound is the "
+            f"{CLI_INVOCATION_TIMEOUT}s invocation timeout. Natively enforced "
+            f"on: {', '.join(AGENT_MAX_TURNS_NATIVE_PROVIDERS)}."
         )
     if provider_id == "claude-code":
         return ClaudeCodeProvider(
@@ -2946,6 +3120,7 @@ def build_provider(
             extra_args=extra_args,
             mcp_config_file=mcp_config,
             profile=profile,
+            max_turns=agent_max_turns,
         )
     raise ValueError(
         f"Unsupported provider: {provider_id!r}. Currently supported: "
@@ -7316,15 +7491,6 @@ def main() -> int:
     register_secret(gh_token)
     pr_number: int = int(pr_number_raw)
 
-    model: str = (
-        os.environ.get("AIPRR_MODEL", "").strip()
-        or DEFAULT_MODELS.get(provider_id, "")
-    )
-    if not model:
-        log(f"No default model for provider {provider_id!r} — aborting.")
-        write_all_outputs(skipped=False)
-        return 1
-
     # Backend selection (v2.1.0+). Validate before anything outward-facing
     # happens: the credential in `api-key` will be sent to this host.
     try:
@@ -7341,6 +7507,21 @@ def main() -> int:
         f"host={backend_profile.host or 'default'}"
         + ("" if backend_profile.is_default else " (custom api-base)")
     )
+
+    # Model: empty → provider default; tier word → cost-controls table;
+    # anything else → explicit id (v2.1.0+ tier aliases).
+    try:
+        model: str = resolve_model(
+            provider_id, backend_profile, os.environ.get("AIPRR_MODEL", "")
+        )
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    if not model:
+        log(f"No default model for provider {provider_id!r} — aborting.")
+        write_all_outputs(skipped=False)
+        return 1
 
     prompt_file: str = os.environ.get("AIPRR_PROMPT_FILE", "").strip()
     prompt_extension_file: str = os.environ.get(

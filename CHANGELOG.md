@@ -77,6 +77,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `action.yml` installs the CLI only when `provider: grok`, with a new
   `grok-version` pin input; `code_check.yml` smoke-tests the installer.
   New example `examples/provider-grok.yml`.
+- **Model tier aliases + cost-efficient defaults matrix.** `model` accepts
+  `balanced` / `economy` / `deep`, resolved per runner × backend from one
+  table (`MODEL_TIER_TABLE`) and logged; empty `model` keeps the built-in
+  default (no behaviour change), explicit ids pass through, Azure /
+  custom hosts fail fast with guidance. The dated matrix (verified
+  2026-09-16) lives in `docs/PROVIDERS.md` with rationale per row and a
+  label-routed recipe. Notable verified facts: `claude-sonnet-5` ($2/$10)
+  is current and cheaper than the legacy `claude-sonnet-4-6` ($3/$15)
+  the built-in default still names (the run logs a hint; `model:
+  balanced` opts in); `gpt-5.6-luna` ($0.20/$1.20) is cheaper than
+  `gpt-5.4-mini` ($0.75/$4.50). An indicative price table
+  (`INDICATIVE_PRICES_USD_PER_MTOK`) is shared with the usage telemetry.
+- **`agent-max-turns` is enforced natively on `grok`** (`--max-turns`);
+  other CLIs get an accurate per-provider warning (Claude Code:
+  `--max-budget-usd` via `agent-extra-args`). Junk values abort.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

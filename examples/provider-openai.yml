@@ -7,7 +7,8 @@
 # Z.ai (see the variants at the bottom).
 #
 # Default model `gpt-5.6-luna` (current-gen budget model that still finds
-# subtle bugs). Pin `gpt-5.4-mini` for a cheaper/shallower smoke review.
+# subtle bugs — and, as of 2026-09-16 pricing, cheaper than gpt-5.4-mini).
+# Use `model: economy | balanced | deep` for a one-word cost profile.
 # SECURITY: `api-key` is sent to the `api-base` host.
 
 name: PR review (OpenAI-compatible)
@@ -38,7 +39,7 @@ jobs:
           provider: openai
           api-key: ${{ secrets.OPENAI_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # model: gpt-5.4-mini            # cheaper smoke tier
+          # model: economy                 # one-word cost profile (economy | balanced | deep)
 
       # ---- Azure Foundry (v1 endpoint) --------------------------------------
       # - uses: DailybotHQ/ai-diff-reviewer@v2

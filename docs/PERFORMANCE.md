@@ -124,7 +124,7 @@ The runtime handles this by **retrying summary-only** on 422 — the review stil
 Common to both provider families:
 
 - **`max-inline-comments`** (default `10`) — hard cap on inline comments; the review summary is not capped. Applied uniformly across both families.
-- **`model`** — swapping model tiers has the biggest effect on both cost and quality. The `DEFAULT_MODELS` table at the top of `scripts/reviewer.py` picks a deliberate midpoint per provider; override if your budget or quality bar is different.
+- **`model`** — swapping model tiers has the biggest effect on both cost and quality. Pick a profile in one word — `model: balanced | economy | deep` — resolved per runner × backend from the dated matrix in [`PROVIDERS.md` § "Cost-efficient defaults matrix"](PROVIDERS.md#cost-efficient-defaults-matrix-verified-2026-09-16--ids-and-prices-move-re-check-when-bumping); empty keeps the built-in default; an explicit id passes through.
 
 Chat-completions family only:
 
@@ -132,7 +132,7 @@ Chat-completions family only:
 
 Agent-runner family only:
 
-- **`agent-max-turns`** — currently warns on CLI providers instead of enforcing a cap. Use `agent-extra-args` for vendor-native budget flags when a CLI exposes one.
+- **`agent-max-turns`** — enforced natively on `grok` (`--max-turns`); on Claude Code / Codex / Cursor the run logs a per-provider warning (Claude Code: use `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s timeout is the bound).
 - **`agent-extra-args`** — free-form vendor flags. Not cost-capped by us.
 - **`mcp-config-file`** — path to an MCP config for the vendor CLI. Extra tools = more turns = more spend.
 

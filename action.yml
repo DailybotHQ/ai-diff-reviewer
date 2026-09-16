@@ -42,7 +42,7 @@ inputs:
     required: false
     default: 'anthropic'
   model:
-    description: 'Model id for the chosen provider. Empty = provider default. Defaults balance review quality against cost: Anthropic → `claude-sonnet-4-6`; Claude Code → `claude-sonnet-4-6` (the quality/price sweet spot for code review; never `auto`, which can silently be Opus; pin `claude-haiku-4-5` for a cheaper/shallower smoke review); Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model); Codex → `gpt-5.6-luna` (current-gen budget model, the OpenAI parallel of the Sonnet-class choice — `gpt-5-codex` is deprecated; pin the cheaper `gpt-5.4-mini` for a shallower smoke review); OpenAI (`provider: openai`) → `gpt-5.6-luna` as well; on a non-default `api-base` pin the backend''s own id (e.g. `grok-4.3`, `glm-5.3`, or an Azure deployment name). Note the `api-key` input for Claude Code also accepts a `claude setup-token` subscription OAuth token (`sk-ant-oat…`) to bill against a Claude Pro/Max plan instead of API usage. See docs/PROVIDERS.md § "Choosing a cost-efficient model".'
+    description: 'Model id for the chosen provider, or a cost-profile tier alias: `balanced` (recommended), `economy` (smoke passes), `deep` (high-risk PRs) — resolved per runner × backend from the dated matrix in docs/PROVIDERS.md § "Cost-efficient defaults matrix" (Azure deployments / custom gateways have no tier rows: pass the explicit name). Empty = provider default. Defaults balance review quality against cost: Anthropic → `claude-sonnet-4-6`; Claude Code → `claude-sonnet-4-6` (the quality/price sweet spot for code review; never `auto`, which can silently be Opus; pin `claude-haiku-4-5` for a cheaper/shallower smoke review); Cursor → `auto` (unlimited on Pro plans; pin `composer-2.5` etc. to force a specific model); Codex → `gpt-5.6-luna` (current-gen budget model, the OpenAI parallel of the Sonnet-class choice — `gpt-5-codex` is deprecated; pin `gpt-5.4-mini` only if you specifically want that model — as of 2026-09-16 it is no longer cheaper than `gpt-5.6-luna`; use `model: economy` for the cheap tier); OpenAI (`provider: openai`) → `gpt-5.6-luna` as well; on a non-default `api-base` pin the backend''s own id (e.g. `grok-4.3`, `glm-5.3`, or an Azure deployment name). Note the `api-key` input for Claude Code also accepts a `claude setup-token` subscription OAuth token (`sk-ant-oat…`) to bill against a Claude Pro/Max plan instead of API usage. See docs/PROVIDERS.md § "Choosing a cost-efficient model".'
     required: false
     default: ''
 
@@ -144,7 +144,7 @@ inputs:
   # These inputs only affect the CLI providers (`claude-code`, `cursor`, `codex`).
   # Ignored by `anthropic`. Empty = provider default.
   agent-max-turns:
-    description: 'Reserved budget hint for CLI providers. Currently logs a warning instead of enforcing a cap because the shipping CLIs do not expose one stable cross-provider turn-count flag. Ignored for chat-completions providers.'
+    description: 'Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns N`). Claude Code, Cursor and Codex expose no turn-count flag — the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound). Whole number; ignored by chat-completions providers (use `max-turns`).'
     required: false
     default: ''
   agent-extra-args:

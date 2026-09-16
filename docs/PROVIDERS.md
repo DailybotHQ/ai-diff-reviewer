@@ -307,7 +307,7 @@ The runtime logs a WARNING naming this limitation whenever Codex runs on an `xai
 
 ### Known limitations of the agent-runner path
 
-- **`agent-max-turns` is not enforced for the CLI providers.** None of the shipping CLIs (Claude Code, Cursor, Codex) expose a turn-count cap flag on their current versions, so the input can't be forwarded. When it is set, the run now logs a clear warning (rather than silently ignoring it) — the effective bound is the `CLI_INVOCATION_TIMEOUT` (900 s). For a real cap use `agent-extra-args` with a vendor-native flag (e.g. Claude Code's `--max-budget-usd`).
+- **`agent-max-turns` is enforced natively only on `grok`** (`--max-turns`). Claude Code, Cursor and Codex expose no turn-count flag; when the input is set on those providers the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound).
 - **`mcp-config-file` passthrough:** works for **Cursor** (`~/.cursor/mcp.json` + `--approve-mcps`) and **Claude Code** (passed via `--mcp-config <file>`). For **Codex** it does **not** take effect — Codex configures MCP via `config.toml`, not a JSON file — and the run warns accordingly without copying the ignored JSON file into `~/.codex` or the isolated per-run `CODEX_HOME`; supply MCP config via `agent-extra-args` (`-c mcp_servers...`) or a preconfigured `config.toml`.
 - **Malformed CLI JSON fallback:** agent-runner providers are instructed to write strict JSON to `.aiprr/findings.json`. If a CLI exits successfully but writes malformed JSON with a recoverable top-level `summary`, AI Diff Reviewer posts a summary-only review and logs a warning; inline findings are dropped because malformed finding objects cannot be trusted. Direct parser validation remains strict unless this fallback is explicitly enabled at the subprocess boundary.
 
@@ -413,35 +413,71 @@ This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses t
 
 Two things drive review cost: **how often it runs** and **which model it uses**.
 
-- **Frequency** is the biggest lever. Running several providers on every push is N× the reviews. Pick one provider for routine use, or gate the expensive legs (this repo's `self-review.yml` runs a cheap Anthropic baseline on every PR and only invokes the CLI providers when the diff touches runtime/action/prompt surfaces).
-- **Model** matters most for the agent-runner CLIs (`claude-code`, `codex`), which are autonomous agents that explore the repo and spend far more tokens than the bounded chat-completions path — and whose turn count can't be capped from the action (only the 900 s timeout bounds them).
+- **Frequency** is the biggest lever. Running several providers on every push is N× the reviews. Pick one provider for routine use, or gate the expensive legs (this repo's `self-review.yml` runs a cheap baseline on every `ready` PR and reserves deeper passes for high-risk changes).
+- **Model** matters most for the agent-runner CLIs (`claude-code`, `codex`, `grok`), which are autonomous agents that explore the repo and spend far more tokens than the bounded chat-completions path.
 
 ### Quality is not optional for review
 
-Code review's value is catching **subtle** bugs — logic errors, race conditions, security issues. That's exactly where model capability pays off, so the cheapest model is not always the best *value*:
+Code review's value is catching **subtle** bugs — logic errors, race conditions, security issues. That is exactly where model capability pays off, so the cheapest model is not always the best *value*: a cheap review that misses real issues can be worse than none (false confidence). The **balanced** tier below is the quality/cost sweet spot for real reviews; **economy** is for smoke/dogfood passes and docs-only PRs; **deep** for high-risk PRs.
 
-- **Haiku 4.5 / mini-tier models** are great for obvious bugs, style, and fast smoke passes, but noticeably weaker at the subtle bugs that justify running a reviewer. A cheap review that misses real issues can be worse than none (false confidence).
-- **Sonnet-class** models are the sweet spot for real review — strong bug-finding at roughly 1/5th of Opus cost.
-- **Opus-class** is best but usually overkill for routine PRs.
+### Pick a cost profile in one word — `model: balanced | economy | deep`
 
-### Default models (chosen for quality/cost balance)
+Cursor `auto` proved the pattern: a one-word cost profile is what teams actually use day to day. The `model` input now accepts the same idea for every runner × backend — the runtime resolves the tier from the matrix below and logs the concrete id. Empty `model` keeps resolving to the built-in default (unchanged for existing consumers); an explicit id always passes through.
 
-| Provider | Default model | Approx. API price (in / out per 1M) | Rationale |
-|---|---|---|---|
-| `anthropic` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot for review quality. |
-| `claude-code` | `claude-sonnet-4-6` | $3 / $15 | Sweet spot. Never `auto` (could be Opus $5/$25). Pin `claude-haiku-4-5` for a cheaper/shallower smoke review. |
-| `cursor` | `auto` | subscription (flat) | Unlimited on Cursor Pro → ~$0 marginal. `auto` is the right choice here. |
-| `codex` | `gpt-5.6-luna` | $1 / $6 | Current-gen budget model — the OpenAI parallel of the Sonnet-class choice: strong enough for subtle bugs, far below codex-tier (`gpt-5-codex` ≈$1.75/$14, and deprecated). Pin the cheaper `gpt-5.4-mini` ($0.75/$4.50) for a shallower smoke review. |
+### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
 
-Prices are indicative (mid-2026) and change — check each vendor's pricing page. Anthropic has no separate "mini" tier: **Haiku 4.5 is the small/cheap Claude**; OpenAI's mini is `gpt-5.4-mini`. The consumer defaults for the metered providers are all **quality-tier** (Sonnet-class / current-gen budget) — the mini/Haiku tiers are reserved for smoke/dogfood passes (see `self-review.yml`), never a consumer default.
+Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free).
 
-### Recommendations
+| Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
+|---|---|---|---|---|---|
+| `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
+| `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
+| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.3` — $1.25 / $2.50 | `grok-4.3` | `grok-4.6` — $2 / $6 | 4.3 is the daily tier at a low price point; 4.6 is the reasoning tier. (Prices are the <200k-token rates; above that they double.) |
+| `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
+| `openai`, `codex` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
+| `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
+| `grok` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. |
+| `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
+| any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
 
-- **Real reviews (consumers):** keep the Sonnet-class defaults — the quality is the point.
-- **Cheapest predictable setup:** `provider: anthropic` (bounded loop + prompt caching keep it low and stable).
-- **Cheapest if you're on Cursor Pro:** `provider: cursor`, `model: auto` (flat rate).
-- **Smoke/dogfood reviews** (backed by human review, e.g. this repo's self-review baseline): `claude-haiku-4-5` / `gpt-5.4-mini` are fine — a cheap sanity pass, with deeper providers reserved for high-risk changes.
-- **`max-turns` (chat-completions only):** the default `30` is a *safety ceiling*, not a target — the loop stops as soon as the model calls `submit_review` (usually well under 10 turns), so it rarely drives cost. It does not apply to the CLI providers. Lower it (e.g. `12`, as `self-review.yml` does for its smoke baseline) only to bound a pathological run.
+Built-in defaults when `model` is empty (unchanged this release): `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.3` (grok), `auto` (cursor).
+
+### Route tiers by risk (recipe)
+
+Run `economy` on every push and `deep` only when the PR is risky — the complexity label the reviewer itself applies (`complexity-labels-enabled`) or a human `deep-review` label are the natural triggers. Two jobs with distinct `applied-label`s; per-provider collapse keeps their reviews apart:
+
+```yaml
+jobs:
+  review-economy:
+    if: "!contains(github.event.pull_request.labels.*.name, 'deep-review')"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          model: economy
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          applied-label: reviewed:economy
+  review-deep:
+    if: "contains(github.event.pull_request.labels.*.name, 'deep-review') || contains(github.event.pull_request.labels.*.name, 'complexity:high')"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          model: deep
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          applied-label: reviewed:deep
+```
+
+### Turn and budget caps per CLI
+
+- `agent-max-turns` is enforced **natively on `grok`** (`--max-turns`). Claude Code has no turn cap but exposes `--max-budget-usd <amount>` (pass it via `agent-extra-args`); Codex and Cursor expose neither — the effective bound is the 900 s invocation timeout. The run logs an accurate per-provider warning when the input cannot be forwarded.
+- `max-turns` (chat-completions only, default `30`) is a safety ceiling, not a target — the loop stops at `submit_review`, usually well under 10 turns.
 
 ### Billing Claude Code against a subscription (instead of API tokens)
 

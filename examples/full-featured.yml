@@ -30,6 +30,9 @@ jobs:
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Cost profile in one word (v2.1.0+): balanced | economy | deep —
+          # resolved per runner × backend; empty keeps the built-in default.
+          # model: balanced
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
           # 1. Trigger: only run when the author signals readiness via label.

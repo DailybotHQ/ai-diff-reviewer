@@ -151,6 +151,11 @@ Discovery data to pre-fill anything you can (e.g. `default_branch`,
 > - **`codex`** — Runs the OpenAI Codex CLI headlessly (GPT models).
 >   Best if the team already has OpenAI billing.
 
+Whatever the provider, suggest `model: balanced` (the cost-efficient
+recommendation — one word, resolved per runner × backend; `economy` for
+smoke passes, `deep` for high-risk PRs). See `docs/PROVIDERS.md § "Cost-efficient
+defaults matrix"` in the action repo.
+
 Record: `PROVIDER`. Also record the corresponding secret name for
 Step 4: `ANTHROPIC_API_KEY` / `CLAUDE_CODE_TOKEN` (or
 `ANTHROPIC_API_KEY`) / `CURSOR_API_KEY` / `OPENAI_API_KEY`.

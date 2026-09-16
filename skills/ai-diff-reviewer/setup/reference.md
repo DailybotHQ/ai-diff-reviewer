@@ -78,7 +78,12 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `model`
 
 - **Default:** `''` (empty — provider default; see below).
-- **Provider-specific defaults:**
+- **Tier aliases (v2.1.0+):** `balanced` (recommended), `economy` (smoke),
+  `deep` (high-risk PRs) — resolved per runner × backend from the dated
+  matrix in `docs/PROVIDERS.md § "Cost-efficient defaults matrix"`; the run
+  logs the concrete id. Azure deployments / custom gateways have no tier
+  rows — pass the explicit name. Any other value is an explicit model id.
+- **Provider-specific defaults (empty `model`):**
   - `anthropic` → `claude-sonnet-4-6`
   - `openai` → `gpt-5.6-luna` (same reasoning as Codex; on a non-default
     `api-base` pin the backend's own id — `grok-4.3`, `glm-5.3`, or an
@@ -391,13 +396,14 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 ### `agent-max-turns`
 
-- **Default:** `''` (empty).
-- **What it is:** Reserved budget hint for CLI providers. Currently
-  logs a warning instead of enforcing a cap, because the shipping
-  CLIs do not yet expose a single stable cross-provider turn-count
-  flag.
-- **Status:** placeholder for future enforcement; setting it today is
-  informational only.
+- **Default:** `''` (unset).
+- **What it is:** turn cap for agent-runner CLIs. **Enforced natively on
+  `grok`** (`--max-turns N`). Claude Code, Cursor and Codex expose no
+  turn-count flag: the run logs a per-provider warning (Claude Code: use
+  `--max-budget-usd <amount>` via `agent-extra-args`; otherwise the 900 s
+  invocation timeout is the bound). Must be a whole number; junk aborts.
+- **Ignored by:** chat-completions providers (`anthropic`, `openai`) —
+  they use `max-turns`.
 
 ### `agent-extra-args`
 
