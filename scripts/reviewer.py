@@ -2769,6 +2769,20 @@ def _drain_tail(stream: Any, sink: dict[str, Any], key: str) -> None:
     sink[key + "_dropped"] = dropped
 
 
+def _feed_stdin(proc: "subprocess.Popen[bytes]", data: bytes) -> None:
+    """Write the prompt to the CLI's stdin and close it, tolerating a CLI
+    that exits (or never reads) before consuming it — like `communicate()`."""
+    assert proc.stdin is not None
+    try:
+        proc.stdin.write(data)
+    except (BrokenPipeError, OSError):
+        pass  # the CLI's exit code says why it stopped reading
+    try:
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+
+
 def _run_cli_process(
     argv: list[str],
     *,
@@ -2777,15 +2791,17 @@ def _run_cli_process(
     input: str | None,
     timeout: int,
 ) -> "subprocess.CompletedProcess[str]":
-    """`subprocess.run` with bounded output capture.
+    """`subprocess.run(..., timeout=)` semantics with bounded output capture.
 
     stdout/stderr are drained by reader threads that keep only the last
     CLI_OUTPUT_TAIL_MAX_BYTES of each stream, so a chatty CLI cannot grow
-    the reviewer's memory without bound (and a large stdin prompt cannot
-    deadlock against a full stdout pipe). Raises `subprocess.TimeoutExpired`
-    exactly like `subprocess.run(timeout=...)`.
+    the reviewer's memory without bound; stdin is fed by its own thread so
+    a CLI that never reads its prompt cannot block the deadline. One
+    deadline covers the write, the wait and the drain; on expiry the CLI is
+    killed and `subprocess.TimeoutExpired` is raised as `run()` would.
     """
-    proc = subprocess.Popen(
+    deadline: float = time.monotonic() + timeout
+    proc: "subprocess.Popen[bytes]" = subprocess.Popen(
         argv,
         cwd=cwd,
         env=env,
@@ -2794,27 +2810,28 @@ def _run_cli_process(
         stderr=subprocess.PIPE,
     )
     sink: dict[str, Any] = {}
-    readers: list[threading.Thread] = [
+    workers: list[threading.Thread] = [
         threading.Thread(target=_drain_tail, args=(proc.stdout, sink, "stdout"), daemon=True),
         threading.Thread(target=_drain_tail, args=(proc.stderr, sink, "stderr"), daemon=True),
     ]
-    for t in readers:
+    if input is not None:
+        workers.append(
+            threading.Thread(target=_feed_stdin, args=(proc, input.encode("utf-8")), daemon=True)
+        )
+    for t in workers:
         t.start()
-    if input is not None and proc.stdin is not None:
-        try:
-            proc.stdin.write(input.encode("utf-8"))
-        except BrokenPipeError:
-            pass  # the CLI exited before reading its prompt; its exit code says why
-        finally:
-            proc.stdin.close()
     try:
-        returncode: int = proc.wait(timeout=timeout)
+        returncode: int = proc.wait(timeout=max(0.0, deadline - time.monotonic()))
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
         raise
-    for t in readers:
-        t.join()
+    for t in workers:
+        t.join(timeout=max(0.0, deadline - time.monotonic()))
+    if any(t.is_alive() for t in workers):
+        # A grandchild kept the pipes open past the deadline: report what
+        # was captured so far rather than hang the action.
+        log(f"{argv[0]}: output pipes still open after the CLI exited; using the captured tail.")
     for key in ("stdout", "stderr"):
         if sink.get(key + "_dropped"):
             log(
@@ -2859,6 +2876,7 @@ def _invoke_cli_agent(
         # persistent self-hosted workspace would otherwise be posted as a
         # review.
         findings_path.unlink(missing_ok=True)
+        started: float = time.monotonic()
         try:
             result = _run_cli_process(
                 argv,
@@ -2874,6 +2892,15 @@ def _invoke_cli_agent(
                 f"or narrowing the PR scope."
             ) from e
         if result.returncode == 0 and not findings_path.exists() and attempt < attempts:
+            elapsed: float = time.monotonic() - started
+            if elapsed > CLI_INVOCATION_TIMEOUT / 2:
+                # A second full-length attempt would overrun the job's
+                # `timeout-minutes`; post the incomplete review instead.
+                log(
+                    f"WARNING: {cli_name} CLI exited 0 without a findings file "
+                    f"after {elapsed:.0f}s — no time budget for a retry."
+                )
+                break
             # The agent ended its session without the contract output
             # (observed live with the Grok CLI). One fresh attempt is
             # cheaper than a failed check; its usage is carried over.
@@ -2886,7 +2913,8 @@ def _invoke_cli_agent(
             if usage_parser is not None:
                 try:
                     carried_usage = usage_parser(result.stdout or "")
-                except Exception:  # noqa: BLE001 — telemetry never fails a run
+                except Exception as exc:  # noqa: BLE001 — telemetry never fails a run
+                    log(f"Usage parse skipped ({cli_name}, attempt {attempt}): {type(exc).__name__}: {exc}")
                     carried_usage = None
             retry_note = (
                 "\n\n---\n\n_Retried once: the first attempt ended without "

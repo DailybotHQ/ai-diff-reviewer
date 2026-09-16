@@ -34,7 +34,7 @@ Auditable in `scripts/reviewer.py` via the `ANTHROPIC_API_URL`, `GITHUB_REST_BAS
 
 ### Vendor-CLI subprocess environment (v1.1.0+)
 
-Agent-runner providers invoke the vendor CLI via `subprocess.run(argv, env=...)` — argv-list form, never `shell=True`. The `env` passed to the subprocess is **explicitly scrubbed** via `_build_cli_env()`: it forwards only an allowlist of variables the CLI needs (`PATH`, `HOME`, `NODE_PATH`, locale, runner metadata) plus the vendor-specific API key. `AIPRR_GH_TOKEN` and every other `AIPRR_*` env var are **not** forwarded to the CLI — the reviewer's Python runtime keeps the GitHub token in-process and calls the GitHub API directly.
+Agent-runner providers invoke the vendor CLI through `_run_cli_process` — `subprocess.Popen(argv, env=...)` in argv-list form, never `shell=True`, with bounded output capture (last 4 MB per stream) and one deadline over write, wait and drain (v2.2.0+; `subprocess.run` semantics otherwise). The `env` passed to the subprocess is **explicitly scrubbed** via `_build_cli_env()`: it forwards only an allowlist of variables the CLI needs (`PATH`, `HOME`, `NODE_PATH`, locale, runner metadata) plus the vendor-specific API key. `AIPRR_GH_TOKEN` and every other `AIPRR_*` env var are **not** forwarded to the CLI — the reviewer's Python runtime keeps the GitHub token in-process and calls the GitHub API directly.
 
 ### Agent-runner providers: residual exfiltration surface (READ BEFORE ENABLING)
 

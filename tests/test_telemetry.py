@@ -246,10 +246,6 @@ class WiringTests(unittest.TestCase):
         self.assertIn("iteration-tokens-used=1234", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CursorUsageParserTests(unittest.TestCase):
     def test_single_document_with_usage(self) -> None:
         out = json.dumps({"type": "result", "usage": {"input_tokens": 100, "output_tokens": 20, "cache_read_input_tokens": 50}, "num_turns": 3, "total_cost_usd": 0.01})
@@ -268,3 +264,6 @@ class CursorUsageParserTests(unittest.TestCase):
         self.assertIsNone(reviewer.parse_cursor_usage(json.dumps({"type": "result"})))
         self.assertIsNone(reviewer.parse_cursor_usage(""))
 
+
+if __name__ == "__main__":
+    unittest.main()

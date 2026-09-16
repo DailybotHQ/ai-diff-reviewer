@@ -339,7 +339,7 @@ Missing files raise `FileNotFoundError` with an actionable message. Malformed JS
 |---|---|---|
 | exit 0, findings file written | normal review | strictness gate as usual |
 | non-zero exit, findings file written | posts the review with a `Partial review: <cli> exited with code N` footer and a WARNING in the log | strictness gate as usual |
-| exit 0, no findings file | **retried once** with a fresh session (both attempts' usage is reported, the summary carries a `Retried once` note); if the retry also produces no file, posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
+| exit 0, no findings file | **retried once** with a fresh session when the first attempt used less than half of the CLI timeout (both attempts' usage is reported, the summary carries a `Retried once` note); if the retry also produces no file, posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
 | non-zero exit, no findings file | the run fails with the CLI's stderr/stdout tail | red |
 
 Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run. CLI stdout/stderr are captured **bounded** (last 4 MB of each stream): a chatty agent cannot grow the reviewer's memory, and a multi-megabyte prompt on stdin cannot deadlock against a full pipe.

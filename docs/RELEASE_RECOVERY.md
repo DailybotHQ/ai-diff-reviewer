@@ -345,14 +345,6 @@ git commit -m "fix(ci): re-sync skill prompt with default"
 This is normally handled by auto-release Step 2.5; only fires if you
 edited `prompts/default.md` in a PR that also touches `skills/`.
 
----
-
-## Contact
-
-For anything not covered here, file a bug at
-<https://github.com/DailybotHQ/ai-diff-reviewer/issues> with the
-workflow-run URL and the observed remote state.
-
 ### Scenario: the release silently skipped because a commit body *quoted* the marker
 
 `auto-release.yml` skips when the head commit **message** (subject + body)
@@ -366,3 +358,11 @@ Recovery: merge one more conventional commit to `main` (a `feat:` or `fix:`
 subject decides the bump; the squash **subject** is what the bump derivation
 reads, `git log --format=%s`). Prevention: never write the literal marker in a
 commit body unless you mean it — spell it `skip-release marker` in prose.
+
+---
+
+## Contact
+
+For anything not covered here, file a bug at
+<https://github.com/DailybotHQ/ai-diff-reviewer/issues> with the
+workflow-run URL and the observed remote state.

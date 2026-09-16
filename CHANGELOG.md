@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
 - **Agent-runner retry:** a CLI that exits 0 without writing its findings
   file gets one fresh attempt before the run is posted as an incomplete
   review; both attempts' usage is reported and the summary says
@@ -21,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   saying `not reported by this provider`. Not verified live in this release
   (no Cursor key in the dogfood matrix).
 - **Release hygiene:** documented that a squash body quoting `[skip release]` suppresses the release (PR #51 shipped untagged), with the recovery and the commit-message rule (`docs/RELEASE_RECOVERY.md`, `CONTRIBUTING.md`).
-
-### Changed
 
 - **Releases stamp the CHANGELOG.** `auto-release.yml` now turns
   `## [Unreleased]` into `## [X.Y.Z] — date` (and opens a fresh empty
