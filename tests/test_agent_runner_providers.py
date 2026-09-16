@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -708,6 +709,17 @@ def _capture_codex_call_with_auth_state(
             captured["codex_home_path"] = codex_home
             auth_path: Path = codex_home / "auth.json"
             captured["auth_json_exists_at_invocation"] = auth_path.exists()
+            config_path: Path = codex_home / "config.toml"
+            captured["config_toml_exists_at_invocation"] = config_path.exists()
+            catalog_path: Path = codex_home / "models.json"
+            captured["catalog_exists_at_invocation"] = catalog_path.exists()
+            if catalog_path.exists():
+                captured["catalog_content"] = catalog_path.read_text(encoding="utf-8")
+            if config_path.exists():
+                captured["config_toml_content"] = config_path.read_text(
+                    encoding="utf-8"
+                )
+                captured["config_toml_mode"] = config_path.stat().st_mode & 0o777
             if auth_path.exists():
                 captured["auth_json_content"] = auth_path.read_text(
                     encoding="utf-8"
@@ -959,6 +971,215 @@ class ClaudeCodeCustomBackendTests(unittest.TestCase):
         env = reviewer.ClaudeCodeProvider(api_key="xai-KEY", model="grok-4.3", profile=prof).auth_env_vars()
         self.assertEqual(env[reviewer.CLAUDE_CODE_BASE_URL_ENV], "https://api.x.ai")
         self.assertEqual(env["ANTHROPIC_DEFAULT_SONNET_MODEL"], "grok-4.3")
+
+
+class CodexCustomBackendTests(unittest.TestCase):
+    """`api-base` on codex materializes a `config.toml` in the isolated
+    CODEX_HOME that routes the CLI to a Responses-API backend; the default
+    profile writes no config and keeps argv/env byte-identical."""
+
+    AZURE = "https://myres.services.ai.azure.com/openai/v1"
+
+    def setUp(self) -> None:
+        # Keep these hermetic: the catalog step shells out to `codex debug
+        # models --bundled`; stub it as unavailable (covered separately).
+        self._rc = mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, ""))
+        self._rc.start(); self.addCleanup(self._rc.stop)
+
+    def _prov(self, base: str, *, model: str = "gpt-5.4-mini-azure", key: str = "az-KEY") -> Any:
+        prof = reviewer.resolve_endpoint_profile(base, "codex")
+        return reviewer.CodexProvider(api_key=key, model=model, profile=prof)
+
+    def test_default_profile_writes_no_config_toml(self) -> None:
+        c = _capture_codex_call_with_auth_state(reviewer.CodexProvider(api_key="k", model=""))
+        self.assertFalse(c["config_toml_exists_at_invocation"])
+        self.assertNotIn("--model", c["argv"])
+        self.assertEqual(c["env"].get("OPENAI_API_KEY"), "k")
+
+    def test_azure_profile_config_toml_content_and_perms(self) -> None:
+        c = _capture_codex_call_with_auth_state(self._prov(self.AZURE))
+        self.assertTrue(c["config_toml_exists_at_invocation"])
+        self.assertEqual(c["config_toml_mode"], 0o600)
+        toml = c["config_toml_content"]
+        self.assertIn('model = "gpt-5.4-mini-azure"', toml)
+        self.assertIn('model_provider = "aiprr"', toml)
+        self.assertIn("[model_providers.aiprr]", toml)
+        self.assertIn(f'base_url = "{self.AZURE}"', toml)
+        self.assertIn('env_key = "OPENAI_API_KEY"', toml)
+        self.assertIn('wire_api = "responses"', toml)
+        self.assertIn(reviewer.AZURE_IMAGE_GEN_HEADER, toml)
+        self.assertIn("[features]", toml)
+        self.assertIn("image_generation = false", toml)
+        # the key itself never lands in the TOML
+        self.assertNotIn("az-KEY", toml)
+        # --model forced, key still forwarded via env for env_key
+        self.assertIn("--model", c["argv"])
+        self.assertEqual(c["argv"][c["argv"].index("--model") + 1], "gpt-5.4-mini-azure")
+        self.assertEqual(c["env"].get("OPENAI_API_KEY"), "az-KEY")
+        self.assertTrue(c["auth_json_exists_at_invocation"])
+        self.assertFalse(c["codex_home_path"].exists(), "CODEX_HOME must be cleaned up")
+
+    def test_xai_and_zai_profiles_have_no_azure_block(self) -> None:
+        for base, model in (("https://api.x.ai/v1", "grok-4.3"), ("https://api.z.ai/api/v1", "glm-5.3")):
+            with self.subTest(base=base):
+                c = _capture_codex_call_with_auth_state(self._prov(base, model=model))
+                toml = c["config_toml_content"]
+                self.assertIn(f'base_url = "{base}"', toml)
+                self.assertNotIn(reviewer.AZURE_IMAGE_GEN_HEADER, toml)
+                self.assertNotIn("[features]", toml)
+                self.assertIn('wire_api = "responses"', toml)
+
+    def test_model_required_on_custom_backend(self) -> None:
+        for bad in ("", "auto"):
+            with self.subTest(model=bad), self.assertRaises(ValueError):
+                _capture_codex_call_with_auth_state(self._prov(self.AZURE, model=bad))
+
+    def test_toml_escaping(self) -> None:
+        esc = reviewer.CodexProvider._toml_escape
+        self.assertEqual(esc('a"b'), 'a\\"b')
+        self.assertEqual(esc("a\\b"), "a\\\\b")
+        self.assertEqual(esc("a\nb"), "a\\nb")
+        prof = reviewer.resolve_endpoint_profile("https://api.x.ai/v1", "codex")
+        rendered = reviewer.CodexProvider.render_custom_provider_config(profile=prof, model='we"ird')
+        self.assertIn('model = "we\\"ird"', rendered)
+
+    def test_rendered_config_has_no_unescaped_newlines_in_strings(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.AZURE, "codex")
+        rendered = reviewer.CodexProvider.render_custom_provider_config(profile=prof, model="m")
+        for line in rendered.splitlines():
+            if "=" in line and '"' in line:
+                self.assertEqual(line.count('"') % 2, 0, line)
+
+
+_FAKE_BUNDLED_CATALOG: dict[str, Any] = {
+    "models": [
+        {
+            "slug": "gpt-6-astra", "display_name": "Astra", "description": "x",
+            "visibility": "hidden", "supported_in_api": False, "priority": 9,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "base_instructions": "BASE", "context_window": 1,
+        },
+        {
+            "slug": "gpt-5.4", "display_name": "GPT-5.4", "description": "t",
+            "visibility": "list", "supported_in_api": True, "priority": 3,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace", "apps"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "web_search_tool_type": "preview", "base_instructions": "BASE54", "context_window": 2,
+            "upgrade": {"model": "gpt-5.6-terra", "migration_markdown": "moved"},
+        },
+        {
+            "slug": "gpt-5.6-luna", "display_name": "Luna", "description": "l",
+            "visibility": "list", "supported_in_api": True, "priority": 2,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "web_search_tool_type": "text_and_image", "base_instructions": "BASELUNA",
+            "context_window": 3, "upgrade": None, "availability_nux": None,
+        },
+    ]
+}
+
+
+class _FakeCmd:
+    def __init__(self, returncode: int, stdout: str) -> None:
+        self.returncode = returncode; self.stdout = stdout; self.stderr = ""
+
+
+class CodexModelCatalogTests(unittest.TestCase):
+    """Custom backends get a cloned model catalog so Codex does not send
+    OpenAI-only tool types (xAI rejects `tools[].type: namespace`)."""
+
+    XAI = "https://api.x.ai/v1"
+
+    def test_entry_cloned_from_preferred_template_with_safe_overrides(self) -> None:
+        entry = reviewer.CodexProvider.build_model_catalog_entry(_FAKE_BUNDLED_CATALOG, model="grok-4.3", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["slug"], "grok-4.3")
+        self.assertEqual(entry["display_name"], "grok-4.3")
+        self.assertEqual(entry["base_instructions"], "BASELUNA", "preferred template is the first upgrade-free entry (gpt-5.6-luna)")
+        # a non-null template field is never overwritten with null …
+        self.assertEqual(entry["web_search_tool_type"], "text_and_image")
+        # … but a nullable one may stay null
+        self.assertIsNone(entry["availability_nux"])
+        self.assertEqual(entry["visibility"], "list")
+        self.assertTrue(entry["supported_in_api"])
+        self.assertFalse(entry["use_responses_lite"])
+        self.assertFalse(entry["supports_search_tool"])
+        self.assertEqual(entry["experimental_supported_tools"], [])
+        self.assertEqual(entry["service_tiers"], [])
+        self.assertFalse(entry["include_apps_usage_instructions"])
+        # keys absent from the template are never invented
+        self.assertNotIn("multi_agent_version", entry)
+        # the bundled catalog object is not mutated
+        self.assertEqual(_FAKE_BUNDLED_CATALOG["models"][1]["slug"], "gpt-5.4")
+
+    def test_entry_falls_back_to_first_model_and_none_when_empty(self) -> None:
+        only_astra = {"models": [_FAKE_BUNDLED_CATALOG["models"][0]]}
+        entry = reviewer.CodexProvider.build_model_catalog_entry(only_astra, model="m", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["base_instructions"], "BASE")
+
+    def test_templates_with_an_upgrade_redirect_are_skipped(self) -> None:
+        bundled = {"models": [_FAKE_BUNDLED_CATALOG["models"][1], _FAKE_BUNDLED_CATALOG["models"][0]]}
+        entry = reviewer.CodexProvider.build_model_catalog_entry(bundled, model="m", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["base_instructions"], "BASE", "gpt-5.4 carries an upgrade block and must not be the template")
+        self.assertIsNone(reviewer.CodexProvider.build_model_catalog_entry({"models": []}, model="m", kind="xai"))
+
+    def test_catalog_written_and_referenced_from_config(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(0, json.dumps(_FAKE_BUNDLED_CATALOG))):
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertTrue(c["catalog_exists_at_invocation"])
+        catalog = json.loads(c["catalog_content"])
+        self.assertEqual([m["slug"] for m in catalog["models"]], ["grok-4.3"])
+        self.assertIn("model_catalog_json = ", c["config_toml_content"])
+        self.assertIn("models.json", c["config_toml_content"])
+
+    def test_catalog_unavailable_degrades_to_no_catalog(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, "")), \
+             mock.patch.object(reviewer, "log") as fake_log:
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertFalse(c["catalog_exists_at_invocation"])
+        self.assertTrue(c["config_toml_exists_at_invocation"])
+        self.assertNotIn("model_catalog_json", c["config_toml_content"])
+        self.assertTrue(any("catalog" in str(call.args[0]) for call in fake_log.call_args_list))
+
+    def test_non_json_catalog_degrades(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(0, "not json")):
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertFalse(c["catalog_exists_at_invocation"])
+
+
+class CodexCustomToolWarningTests(unittest.TestCase):
+    """Codex 0.154 emits a `custom` (freeform apply_patch) tool that some
+    Responses gateways reject; the runtime warns on those kinds, never blocks."""
+
+    def _run(self, base: str) -> list[str]:
+        prof = reviewer.resolve_endpoint_profile(base, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="m", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, "")), \
+             mock.patch.object(reviewer, "log") as fake_log:
+            _capture_codex_call_with_auth_state(prov)
+        return [str(c.args[0]) for c in fake_log.call_args_list]
+
+    def test_warns_on_xai_and_custom_hosts(self) -> None:
+        for base in ("https://api.x.ai/v1", "https://api.z.ai/api/v1", "https://gateway.example/v1"):
+            with self.subTest(base=base):
+                msgs = self._run(base)
+                self.assertTrue(any("custom" in m and "422" in m for m in msgs), msgs)
+
+    def test_no_warning_on_azure(self) -> None:
+        msgs = self._run("https://myres.services.ai.azure.com/openai/v1")
+        self.assertFalse(any("422" in m for m in msgs), msgs)
 
 
 if __name__ == "__main__":

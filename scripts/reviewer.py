@@ -284,6 +284,55 @@ PROVIDER_DEFAULT_API_BASE: dict[str, str] = {
 }
 PROVIDERS_WITHOUT_API_BASE: tuple[str, ...] = ("cursor",)
 
+# Codex on a custom backend (`api-base`, v2.1.0+): a `config.toml` written
+# into the isolated per-run CODEX_HOME routes Codex to an OpenAI-compatible
+# Responses API (Azure Foundry v1, xAI, Z.ai). `env_key` names the env var
+# holding the credential — we already forward the key as OPENAI_API_KEY.
+CODEX_CONFIG_TOML_FILENAME: str = "config.toml"
+CODEX_CUSTOM_PROVIDER_ID: str = "aiprr"
+CODEX_CUSTOM_PROVIDER_ENV_KEY: str = "OPENAI_API_KEY"
+# Model catalog for custom backends. Codex resolves per-model capabilities
+# (tool set, responses-lite presets, app/plugin tool namespaces) from its
+# bundled catalog; a third-party Responses endpoint rejects several of those
+# (xAI: `tools[].type: unknown variant "namespace"`). We clone a bundled
+# entry under the consumer's model id with conservative capabilities and
+# point `model_catalog_json` at it. Best-effort: if the bundled catalog
+# cannot be read, the run proceeds without a catalog (Azure works either way).
+CODEX_MODEL_CATALOG_FILENAME: str = "models.json"
+# Backends observed (2026-09-16, Codex 0.154.0) to reject Codex's freeform
+# `apply_patch` custom tool with HTTP 422. Warned, not blocked — a future
+# CLI or gateway release may lift it.
+CODEX_CUSTOM_TOOL_SENSITIVE_KINDS: tuple[str, ...] = ("xai", "zai", "custom")
+# Preferred templates: current-gen, API-supported entries WITHOUT an
+# `upgrade` redirect (an upgrade block would make Codex swap the model).
+CODEX_CATALOG_TEMPLATE_SLUGS: tuple[str, ...] = (
+    "gpt-5.6-luna",
+    "gpt-5.4-mini",
+    "gpt-5.4",
+)
+CODEX_CATALOG_CMD: tuple[str, ...] = ("codex", "debug", "models", "--bundled")
+# Overrides applied to the cloned entry — only keys already present in the
+# template are touched, so the shape stays valid across Codex versions.
+CODEX_CATALOG_SAFE_OVERRIDES: dict[str, Any] = {
+    "visibility": "list",
+    "supported_in_api": True,
+    "priority": 1,
+    "use_responses_lite": False,
+    "supports_search_tool": False,
+    "additional_speed_tiers": [],
+    "service_tiers": [],
+    "experimental_supported_tools": [],
+    "include_apps_usage_instructions": False,
+    "include_plugin_usage_instructions": False,
+    "include_skills_usage_instructions": False,
+    # Legacy keys (older Codex catalogs) — applied only when present AND
+    # already nullable in the template (see build_model_catalog_entry).
+    "multi_agent_version": None,
+    "tool_mode": None,
+    "upgrade": None,
+    "availability_nux": None,
+}
+
 # Tool-use loop guardrails.
 MAX_TOOL_OUTPUT_BYTES: int = 32_000
 MAX_FILE_READ_LINES: int = 2_000
@@ -2298,6 +2347,13 @@ class CodexProvider(AgentRunnerProvider):
 
     CLI: `@openai/codex` on npm. Installed by the composite step when
     `provider: codex`.
+
+    Custom backends (`api-base`, v2.1.0+): when the resolved profile is not
+    the default, a `config.toml` is written next to `auth.json` in the same
+    isolated CODEX_HOME, declaring an OpenAI-compatible Responses-API
+    provider (`wire_api = "responses"`) — Azure Foundry v1, xAI, Z.ai — plus
+    the Azure image-generation workaround where the host is Azure. `--model`
+    is required there (deployment name or the backend's model id).
     """
 
     PROVIDER_ID: str = "codex"
@@ -2334,6 +2390,173 @@ class CodexProvider(AgentRunnerProvider):
                 f"{auth_path}: {e}. Continuing — the temp CODEX_HOME "
                 f"parent directory is already 0700."
             )
+
+    @staticmethod
+    def _toml_escape(value: str) -> str:
+        """Escape a string for a double-quoted TOML basic string."""
+        out: list[str] = []
+        for ch in value:
+            if ch == "\\":
+                out.append("\\\\")
+            elif ch == '"':
+                out.append('\\"')
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            elif ord(ch) < 0x20:
+                out.append(f"\\u{ord(ch):04X}")
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    @classmethod
+    def render_custom_provider_config(
+        cls,
+        *,
+        profile: EndpointProfile,
+        model: str,
+        catalog_path: Path | None = None,
+    ) -> str:
+        """Render the `config.toml` that routes Codex to a custom backend.
+
+        Pure (unit-tested directly). The provider block mirrors the
+        maintainer-proven overlay for Azure Foundry / xAI / Z.ai:
+        `wire_api = "responses"`, `env_key` pointing at the env var we
+        already forward, plus the profile's extra TOML (Azure needs the
+        image-generation header workaround and the feature disabled).
+        """
+        esc = cls._toml_escape
+        pid: str = CODEX_CUSTOM_PROVIDER_ID
+        lines: list[str] = [
+            "# Generated per-run by AI Diff Reviewer — routes Codex to the",
+            "# backend selected by `api-base`. Lives only in the isolated",
+            "# CODEX_HOME for this invocation.",
+            f'model = "{esc(model)}"',
+            f'model_provider = "{pid}"',
+        ]
+        if catalog_path is not None:
+            lines.append(f'model_catalog_json = "{esc(str(catalog_path))}"')
+        lines += [
+            "",
+            f"[model_providers.{pid}]",
+            f'name = "AI Diff Reviewer backend ({esc(profile.kind)})"',
+            f'base_url = "{esc(profile.base_url)}"',
+            f'env_key = "{CODEX_CUSTOM_PROVIDER_ENV_KEY}"',
+            f'wire_api = "{esc(profile.codex_wire_api)}"',
+        ]
+        text: str = "\n".join(lines) + "\n"
+        if profile.codex_extra_toml:
+            text += profile.codex_extra_toml
+        return text
+
+    @staticmethod
+    def build_model_catalog_entry(
+        bundled: dict[str, Any], *, model: str, kind: str
+    ) -> dict[str, Any] | None:
+        """Clone a bundled ModelInfo under `model` with conservative
+        capabilities (pure — unit-tested). Returns None when the bundled
+        catalog has no usable template."""
+        models: list[dict[str, Any]] = [
+            m for m in (bundled.get("models") or []) if isinstance(m, dict)
+        ]
+        if not models:
+            return None
+        by_slug: dict[str, dict[str, Any]] = {
+            str(m.get("slug", "")): m for m in models
+        }
+        def _no_upgrade(m: dict[str, Any]) -> bool:
+            return m.get("upgrade") is None
+
+        template: dict[str, Any] | None = None
+        for slug in CODEX_CATALOG_TEMPLATE_SLUGS:
+            candidate: dict[str, Any] | None = by_slug.get(slug)
+            if candidate is not None and _no_upgrade(candidate):
+                template = candidate
+                break
+        if template is None:
+            template = next((m for m in models if _no_upgrade(m)), models[0])
+        entry: dict[str, Any] = json.loads(json.dumps(template))  # deep copy
+        entry["slug"] = model
+        entry["display_name"] = model
+        entry["description"] = f"AI Diff Reviewer backend model ({kind})."
+        for key, value in CODEX_CATALOG_SAFE_OVERRIDES.items():
+            if key not in entry:
+                continue
+            # Never write `null` into a field the template has non-null:
+            # Codex's catalog parser is strict about types.
+            if value is None and entry[key] is not None:
+                continue
+            entry[key] = json.loads(json.dumps(value))
+        return entry
+
+    @classmethod
+    def _materialize_model_catalog(
+        cls, *, codex_home: Path, profile: EndpointProfile, model: str
+    ) -> Path | None:
+        """Best-effort: write `models.json` cloned from the bundled catalog.
+
+        Returns the catalog path, or None (with a log line) when the CLI
+        cannot list its bundled catalog — the run then proceeds without a
+        catalog, which is enough for Azure Foundry and any backend that
+        tolerates Codex's default tool set.
+        """
+        result = run_cmd(list(CODEX_CATALOG_CMD))
+        if result.returncode != 0 or not (result.stdout or "").strip():
+            log(
+                "Codex model catalog unavailable "
+                f"(`{' '.join(CODEX_CATALOG_CMD)}` exit {result.returncode}); "
+                "continuing without model_catalog_json."
+            )
+            return None
+        try:
+            bundled: dict[str, Any] = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            log(f"Codex model catalog is not JSON ({e}); continuing without it.")
+            return None
+        entry: dict[str, Any] | None = cls.build_model_catalog_entry(
+            bundled, model=model, kind=profile.kind
+        )
+        if entry is None:
+            log("Codex bundled catalog had no models; continuing without it.")
+            return None
+        catalog_path: Path = codex_home / CODEX_MODEL_CATALOG_FILENAME
+        catalog_path.write_text(
+            json.dumps({"models": [entry]}, indent=2) + "\n", encoding="utf-8"
+        )
+        try:
+            os.chmod(catalog_path, 0o600)
+        except OSError as e:  # noqa: BLE001 — perms are defense in depth
+            log(f"WARNING: could not chmod 0600 on {catalog_path}: {e}")
+        return catalog_path
+
+    @classmethod
+    def _materialize_custom_provider_config(
+        cls, *, codex_home: Path, profile: EndpointProfile, model: str
+    ) -> Path:
+        """Write `config.toml` (0600) into `codex_home` for a custom backend,
+        referencing a cloned model catalog when one could be produced."""
+        catalog_path: Path | None = cls._materialize_model_catalog(
+            codex_home=codex_home, profile=profile, model=model
+        )
+        config_path: Path = codex_home / CODEX_CONFIG_TOML_FILENAME
+        config_path.write_text(
+            cls.render_custom_provider_config(
+                profile=profile, model=model, catalog_path=catalog_path
+            ),
+            encoding="utf-8",
+        )
+        try:
+            os.chmod(config_path, 0o600)
+        except OSError as e:
+            log(
+                f"WARNING: could not chmod 0600 on Codex config.toml at "
+                f"{config_path}: {e}. Continuing — the temp CODEX_HOME "
+                f"parent directory is already 0700."
+            )
+        return config_path
 
     def __init__(
         self,
@@ -2407,6 +2630,35 @@ class CodexProvider(AgentRunnerProvider):
             self._materialize_apikey_auth_json(
                 codex_home=codex_home, api_key=self.api_key
             )
+            if not self.profile.is_default:
+                # Custom backend (Azure Foundry / xAI / Z.ai / gateway): the
+                # model is the backend's own id or deployment name and must
+                # be explicit — Codex's built-in default only exists on
+                # OpenAI.
+                if not self.model or self.model == "auto":
+                    raise ValueError(
+                        "model is required when codex runs on a custom "
+                        f"api-base ({self.profile.host}) — e.g. an Azure "
+                        "deployment name, `grok-4.3` (xAI) or `glm-5.3` "
+                        "(Z.ai)."
+                    )
+                self._materialize_custom_provider_config(
+                    codex_home=codex_home, profile=self.profile, model=self.model
+                )
+                log(
+                    f"Codex backend: {self.profile.kind} ({self.profile.host}) "
+                    f"wire_api={self.profile.codex_wire_api}, model={self.model}"
+                )
+                if self.profile.kind in CODEX_CUSTOM_TOOL_SENSITIVE_KINDS:
+                    log(
+                        "WARNING: Codex CLI 0.154+ always sends its freeform "
+                        "apply_patch tool (`tools[].type: custom`), which "
+                        f"{self.profile.kind} Responses endpoints have been "
+                        "observed to reject with HTTP 422. If this run fails "
+                        "that way, use `provider: openai` (in-process) or "
+                        "`provider: grok` for xAI instead, or pin an older "
+                        "`codex-version`. See docs/PROVIDERS.md."
+                    )
 
             # Do not copy `mcp-config-file` to `~/.codex/mcp.json`: Codex
             # ignores that JSON file, and this run uses an isolated CODEX_HOME

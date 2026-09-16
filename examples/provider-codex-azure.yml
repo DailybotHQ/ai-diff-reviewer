@@ -1,0 +1,57 @@
+# OpenAI Codex CLI on Azure Foundry (agent-runner family + `api-base`,
+# v2.1.0+). Also the template for Codex on xAI or Z.ai — see the bottom.
+#
+# The action installs `@openai/codex` (only for this provider) and runs it
+# headless. With `api-base` set, it writes a per-run `config.toml` into an
+# isolated CODEX_HOME that declares an OpenAI-compatible Responses-API
+# provider (`wire_api = "responses"`), plus — for Azure hosts — the
+# image-generation header workaround Foundry needs on plain text turns.
+#
+# `model` is REQUIRED and is your Azure DEPLOYMENT NAME (not the base model
+# id). `api-base` is the Foundry v1 endpoint of your resource.
+# SECURITY: `api-key` is sent to the `api-base` host; agent-runner CLIs run
+# with broad local access — trusted (non-fork) PRs only.
+
+name: PR review (Codex · Azure Foundry)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: codex
+          # Repository variable so the URL is not hard-coded in the workflow:
+          api-base: ${{ vars.AZURE_OPENAI_BASE_URL }}   # e.g. https://<resource>.services.ai.azure.com/openai/v1
+          api-key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: gpt-5.4-mini-azure     # your DEPLOYMENT name (required)
+          # codex-version: '0.154.0'    # optional CLI pin
+
+# Codex on xAI — NOT recommended with Codex 0.154 (xAI rejects Codex's freeform
+# apply_patch `custom` tool with HTTP 422). Use `provider: openai` with
+# `api-base: https://api.x.ai/v1` or `provider: grok` instead. See docs/PROVIDERS.md.
+#
+# Codex on Z.ai GLM (Responses API — note: NOT the coding/paas/v4 chat base;
+# unverified, expect the same limitation as xAI — prefer claude-code or openai):
+#   api-base: https://api.z.ai/api/v1
+#   api-key:  ${{ secrets.ZAI_CODING_API_KEY }}
+#   model:    glm-5.3

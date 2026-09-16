@@ -155,6 +155,8 @@ The in-process OpenAI-compatible runner is the most portable path: zero install,
 
 Copy-paste workflow with all four variants: [`examples/provider-openai.yml`](../examples/provider-openai.yml). Errors and logs name the endpoint kind and host, never the key.
 
+**Verified live (2026-09-16):** the `openai` runner completed a tool-enabled request against xAI (`grok-4.3`, `https://api.x.ai/v1`) and Azure Foundry (`gpt-5.4-mini-azure` deployment, v1 endpoint) with the action's real tool schema — both returned `end_turn` with `usage` populated. Z.ai could not be exercised that day (quota exhausted).
+
 ---
 
 ## Agent Runner Provider Contract (v1.1.0)
@@ -261,6 +263,45 @@ AI Diff Reviewer handles this automatically. For each Codex invocation the provi
 4. Removes the entire `CODEX_HOME` in a `finally` block after the invocation returns — success or failure.
 
 No consumer action is required. If you need to override where `auth.json` is materialized (e.g. an air-gapped runner with a pre-seeded `CODEX_HOME`), that is a roadmap item; open an issue.
+
+### Codex on Azure Foundry / xAI / Z.ai (`api-base`, v2.1.0+)
+
+When `provider: codex` runs with a non-default `api-base`, the provider writes a `config.toml` **next to `auth.json` in the same isolated per-run `CODEX_HOME`** (mode `0600`, removed in the `finally` block) that routes the CLI to an OpenAI-compatible **Responses API** backend:
+
+```toml
+model = "<your model or deployment name>"
+model_provider = "aiprr"
+
+[model_providers.aiprr]
+name = "AI Diff Reviewer backend (<kind>)"
+base_url = "<api-base>"
+env_key = "OPENAI_API_KEY"        # the key is already forwarded under this name
+wire_api = "responses"
+# Azure hosts only — Foundry rejects plain text turns without these:
+http_headers = { "x-ms-oai-image-generation-deployment" = "gpt-image-1" }
+[features]
+image_generation = false
+```
+
+| Backend | `api-base` | `model` | Notes |
+|---|---|---|---|
+| Azure Foundry (v1) | `https://<resource>.services.ai.azure.com/openai/v1` | your **deployment name** (e.g. `gpt-5.4-mini-azure`) | Image-generation header workaround + `image_generation = false` added automatically. |
+| xAI Grok | `https://api.x.ai/v1` | `grok-4.3` / `grok-4.6` | Responses API. **Rejected by xAI with Codex 0.154** (see verification below) — prefer `provider: openai` or `provider: grok`. |
+| Z.ai GLM | `https://api.z.ai/api/v1` | `glm-5.3` / `glm-5.3-flash` | **Responses** base — different from the chat base (`/api/coding/paas/v4`) used by `provider: openai`. Unverified; prefer `claude-code` or `openai` for GLM. |
+
+`model` is **required** on a custom backend (`auto` and empty are rejected with an actionable error): Codex's built-in default only exists on OpenAI. Everything else — the apikey-mode `auth.json`, the `--dangerously-bypass-approvals-and-sandbox` flag, stdin prompt delivery, the MCP caveat — is unchanged. Copy-paste workflow: [`examples/provider-codex-azure.yml`](../examples/provider-codex-azure.yml).
+
+**Model catalog (why a `models.json` is written too).** Codex resolves per-model capabilities from its bundled catalog — including OpenAI-only tool types that third-party Responses endpoints reject (xAI answers `422 … tools[].type: unknown variant "namespace"`). So on a custom backend the provider also writes `models.json` into the same `CODEX_HOME`: one entry cloned from a bundled template (`gpt-5.4`, else `gpt-5.4-mini`, else the first) under **your** model id, with conservative capabilities (`use_responses_lite = false`, no search/apps/plugin tool namespaces, no service tiers), and `config.toml` points `model_catalog_json` at it. This is the recipe the maintainer runs locally and it is what makes xAI work; Azure Foundry works with or without it. If `codex debug models --bundled` is unavailable on the installed CLI, the run logs it and proceeds without a catalog.
+
+**Verification (2026-09-16, Codex CLI 0.154.0, headless `codex exec` with the generated files):**
+
+| Backend | Result | Detail |
+|---|---|---|
+| Azure Foundry (`gpt-5.4-mini-azure` deployment) | ✅ works | With and without the cloned catalog. |
+| xAI (`grok-4.3`) | ❌ **not usable with Codex 0.154** | The catalog removes the `namespace` tool types, but Codex 0.154 only supports `apply_patch_tool_type = "freeform"`, which is sent as `tools[].type: custom`; xAI's Responses API rejects it (`422 … unknown variant "custom"`). Not fixable from this action. **Use `provider: openai` + `api-base: https://api.x.ai/v1` (in-process, verified) or `provider: grok` for xAI.** A consumer who knows an older Codex build that predates freeform `apply_patch` can pin it via `codex-version`. |
+| Z.ai (`glm-5.3`, Responses base) | ⚠️ unverified | The plan's weekly quota was exhausted on the verification day. Expect the same `custom`-tool sensitivity as xAI; the `openai` runner on `https://api.z.ai/api/coding/paas/v4` and the `claude-code` runner are the verified GLM paths. |
+
+The runtime logs a WARNING naming this limitation whenever Codex runs on an `xai`, `zai` or `custom` host, and never blocks (a future CLI or gateway release may lift it).
 
 ### Known limitations of the agent-runner path
 

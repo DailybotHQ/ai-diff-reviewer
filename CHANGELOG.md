@@ -51,6 +51,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   profile env/argv unchanged (snapshot tests). New example
   `examples/provider-claude-code-glm.yml`; `docs/PROVIDERS.md` § "Z.ai GLM —
   recommended runner and why".
+- **`codex` runner honours `api-base` (Azure Foundry / xAI / Z.ai).** A
+  per-run `config.toml` is written next to `auth.json` in the isolated
+  `CODEX_HOME` declaring an OpenAI-compatible Responses-API provider
+  (`wire_api = "responses"`, `env_key = "OPENAI_API_KEY"`); Azure hosts get
+  the image-generation header workaround and `image_generation = false`.
+  `model` (deployment name or backend id) is required there; `--model` is
+  always passed. Strings are TOML-escaped; the key never lands in the file.
+  A `models.json` cloned from Codex's bundled catalog (conservative
+  capabilities, no OpenAI-only tool namespaces) is written alongside and
+  referenced via `model_catalog_json` — required for xAI, harmless on
+  Azure; degrades to no catalog if the CLI cannot list its bundled models.
+  Live-verified on Azure Foundry (Codex 0.154.0). **Known limitation:**
+  Codex 0.154 always sends its freeform `apply_patch` tool
+  (`tools[].type: custom`), which xAI's Responses API rejects (HTTP 422) —
+  the runtime warns on `xai` / `zai` / `custom` hosts; use `provider:
+  openai` or `provider: grok` for xAI. Z.ai via Codex is unverified.
+  Default profile argv/env unchanged and no config/catalog file is
+  written. New example `examples/provider-codex-azure.yml`.
 
 ### Fixed
 

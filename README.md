@@ -150,6 +150,17 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
 ```
 
 ```yaml
+# OpenAI Codex on Azure Foundry — model is your deployment name
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: codex
+    api-base: https://<resource>.services.ai.azure.com/openai/v1
+    api-key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: gpt-5.4-mini-azure
+```
+
+```yaml
 # Z.ai GLM through Claude Code — the recommended GLM runner (flat-rate Coding Plan)
 - uses: DailybotHQ/ai-diff-reviewer@v2
   with:
@@ -160,7 +171,7 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
     model: glm-5.3          # required on a custom backend
 ```
 
-Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
+Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
 
