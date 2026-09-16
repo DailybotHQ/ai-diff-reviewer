@@ -6,8 +6,15 @@
 
 | File | Purpose (tests) |
 |---|---|
-| [`test_agent_runner_providers.py`](test_agent_runner_providers.py) | The four `AgentRunnerProvider` implementations (`claude-code`, `cursor`, `codex`, `grok`) (99) |
-| [`test_backends.py`](test_backends.py) | `api-base` contract (48) |
+| [`test_agent_runner_backends.py`](test_agent_runner_backends.py) | Custom backends for CLI runners (21) |
+| [`test_agent_runner_cli_invocations.py`](test_agent_runner_cli_invocations.py) | Claude Code and Codex invocations (22) |
+| [`test_agent_runner_cursor.py`](test_agent_runner_cursor.py) | Cursor Agent CLI headless defaults (6) |
+| [`test_agent_runner_grok_and_snapshots.py`](test_agent_runner_grok_and_snapshots.py) | Grok CLI invocation (prompt file, rules, hardening flags, `--max-turns`, env) and the **default-profile back-compat snapshot table captured from `main`** (9) |
+| [`test_agent_runner_hardening.py`](test_agent_runner_hardening.py) | Agent-runner security (18) |
+| [`test_agent_runner_providers.py`](test_agent_runner_providers.py) | Agent-runner core (23) |
+| [`test_backend_matrix.py`](test_backend_matrix.py) | The **runner × backend matrix** (six runners × five backends), endpoint path joining, backend-selection logging (9) |
+| [`test_backend_requests.py`](test_backend_requests.py) | Anthropic runner on compatible gateways (13) |
+| [`test_backends.py`](test_backends.py) | `api-base` contract (29) |
 | [`test_end_to_end_roundtrip.py`](test_end_to_end_roundtrip.py) | Cross-family invariants (13) |
 | [`test_findings_parser.py`](test_findings_parser.py) | `parse_findings_file()` (33) |
 | [`test_iar_dedup.py`](test_iar_dedup.py) | IAR fingerprinting and dedup of findings against prior rounds (32) |
@@ -20,11 +27,11 @@
 | [`test_iar_state_layer.py`](test_iar_state_layer.py) | Iteration-Aware Review state (39) |
 | [`test_model_tiers.py`](test_model_tiers.py) | `model` tier aliases (`balanced` / `economy` / `deep`), the dated defaults matrix, legacy-default hints, `agent-max-turns` parsing and native caps (17) |
 | [`test_openai_provider.py`](test_openai_provider.py) | `provider: openai` (20) |
+| [`test_review_safety_regressions.py`](test_review_safety_regressions.py) | Local-review regressions for multi-backend and incremental safety (14) |
 | [`test_reviewer.py`](test_reviewer.py) | Core runtime (192) |
-| [`test_review_safety_regressions.py`](test_review_safety_regressions.py) | Incremental, backend, HTTP, usage and modular-install safety regressions (14) |
 | [`test_telemetry.py`](test_telemetry.py) | Usage telemetry (22) |
 
-Every file imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). Total: **717** tests.
+Every file imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). Total: **720** tests.
 
 ## What is (and isn't) covered
 

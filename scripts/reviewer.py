@@ -213,6 +213,18 @@ DEFAULT_MODELS: dict[str, str] = {
 MODEL_TIER_BALANCED: str = "balanced"
 MODEL_TIER_ECONOMY: str = "economy"
 MODEL_TIER_DEEP: str = "deep"
+# Runners that ignore `api-base` (they only talk to their own vendor): an
+# empty `model` keeps resolving to the built-in default for them.
+PROVIDERS_WITHOUT_API_BASE_LANE: tuple[str, ...] = ("cursor", "grok")
+# What `model` must name when `api-base` points at each kind of backend.
+MODEL_REQUIRED_HINTS: dict[str, str] = {
+    "azure": "your Azure deployment name (e.g. `gpt-5.4-mini-azure`)",
+    "zai": "a GLM id (e.g. `glm-5.3`)",
+    "xai": "a Grok id (e.g. `grok-4.6`)",
+    "anthropic": "an Anthropic model id",
+    "openai": "an OpenAI model id",
+    "custom": "the gateway's model id",
+}
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
     MODEL_TIER_ECONOMY,
@@ -238,8 +250,14 @@ _OPENAI_TIERS: dict[str, str] = {
     MODEL_TIER_DEEP: "gpt-5.6-terra",
 }
 _XAI_TIERS: dict[str, str] = {
-    # grok-4.3 ($1.25/$2.50 under 200k) daily tier; grok-4.6 ($2/$6) deep.
-    MODEL_TIER_BALANCED: "grok-4.3",
+    # Measured 2026-09-16 on the labelled corpus (tests/eval): through the
+    # Grok CLI, grok-4.3 ($1.25/$2.50 under 200k) reported 0 of 4 known
+    # defects (and once wrote no findings file) at ~$0.07/review, while
+    # grok-4.6 ($2/$6) found 3 of 4 with zero false positives at
+    # $0.47–0.85 and 4–10 min. A "balanced" review that finds nothing is not
+    # balanced, so 4.6 is both the balanced and the deep pick; 4.3 remains
+    # the economy/smoke tier.
+    MODEL_TIER_BALANCED: "grok-4.6",
     MODEL_TIER_ECONOMY: "grok-4.3",
     MODEL_TIER_DEEP: "grok-4.6",
 }
@@ -834,6 +852,16 @@ PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
 PRIOR_FINDING_STATUS_REGRESSED: str = "regressed"
+# Prior-finding resolution policy (v2.2.0+). `advisory` (default, byte-identical
+# to v2.1.0): the model's `resolved` verdicts are reported but never retire a
+# finding — a maintainer resolves the thread. `verified`: a `resolved` verdict
+# is honoured only when the runtime can corroborate it (fingerprint absent
+# from this round AND the file changed since the last reviewed head or no
+# longer exists); the thread is then replied to and resolved.
+PRIOR_FINDINGS_RESOLUTION_ENV: str = "AIPRR_PRIOR_FINDINGS_RESOLUTION"
+RESOLUTION_POLICY_ADVISORY: str = "advisory"
+RESOLUTION_POLICY_VERIFIED: str = "verified"
+RESOLUTION_POLICIES: tuple[str, ...] = (RESOLUTION_POLICY_ADVISORY, RESOLUTION_POLICY_VERIFIED)
 PRIOR_FINDING_STATUSES: tuple[str, ...] = (
     PRIOR_FINDING_STATUS_RESOLVED,
     PRIOR_FINDING_STATUS_OPEN,
@@ -1768,6 +1796,25 @@ def resolve_model(
     Logs the resolution so the effective model is always visible.
     """
     value: str = (raw_model or "").strip()
+    if (
+        not value
+        and not profile.is_default
+        and provider_id not in PROVIDERS_WITHOUT_API_BASE_LANE
+    ):
+        # A runner's built-in default names the runner's own vendor model;
+        # sending it to another backend is silently wrong (Z.ai would get
+        # `claude-sonnet-4-6`, Azure `gpt-5.6-luna` as a deployment name).
+        expected: str = MODEL_REQUIRED_HINTS.get(
+            profile.kind, "the gateway's model id"
+        )
+        raise ValueError(
+            f"model is required when provider {provider_id!r} runs on "
+            f"api-base {profile.base_url!r} ({profile.kind}); the built-in "
+            f"default is a {PROVIDER_DEFAULT_ENDPOINT_KIND.get(provider_id, 'vendor')} "
+            f"model. Set `model` to {expected}, or to a tier alias "
+            f"(`{MODEL_TIER_BALANCED}` / `{MODEL_TIER_ECONOMY}` / "
+            f"`{MODEL_TIER_DEEP}`) where the backend has tier rows."
+        )
     if not value:
         default: str = DEFAULT_MODELS.get(provider_id, "")
         hint: str = LEGACY_DEFAULT_MODEL_HINTS.get(default, "")
@@ -2545,6 +2592,7 @@ class AgentRunnerProvider:
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         """Invoke the vendor CLI headless; return a ReviewResult."""
         raise NotImplementedError
@@ -2618,8 +2666,11 @@ _CLI_ENV_ALLOWLIST: tuple[str, ...] = (
 )
 
 
+_INHERITED_BASE_URL_VARS: tuple[str, ...] = ("ANTHROPIC_BASE_URL", "OPENAI_BASE_URL")
+
+
 def _build_cli_env(
-    *, extra_vars: dict[str, str]
+    *, extra_vars: dict[str, str], allow_inherited_base_urls: bool = True
 ) -> dict[str, str]:
     """Build a scrubbed environment for a vendor-CLI subprocess.
 
@@ -2628,12 +2679,35 @@ def _build_cli_env(
     the vendor-specific API key). Everything else — notably the
     consumer's GitHub token and any other secrets in the workflow's
     env: block — stays in the parent process.
+
+    `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` inherited from the workflow env
+    are the pre-2.1.0 bring-your-own-endpoint hook. They are forwarded only
+    on a runner's default profile (`allow_inherited_base_urls=True`), after
+    `validate_api_base` (an invalid value aborts) and with a WARNING naming
+    the host, because the credential follows them. On a custom `api-base`
+    the profile's own value wins and the inherited ones are dropped.
     """
     scrubbed: dict[str, str] = {}
     for name in _CLI_ENV_ALLOWLIST:
         val: str | None = os.environ.get(name)
-        if val is not None:
-            scrubbed[name] = val
+        if val is None:
+            continue
+        if name in _INHERITED_BASE_URL_VARS and name not in extra_vars:
+            if not allow_inherited_base_urls:
+                log(
+                    f"Ignoring inherited {name} from the workflow env: "
+                    "api-base is set and takes precedence."
+                )
+                continue
+            validated: str = validate_api_base(val)  # raises on a malformed value
+            host: str = urllib.parse.urlsplit(validated).hostname or validated
+            log(
+                f"WARNING: {name}={host!r} inherited from the workflow env "
+                "redirects the CLI (and its credential) to that host. Prefer "
+                "the `api-base` input, which is validated and logged per run."
+            )
+            val = validated
+        scrubbed[name] = val
     scrubbed.update(extra_vars)
     return scrubbed
 
@@ -2661,6 +2735,10 @@ def _invoke_cli_agent(
     large prompt this way instead of via a positional CLI argument.
     """
     log(f"Invoking {cli_name}: {' '.join(shlex.quote(a) for a in argv[:2])} …")
+    # A findings file that exists AFTER the subprocess must have been written
+    # by THIS run — a leftover from a previous step or a persistent
+    # self-hosted workspace would otherwise be posted as a review.
+    findings_path.unlink(missing_ok=True)
     try:
         result = subprocess.run(
             argv,
@@ -2679,17 +2757,61 @@ def _invoke_cli_agent(
             f"or narrowing the PR scope."
         ) from e
 
+    partial_note: str = ""
     if result.returncode != 0:
         stderr_tail: str = (result.stderr or "")[-MAX_ERROR_BODY_CHARS:]
         stdout_tail: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
-        raise RuntimeError(
-            f"{cli_name} CLI exited with code {result.returncode}. "
-            f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
+        if not findings_path.exists():
+            raise RuntimeError(
+                f"{cli_name} CLI exited with code {result.returncode}. "
+                f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
+            )
+        # The agent wrote its findings before exiting non-zero (e.g. a
+        # native turn cap or a late vendor error): keep the review and say
+        # so, instead of failing the whole run (v2.2.0+).
+        log(
+            f"WARNING: {cli_name} CLI exited with code {result.returncode} "
+            f"but wrote the findings file — posting a partial review. "
+            f"stderr tail: {stderr_tail!r}."
         )
+        partial_note = (
+            f"\n\n---\n\n_Partial review: {cli_name} exited with code "
+            f"{result.returncode}; findings recovered from the findings file._"
+        )
+    elif not findings_path.exists():
+        # Exit 0 without a findings file: the agent ended its session
+        # without producing the contract output (observed live with the
+        # Grok CLI). Post an explicit summary-only review rather than a
+        # failed run; the tracking comment and log both name the cause.
+        stdout_tail_ok: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+        log(
+            f"WARNING: {cli_name} CLI exited 0 but did not write "
+            f"{findings_path}; posting a summary-only review. "
+            f"stdout tail: {stdout_tail_ok!r}."
+        )
+        incomplete_result: ReviewResult = ReviewResult(
+            summary=(
+                "## Code Review Summary\n\n"
+                f"_The {cli_name} agent finished without writing its findings "
+                "file, so this round carries no findings. This is an incomplete "
+                "review — re-run (toggle the label) or check the workflow log "
+                "for the agent's own output._"
+            ),
+            findings=[],
+            incomplete=True,
+        )
+        if usage_parser is not None:
+            try:
+                incomplete_result.usage = usage_parser(result.stdout or "")
+            except Exception as exc:  # noqa: BLE001 — telemetry never fails a run
+                log(f"Usage parse skipped ({cli_name}): {type(exc).__name__}: {exc}")
+        return incomplete_result
 
     parsed: ReviewResult = parse_findings_file(
         findings_path, allow_malformed_summary_fallback=True
     )
+    if partial_note:
+        parsed.summary = (parsed.summary or "").rstrip() + partial_note
     if usage_parser is not None:
         try:
             parsed.usage = usage_parser(result.stdout or "")
@@ -2802,6 +2924,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2818,6 +2941,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
@@ -2865,7 +2989,8 @@ class ClaudeCodeProvider(AgentRunnerProvider):
                 argv += shlex.split(self.extra_args)
 
             env: dict[str, str] = _build_cli_env(
-                extra_vars=self.auth_env_vars()
+                extra_vars=self.auth_env_vars(),
+                allow_inherited_base_urls=self.profile.is_default,
             )
             if not self.profile.is_default:
                 log(
@@ -2955,6 +3080,7 @@ class CursorProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2967,6 +3093,7 @@ class CursorProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         user_prompt: str = (
             enriched_instructions
@@ -3004,7 +3131,8 @@ class CursorProvider(AgentRunnerProvider):
                 argv += shlex.split(self.extra_args)
 
             env: dict[str, str] = _build_cli_env(
-                extra_vars={"CURSOR_API_KEY": self.api_key}
+                extra_vars={"CURSOR_API_KEY": self.api_key},
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -3292,6 +3420,7 @@ class CodexProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3301,6 +3430,7 @@ class CodexProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         user_prompt: str = (
             enriched_instructions
@@ -3397,7 +3527,8 @@ class CodexProvider(AgentRunnerProvider):
                 extra_vars={
                     "OPENAI_API_KEY": self.api_key,
                     "CODEX_HOME": str(codex_home),
-                }
+                },
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -3500,6 +3631,7 @@ class GrokProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3513,6 +3645,7 @@ class GrokProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         if self.mcp_config_file:
             log(
@@ -3535,7 +3668,8 @@ class GrokProvider(AgentRunnerProvider):
                 prompt_path=prompt_path, instructions=enriched_instructions
             )
             env: dict[str, str] = _build_cli_env(
-                extra_vars={GROK_API_KEY_ENV: self.api_key}
+                extra_vars={GROK_API_KEY_ENV: self.api_key},
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -4548,6 +4682,27 @@ class ReviewResult:
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
+    # Agent-runner degrade (v2.2.0+): the CLI exited 0 without writing its
+    # findings file. The summary explains it; `main()` never lets an
+    # incomplete review green the check or stamp the reviewed label.
+    incomplete: bool = False
+
+
+def incomplete_review_gate(strictness: str, cli_name: str) -> tuple[bool, str]:
+    """Gate verdict for an incomplete agent-runner review.
+
+    A review that never produced the contract output is not a clean review:
+    every blocking strictness fails the check (the PR was not reviewed);
+    only `lenient` — "never blocks" — stays green, and even then the
+    reviewed label is not stamped.
+    """
+    reason: str = (
+        f"incomplete review — {cli_name} ended without writing its findings "
+        "file; re-run the review"
+    )
+    if strictness == STRICTNESS_LENIENT:
+        return False, reason + " (lenient — check stays green)"
+    return True, reason
 
 
 # ---------------------------------------------------------------------------
@@ -5946,6 +6101,20 @@ class PriorFindingReconciliation:
     unverified: list[PriorFinding] = field(default_factory=list)  # claimed resolved, not verified
 
 
+def parse_resolution_policy(raw: str) -> str:
+    """`prior-findings-resolution` input → policy id. Empty → advisory;
+    anything else must be one of `RESOLUTION_POLICIES` (case-insensitive)."""
+    value: str = (raw or "").strip().lower()
+    if not value:
+        return RESOLUTION_POLICY_ADVISORY
+    if value not in RESOLUTION_POLICIES:
+        raise ValueError(
+            f"prior-findings-resolution must be one of "
+            f"{', '.join(RESOLUTION_POLICIES)}; got {raw!r}."
+        )
+    return value
+
+
 def reconcile_prior_findings(
     *,
     prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
@@ -5953,14 +6122,22 @@ def reconcile_prior_findings(
     current_fingerprints: set[str],
     delta: IncrementalDelta | None,
     workspace: Path | None = None,
+    policy: str = RESOLUTION_POLICY_ADVISORY,
 ) -> PriorFindingReconciliation:
-    """Classify model verdicts without mistaking diff changes for proof of a fix.
+    """Classify the model's verdicts on prior findings.
 
-    A missing fingerprint, edited file or deleted path cannot establish that
-    the concrete failure disappeared. Resolution claims remain unverified and
-    blocking until the thread is explicitly resolved by a maintainer. Keep the
-    keyword parameters for callers; no arbitrary filesystem probe is needed.
+    `advisory` (default): a `resolved` claim is recorded as *unverified* and
+    the finding stays open — a diff change is not proof that the concrete
+    failure disappeared; a maintainer resolves the thread.
+
+    `verified`: a `resolved` claim is honoured only when the runtime can
+    corroborate it — the fingerprint is absent from this round AND the file
+    changed since the last reviewed head (or no longer exists). Anything the
+    runtime cannot corroborate stays open and is listed as unverified.
+    `regressed` is model-asserted in both policies; no verdict → still open.
     """
+    changed: set[str] = set(delta.changed_files) if delta is not None else set()
+    root: Path = workspace if workspace is not None else Path.cwd()
     out = PriorFindingReconciliation()
     for pf in prior_findings:
         status, _note = updates.get(pf.fingerprint, ("", ""))
@@ -5968,6 +6145,19 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
+            if policy == RESOLUTION_POLICY_VERIFIED:
+                file_changed: bool = pf.path in changed
+                # `pf.path` comes from a GitHub review thread; keep the
+                # repo-relative invariant anyway (never join an absolute or
+                # `..` path onto the workspace).
+                rel: Path = Path(pf.path) if pf.path else Path()
+                path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
+                file_gone: bool = path_ok and not (root / rel).exists()
+                if pf.fingerprint not in current_fingerprints and (
+                    file_changed or file_gone
+                ):
+                    out.resolved.append(pf)
+                    continue
             out.unverified.append(pf)
         out.still_open.append(pf)
     return out
@@ -6053,6 +6243,7 @@ def render_incremental_footer(
     delta: IncrementalDelta,
     reconciliation: PriorFindingReconciliation,
     new_findings: int,
+    policy: str = RESOLUTION_POLICY_ADVISORY,
 ) -> str:
     """One-line summary footer for incremental rounds."""
     unverified_note: str = (
@@ -6060,11 +6251,37 @@ def render_incremental_footer(
         if reconciliation.unverified
         else ""
     )
+    policy_note: str = (
+        f" · policy: {policy}" if policy != RESOLUTION_POLICY_ADVISORY else ""
+    )
     return (
         f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
         f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
         f"still open {len(reconciliation.still_open)} · regressed "
-        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}._"
+        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}{policy_note}._"
+    )
+
+
+def apply_resolution_policy(
+    *,
+    policy: str,
+    reconciliation: PriorFindingReconciliation,
+    token: str,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+) -> int:
+    """Side effects of the resolution policy on GitHub. `advisory` never
+    touches review threads; `verified` replies on and resolves every thread
+    the runtime corroborated (best-effort). Returns threads resolved."""
+    if policy != RESOLUTION_POLICY_VERIFIED or not reconciliation.resolved:
+        return 0
+    return close_resolved_prior_findings(
+        token=token,
+        repo=repo,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        reconciliation=reconciliation,
     )
 
 
@@ -6361,9 +6578,16 @@ def run_iar_post_llm(
     base_max_inline_comments: int,
     telemetry: RunTelemetry,
     surface_cap: int = 0,
+    resolution_policy: str = RESOLUTION_POLICY_ADVISORY,
+    workspace: Path | None = None,
 ) -> tuple[IterationState, PolicyResult]:
     """Apply IAR filtering AFTER the LLM call and return the state to
     embed + the surfacing decision.
+
+    `resolution_policy` (v2.2.0+): under `verified`, prior findings the
+    runtime can corroborate as resolved (see `reconcile_prior_findings`)
+    leave the outstanding set and stop contributing to the gate; under
+    `advisory` (default) every prior finding stays outstanding.
 
     `surface_cap` (v2.1.0+, agent-runner path): the effective inline cap
     is enforced HERE, after fingerprinting, so overflow findings are still
@@ -6418,11 +6642,44 @@ def run_iar_post_llm(
             [f.severity for f in result.findings]
         )
     # The incremental prompt explicitly forbids reposting prior findings.
-    # Their absence from this run's new comments must not clear the gate.
+    # Their absence from this run's new comments must not clear the gate —
+    # except, under the `verified` policy, for findings the runtime can
+    # corroborate as resolved.
+    verified_resolved_fps: set[str] = set()
+    if (
+        pre_context.prior_findings
+        and resolution_policy == RESOLUTION_POLICY_VERIFIED
+        and pre_context.mode == IAR_MODE_INCREMENTAL
+    ):
+        # `Finding.fingerprint` is stamped further down; corroboration needs
+        # this round's fingerprints NOW, over every finding the model
+        # produced (surfaced, overflow and silenced) — a re-posted issue is
+        # never "absent this round".
+        round_fps: set[str] = {
+            finding_fingerprint(finding=f, code_context=code_contexts.get(f.path))
+            for f in list(surfaced)
+            + list(overflow)
+            + [sf.finding for sf in policy_result.findings_silenced]
+        }
+        verified_resolved_fps = {
+            pf.fingerprint
+            for pf in reconcile_prior_findings(
+                prior_findings=pre_context.prior_findings,
+                updates=result.prior_finding_updates,
+                current_fingerprints=round_fps,
+                delta=pre_context.delta,
+                workspace=workspace,
+                policy=resolution_policy,
+            ).resolved
+        }
     if pre_context.prior_findings:
         result.overall_severity = overall_severity(
             [result.overall_severity]
-            + [pf.severity for pf in pre_context.prior_findings]
+            + [
+                pf.severity
+                for pf in pre_context.prior_findings
+                if pf.fingerprint not in verified_resolved_fps
+            ]
         )
     # Escape-label short-circuit: preserve prior state exactly, no
     # mutations. This is the contract from Task 7 — persisted state must
@@ -6503,8 +6760,9 @@ def run_iar_post_llm(
         }
         if pre_context.prior_state is not None:
             outstanding.update(pre_context.prior_state.open_fingerprints_this_gen)
-        next_open = sorted(set(next_open) | outstanding)
-        newly_resolved = []
+        outstanding -= verified_resolved_fps
+        next_open = sorted((set(next_open) | outstanding) - verified_resolved_fps)
+        newly_resolved = sorted(verified_resolved_fps)
     next_resolved: list[str] = sorted(
         (set(state_before_fp_update.resolved_fingerprints) | set(newly_resolved))
         - set(next_open)
@@ -6842,7 +7100,8 @@ def render_incremental_sections(
     if len(delta_diff) > MAX_DIFF_CHARS:
         delta_diff = (
             delta_diff[:MAX_DIFF_CHARS]
-            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters]"
+            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters — use your "
+            "file-reading tool to inspect specific changed files in full]"
         )
     unchanged_lines: list[str] = [
         f"- {f['path']} ({f['status']}) +{f['additions']}/-{f['deletions']}"
@@ -8611,9 +8870,14 @@ def write_findings_prompt_directive(
     *,
     require_complexity: bool = False,
     prior_findings_expected: bool = False,
+    max_inline_comments: int = 0,
 ) -> str:
     """Append the "write your findings to this file" directive to the
     review instructions handed to an agent-runner CLI.
+
+    `max_inline_comments` (v2.2.0+): the effective inline cap for this
+    round, stated to the agent so it prioritises instead of being truncated
+    after the fact (0 = not stated).
 
     Standardised so every CLI provider emits the same schema — the receiving
     parser (`parse_findings_file`) is a single implementation shared across
@@ -8642,15 +8906,16 @@ def write_findings_prompt_directive(
         + "## Output contract (MANDATORY)\n\n"
         + "Before ending your turn, write your review to the file:\n\n"
         + f"    {findings_path}\n\n"
-        + "as JSON matching this schema:\n\n"
-        + "```json\n"
+        + "as JSON matching this schema (the outer fence is four backticks so "
+        + "the three-backtick suggestion example inside stays part of it):\n\n"
+        + "````json\n"
         + "{\n"
         + '  "summary": "markdown body of the overall review",\n'
         + '  "findings": [\n'
         + "    {\n"
         + '      "path": "repo-relative file path (must appear in the PR diff)",\n'
         + '      "line": 123,\n'
-        + '      "body": "markdown body of this inline comment",\n'
+        + '      "body": "markdown body of this inline comment; a short fix goes in a suggestion block, escaped for JSON: \\n\\n```suggestion\\nfixed line\\n```",\n'
         + '      "severity": "critical | warning | info",\n'
         + '      "start_line": 121,\n'
         + '      "side": "RIGHT"\n'
@@ -8666,7 +8931,7 @@ def write_findings_prompt_directive(
             else ""
         )
         + "}\n"
-        + "```\n\n"
+        + "````\n\n"
         + "Rules:\n"
         + "- `path` and `line` MUST reference a line that appears in the PR "
         + "diff. Off-diff lines are rejected by GitHub with HTTP 422 and lose "
@@ -8677,6 +8942,13 @@ def write_findings_prompt_directive(
         + "(new code); use `LEFT` for removed code.\n"
         + "- Empty `findings` is valid — it means "
         + '"no issues found; just the summary".\n'
+        + (
+            f"- At most {max_inline_comments} findings are posted inline this "
+            "round: list the most severe first; anything beyond the cap is "
+            "kept for later rounds, not posted.\n"
+            if max_inline_comments > 0
+            else ""
+        )
         + "- Only write the file once, at the end. Do NOT stream partials.\n"
         + "- Never modify any file other than the findings file (the review "
         + "instructions above carry the triage and verification budget).\n"
@@ -9067,6 +9339,16 @@ def main() -> int:
         log(f"CONFIGURATION ERROR: {e} Aborting.")
         write_all_outputs(skipped=False)
         return 1
+    try:
+        resolution_policy: str = parse_resolution_policy(
+            os.environ.get(PRIOR_FINDINGS_RESOLUTION_ENV, "")
+        )
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    if resolution_policy != RESOLUTION_POLICY_ADVISORY:
+        log(f"Prior-finding resolution policy: {resolution_policy}")
     if not model:
         log(f"No default model for provider {provider_id!r} — aborting.")
         write_all_outputs(skipped=False)
@@ -9672,6 +9954,7 @@ def main() -> int:
                 workspace=workspace,
                 output_dir=workspace,
                 require_complexity_in_findings=complexity_labels_enabled,
+                max_inline_comments=effective_max_inline_comments,
             )
             # The inline cap for the agent-runner path is enforced in
             # `run_iar_post_llm` AFTER fingerprinting (single path; overflow
@@ -9772,7 +10055,19 @@ def main() -> int:
         result.overall_severity = overall_severity(
             [f.severity for f in result.findings]
         )
-    if iar_pre_context is not None:
+    if iar_pre_context is not None and result.incomplete:
+        # No findings were produced, so nothing was resolved: re-embed the
+        # prior state unchanged (as the escape-label path does) instead of
+        # recording an empty round that would retire every open finding.
+        log("IAR post-LLM: incomplete review — persisted state unchanged.")
+        iar_state_final = iar_pre_context.prior_state
+        iar_policy_final = iar_pre_context.pre_policy_result
+        if iar_pre_context.prior_findings:
+            result.overall_severity = overall_severity(
+                [result.overall_severity]
+                + [pf.severity for pf in iar_pre_context.prior_findings]
+            )
+    elif iar_pre_context is not None:
         try:
             iar_state_final, iar_policy_final = run_iar_post_llm(
                 iar_config=iar_config,
@@ -9785,6 +10080,8 @@ def main() -> int:
                     if isinstance(provider, AgentRunnerProvider)
                     else 0
                 ),
+                resolution_policy=resolution_policy,
+                workspace=Path.cwd(),
             )
         except Exception as exc:  # noqa: BLE001 — best-effort IAR wrap
             log(
@@ -9822,13 +10119,25 @@ def main() -> int:
                 updates=result.prior_finding_updates,
                 current_fingerprints=current_fps,
                 delta=iar_pre_context.delta,
+                workspace=Path.cwd(),
+                policy=resolution_policy,
             )
-            # Model-only resolution is advisory. Never mutate human review
-            # threads based on a missing fingerprint or unrelated file edit.
+            # `advisory` (default): model-only resolution never mutates human
+            # review threads. `verified`: reply on + resolve the threads the
+            # runtime corroborated (best-effort).
+            apply_resolution_policy(
+                policy=resolution_policy,
+                reconciliation=reconciliation,
+                token=gh_token,
+                repo=repo,
+                pr_number=pr_number,
+                head_sha=head_sha,
+            )
             result.summary = (result.summary or "").rstrip() + render_incremental_footer(
                 delta=iar_pre_context.delta,
                 reconciliation=reconciliation,
                 new_findings=len(result.findings),
+                policy=resolution_policy,
             )
             log(
                 f"IAR incremental: resolved={len(reconciliation.resolved)} "
@@ -9981,6 +10290,13 @@ def main() -> int:
     # ------------------------------------------------------------------
     severity: str = result.overall_severity
     blocked, block_reason = evaluate_strictness(severity, strictness)
+    if result.incomplete:
+        # An incomplete agent-runner review must not green the check.
+        incomplete_blocked, incomplete_reason = incomplete_review_gate(
+            strictness, getattr(provider, "CLI_NAME", provider_id)
+        )
+        if incomplete_blocked or not blocked:
+            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
 
     # PR description gate — orthogonal to the strictness gate. When
     # `pr-description-mode: block`, an inadequate description forces
@@ -10021,7 +10337,7 @@ def main() -> int:
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".
-    if trigger_mode == TRIGGER_LABEL_ONCE and not blocked:
+    if trigger_mode == TRIGGER_LABEL_ONCE and not blocked and not result.incomplete:
         tracking_body = write_trigger_state(
             tracking_body,
             {"label_toggle_generation": label_toggle_generation},
@@ -10038,7 +10354,9 @@ def main() -> int:
     # keeps the marker honest.
     # ------------------------------------------------------------------
     label_stamped: bool = False
-    if applied_label and not blocked:
+    if applied_label and result.incomplete:
+        log(f"Skipped applying {applied_label!r} — incomplete review")
+    elif applied_label and not blocked:
         try:
             gh_apply_label(
                 token=gh_token,

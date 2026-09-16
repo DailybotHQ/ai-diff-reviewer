@@ -7,6 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Releases stamp the CHANGELOG.** `auto-release.yml` now turns
+  `## [Unreleased]` into `## [X.Y.Z] — date` (and opens a fresh empty
+  section) in the same sync commit that bumps the skill version, via
+  `.github/scripts/stamp_changelog.py` (idempotent; empty section → notice).
+  v2.0.0, v2.0.1 and v2.1.0 were restored by hand in v2.1.1.
+- **Dogfood: the in-process `openai` leg runs by default** whenever
+  `OPENAI_API_KEY` exists (opt out with the repo variable
+  `SELF_REVIEW_OPENAI_CHAT=false`); the repo's required checks now include
+  `CLI install smoke — grok`.
+- **xAI `balanced` tier now resolves to `grok-4.6`** (was `grok-4.3`; `economy`
+  stays `grok-4.3`, the built-in default for `provider: grok` is unchanged).
+  Measured on the labelled corpus in `tests/eval/`: through the Grok CLI,
+  `grok-4.3` reported 0 of 4 known defects (and once wrote no findings
+  file) while `grok-4.6` found 3 of 4 with no false positives at ~$0.5–0.85
+  and 4–10 minutes per review. The repo's own Grok dogfood leg moves to
+  `balanced`.
+- **Review-quality harness in the tree.** `tests/eval/run_eval.py` +
+  `tests/eval/corpus.json` (labelled expectations for four merged PRs) —
+  offline, never posts; documented in `docs/TESTING_GUIDE.md`.
+
+### Added
+
+- **`prior-findings-resolution` input (`advisory` | `verified`).** Incremental
+  follow-up rounds keep the v2.1.0 default: a `resolved` verdict is reported
+  but a maintainer resolves the thread and the finding keeps gating. Opting
+  into `verified` restores runtime-corroborated auto-resolution — the thread
+  is replied to and resolved only when the fingerprint is gone **and** the
+  file changed or was deleted; unverifiable claims stay open. Footer names
+  the policy when it is not the default.
+- **Checksum-verified installers.** New optional inputs
+  `cursor-installer-sha256` and `grok-installer-sha256`: the Cursor and
+  Grok install steps now download the vendor artefact to a file through
+  `.github/scripts/verified_install.sh`, log its SHA-256 on every run,
+  and — when a hash is configured — refuse to run an artefact whose hash
+  differs. The CI smoke matrix proves the gate (right hash accepted, wrong
+  hash refused). `docs/SECURITY.md § installer supply chain` states what
+  a pin does and does not cover.
+
+### Fixed
+
+- **Empty `model` on a custom `api-base` now fails fast** (for runners that route `api-base`; `cursor`/`grok` ignore it and keep their defaults) with the expected
+  value (deployment name / `glm-5.3` / `grok-4.6` / gateway id) instead of
+  silently sending the runner's default vendor model to another backend
+  (`resolve_model` ran before the providers' guards, which were unreachable).
+- **Inherited `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL`** from the workflow
+  env are validated (`validate_api_base`) and logged with a WARNING before a
+  CLI receives them on a default profile, and dropped when `api-base` is set.
+- **Agent-runner CLIs no longer lose a review on exit:** a non-zero exit
+  with a written findings file posts a partial review (footer + WARNING);
+  exit 0 without a findings file posts an explicit summary-only "incomplete
+  review" (observed live with the Grok CLI). An incomplete review is never
+  a green review: every blocking strictness fails the check (`lenient` stays
+  green by definition), the reviewed label is not stamped, `label-once`
+  does not consume the label toggle, and the prior IAR state is re-embedded
+  unchanged so no open finding is retired by an empty round.
+- **Stale findings files are removed before the CLI runs:** a
+  `.aiprr/findings.json` left by a previous step or a persistent self-hosted
+  workspace can no longer be posted as this run's review.
+- **`verified` resolution corroborates against this round's fingerprints**
+  (surfaced, overflow and silenced findings): a re-posted issue is never
+  auto-retired even when the model also claims it resolved.
+- **Agent-runner output contract uses a four-backtick fence** so the escaped
+  ```suggestion example inside the schema cannot end the JSON block early
+  for CLIs that render the directive as Markdown.
+- **`verified_install.sh` hardening:** `cursor-version` / `grok-version` must
+  match `^[A-Za-z0-9._-]+$` before being used as a URL or path segment;
+  `sha256sum` falls back to `shasum -a 256` and the hash compare no longer
+  needs bash 4 (macOS self-hosted runners).
+- **Agent-runner output contract** states the effective inline cap and shows
+  an escaped suggestion-block example; the prompt's tool-substitution note
+  now covers `post_inline_comment` / `submit_review` (prompt v3.1.1); the
+  incremental delta's truncation notice carries the read-the-rest hint.
+- **`cursor-version` now takes effect.** The vendor's installer script
+  ignores version hints, so the pin was silently a no-op; a pinned version
+  now installs the versioned package directly from Cursor's download host
+  (same layout and symlinks as the official installer).
+
+## [2.1.0] — 2026-09-16
+
 **Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review the actual new diff and carry outstanding findings forward, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
 
 ### Added
@@ -207,25 +288,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/validate-frontmatter.py` now fails on descriptions over 1,024
   characters or names over 64. Downstream vendored copies clear the
   warning when they pick up the release that ships this.
-- **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
-
-- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
-
-> **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
-> `auto-release.yml` (`feat!:` commit). **`@v2` is the default consumer
-> pin** going forward (skill `version: "2.0.0"`).
-
-### v2 pin surface
-
-Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
-
-- **Default pin:** `uses: DailybotHQ/ai-diff-reviewer@v2` and
-  `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`.
-- **`action.yml` contract:** no inputs renamed or removed.
-- **Platform behaviour:** Iteration-Aware Review on every CI review;
-  local skill reviews stay a full pass. Escape / reset /
-  emergency-bypass: [`docs/ITERATION_AWARENESS.md`](docs/ITERATION_AWARENESS.md),
-  [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
 - **Dogfood follow-ups from the first self-review of the release PR.** An
@@ -266,6 +328,16 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   `main` (intentional deltas listed explicitly), and hardening
   regressions. `docs/TESTING_GUIDE.md` and `tests/README.md` now describe
   the real suite.
+
+## [2.0.1] — 2026-07-17
+
+### Fixed
+
+- **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
+
+- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
+
+### Changed
 - **Harness: Deep Work Plan skill bumped to v2.17.0 + AI Diff Reviewer
   addon wired (Flow B).** Vendored `deepworkplan` via
   `npx skills update deepworkplan` (lockfile hash refresh). New addon
@@ -276,6 +348,26 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   stays `.github/workflows/self-review.yml` (no consumer
   `pr-review.yml`). Dailybot addon already present — reconciled, no
   wiring changes. Consumer Action runtime unchanged.
+
+## [2.0.0] — 2026-07-16
+
+> **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
+> `auto-release.yml` (`feat!:` commit). **`@v2` is the default consumer
+> pin** going forward (skill `version: "2.0.0"`).
+
+### v2 pin surface
+
+Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
+
+- **Default pin:** `uses: DailybotHQ/ai-diff-reviewer@v2` and
+  `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`.
+- **`action.yml` contract:** no inputs renamed or removed.
+- **Platform behaviour:** Iteration-Aware Review on every CI review;
+  local skill reviews stay a full pass. Escape / reset /
+  emergency-bypass: [`docs/ITERATION_AWARENESS.md`](docs/ITERATION_AWARENESS.md),
+  [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
+
+### Changed
 - **Docs + skill + examples sync for IAR / `skip-review-label`, plus
   v2 pin surface.** Discoverability pass so Marketplace consumers and
   the companion skill see the same story as `action.yml`, and consumer

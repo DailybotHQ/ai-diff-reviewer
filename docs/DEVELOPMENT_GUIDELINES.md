@@ -244,14 +244,14 @@ Use `enum.Enum` only when type-safe state machines are clearly load-bearing.
 
 ## Test discipline
 
-There's a stdlib `unittest` suite in `tests/` (242 tests as of v1.6, across four files) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
+There's a stdlib `unittest` suite in `tests/` (720 tests as of v2.1.0, across 24 files) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
 
 - Place at `tests/test_<area>.py` — **not** at `scripts/test_<area>.py`. The tests live in a sibling directory to keep `scripts/reviewer.py` importable as a plain module (`sys.path.insert(0, 'scripts'); import reviewer as r` — see the pattern in the existing test files).
 - Use stdlib `unittest`. No `pytest`.
 - Run via `python3 -m unittest discover -s tests`.
-- Keep each file focused on one concern; the existing four-file split (`test_reviewer.py` for core, `test_findings_parser.py` for the findings-file parser, `test_agent_runner_providers.py` for CLI providers + subprocess-security invariants, `test_end_to_end_roundtrip.py` for cross-family serialization) is the model. Add a new file rather than growing an existing one past ~500 lines.
+- Keep each file focused on one concern; the concern-scoped split in `tests/` (see the table in `TESTING_GUIDE.md`: core runtime, findings parser, agent-runner core / hardening / CLI invocations / Cursor / custom backends / Grok + snapshots, `api-base` / requests / matrix, OpenAI provider, tiers, telemetry, IAR family, roundtrip, safety regressions) is the model. Add a new file rather than growing an existing one past ~500 lines.
 - Don't mock external APIs end-to-end. If your code is "mostly mocking out the network", it's not testing the right thing — write a smoke test on a real PR instead. Mocking a subprocess boundary (e.g. simulating a fake `.aiprr/findings.json` file that a vendor CLI would have written) is fine and encouraged.
 
 ## When in doubt
 
-Read `scripts/reviewer.py`. It's ~4000 LOC and follows every rule above. The patterns that exist are the patterns; new code should look like the surrounding code.
+Read `scripts/reviewer.py`. It's ~10k LOC (v2.1.0 — past the historical soft ceiling; see `STANDARDS.md § File size`) and follows every rule above. The patterns that exist are the patterns; new code should look like the surrounding code.

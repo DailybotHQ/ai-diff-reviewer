@@ -11,8 +11,8 @@ name: Self-review
 #      control of when tokens burn.
 #   2. FULL COVERAGE — every configured runner/backend (Anthropic; the CLI
 #      runners claude-code, cursor, codex, grok; and the `api-base` legs
-#      claude-code+Z.ai, codex+Azure, plus the opt-in in-process `openai`
-#      leg) reviews EVERY ready-labeled PR,
+#      claude-code+Z.ai, codex+Azure, plus the in-process `openai` leg,
+#      default-on with OPENAI_API_KEY) reviews EVERY ready-labeled PR,
 #      including docs-only and AI-tooling-only diffs. Rationale is trust
 #      surface: skill vendors under `.agents/`, workflow tweaks under
 #      `.github/`, prompt edits under `prompts/`, and doc changes are exactly
@@ -114,8 +114,10 @@ jobs:
           HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
           # v2.1.0 legs — presence toggles only; secret VALUES never enter
           # this shell. Azure needs its endpoint + deployment from repo
-          # *variables* (they are not secrets); the in-process `openai` leg
-          # is opt-in so OpenAI spend is not doubled by default.
+          # *variables* (they are not secrets). The in-process `openai` leg
+          # runs whenever OPENAI_API_KEY exists (v2.2.0: default-on, same
+          # secret as codex, economy tier); set the repo variable
+          # SELF_REVIEW_OPENAI_CHAT=false to opt out.
           HAS_XAI: ${{ secrets.XAI_API_KEY != '' }}
           HAS_ZAI: ${{ secrets.ZAI_CODING_API_KEY != '' }}
           HAS_AZURE: ${{ secrets.AZURE_OPENAI_API_KEY != '' }}
@@ -180,11 +182,14 @@ jobs:
           # dated defaults matrix (docs/PROVIDERS.md) stays the single source
           # of truth for the concrete model id; Azure deployments have no
           # tier rows, so the deployment name comes from a repo variable.
-          [ "$HAS_XAI" = "true" ]         && add grok XAI_API_KEY "self-reviewed:grok" economy
+          # grok: `balanced` (→ grok-4.6) — measured 2026-09-16: the economy
+          # tier (grok-4.3) found 0 of 4 known defects on the labelled corpus,
+          # 4.6 found 3 of 4 with no false positives (~$0.5–0.85, 4–10 min).
+          [ "$HAS_XAI" = "true" ]         && add grok XAI_API_KEY "self-reviewed:grok" balanced
           [ "$HAS_ZAI" = "true" ]         && add claude-code ZAI_CODING_API_KEY "self-reviewed:claude-code-glm" economy "https://api.z.ai/api/anthropic"
           [ "$HAS_AZURE" = "true" ] && [ -n "$AZURE_BASE" ] \
                                           && add codex AZURE_OPENAI_API_KEY "self-reviewed:codex-azure" "${AZURE_MODEL:-gpt-5.4-mini-azure}" "$AZURE_BASE"
-          [ "$HAS_OPENAI" = "true" ] && [ "$OPENAI_CHAT_LEG" = "true" ] \
+          [ "$HAS_OPENAI" = "true" ] && [ "$OPENAI_CHAT_LEG" != "false" ] \
                                           && add openai OPENAI_API_KEY "self-reviewed:openai" economy
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can

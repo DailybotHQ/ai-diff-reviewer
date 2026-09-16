@@ -7,7 +7,7 @@ Thanks for your interest in improving AI Diff Reviewer. This is an open-source p
 - **Bug reports** — open an issue with a minimal reproduction (workflow YAML + the failure mode you saw).
 - **Feature requests** — open an issue *first*, before sending a PR. Big surface-area changes (new inputs, new outputs, new providers) need a quick design discussion to make sure the action stays simple and stable.
 - **Prompt improvements** — the bundled default prompt (`prompts/default.md`) is opinionated but not sacred. PRs that make the reviewer catch more real bugs and fewer false positives are very welcome. Include before/after examples on a real PR if you can.
-- **Provider implementations** — see `docs/PROVIDERS.md` for the contract a new provider has to satisfy. OpenAI, Gemini, and Azure OpenAI are explicitly on the roadmap.
+- **Provider implementations** — see `docs/PROVIDERS.md § Adding a runner or backend` (a new vendor on an existing protocol is a host suffix + tier row; a new runner is a class). OpenAI and Azure Foundry shipped in v2.1.0; Gemini and Bedrock remain open.
 
 ## Project layout
 

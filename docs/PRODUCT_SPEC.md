@@ -106,7 +106,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **CLI installers smoke-tested** — a matrix job exercises each agent-runner CLI installer on a fresh runner before it reaches consumers.
 - **Prompt sync enforced** — `Skills — prompt-sync invariant` in `code_check.yml` fails any PR where the skill's `prompt.md` byte-copy has drifted from the Action's `prompts/default.md`. Local↔CI parity is a hard CI gate, not a convention.
 - **Dogfooded on both surfaces:**
-  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The matrix is built from secret presence: every configured runner/backend (Anthropic, Claude Code, Cursor, Codex, Grok, Claude Code on Z.ai, Codex on Azure, opt-in `openai`) reviews each `ready` PR with a distinct `self-reviewed:*` label; legs without secrets are absent, never a misleading green.
+  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The matrix is built from secret presence: every configured runner/backend (Anthropic, Claude Code, Cursor, Codex, Grok, Claude Code on Z.ai, Codex on Azure, `openai` in-process) reviews each `ready` PR with a distinct `self-reviewed:*` label; legs without secrets are absent, never a misleading green.
   - **Skill:** the vendored copy at `.agents/skills/ai-diff-reviewer/` is re-installed via `npx skills update` after every release, so a broken install flow fails the release itself.
 
 ## Current major + roadmap (not a commitment)
@@ -115,7 +115,8 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 | Version | Headline |
 |---|---|
-| **v2.0.0** (shipping) | IAR platform major — unconditional Iteration-Aware Review, user-forced reset, `skip-review-label` emergency bypass, full companion skill pack (`setup` / `generate-extension` / `open-pr` / `apply-review`). Default pin `@v2` / skill `2.0.0`. No `action.yml` inputs renamed or removed. |
+| **v2.1.0** (shipping, 2026-09-16) | Providers as vendors × runners: `api-base` (Azure Foundry, xAI, Z.ai GLM, gateways), new `openai` and `grok` runners, one-word model tiers with a dated cost matrix, `ignore-paths`, real usage telemetry, incremental follow-up reviews (advisory resolution), prompt v3.1, security hardening, skill upgrades (`open-pr` base sync, runner × backend `setup` wizard, 1,024-char descriptions). Additive; default pin `@v2` / skill `2.1.0`. |
+| **v2.0.0** (2026-07-16) | IAR platform major — unconditional Iteration-Aware Review, user-forced reset, `skip-review-label` emergency bypass, full companion skill pack (`setup` / `generate-extension` / `open-pr` / `apply-review`). No `action.yml` inputs renamed or removed. |
 
 Upcoming work — no commitment on ordering; ships on the **v2.x** line unless flagged as a new major:
 

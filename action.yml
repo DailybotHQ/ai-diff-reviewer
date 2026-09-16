@@ -176,6 +176,14 @@ inputs:
     description: 'Pin the xAI Grok CLI version (e.g. `1.0.30`; passed to the official installer as `bash -s <version>`). Empty = latest stable. Only used when `provider: grok`.'
     required: false
     default: ''
+  cursor-installer-sha256:
+    description: 'Optional SHA-256 of the artefact the Cursor install step downloads — the versioned package when `cursor-version` is set, else the installer script from cursor.com/install (which is stamped with the current release, so its hash pins a version). When set, the step refuses to run an artefact whose hash differs; when empty, the step logs the observed hash so you can pin it next time. Only used when `provider: cursor`.'
+    required: false
+    default: ''
+  grok-installer-sha256:
+    description: 'Optional SHA-256 of the xAI Grok installer script (x.ai/cli/install.sh) that the Grok install step downloads. When set, the step refuses to run a script whose hash differs; when empty, the step logs the observed hash so you can pin it next time. Pair with `grok-version` to pin the binary. Only used when `provider: grok`.'
+    required: false
+    default: ''
 
   # ---------------- Iteration-Aware Review (IAR) — tunable knobs ----------------
   # IAR runs on every review. The four inputs below shape the pipeline.
@@ -196,6 +204,10 @@ inputs:
     description: 'Label name a human can apply to a PR to force a full review regardless of IAR state — dedup is skipped for that run only, persisted state is NOT mutated. Default `full-review-please`. When the label is removed, subsequent reviews resume normal IAR behavior. See docs/ITERATION_AWARENESS.md § 8.'
     required: false
     default: 'full-review-please'
+  prior-findings-resolution:
+    description: 'How the model''s verdicts on prior findings are treated in incremental follow-up rounds. `advisory` (default): a `resolved` verdict is reported in the summary but never retires the finding — a maintainer resolves the thread and the finding keeps counting toward the strictness gate. `verified`: a `resolved` verdict is honoured only when the runtime can corroborate it (fingerprint absent from this round AND the file changed since the last reviewed head or no longer exists); the thread is then replied to and resolved, and the finding stops gating. Unverifiable claims stay open under both policies.'
+    required: false
+    default: 'advisory'
 
 outputs:
   review-url:
@@ -293,6 +305,8 @@ runs:
       shell: bash
       env:
         CURSOR_VERSION: ${{ inputs.cursor-version }}
+        CURSOR_SHA256: ${{ inputs.cursor-installer-sha256 }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
         # Self-hosted / pre-provisioned runners: honour an existing binary
@@ -305,15 +319,11 @@ runs:
         fi
         # Cursor's official installer script places the binary in
         # ~/.local/bin. We forward VERSION when the consumer pins it.
-        installer_url="https://cursor.com/install"
-        if [ -n "${CURSOR_VERSION}" ]; then
-          # Cursor's installer respects a VERSION env var for pinning.
-          echo "::group::Install cursor-agent (pinned to ${CURSOR_VERSION})"
-          VERSION="${CURSOR_VERSION}" curl -fsSL "${installer_url}" | bash
-        else
-          echo "::group::Install cursor-agent (latest)"
-          curl -fsSL "${installer_url}" | bash
-        fi
+        # Download-to-file + optional sha256 + install, via the shared script
+        # (also used by the CI smoke matrix). A pinned `cursor-version` installs
+        # the versioned package directly — the vendor installer ignores VERSION.
+        echo "::group::Install cursor-agent (${CURSOR_VERSION:-latest})"
+        bash "${ACTION_PATH}/.github/scripts/verified_install.sh" cursor "${CURSOR_VERSION}" "${CURSOR_SHA256}"
         echo "::endgroup::"
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         "$HOME/.local/bin/cursor-agent" --version
@@ -323,6 +333,8 @@ runs:
       shell: bash
       env:
         GROK_VERSION: ${{ inputs.grok-version }}
+        GROK_SHA256: ${{ inputs.grok-installer-sha256 }}
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
         # Self-hosted / pre-provisioned runners: honour an existing binary
@@ -336,18 +348,10 @@ runs:
         # Official installer (https://x.ai/cli/install.sh) — a host outside the
         # GitHub/npm trust set by necessity (xAI does not publish the CLI on
         # npm); consequences and mitigations (provider-gated, version pin,
-        # skip-if-present) in docs/SECURITY.md § "installer supply chain".
-        # It installs a
-        # single static binary into ~/.grok/bin (override: GROK_BIN_DIR) and
-        # accepts an explicit version as `bash -s <X.Y.Z>`; with no argument
-        # it resolves the latest stable release.
-        if [ -n "${GROK_VERSION}" ]; then
-          echo "::group::Install grok (pinned to ${GROK_VERSION})"
-          curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}"
-        else
-          echo "::group::Install grok (latest stable)"
-          curl -fsSL https://x.ai/cli/install.sh | bash
-        fi
+        # sha256 pin, skip-if-present) in docs/SECURITY.md § "installer supply
+        # chain". Downloaded to a file and verified by the shared script.
+        echo "::group::Install grok (${GROK_VERSION:-latest stable})"
+        bash "${ACTION_PATH}/.github/scripts/verified_install.sh" grok "${GROK_VERSION}" "${GROK_SHA256}"
         echo "::endgroup::"
         echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
         "$HOME/.grok/bin/grok" --version
@@ -405,6 +409,7 @@ runs:
         AIPRR_MAX_REVIEW_ROUNDS: ${{ inputs.max-review-rounds }}
         AIPRR_EXHAUSTIVE_FIRST_PASS_CAP_MULTIPLIER: ${{ inputs.exhaustive-first-pass-cap-multiplier }}
         AIPRR_ITERATION_ESCAPE_LABEL: ${{ inputs.iteration-escape-label }}
+        AIPRR_PRIOR_FINDINGS_RESOLUTION: ${{ inputs.prior-findings-resolution }}
 
         # Repo / PR context — pulled from the consumer's `pull_request` event.
         AIPRR_REPO: ${{ github.repository }}

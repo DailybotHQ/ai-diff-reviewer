@@ -422,3 +422,80 @@ class MarkerShaCoercionTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertEqual(parsed.base_sha, "")
         self.assertEqual(parsed.head_sha, good)
+
+
+class ResolutionPolicyTests(unittest.TestCase):
+    """v2.2.0: `prior-findings-resolution` — advisory (default, unchanged) vs
+    verified (runtime-corroborated auto-resolution)."""
+
+    def _recon(self, status: str | None, *, policy: str, fp_present: bool = False, file_changed: bool = True, file_exists: bool = True) -> Any:
+        with tempfile.TemporaryDirectory() as td:
+            if file_exists:
+                (Path(td) / "src").mkdir(); (Path(td) / "src" / "x.py").write_text("x")
+            updates = {"a" * 16: (status, "n")} if status else {}
+            return reviewer.reconcile_prior_findings(prior_findings=(_prior(),), updates=updates,
+                                                     current_fingerprints={"a" * 16} if fp_present else set(),
+                                                     delta=_delta(files=("src/x.py",) if file_changed else ("other.py",)),
+                                                     workspace=Path(td), policy=policy)
+
+    def test_parse_policy(self) -> None:
+        self.assertEqual(reviewer.parse_resolution_policy(""), "advisory")
+        self.assertEqual(reviewer.parse_resolution_policy(" Verified "), "verified")
+        with self.assertRaises(ValueError):
+            reviewer.parse_resolution_policy("auto")
+
+    def test_advisory_never_resolves(self) -> None:
+        r = self._recon("resolved", policy="advisory")
+        self.assertEqual((len(r.resolved), len(r.still_open), len(r.unverified)), (0, 1, 1))
+
+    def test_verified_matrix(self) -> None:
+        self.assertEqual(len(self._recon("resolved", policy="verified").resolved), 1)
+        r = self._recon("resolved", policy="verified", fp_present=True)
+        self.assertEqual((len(r.resolved), len(r.still_open), len(r.unverified)), (0, 1, 1), "fingerprint still present → not resolved")
+        r = self._recon("resolved", policy="verified", file_changed=False)
+        self.assertEqual((len(r.resolved), len(r.unverified)), (0, 1), "file untouched → not resolved")
+        self.assertEqual(len(self._recon("resolved", policy="verified", file_changed=False, file_exists=False).resolved), 1, "deleted file counts as changed")
+        self.assertEqual(len(self._recon("open", policy="verified").still_open), 1)
+        self.assertEqual(len(self._recon("regressed", policy="verified").regressed), 1)
+
+    def test_apply_policy_touches_threads_only_when_verified(self) -> None:
+        recon = reviewer.PriorFindingReconciliation(resolved=[_prior()])
+        with mock.patch.object(reviewer, "close_resolved_prior_findings", return_value=1) as close:
+            self.assertEqual(reviewer.apply_resolution_policy(policy="advisory", reconciliation=recon, token="t", repo="o/r", pr_number=1, head_sha="deadbeef"), 0)
+            close.assert_not_called()
+            self.assertEqual(reviewer.apply_resolution_policy(policy="verified", reconciliation=recon, token="t", repo="o/r", pr_number=1, head_sha="deadbeef"), 1)
+            close.assert_called_once()
+
+    def test_footer_names_policy_only_when_not_advisory(self) -> None:
+        recon = reviewer.PriorFindingReconciliation(resolved=[_prior()])
+        d = _delta(files=("src/x.py",))
+        self.assertNotIn("policy:", reviewer.render_incremental_footer(delta=d, reconciliation=recon, new_findings=0))
+        self.assertIn("policy: verified", reviewer.render_incremental_footer(delta=d, reconciliation=recon, new_findings=0, policy="verified"))
+
+
+class IncrementalTruncationHintTests(unittest.TestCase):
+    """The incremental delta's truncation notice carries the read-the-rest
+    hint (tool-name-neutral), like the full-diff path does."""
+
+    def test_truncated_delta_carries_read_hint(self) -> None:
+        big = "diff --git a/src/auth.py b/src/auth.py\n--- a/src/auth.py\n+++ b/src/auth.py\n@@ -1 +1 @@\n" + ("+x\n" * (reviewer.MAX_DIFF_CHARS // 3 + 10))
+        state = reviewer.new_iteration_state(generation_range_hash="old", base_sha="b" * 40, head_sha="1" * 40, policy_applied=reviewer.IAR_POLICY_ITERATIVE)
+        pre = reviewer.IARPreLLMContext(
+            prior_state=state, transition=reviewer.GenerationTransition.SAME_GENERATION,
+            base_sha="b" * 40, head_sha="2" * 40, range_hash="new", new_lines_pct=1.0, pr_labels=[],
+            pre_policy_result=reviewer.PolicyResult(findings_to_surface=[], findings_silenced=[], effective_max_inline_comments=3, prompt_addendum="", policy_applied=reviewer.IAR_POLICY_ITERATIVE),
+            mode=reviewer.IAR_MODE_INCREMENTAL, prior_findings=(),
+            delta=reviewer.IncrementalDelta(prior_head_sha="1" * 40, head_sha="2" * 40, changed_files=("src/auth.py",), delta_ratio=0.5, diff=big),
+        )
+        pr = reviewer.PRContext(title="t", author="a", head_ref="feature", base_ref="main", state="open", additions=1, deletions=1, commits=2, body="",
+                                changed_files=[{"path": "src/auth.py", "status": "modified", "additions": 1, "deletions": 0}], diff=big, incremental=pre)
+        rendered = reviewer.render_incremental_sections(pr, pre)
+        self.assertIn("diff truncated at", rendered)
+        self.assertIn("use your file-reading tool", rendered)
+
+    def test_verified_policy_never_joins_absolute_or_parent_paths(self) -> None:
+        bad = reviewer.PriorFinding(thread_id="t", comment_id="c", comment_database_id=1, path="/etc/passwd", line=1, severity="info", fingerprint="b" * 16, body_excerpt="x", is_outdated=False)
+        with tempfile.TemporaryDirectory() as td:
+            r = reviewer.reconcile_prior_findings(prior_findings=(bad,), updates={"b" * 16: ("resolved", "n")}, current_fingerprints=set(), delta=_delta(files=("other.py",)), workspace=Path(td), policy="verified")
+        self.assertEqual((len(r.resolved), len(r.unverified)), (0, 1), "an absolute path must not count as a deleted file")
+

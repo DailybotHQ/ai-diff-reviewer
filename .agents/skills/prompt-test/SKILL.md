@@ -21,7 +21,7 @@ Without this evidence, prompt changes are opinion, not engineering.
 ## Non-goals
 
 - Does NOT modify the prompt for the user. The user owns the prompt edit; this skill evaluates it.
-- Does NOT post comments on the test PR — runs are configured with `AIPRR_TRACKING_COMMENT=false` and `AIPRR_COLLAPSE_PREVIOUS=false` to avoid disturbing the target PR's conversation.
+- Does NOT post comments on the test PR — `tests/eval/run_eval.py` runs the review loop in-process with the GitHub submission path stubbed out, so the target PR's conversation is never touched.
 
 ## Inputs
 
@@ -43,65 +43,55 @@ If the prompt isn't actually changed in the working tree, ask the user whether t
 
 ## Steps
 
-For each target PR `N` in `target_prs`:
+Run everything through the in-tree harness `tests/eval/run_eval.py` (stdlib,
+offline — it fetches the PR context and runs the review loop **without posting
+anything**; never run `scripts/reviewer.py` against a live PR to smoke-test a
+prompt). Pick target PRs from `tests/eval/corpus.json` whenever possible so
+the comparison is scored against labelled expectations, not eyeballed.
 
-### 1. Capture HEAD SHA of target PR
+### 1. Check out each target PR at its head
 
 ```bash
 HEAD_SHA=$(gh api "repos/${REPO}/pulls/${N}" --jq .head.sha)
+git worktree add "/tmp/aiprr-pr-${N}" "$HEAD_SHA"
 ```
 
-### 2. Run with OLD prompt
+### 2. Run with the OLD prompt
 
 ```bash
-git stash                       # set aside the new prompt
-
-export AIPRR_PROVIDER=anthropic
-export AIPRR_API_KEY=$ANTHROPIC_API_KEY
-export AIPRR_GH_TOKEN=$GITHUB_TOKEN
-export AIPRR_REPO=$REPO
-export AIPRR_PR_NUMBER=$N
-export AIPRR_HEAD_SHA=$HEAD_SHA
-export AIPRR_BASE_REF=main
-export AIPRR_ACTION_PATH=$PWD
-export AIPRR_STRICTNESS=lenient
-export AIPRR_TRACKING_COMMENT=false       # capture, don't post
-export AIPRR_COLLAPSE_PREVIOUS=false       # don't disturb the PR
-
-python3 scripts/reviewer.py 2>&1 | tee "/tmp/old-${N}.log"
+git show main:prompts/default.md > /tmp/prompt-old.md     # or the previous tag
+python3 tests/eval/run_eval.py run --repo "$REPO" --pr "$N" --worktree "/tmp/aiprr-pr-${N}" \
+  --provider openai --api-base "$AZURE_OPENAI_BASE_URL" --model "$AZURE_OPENAI_MODEL_DAILY" \
+  --api-key-env AZURE_OPENAI_API_KEY --prompt /tmp/prompt-old.md --out "results/old-${N}.json"
 ```
 
-Capture from the log:
-- The summary (the model's `submit_review` argument).
-- The list of inline comments with severities.
-- The number of tool calls.
-- The number of turns the loop ran.
+Any runner works (`--provider anthropic --api-key-env ANTHROPIC_API_KEY` for
+the default backend; `--provider grok --model grok-4.6` for the Grok CLI when
+it is installed). Use the same runner and model for OLD and NEW.
 
-### 3. Run with NEW prompt
+### 3. Run with the NEW prompt
 
 ```bash
-git stash pop                  # restore the new prompt
-
-python3 scripts/reviewer.py 2>&1 | tee "/tmp/new-${N}.log"
+python3 tests/eval/run_eval.py run ... --prompt prompts/default.md --out "results/new-${N}.json"
 ```
-
-Same captures.
 
 ### 4. Compare
 
-Produce a per-PR comparison:
+```bash
+python3 tests/eval/run_eval.py score results/old-*.json results/new-*.json
+```
 
-| Metric | OLD | NEW |
-|---|---|---|
-| Inline comments | N1 | N2 |
-| Severities (critical/warning/info) | a/b/c | x/y/z |
-| Tool calls | M1 | M2 |
-| Turns | T1 | T2 |
-
-Plus a qualitative bullet list:
-- "New flags X that old missed." (better)
-- "New misses Y that old caught." (regression)
+The table gives, per run: must-find recall, false positives (labelled
+`must_not_flag`), unlabelled findings (inspect them — they are either new true
+positives to add to the corpus or noise), severity match, summary present,
+suggestion blocks, turns, tokens, cost, wall clock. Add a qualitative bullet
+list from the JSON bodies:
+- "NEW flags X that OLD missed." (better)
+- "NEW misses Y that OLD caught." (regression)
 - "Severity of Z shifted from `info` → `warning`." (calibration change)
+
+Ship only when recall is ≥ and false positives ≤ on every model you could run;
+record blocked models honestly (no key, quota) instead of assuming.
 
 ## Aggregation across multiple PRs
 
@@ -129,7 +119,10 @@ Print the summary to stdout. Optionally write it to `tmp/prompt-test-<branch>.md
 
 ## Common failure modes
 
+- **Comparing across different runners or models.** OLD and NEW must share runner + model; the runner's own tool loop changes the result more than most prompt edits.
+- **Trusting finding counts.** A prompt that doubles false positives "finds more"; the corpus score is the metric.
+
+
 - **Anthropic rate limits.** Add `time.sleep(5)` between PRs if you're testing >5 in a row.
-- **Stash conflict.** If `git stash pop` fails, the user has uncommitted changes elsewhere; stop and ask.
 - **Target PR closed.** PRs in closed/merged state still work for read-only review; skip if the diff is gone (rare).
 - **Provider cost.** Each run is one full review at the configured model. For 5 PRs × 2 runs = 10 reviews. Estimate cost up front; if that's a problem use a cheaper model via `AIPRR_MODEL` for the smoke test.

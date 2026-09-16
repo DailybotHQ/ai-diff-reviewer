@@ -63,3 +63,6 @@ jobs:
           # model: composer-2.5
           # Optional: pin the CLI version.
           # cursor-version: '2025.11.01'
+          # Optional supply-chain pin: sha256 of the artefact the cursor install
+          # step downloads (logged on every run). A mismatch fails the step.
+          # cursor-installer-sha256: <64-hex>

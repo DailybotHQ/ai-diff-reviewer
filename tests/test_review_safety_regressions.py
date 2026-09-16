@@ -6,6 +6,7 @@ import importlib.util
 import dataclasses
 import io
 import sys
+import tempfile
 import re
 import unittest
 import urllib.error
@@ -81,6 +82,42 @@ class IncrementalSafetyTests(unittest.TestCase):
         self.assertEqual(result.findings, [], "do not re-post the old inline comment")
         self.assertEqual(result.overall_severity, "critical")
         self.assertTrue(reviewer.evaluate_strictness(result.overall_severity, "block-on-critical")[0])
+        self.assertIn(prior().fingerprint, state.open_fingerprints_this_gen)
+        self.assertNotIn(prior().fingerprint, state.resolved_fingerprints)
+
+    def test_verified_policy_retires_corroborated_finding_and_unblocks(self) -> None:
+        """Opt-in `verified`: a resolved verdict + file changed + fingerprint
+        absent leaves the outstanding set and stops gating; default stays put."""
+        pre = context()
+        result = reviewer.ReviewResult(summary="Fixed it", findings=[], overall_severity="none")
+        result.prior_finding_updates = {prior().fingerprint: ("resolved", "auth check restored")}
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(reviewer, "_load_code_contexts_for_findings", return_value={}):
+            state, _ = reviewer.run_iar_post_llm(
+                iar_config=reviewer.build_iar_config({"AIPRR_CONVERGENCE_POLICY": "iterative"}),
+                pre_context=pre, result=result, base_max_inline_comments=3,
+                telemetry=reviewer.RunTelemetry(), resolution_policy="verified", workspace=Path(td),
+            )
+        self.assertEqual(result.overall_severity, "none")
+        self.assertNotIn(prior().fingerprint, state.open_fingerprints_this_gen)
+        self.assertIn(prior().fingerprint, state.resolved_fingerprints)
+
+    def test_verified_policy_keeps_a_reposted_finding_open(self) -> None:
+        """Corroboration must see THIS round's fingerprints: when the model
+        re-posts the issue (same fingerprint) while also claiming `resolved`,
+        the finding stays open and keeps gating."""
+        pre = context()
+        reposted = reviewer.Finding(path="src/auth.py", line=10, body="Authentication bypass", severity="critical")
+        result = reviewer.ReviewResult(summary="", findings=[reposted], overall_severity="critical")
+        result.prior_finding_updates = {prior().fingerprint: ("resolved", "claims fixed")}
+        with tempfile.TemporaryDirectory() as td, \
+             mock.patch.object(reviewer, "_load_code_contexts_for_findings", return_value={}), \
+             mock.patch.object(reviewer, "finding_fingerprint", return_value=prior().fingerprint):
+            state, _ = reviewer.run_iar_post_llm(
+                iar_config=reviewer.build_iar_config({"AIPRR_CONVERGENCE_POLICY": "iterative"}),
+                pre_context=pre, result=result, base_max_inline_comments=3,
+                telemetry=reviewer.RunTelemetry(), resolution_policy="verified", workspace=Path(td),
+            )
+        self.assertEqual(result.overall_severity, "critical")
         self.assertIn(prior().fingerprint, state.open_fingerprints_this_gen)
         self.assertNotIn(prior().fingerprint, state.resolved_fingerprints)
 

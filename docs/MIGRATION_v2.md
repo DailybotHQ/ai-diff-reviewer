@@ -4,7 +4,7 @@
 **Skill:** `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`  
 (or `npx skills update ai-diff-reviewer`)
 
-Exact pin when you want a frozen tag: `@v2.0.0` (skill frontmatter `version: "2.0.0"`).
+Exact pin when you want a frozen tag: `@v2.1.0` (skill frontmatter `version: "2.1.0"`); earlier frozen tags on this major: `@v2.0.1`, `@v2.0.0`.
 
 ## Contract
 

@@ -1,8 +1,12 @@
 # Providers — current status and how to add a new one
 
+## Providers are vendors; runners are how they run
+
+From a consumer's point of view the action supports **six providers**: Anthropic, OpenAI, Azure Foundry, xAI (Grok), Z.ai GLM and Cursor — plus any Anthropic- or OpenAI-compatible gateway. Each is reached through one or more **runners**: the action's own in-process loop (`anthropic`, `openai`) or a vendor coding-agent CLI (`claude-code`, `codex`, `grok`, `cursor`). The `README.md` Providers table is organised by vendor; this document explains the mechanism underneath.
+
 ## Runner × backend matrix (v2.1.0+)
 
-Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* (where the model lives). Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
+Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* — the vendor whose model answers. Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
 
 | Runner (`provider`) | Anthropic | OpenAI | Azure Foundry | xAI | Z.ai GLM | Subscription / flat-rate |
 |---|---|---|---|---|---|---|
@@ -13,7 +17,7 @@ Two inputs decide a review: **`provider`** picks the *runner* (who drives the to
 | `grok` (CLI) | — | — | — | ✅ default (`grok-4.3`) | — | — |
 | `cursor` (CLI) | — | — | — | — | — | ✅ Cursor Pro (`model: auto`); no `api-base` lane |
 
-Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
+`model` is **required** whenever `api-base` is set for a runner that routes it (v2.2.0+): a runner's built-in default names its own vendor's model, so the run aborts with the expected value (deployment name, `glm-5.3`, `grok-4.6`, the gateway's id) instead of sending the wrong model. `cursor` and `grok` ignore `api-base` (warned) and keep their defaults. Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
 
 **Choosing in one minute**
 
@@ -40,17 +44,17 @@ Cursor `auto` proved the pattern: a one-word cost profile is what teams actually
 
 ### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
 
-Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free).
+Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free). The runtime's copy of this table is dated by the constant `MODEL_TIERS_VERIFIED_ON` in `scripts/reviewer.py` (currently `2026-09-16`) — the `**Usage:**` line marks estimates as `(indicative)` for that reason; xAI prices are the <200k-token rates and double above that, so long reviews under-report.
 
 | Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
 |---|---|---|---|---|---|
 | `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
 | `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
-| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.3` — $1.25 / $2.50 | `grok-4.3` | `grok-4.6` — $2 / $6 | 4.3 is the daily tier at a low price point; 4.6 is the reasoning tier. (Prices are the <200k-token rates; above that they double.) |
+| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.6` — $2 / $6 | `grok-4.3` — $1.25 / $2.50 | `grok-4.6` | Measured 2026-09-16 (`tests/eval`): 4.3 reported 0 of 4 known defects; 4.6 found 3 of 4 with no false positives — so 4.6 is the balanced pick and 4.3 the smoke tier. (Prices are the <200k-token rates; above that they double.) |
 | `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
-| `openai`, `codex` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
+| `openai`, `codex` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
 | `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
-| `grok` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. |
+| `grok` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget 4–10 min and ~$0.5–0.85 per mid-size PR on 4.6; the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
 
@@ -329,6 +333,17 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 
 Missing files raise `FileNotFoundError` with an actionable message. Malformed JSON raises `ValueError` with the offending snippet quoted.
 
+### Degrade paths (v2.2.0+)
+
+| CLI outcome | What the action does | Check / label |
+|---|---|---|
+| exit 0, findings file written | normal review | strictness gate as usual |
+| non-zero exit, findings file written | posts the review with a `Partial review: <cli> exited with code N` footer and a WARNING in the log | strictness gate as usual |
+| exit 0, no findings file | posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
+| non-zero exit, no findings file | the run fails with the CLI's stderr/stdout tail | red |
+
+Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run.
+
 ### The prompt directive
 
 CLI providers wrap the review instructions with `write_findings_prompt_directive()`, which appends the schema + "write your findings to this file before ending your turn" instruction to whatever comes from `prompts/default.md`. The directive is standardised so every CLI writes the same schema — one parser, three producers.
@@ -520,7 +535,7 @@ To run multiple providers cleanly:
 1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
 2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.
 
-This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses this pattern: every runner/backend whose secret is configured reviews each `ready`-labelled PR with its own label — `self-reviewed:anthropic`, `self-reviewed:claude-code`, `self-reviewed:cursor`, `self-reviewed:codex`, `self-reviewed:grok`, `self-reviewed:claude-code-glm` (Z.ai via `api-base`), `self-reviewed:codex-azure` (Azure Foundry via `api-base`) and the opt-in `self-reviewed:openai`. The same runner can appear twice with different backends: a non-empty `api-base` adds a stable endpoint hash to the marker scope, isolating collapse, IAR and label-once tracking state. Default endpoints retain the historical runner marker. Give each lane a distinct applied label; different models on the same runner/endpoint still share a lane.
+This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses this pattern: every runner/backend whose secret is configured reviews each `ready`-labelled PR with its own label — `self-reviewed:anthropic`, `self-reviewed:claude-code`, `self-reviewed:cursor`, `self-reviewed:codex`, `self-reviewed:grok`, `self-reviewed:claude-code-glm` (Z.ai via `api-base`), `self-reviewed:codex-azure` (Azure Foundry via `api-base`) and `self-reviewed:openai` (in-process, default-on whenever `OPENAI_API_KEY` exists). The same runner can appear twice with different backends: a non-empty `api-base` adds a stable endpoint hash to the marker scope, isolating collapse, IAR and label-once tracking state. Default endpoints retain the historical runner marker. Give each lane a distinct applied label; different models on the same runner/endpoint still share a lane.
 
 > **Passing multiple provider API keys** (e.g. both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` as repo secrets) is fine and does **not** cause cross-contamination: each job forwards only its own provider's key to the CLI subprocess (`_build_cli_env` scrubs everything else), and a single action invocation uses exactly one `provider` + one `api-key`. There is no "both keys in one run" mode — the keys only coexist as separate secrets consumed by separate jobs.
 

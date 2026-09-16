@@ -1,0 +1,49 @@
+{
+  "_about": "Labelled expectations for merged PRs of DailybotHQ/ai-diff-reviewer used by run_eval.py. Labels come from the v3/v3.1 evaluation (2026-09-16) and a read of each PR's post-merge fixes. A label matches a finding on the same path within `window` lines (default 25) when any keyword appears in the body (all_keywords=true → every keyword). Severity is the expected severity where the ground truth is clear.",
+  "46": {
+    "title": "fix(runtime): permission-aware author-association gate (#46) — bugfix, 8 files",
+    "must_find": [
+      {"id": "46-fail-open-missing-login", "path": "scripts/reviewer.py", "line": 5020, "window": 40, "keywords": ["user.login", "permission_lookup_failed", "fail-open", "fail open"], "severity": "warning", "note": "the permission lookup is skipped when the payload lacks pull_request.user.login, which fail-opens private/internal PRs; docstring claims otherwise"}
+    ],
+    "acceptable": [
+      {"id": "46-skip-message-wording", "path": "scripts/reviewer.py", "line": 6432, "window": 40, "keywords": ["skip message", "public-repo", "default"]},
+      {"id": "46-unknown-permission-string", "path": "scripts/reviewer.py", "line": 5036, "window": 40, "keywords": ["permission", "unknown", "allow"]}
+    ],
+    "must_not_flag": []
+  },
+  "45": {
+    "title": "fix(runtime): complexity labels on all providers (#45) — feature/fix, 10 files",
+    "must_find": [
+      {"id": "45-complexity-not-validated", "path": "scripts/reviewer.py", "line": 5614, "window": 40, "keywords": ["complexity"], "all_keywords": false, "severity": "warning", "note": "parse_findings_file stores the raw complexity value without validating it"},
+      {"id": "45-json-example-invalid", "path": "scripts/reviewer.py", "line": 5642, "window": 40, "keywords": ["// optional", "invalid json", "not valid json"], "severity": "warning", "note": "the `// optional` comment made the directive's JSON example invalid (fixed in v2.1.0 Task 12)"}
+    ],
+    "acceptable": [
+      {"id": "45-fallback-labels-every-pr", "path": "scripts/reviewer.py", "line": 6777, "window": 40, "keywords": ["fallback", "label"]},
+      {"id": "45-flag-threading", "path": "scripts/reviewer.py", "line": 1375, "window": 40, "keywords": ["require_complexity", "flag"]},
+      {"id": "45-label-update-failure-logged", "path": "scripts/reviewer.py", "keywords": ["label update", "only logged", "still reports success"]}
+    ],
+    "must_not_flag": []
+  },
+  "43": {
+    "title": "ci(self-review): dogfood complexity labeling (#43) — CI config, 1 file",
+    "must_find": [
+      {"id": "43-complexity-vs-docs", "path": ".github/workflows/self-review.yml", "line": 328, "window": 40, "keywords": ["complexity"], "severity": "warning", "note": "workflow enables complexity labeling for legs the docs said did not support it"}
+    ],
+    "acceptable": [],
+    "must_not_flag": [
+      {"id": "43-label-gate-case", "path": ".github/workflows/self-review.yml", "keywords": ["case-sensitive", "case sensitive", "lowercase", "casing"], "note": "FALSE POSITIVE — adjudicated 2026-09-16: the PR head (65e3a2e) already compared labels with .strip().lower() (scripts/reviewer.py:782-783)"}
+    ]
+  },
+  "37": {
+    "title": "docs(skill): reframe SKILL.md as Local & CI Companion (#37) — docs-only, 1 file",
+    "must_find": [
+      {"id": "37-parity-paragraph-contradiction", "path": "skills/ai-diff-reviewer/SKILL.md", "line": 69, "window": 40, "keywords": ["step 5", "handoff", "default", "setup/SKILL.md"], "severity": "warning", "note": "the Flow B parity paragraph said the handoff is the default; setup/SKILL.md keeps it opt-in"}
+    ],
+    "acceptable": [
+      {"id": "37-duplicated-framing", "path": "skills/ai-diff-reviewer/SKILL.md", "line": 181, "window": 60, "keywords": ["duplicat", "framing", "section"]}
+    ],
+    "must_not_flag": [
+      {"id": "37-praise-as-finding", "path": "skills/ai-diff-reviewer/SKILL.md", "keywords": ["nice", "great", "well done", "good job", "praise"], "note": "praise belongs in the summary, never inline"}
+    ]
+  }
+}
