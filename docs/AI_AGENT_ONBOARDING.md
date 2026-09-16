@@ -14,7 +14,7 @@ You're an AI coding agent (Claude Code, Cursor, Codex, Gemini, Copilot, OpenClaw
 
 An LLM-driven code-review system that ships on **two surfaces from the same codebase**:
 
-1. **A GitHub Action** — composite action, `action.yml` + `scripts/reviewer.py` (~4000 LOC, stdlib only). Distributed via the GitHub Marketplace. This is what most of the runtime code implements.
+1. **A GitHub Action** — composite action, `action.yml` + `scripts/reviewer.py` (~10k LOC, stdlib only). Distributed via the GitHub Marketplace. This is what most of the runtime code implements.
 2. **A local companion skill** — `skills/ai-diff-reviewer/`, distributed via `npx skills add`. The skill runs the SAME review methodology inside the developer's coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) using the same `prompts/default.md`. See [ARCHITECTURE.md § "Two surfaces, one methodology"](ARCHITECTURE.md#two-surfaces-one-methodology).
 
 **Both surfaces are equally important.** If you're changing the review prompt, the severity model, or anything that affects how the reviewer sees a diff, your change affects both surfaces — the `Skills — prompt-sync invariant` CI job in `code_check.yml` enforces this.

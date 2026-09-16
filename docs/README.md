@@ -21,7 +21,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [DEVELOPMENT_COMMANDS.md](DEVELOPMENT_COMMANDS.md) | Verbatim command reference (compile check, unittest suite, action.yml validation, local debug). |
 | [RELEASE_RECOVERY.md](RELEASE_RECOVERY.md) | Playbook for recovering from partial-release failures in `auto-release.yml` (tag pushed but sync commit rejected by branch protection, etc.). |
 | [TESTING_GUIDE.md](TESTING_GUIDE.md) | How the stdlib `unittest` suite is organised, how to run it, and the dogfooding loop via `self-review.yml`. |
-| [SECURITY.md](SECURITY.md) | Secrets handling (`AIPRR_API_KEY`), tool-arg redaction, safe-path resolution, IAR trust boundary (marker author filter + parser hardening), and the `skip-review-label` threat model. |
+| [SECURITY.md](SECURITY.md) | Secrets handling and credential lanes per runner, custom endpoints (`api-base` — where the key goes), generated per-run files, vendor-CLI environment scrub and installer supply chain, tool-arg redaction, safe-path resolution, IAR trust boundary (marker author filter + per-field shape validation), and the `skip-review-label` threat model. |
 | [DOCUMENTATION_GUIDE.md](DOCUMENTATION_GUIDE.md) | How this documentation tree is organised and the rule that keeps it in sync with runtime behaviour. |
 
 ## User-facing surface (referenced from `README.md`)
@@ -29,7 +29,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | Document | Purpose |
 |---|---|
 | [PROMPTS.md](PROMPTS.md) | What a good custom prompt looks like — the main lever consumers pull to adapt the reviewer to their codebase. Explains `prompt-file` vs `prompt-extension-file`, the `.review/extension.md` convention that keeps local skill and CI action in sync, and the meta-prompt for AI-generated custom prompts. |
-| [PROVIDERS.md](PROVIDERS.md) | Both provider families — the chat-completions Anthropic-shape contract and the agent-runner `.aiprr/findings.json` contract — plus the shipping providers (`anthropic`, `claude-code`, `cursor`, `codex`) and the roadmap for raw OpenAI / Gemini / Bedrock. |
+| [PROVIDERS.md](PROVIDERS.md) | Providers as vendors (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai GLM, Cursor, self-hosted gateways) and the runner × backend matrix behind them (`provider` + `api-base`), the dated cost-efficient defaults matrix and tier aliases, both family contracts (Anthropic-shape in-process loop; agent-runner `.aiprr/findings.json`), usage telemetry per provider, and the checklist for adding a runner or backend. Roadmap: Gemini / Bedrock. |
 | [STRICTNESS.md](STRICTNESS.md) | The four strictness modes (`lenient` / `block-on-critical` / `block-on-warning` / `block-on-any`) and how the model's `severity` argument maps to the GitHub check outcome. |
 | [TRIGGER_MODES.md](TRIGGER_MODES.md) | The four `trigger-mode` values (`always` / `label-required` / `label-once` / `label-added-only`), how to pair them with the workflow's `on:` block, and the opt-in `skip-review-label` emergency-bypass hatch. |
 | [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |

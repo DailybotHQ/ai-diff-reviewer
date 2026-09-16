@@ -115,7 +115,8 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 | Version | Headline |
 |---|---|
-| **v2.0.0** (shipping) | IAR platform major — unconditional Iteration-Aware Review, user-forced reset, `skip-review-label` emergency bypass, full companion skill pack (`setup` / `generate-extension` / `open-pr` / `apply-review`). Default pin `@v2` / skill `2.0.0`. No `action.yml` inputs renamed or removed. |
+| **v2.1.0** (shipping, 2026-09-16) | Providers as vendors × runners: `api-base` (Azure Foundry, xAI, Z.ai GLM, gateways), new `openai` and `grok` runners, one-word model tiers with a dated cost matrix, `ignore-paths`, real usage telemetry, incremental follow-up reviews (advisory resolution), prompt v3.1, security hardening, skill upgrades (`open-pr` base sync, runner × backend `setup` wizard, 1,024-char descriptions). Additive; default pin `@v2` / skill `2.1.0`. |
+| **v2.0.0** (2026-07-16) | IAR platform major — unconditional Iteration-Aware Review, user-forced reset, `skip-review-label` emergency bypass, full companion skill pack (`setup` / `generate-extension` / `open-pr` / `apply-review`). No `action.yml` inputs renamed or removed. |
 
 Upcoming work — no commitment on ordering; ships on the **v2.x** line unless flagged as a new major:
 

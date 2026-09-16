@@ -144,9 +144,9 @@ The script will:
 Whenever you touch the agentic loop, the prompt, the review-submission path, or a provider implementation:
 
 1. Open a PR in this repo with your change.
-2. `self-review.yml` runs the action against itself. The Anthropic baseline leg always invokes the reviewer; the three CLI-provider legs invoke it when provider-sensitive files changed.
+2. `self-review.yml` runs the action against itself when the PR carries the `ready` label. Every leg whose provider secret is configured on the repo reviews the PR (today: `grok`); a leg without its secret is absent from the matrix.
 3. Watch the active tracking comments. Each should transition `Working… → done`.
-4. Verify the inline comments and the summary look right for **the provider you touched**. If your change also affected shared code (`state_to_review_result`, the submission path, the strictness gate), make sure the diff trips the critical-file scope gate and verify all active provider legs.
+4. Verify the inline comments and the summary look right for **the provider you touched**. If your change also affected shared code (`state_to_review_result`, the submission path, the strictness gate), toggle `ready` again after your fix and verify every active provider leg.
 5. If anything is off — comment posted on a wrong line, summary missing a section, severity mis-assigned — fix it on the same PR. Each push re-triggers self-review against the new HEAD.
 
 The PR description should explicitly reference which self-review runs validated the change (per provider, if the change is not provider-agnostic).

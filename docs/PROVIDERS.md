@@ -1,8 +1,12 @@
 # Providers — current status and how to add a new one
 
+## Providers are vendors; runners are how they run
+
+From a consumer's point of view the action supports **six providers**: Anthropic, OpenAI, Azure Foundry, xAI (Grok), Z.ai GLM and Cursor — plus any Anthropic- or OpenAI-compatible gateway. Each is reached through one or more **runners**: the action's own in-process loop (`anthropic`, `openai`) or a vendor coding-agent CLI (`claude-code`, `codex`, `grok`, `cursor`). The `README.md` Providers table is organised by vendor; this document explains the mechanism underneath.
+
 ## Runner × backend matrix (v2.1.0+)
 
-Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* (where the model lives). Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
+Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* — the vendor whose model answers. Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
 
 | Runner (`provider`) | Anthropic | OpenAI | Azure Foundry | xAI | Z.ai GLM | Subscription / flat-rate |
 |---|---|---|---|---|---|---|

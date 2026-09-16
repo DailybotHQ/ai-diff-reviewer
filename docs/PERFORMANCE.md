@@ -15,9 +15,9 @@ CPU time inside `scripts/reviewer.py` is negligible. That's why the runtime is s
 
 ## Two performance shapes
 
-As of v1.1.0 the action ships two provider families with different cost/latency profiles. Choose based on which trade-off matches your team:
+The action ships two provider families with different cost/latency profiles (the runner side of the runner × backend matrix in [PROVIDERS.md](PROVIDERS.md)). Choose based on which trade-off matches your team:
 
-| Aspect | Chat-completions family (`anthropic`) | Agent-runner family (`claude-code`, `cursor`, `codex`) |
+| Aspect | Chat-completions family (`anthropic`, `openai`) | Agent-runner family (`claude-code`, `cursor`, `codex`, `grok`) |
 |---|---|---|
 | Loop owner | This action drives the turn loop | Vendor CLI drives its own loop |
 | Cost knob you control | `max-turns` × `max_tokens` × conversation pruning | Workflow/job timeout + whatever the vendor bills per invocation; `agent-extra-args` can pass vendor-native budget flags |

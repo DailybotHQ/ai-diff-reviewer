@@ -5,7 +5,7 @@ How AI coding agents — running on this repo, possibly across multiple agents a
 ## Principles
 
 1. **One change per PR.** Don't bundle a provider addition with a prompt rewrite with a CI refactor. Three PRs are easier to review and revert than one.
-2. **Read before writing.** The repo is ~4000 LOC of runtime + ~300 lines of `action.yml` + a stdlib-`unittest` suite in `tests/` + a handful of docs + the local companion skill pack under `skills/ai-diff-reviewer/`. You can read the runtime in an hour and the skill pack in another 30 minutes. Do.
+2. **Read before writing.** The repo is ~10k LOC of runtime (v2.1.0) + ~400 lines of `action.yml` + a stdlib-`unittest` suite in `tests/` + a handful of docs + the local companion skill pack under `skills/ai-diff-reviewer/`. You can read the runtime in an hour and the skill pack in another 30 minutes. Do.
 3. **Match existing patterns.** This repo's consistency is a feature. New code should look like the surrounding code unless there's a deliberate reason to break the pattern.
 4. **Update docs in the same PR as the code.** Out-of-sync docs are worse than no docs.
 5. **Self-review before requesting human review.** The action runs on every PR with an always-on Anthropic baseline and scoped CLI-provider legs for provider-sensitive changes; it's the first reviewer you need to satisfy.
@@ -103,7 +103,7 @@ Do not install a consumer `pr-review.yml` in this repo; dogfood CI is already [`
 Every PR triggers `.github/workflows/self-review.yml`, which runs the action against itself. The matrix is built from secret presence only: `anthropic`, `claude-code`, `cursor`, `codex`, `grok`, `claude-code` on Z.ai and `codex` on Azure (via `api-base`), plus an opt-in in-process `openai` leg — every configured leg reviews every `ready`-labelled PR, and a leg without its secret is absent rather than a misleading green. Each active leg posts an independent review with a distinct `self-reviewed:<provider>` label so you can tell them apart in the PR conversation.
 
 - **Watch the active tracking comments.** Each transitions in-place from `Working…` to `View review →` (or `failed`). If a leg's API-key secret is not set on the repo, or the scope gate decides that a CLI-provider leg is unnecessary for this diff, that leg emits a `::notice::` and short-circuits before invoking the reviewer.
-- **Read the inline comments per leg.** Provider-family behaviour can diverge: the `anthropic` leg is the strictest control (this action drives the loop), the three CLI legs may find different classes of issue because their vendor CLIs run their own tools.
+- **Read the inline comments per leg.** Provider-family behaviour can diverge: the in-process legs (`anthropic`, `openai`) are the strictest control (this action drives the loop); the CLI legs (`claude-code`, `codex`, `grok`, `cursor`, and the `api-base` variants on Z.ai / Azure) may find different classes of issue because their vendor CLIs run their own tools. Which legs exist depends only on which provider secrets the repo has.
 - **Apply suggestion blocks if any bot's fix is right.** GitHub's one-click apply is fast; it doesn't matter which leg suggested it.
 - **Push a follow-up commit if a leg is wrong.** The next run reviews the new HEAD across the baseline leg and any CLI legs enabled by the scope gate.
 - **Don't manually dismiss the bots' comments.** They auto-collapse on the next push via `collapse-previous`. Manual dismissal hides the history.
@@ -146,7 +146,7 @@ Each of those is a real cost. We've decided the cost outweighs the benefit at th
 
 What we **do** have (post v1.1.0) that earlier versions of this doc claimed we didn't:
 
-- A stdlib `unittest` suite (242 tests across four files in `tests/`) that runs in CI.
+- A stdlib `unittest` suite (720 tests across 17 files in `tests/`) that runs in CI.
 - A CLI-installer smoke matrix (`cli-install-smoke` in `code_check.yml`).
 - Automated releases from Conventional Commits (`auto-release.yml`), so no manual tag-and-push step.
 - A local companion skill (`skills/ai-diff-reviewer/`) shipped alongside the Action, with two CI invariants (`Skills — prompt-sync invariant` in `code_check.yml`; `npx skills update` smoke in `auto-release.yml` Step 3.5) keeping the two surfaces in lock-step.

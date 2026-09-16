@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [2.1.0] — 2026-09-16
+
 **Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review the actual new diff and carry outstanding findings forward, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
 
 ### Added
@@ -207,25 +211,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/validate-frontmatter.py` now fails on descriptions over 1,024
   characters or names over 64. Downstream vendored copies clear the
   warning when they pick up the release that ships this.
-- **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
-
-- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
-
-> **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
-> `auto-release.yml` (`feat!:` commit). **`@v2` is the default consumer
-> pin** going forward (skill `version: "2.0.0"`).
-
-### v2 pin surface
-
-Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
-
-- **Default pin:** `uses: DailybotHQ/ai-diff-reviewer@v2` and
-  `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`.
-- **`action.yml` contract:** no inputs renamed or removed.
-- **Platform behaviour:** Iteration-Aware Review on every CI review;
-  local skill reviews stay a full pass. Escape / reset /
-  emergency-bypass: [`docs/ITERATION_AWARENESS.md`](docs/ITERATION_AWARENESS.md),
-  [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
 - **Dogfood follow-ups from the first self-review of the release PR.** An
@@ -266,6 +251,16 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   `main` (intentional deltas listed explicitly), and hardening
   regressions. `docs/TESTING_GUIDE.md` and `tests/README.md` now describe
   the real suite.
+
+## [2.0.1] — 2026-07-17
+
+### Fixed
+
+- **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
+
+- **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
+
+### Changed
 - **Harness: Deep Work Plan skill bumped to v2.17.0 + AI Diff Reviewer
   addon wired (Flow B).** Vendored `deepworkplan` via
   `npx skills update deepworkplan` (lockfile hash refresh). New addon
@@ -276,6 +271,26 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   stays `.github/workflows/self-review.yml` (no consumer
   `pr-review.yml`). Dailybot addon already present — reconciled, no
   wiring changes. Consumer Action runtime unchanged.
+
+## [2.0.0] — 2026-07-16
+
+> **Shipping as v2.0.0.** Merge of this line cuts a SemVer major via
+> `auto-release.yml` (`feat!:` commit). **`@v2` is the default consumer
+> pin** going forward (skill `version: "2.0.0"`).
+
+### v2 pin surface
+
+Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
+
+- **Default pin:** `uses: DailybotHQ/ai-diff-reviewer@v2` and
+  `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`.
+- **`action.yml` contract:** no inputs renamed or removed.
+- **Platform behaviour:** Iteration-Aware Review on every CI review;
+  local skill reviews stay a full pass. Escape / reset /
+  emergency-bypass: [`docs/ITERATION_AWARENESS.md`](docs/ITERATION_AWARENESS.md),
+  [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
+
+### Changed
 - **Docs + skill + examples sync for IAR / `skip-review-label`, plus
   v2 pin surface.** Discoverability pass so Marketplace consumers and
   the companion skill see the same story as `action.yml`, and consumer
