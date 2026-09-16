@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +82,7 @@ class BuildProviderDispatchTests(unittest.TestCase):
         self.assertIn("Unsupported provider", str(ctx.exception))
 
     def test_default_models_covers_all_shipping_providers(self) -> None:
-        for provider_id in ("anthropic", "claude-code", "cursor", "codex"):
+        for provider_id in ("anthropic", "openai", "claude-code", "cursor", "codex", "grok"):
             self.assertIn(provider_id, reviewer.DEFAULT_MODELS)
             self.assertTrue(reviewer.DEFAULT_MODELS[provider_id])
 
@@ -248,6 +249,11 @@ class CliBinaryConstantsTests(unittest.TestCase):
             str(reviewer.CodexProvider.MCP_DEST).endswith(".codex/mcp.json")
         )
 
+    def test_grok_constants(self) -> None:
+        self.assertEqual(reviewer.GrokProvider.CLI_BIN, "grok")
+        self.assertEqual(reviewer.GrokProvider.CLI_NAME, "xAI Grok")
+        self.assertEqual(reviewer.GrokProvider.PROVIDER_ID, "grok")
+
 
 class CliEnvAllowlistTests(unittest.TestCase):
     """`_build_cli_env` forwards only the allowlist + provided extras.
@@ -296,6 +302,109 @@ class CliEnvAllowlistTests(unittest.TestCase):
         finally:
             os.environ.clear()
             os.environ.update(prev)
+
+
+class HardeningRegressionTests(unittest.TestCase):
+    """Task 13 hardening: allowlist hygiene, bounded findings file, bounded
+    ignore globs, and the credential lanes per runner."""
+
+    def test_allowlist_has_no_credential_like_names(self) -> None:
+        for name in reviewer._CLI_ENV_ALLOWLIST:
+            low = name.lower()
+            self.assertFalse(
+                any(s in low for s in reviewer.LOG_REDACT_SUBSTRINGS),
+                f"{name} looks like a credential and must not be forwarded",
+            )
+            self.assertFalse(name.startswith("AIPRR_"), name)
+
+    def test_findings_file_above_cap_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "findings.json"
+            path.write_text("{}" + " " * 16, encoding="utf-8")
+            with mock.patch.object(reviewer, "MAX_FINDINGS_FILE_BYTES", 8):
+                with self.assertRaises(ValueError) as ctx:
+                    reviewer.parse_findings_file(path)
+            self.assertIn("cap", str(ctx.exception))
+            # Under the cap the same file parses (empty findings list is fine).
+            path.write_text(json.dumps({"summary": "ok", "findings": []}), encoding="utf-8")
+            self.assertEqual(reviewer.parse_findings_file(path).summary, "ok")
+
+    def test_ignore_globs_are_capped(self) -> None:
+        many = ",".join(f"dir{i}/**" for i in range(reviewer.MAX_IGNORE_GLOBS + 50))
+        with mock.patch.object(reviewer, "log"):
+            self.assertEqual(len(reviewer.parse_ignore_paths(many)), reviewer.MAX_IGNORE_GLOBS)
+            long_glob = "a" * (reviewer.MAX_IGNORE_GLOB_LEN + 1)
+            self.assertEqual(reviewer.parse_ignore_paths(f"{long_glob},keep.txt"), ("keep.txt",))
+
+    def test_pathological_globs_match_in_bounded_time(self) -> None:
+        """PR-controlled file names must not stall the matcher (ReDoS)."""
+        import time
+        cases = (
+            ("**/" * 40 + "a", "b/" * 60 + "c"),
+            ("*.*.*.*.*.*.*.*.*.*.ts", "a." * 120 + "x"),
+            ("*a*a*a*a*a*a*a*a*a*a*b", "a" * 200),
+        )
+        for glob, path in cases:
+            t0 = time.monotonic()
+            self.assertFalse(reviewer.path_is_ignored(path, (glob,)))
+            self.assertLess(time.monotonic() - t0, 0.5, glob)
+        self.assertTrue(reviewer.path_is_ignored("a.b.c.d.e.f.g.h.i.j.ts", ("*.*.*.*.*.*.*.*.*.*.ts",)))
+
+    def test_credential_lanes_per_agent_runner(self) -> None:
+        """Each CLI receives exactly its own credential variable(s) and never
+        the GitHub token or any other AIPRR_* variable."""
+        expected: dict[str, set[str]] = {
+            "claude-code": {"ANTHROPIC_API_KEY"},
+            "codex": {"OPENAI_API_KEY", "CODEX_HOME"},
+            "cursor": {"CURSOR_API_KEY"},
+            "grok": {reviewer.GROK_API_KEY_ENV},
+        }
+        prev = dict(os.environ)
+        try:
+            os.environ["AIPRR_GH_TOKEN"] = "ghp_leak_value"
+            os.environ["AIPRR_API_KEY"] = "leak_value"
+            for pid, lanes in expected.items():
+                provider = reviewer.build_provider(pid, api_key="sk-lane-KEY", model="")
+                captured: dict[str, Any] = {}
+
+                def fake_run(argv, **kw):
+                    captured["env"] = dict(kw["env"])
+                    findings = Path(kw["cwd"]) / reviewer.FINDINGS_JSON_REL
+                    findings.parent.mkdir(parents=True, exist_ok=True)
+                    findings.write_text(json.dumps({"summary": "s", "findings": []}))
+                    return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+                with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                    reviewer.subprocess, "run", side_effect=fake_run
+                ), mock.patch.object(reviewer, "log"):
+                    provider.run_review(
+                        pr_context=_make_pr_context(), review_instructions="R",
+                        workspace=Path(tmp), output_dir=Path(tmp),
+                    )
+                env = captured["env"]
+                extra = {k for k in env if k not in reviewer._CLI_ENV_ALLOWLIST}
+                self.assertEqual(extra, lanes, pid)
+                self.assertFalse(any(k.startswith("AIPRR_") for k in env), pid)
+                self.assertNotIn("ghp_leak_value", " ".join(env.values()), pid)
+        finally:
+            os.environ.clear(); os.environ.update(prev)
+
+
+class CursorApiBaseWarningTests(unittest.TestCase):
+    def test_cursor_warns_and_ignores_api_base(self) -> None:
+        with mock.patch.object(reviewer, "log") as fake_log:
+            provider = reviewer.build_provider(
+                "cursor", api_key="k", model="", api_base="https://gw.example.com/v1"
+            )
+        msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+        self.assertIn("api-base", msgs)
+        self.assertIn("WARNING", msgs)
+        self.assertEqual(provider.profile.host, "gw.example.com")
+
+    def test_cursor_default_is_silent(self) -> None:
+        with mock.patch.object(reviewer, "log") as fake_log:
+            reviewer.build_provider("cursor", api_key="k", model="")
+        self.assertFalse(any("api-base" in str(c.args[0]) for c in fake_log.call_args_list))
 
 
 class SecurityInvariantsTests(unittest.TestCase):
@@ -708,6 +817,17 @@ def _capture_codex_call_with_auth_state(
             captured["codex_home_path"] = codex_home
             auth_path: Path = codex_home / "auth.json"
             captured["auth_json_exists_at_invocation"] = auth_path.exists()
+            config_path: Path = codex_home / "config.toml"
+            captured["config_toml_exists_at_invocation"] = config_path.exists()
+            catalog_path: Path = codex_home / "models.json"
+            captured["catalog_exists_at_invocation"] = catalog_path.exists()
+            if catalog_path.exists():
+                captured["catalog_content"] = catalog_path.read_text(encoding="utf-8")
+            if config_path.exists():
+                captured["config_toml_content"] = config_path.read_text(
+                    encoding="utf-8"
+                )
+                captured["config_toml_mode"] = config_path.stat().st_mode & 0o777
             if auth_path.exists():
                 captured["auth_json_content"] = auth_path.read_text(
                     encoding="utf-8"
@@ -849,6 +969,30 @@ class AgentRunnerPromptHygieneTests(unittest.TestCase):
         self.assertIn("submit_review", text)
 
 
+class PromptV3DirectiveTests(unittest.TestCase):
+    """Prompt v3 (Task 12): the agent-runner directive keeps only the
+    file-safety rule (the triage/verification budget lives in the prompt,
+    never duplicated), and the agent-runner closing asks for triage."""
+
+    def test_directive_has_file_safety_rule_but_no_duplicated_budget(self) -> None:
+        d = reviewer.write_findings_prompt_directive("RUBRIC", Path("/tmp/f.json"))
+        self.assertIn("Never modify any file other than the findings file", d)
+        self.assertNotIn("Exploration budget", d)
+
+    def test_agent_runner_closing_mentions_triage_and_slices(self) -> None:
+        text = reviewer.render_user_prompt(_make_pr_context(), for_agent_runner=True)
+        self.assertIn("triage", text)
+        self.assertIn("read slices, not whole trees", text)
+
+    def test_bundled_prompt_carries_v3_sections(self) -> None:
+        prompt = (_ROOT / "prompts" / "default.md").read_text(encoding="utf-8")
+        for heading in ("## Plan the review first (triage)", "## Verification budget", "## Calibration: things that look like bugs but usually are not", "### Finding shape", "## Follow-up reviews", "## Severity definitions", "## What NOT to comment on"):
+            self.assertIn(heading, prompt, heading)
+        self.assertIn("It does **not** decide severity", prompt)
+        self.assertIn("Always finish the session by calling `submit_review` exactly once", prompt)
+        self.assertEqual(prompt, (_ROOT / "skills" / "ai-diff-reviewer" / "prompt.md").read_text(encoding="utf-8"), "skill prompt must be byte-identical")
+
+
 class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
     """`api-key` maps to metered API auth OR subscription OAuth auth based on
     the token prefix — so a Claude Pro/Max subscription can bill the review
@@ -891,5 +1035,452 @@ class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_API_KEY", env)
 
 
+class ClaudeCodeCustomBackendTests(unittest.TestCase):
+    """`api-base` on claude-code switches to the Anthropic-compatible-backend
+    env contract (Z.ai GLM / xAI). The default profile must stay
+    byte-identical — locked by snapshot assertions below."""
+
+    ZAI = "https://api.z.ai/api/anthropic"
+
+    def _zai_provider(self, *, api_key: str = "zai-KEY", model: str = "glm-5.3") -> Any:
+        prof = reviewer.resolve_endpoint_profile(self.ZAI, "claude-code")
+        return reviewer.ClaudeCodeProvider(api_key=api_key, model=model, profile=prof)
+
+    def test_default_profile_env_snapshot_api_key(self) -> None:
+        captured = _capture_provider_call(
+            reviewer.ClaudeCodeProvider(api_key="sk-ant-api03-x", model="")
+        )
+        env = captured["kwargs"]["env"]
+        self.assertEqual(env.get("ANTHROPIC_API_KEY"), "sk-ant-api03-x")
+        for name in (reviewer.CLAUDE_CODE_AUTH_TOKEN_ENV, reviewer.CLAUDE_CODE_BASE_URL_ENV,
+                     reviewer.CLAUDE_CODE_API_TIMEOUT_ENV, *reviewer.CLAUDE_CODE_DEFAULT_MODEL_ENVS):
+            self.assertNotIn(name, env)
+        self.assertNotIn("--model", captured["argv"])
+
+    def test_default_profile_env_snapshot_oauth(self) -> None:
+        captured = _capture_provider_call(
+            reviewer.ClaudeCodeProvider(api_key="sk-ant-oat01-tok", model="auto")
+        )
+        env = captured["kwargs"]["env"]
+        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-tok")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("--model", captured["argv"])
+
+    def test_zai_profile_env_contract(self) -> None:
+        env = self._zai_provider().auth_env_vars()
+        self.assertEqual(env[reviewer.CLAUDE_CODE_AUTH_TOKEN_ENV], "zai-KEY")
+        self.assertEqual(env[reviewer.CLAUDE_CODE_BASE_URL_ENV], self.ZAI)
+        self.assertEqual(env[reviewer.CLAUDE_CODE_API_TIMEOUT_ENV], reviewer.CLAUDE_CODE_CUSTOM_BACKEND_TIMEOUT_MS)
+        for name in reviewer.CLAUDE_CODE_DEFAULT_MODEL_ENVS:
+            self.assertEqual(env[name], "glm-5.3")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", env)
+
+    def test_zai_profile_forces_model_flag_and_env_reaches_subprocess(self) -> None:
+        captured = _capture_provider_call(self._zai_provider())
+        argv, env = captured["argv"], captured["kwargs"]["env"]
+        self.assertIn("--model", argv)
+        self.assertEqual(argv[argv.index("--model") + 1], "glm-5.3")
+        self.assertEqual(env.get(reviewer.CLAUDE_CODE_BASE_URL_ENV), self.ZAI)
+        self.assertNotIn("AIPRR_GH_TOKEN", env)
+        self.assertNotIn("AIPRR_API_KEY", env)
+
+    def test_auto_model_on_custom_backend_fails_fast(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._zai_provider(model="auto").auth_env_vars()
+        self.assertIn("glm-5.3", str(ctx.exception))
+        with self.assertRaises(ValueError):
+            self._zai_provider(model="").auth_env_vars()
+
+    def test_subscription_token_on_custom_backend_fails_fast(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._zai_provider(api_key="sk-ant-oat01-tok").auth_env_vars()
+        self.assertIn("api.z.ai", str(ctx.exception))
+        self.assertNotIn("sk-ant-oat01-tok", str(ctx.exception))
+
+    def test_xai_anthropic_compatible_profile(self) -> None:
+        prof = reviewer.resolve_endpoint_profile("https://api.x.ai", "claude-code")
+        env = reviewer.ClaudeCodeProvider(api_key="xai-KEY", model="grok-4.3", profile=prof).auth_env_vars()
+        self.assertEqual(env[reviewer.CLAUDE_CODE_BASE_URL_ENV], "https://api.x.ai")
+        self.assertEqual(env["ANTHROPIC_DEFAULT_SONNET_MODEL"], "grok-4.3")
+
+
+class CodexCustomBackendTests(unittest.TestCase):
+    """`api-base` on codex materializes a `config.toml` in the isolated
+    CODEX_HOME that routes the CLI to a Responses-API backend; the default
+    profile writes no config and keeps argv/env byte-identical."""
+
+    AZURE = "https://myres.services.ai.azure.com/openai/v1"
+
+    def setUp(self) -> None:
+        # Keep these hermetic: the catalog step shells out to `codex debug
+        # models --bundled`; stub it as unavailable (covered separately).
+        self._rc = mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, ""))
+        self._rc.start(); self.addCleanup(self._rc.stop)
+
+    def _prov(self, base: str, *, model: str = "gpt-5.4-mini-azure", key: str = "az-KEY") -> Any:
+        prof = reviewer.resolve_endpoint_profile(base, "codex")
+        return reviewer.CodexProvider(api_key=key, model=model, profile=prof)
+
+    def test_default_profile_writes_no_config_toml(self) -> None:
+        c = _capture_codex_call_with_auth_state(reviewer.CodexProvider(api_key="k", model=""))
+        self.assertFalse(c["config_toml_exists_at_invocation"])
+        self.assertNotIn("--model", c["argv"])
+        self.assertEqual(c["env"].get("OPENAI_API_KEY"), "k")
+
+    def test_azure_profile_config_toml_content_and_perms(self) -> None:
+        c = _capture_codex_call_with_auth_state(self._prov(self.AZURE))
+        self.assertTrue(c["config_toml_exists_at_invocation"])
+        self.assertEqual(c["config_toml_mode"], 0o600)
+        toml = c["config_toml_content"]
+        self.assertIn('model = "gpt-5.4-mini-azure"', toml)
+        self.assertIn('model_provider = "aiprr"', toml)
+        self.assertIn("[model_providers.aiprr]", toml)
+        self.assertIn(f'base_url = "{self.AZURE}"', toml)
+        self.assertIn('env_key = "OPENAI_API_KEY"', toml)
+        self.assertIn('wire_api = "responses"', toml)
+        self.assertIn(reviewer.AZURE_IMAGE_GEN_HEADER, toml)
+        self.assertIn("[features]", toml)
+        self.assertIn("image_generation = false", toml)
+        # the key itself never lands in the TOML
+        self.assertNotIn("az-KEY", toml)
+        # --model forced, key still forwarded via env for env_key
+        self.assertIn("--model", c["argv"])
+        self.assertEqual(c["argv"][c["argv"].index("--model") + 1], "gpt-5.4-mini-azure")
+        self.assertEqual(c["env"].get("OPENAI_API_KEY"), "az-KEY")
+        self.assertTrue(c["auth_json_exists_at_invocation"])
+        self.assertFalse(c["codex_home_path"].exists(), "CODEX_HOME must be cleaned up")
+
+    def test_xai_and_zai_profiles_have_no_azure_block(self) -> None:
+        for base, model in (("https://api.x.ai/v1", "grok-4.3"), ("https://api.z.ai/api/v1", "glm-5.3")):
+            with self.subTest(base=base):
+                c = _capture_codex_call_with_auth_state(self._prov(base, model=model))
+                toml = c["config_toml_content"]
+                self.assertIn(f'base_url = "{base}"', toml)
+                self.assertNotIn(reviewer.AZURE_IMAGE_GEN_HEADER, toml)
+                self.assertNotIn("[features]", toml)
+                self.assertIn('wire_api = "responses"', toml)
+
+    def test_model_required_on_custom_backend(self) -> None:
+        for bad in ("", "auto"):
+            with self.subTest(model=bad), self.assertRaises(ValueError):
+                _capture_codex_call_with_auth_state(self._prov(self.AZURE, model=bad))
+
+    def test_toml_escaping(self) -> None:
+        esc = reviewer.CodexProvider._toml_escape
+        self.assertEqual(esc('a"b'), 'a\\"b')
+        self.assertEqual(esc("a\\b"), "a\\\\b")
+        self.assertEqual(esc("a\nb"), "a\\nb")
+        prof = reviewer.resolve_endpoint_profile("https://api.x.ai/v1", "codex")
+        rendered = reviewer.CodexProvider.render_custom_provider_config(profile=prof, model='we"ird')
+        self.assertIn('model = "we\\"ird"', rendered)
+
+    def test_rendered_config_has_no_unescaped_newlines_in_strings(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.AZURE, "codex")
+        rendered = reviewer.CodexProvider.render_custom_provider_config(profile=prof, model="m")
+        for line in rendered.splitlines():
+            if "=" in line and '"' in line:
+                self.assertEqual(line.count('"') % 2, 0, line)
+
+
+_FAKE_BUNDLED_CATALOG: dict[str, Any] = {
+    "models": [
+        {
+            "slug": "gpt-6-astra", "display_name": "Astra", "description": "x",
+            "visibility": "hidden", "supported_in_api": False, "priority": 9,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "base_instructions": "BASE", "context_window": 1,
+        },
+        {
+            "slug": "gpt-5.4", "display_name": "GPT-5.4", "description": "t",
+            "visibility": "list", "supported_in_api": True, "priority": 3,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace", "apps"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "web_search_tool_type": "preview", "base_instructions": "BASE54", "context_window": 2,
+            "upgrade": {"model": "gpt-5.6-terra", "migration_markdown": "moved"},
+        },
+        {
+            "slug": "gpt-5.6-luna", "display_name": "Luna", "description": "l",
+            "visibility": "list", "supported_in_api": True, "priority": 2,
+            "use_responses_lite": True, "supports_search_tool": True,
+            "experimental_supported_tools": ["namespace"], "service_tiers": ["fast"],
+            "additional_speed_tiers": ["x"], "include_apps_usage_instructions": True,
+            "web_search_tool_type": "text_and_image", "base_instructions": "BASELUNA",
+            "context_window": 3, "upgrade": None, "availability_nux": None,
+        },
+    ]
+}
+
+
+class _FakeCmd:
+    def __init__(self, returncode: int, stdout: str) -> None:
+        self.returncode = returncode; self.stdout = stdout; self.stderr = ""
+
+
+class CodexModelCatalogTests(unittest.TestCase):
+    """Custom backends get a cloned model catalog so Codex does not send
+    OpenAI-only tool types (xAI rejects `tools[].type: namespace`)."""
+
+    XAI = "https://api.x.ai/v1"
+
+    def test_entry_cloned_from_preferred_template_with_safe_overrides(self) -> None:
+        entry = reviewer.CodexProvider.build_model_catalog_entry(_FAKE_BUNDLED_CATALOG, model="grok-4.3", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["slug"], "grok-4.3")
+        self.assertEqual(entry["display_name"], "grok-4.3")
+        self.assertEqual(entry["base_instructions"], "BASELUNA", "preferred template is the first upgrade-free entry (gpt-5.6-luna)")
+        # a non-null template field is never overwritten with null …
+        self.assertEqual(entry["web_search_tool_type"], "text_and_image")
+        # … but a nullable one may stay null
+        self.assertIsNone(entry["availability_nux"])
+        self.assertEqual(entry["visibility"], "list")
+        self.assertTrue(entry["supported_in_api"])
+        self.assertFalse(entry["use_responses_lite"])
+        self.assertFalse(entry["supports_search_tool"])
+        self.assertEqual(entry["experimental_supported_tools"], [])
+        self.assertEqual(entry["service_tiers"], [])
+        self.assertFalse(entry["include_apps_usage_instructions"])
+        # keys absent from the template are never invented
+        self.assertNotIn("multi_agent_version", entry)
+        # the bundled catalog object is not mutated
+        self.assertEqual(_FAKE_BUNDLED_CATALOG["models"][1]["slug"], "gpt-5.4")
+
+    def test_entry_falls_back_to_first_model_and_none_when_empty(self) -> None:
+        only_astra = {"models": [_FAKE_BUNDLED_CATALOG["models"][0]]}
+        entry = reviewer.CodexProvider.build_model_catalog_entry(only_astra, model="m", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["base_instructions"], "BASE")
+
+    def test_templates_with_an_upgrade_redirect_are_skipped(self) -> None:
+        bundled = {"models": [_FAKE_BUNDLED_CATALOG["models"][1], _FAKE_BUNDLED_CATALOG["models"][0]]}
+        entry = reviewer.CodexProvider.build_model_catalog_entry(bundled, model="m", kind="xai")
+        assert entry is not None
+        self.assertEqual(entry["base_instructions"], "BASE", "gpt-5.4 carries an upgrade block and must not be the template")
+        self.assertIsNone(reviewer.CodexProvider.build_model_catalog_entry({"models": []}, model="m", kind="xai"))
+
+    def test_catalog_written_and_referenced_from_config(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(0, json.dumps(_FAKE_BUNDLED_CATALOG))):
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertTrue(c["catalog_exists_at_invocation"])
+        catalog = json.loads(c["catalog_content"])
+        self.assertEqual([m["slug"] for m in catalog["models"]], ["grok-4.3"])
+        self.assertIn("model_catalog_json = ", c["config_toml_content"])
+        self.assertIn("models.json", c["config_toml_content"])
+
+    def test_catalog_unavailable_degrades_to_no_catalog(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, "")), \
+             mock.patch.object(reviewer, "log") as fake_log:
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertFalse(c["catalog_exists_at_invocation"])
+        self.assertTrue(c["config_toml_exists_at_invocation"])
+        self.assertNotIn("model_catalog_json", c["config_toml_content"])
+        self.assertTrue(any("catalog" in str(call.args[0]) for call in fake_log.call_args_list))
+
+    def test_non_json_catalog_degrades(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(self.XAI, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="grok-4.3", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(0, "not json")):
+            c = _capture_codex_call_with_auth_state(prov)
+        self.assertFalse(c["catalog_exists_at_invocation"])
+
+
+class CodexCustomToolWarningTests(unittest.TestCase):
+    """Codex 0.154 emits a `custom` (freeform apply_patch) tool that some
+    Responses gateways reject; the runtime warns on those kinds, never blocks."""
+
+    def _run(self, base: str) -> list[str]:
+        prof = reviewer.resolve_endpoint_profile(base, "codex")
+        prov = reviewer.CodexProvider(api_key="k", model="m", profile=prof)
+        with mock.patch.object(reviewer, "run_cmd", return_value=_FakeCmd(1, "")), \
+             mock.patch.object(reviewer, "log") as fake_log:
+            _capture_codex_call_with_auth_state(prov)
+        return [str(c.args[0]) for c in fake_log.call_args_list]
+
+    def test_warns_on_xai_and_custom_hosts(self) -> None:
+        for base in ("https://api.x.ai/v1", "https://api.z.ai/api/v1", "https://gateway.example/v1"):
+            with self.subTest(base=base):
+                msgs = self._run(base)
+                self.assertTrue(any("custom" in m and "422" in m for m in msgs), msgs)
+
+    def test_no_warning_on_azure(self) -> None:
+        msgs = self._run("https://myres.services.ai.azure.com/openai/v1")
+        self.assertFalse(any("422" in m for m in msgs), msgs)
+
+
+def _capture_grok_call(provider: Any) -> dict[str, Any]:
+    """Like `_capture_provider_call` but also snapshots the prompt file
+    (it lives in a mkdtemp() dir removed after run_review returns)."""
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(*, argv: list[str], **kwargs: Any) -> Any:
+        captured["argv"] = list(argv)
+        captured["kwargs"] = dict(kwargs)
+        captured["env"] = dict(kwargs.get("env", {}))
+        idx = argv.index("--prompt-file")
+        prompt_path = Path(argv[idx + 1])
+        captured["prompt_path"] = prompt_path
+        captured["prompt_exists_at_invocation"] = prompt_path.exists()
+        if prompt_path.exists():
+            captured["prompt_content"] = prompt_path.read_text(encoding="utf-8")
+            captured["prompt_mode"] = prompt_path.stat().st_mode & 0o777
+            captured["prompt_dir_mode"] = prompt_path.parent.stat().st_mode & 0o777
+        return reviewer.ReviewResult(summary="ok", findings=[])
+
+    orig = reviewer._invoke_cli_agent
+    reviewer._invoke_cli_agent = fake_invoke  # type: ignore[assignment]
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            workspace = Path(td)
+            provider.run_review(
+                pr_context=_make_pr_context(),
+                review_instructions="RUBRIC_TEXT_MARKER",
+                workspace=workspace,
+                output_dir=workspace,
+            )
+    finally:
+        reviewer._invoke_cli_agent = orig  # type: ignore[assignment]
+    return captured
+
+
+class GrokInvocationTests(unittest.TestCase):
+    """GrokProvider: rubric via --rules (text), diff via --prompt-file
+    (0600 temp file), hardening defaults, XAI_API_KEY-only env."""
+
+    def _capture(self, *, model: str = "", extra_args: str = "", mcp: str = "") -> dict[str, Any]:
+        return _capture_grok_call(
+            reviewer.GrokProvider(api_key="xai-KEY", model=model, extra_args=extra_args, mcp_config_file=mcp)
+        )
+
+    def test_rules_carry_instruction_text_and_findings_contract(self) -> None:
+        argv = self._capture()["argv"]
+        idx = argv.index("--rules")
+        self.assertIn("RUBRIC_TEXT_MARKER", argv[idx + 1])
+        self.assertIn("findings.json", argv[idx + 1])
+
+    def test_prompt_file_exists_private_and_carries_pr_context(self) -> None:
+        c = self._capture()
+        self.assertTrue(c["prompt_exists_at_invocation"])
+        self.assertIn("# PR Context", c["prompt_content"])
+        self.assertEqual(c["prompt_mode"], 0o600)
+        self.assertEqual(c["prompt_dir_mode"], 0o700)
+        self.assertIsNone(c["kwargs"].get("stdin_input"))
+        self.assertFalse(c["prompt_path"].exists(), "temp prompt dir must be removed after run_review")
+
+    def test_hardening_defaults_present(self) -> None:
+        argv = self._capture()["argv"]
+        for flag in ("--always-approve", "--disable-web-search", "--no-subagents", "--no-plan"):
+            self.assertIn(flag, argv)
+        self.assertEqual(argv[argv.index("--output-format") + 1], "json")
+
+    def test_model_flag_and_auto(self) -> None:
+        argv = self._capture(model="grok-4.6")["argv"]
+        self.assertEqual(argv[argv.index("-m") + 1], "grok-4.6")
+        self.assertNotIn("-m", self._capture(model="auto")["argv"])
+
+    def test_extra_args_appended_after_defaults(self) -> None:
+        argv = self._capture(extra_args="--reasoning-effort high")["argv"]
+        self.assertGreater(argv.index("--reasoning-effort"), argv.index("--no-plan"))
+        self.assertEqual(argv[argv.index("--reasoning-effort") + 1], "high")
+
+    def test_env_is_allowlist_plus_xai_key_only(self) -> None:
+        prev = dict(os.environ)
+        try:
+            os.environ["AIPRR_GH_TOKEN"] = "ghp_leak"
+            os.environ["AIPRR_API_KEY"] = "leak"
+            env = self._capture()["env"]
+        finally:
+            os.environ.clear(); os.environ.update(prev)
+        self.assertEqual(env.get("XAI_API_KEY"), "xai-KEY")
+        self.assertNotIn("AIPRR_GH_TOKEN", env)
+        self.assertNotIn("AIPRR_API_KEY", env)
+        for name in env:
+            self.assertTrue(name in reviewer._CLI_ENV_ALLOWLIST or name == "XAI_API_KEY", name)
+
+    def test_mcp_and_api_base_warn(self) -> None:
+        with mock.patch.object(reviewer, "log") as fake_log:
+            self._capture(mcp="/tmp/mcp.json")
+            reviewer.build_provider("grok", api_key="k", model="", api_base="https://api.x.ai/v1")
+        msgs = " ".join(str(c.args[0]) for c in fake_log.call_args_list)
+        self.assertIn("mcp-config-file", msgs)
+        self.assertIn("api-base", msgs)
+
+    def test_dispatch_and_default_model(self) -> None:
+        p = reviewer.build_provider("grok", api_key="k", model="")
+        self.assertIsInstance(p, reviewer.GrokProvider)
+        self.assertIsInstance(p, reviewer.AgentRunnerProvider)
+        self.assertEqual(reviewer.DEFAULT_MODELS["grok"], "grok-4.3")
+        self.assertIn("grok", reviewer.PROVIDERS_WITHOUT_API_BASE)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+class DefaultProfileBackCompatSnapshotTests(unittest.TestCase):
+    """Default-profile argv/env for the three pre-existing CLI runners,
+    captured from `main` before the multi-backend work (2026-09-16) and
+    stored as literals. Documented, intentional deltas are listed per
+    runner; anything else is a back-compat regression."""
+
+    # Captured on `main` with model="" and no extra args. Prompt/system text
+    # arguments are elided as <TEXT> (their content is covered elsewhere).
+    MAIN_SNAPSHOT: dict[str, dict[str, Any]] = {
+        "claude-code": {
+            "argv": ["claude", "-p", "--append-system-prompt", "<TEXT>", "--output-format",
+                     "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
+            "env": {"ANTHROPIC_API_KEY": "sk-test-KEY"},
+            "stdin": True,
+        },
+        "cursor": {
+            "argv": ["cursor-agent", "-p", "--output-format", "text", "--force", "--trust"],
+            "env": {"CURSOR_API_KEY": "sk-test-KEY"},
+            "stdin": True,
+        },
+        "codex": {
+            "argv": ["codex", "exec", "--skip-git-repo-check",
+                     "--dangerously-bypass-approvals-and-sandbox", "-"],
+            "env": {"OPENAI_API_KEY": "sk-test-KEY", "CODEX_HOME": "<TMP>"},
+            "stdin": True,
+        },
+    }
+    # Intentional deltas vs main (task → change). Keep this list honest.
+    DOCUMENTED_DELTAS: dict[str, list[str]] = {
+        "codex": ["--json"],  # Task 10: JSONL events on stdout carry usage telemetry
+    }
+
+    def _capture(self, pid: str) -> dict[str, Any]:
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kw):
+            captured["argv"] = list(argv); captured["env"] = dict(kw["env"]); captured["stdin"] = kw.get("input") is not None
+            fp = Path(kw["cwd"]) / reviewer.FINDINGS_JSON_REL
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(json.dumps({"summary": "s", "findings": []}))
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        keep = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME")}
+        with mock.patch.dict(os.environ, keep, clear=True), tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+            provider = reviewer.build_provider(pid, api_key="sk-test-KEY", model="")
+            provider.run_review(pr_context=_make_pr_context(), review_instructions="R", workspace=Path(tmp), output_dir=Path(tmp))
+        argv = ["<TEXT>" if len(x) >= 200 else x for x in captured["argv"]]
+        env = {k: ("<TMP>" if k == "CODEX_HOME" else v) for k, v in captured["env"].items() if k not in ("PATH", "HOME")}
+        return {"argv": argv, "env": env, "stdin": captured["stdin"]}
+
+    def test_default_profiles_match_main_snapshot_modulo_documented_deltas(self) -> None:
+        for pid, expected in self.MAIN_SNAPSHOT.items():
+            with self.subTest(runner=pid):
+                got = self._capture(pid)
+                argv = [x for x in got["argv"] if x not in self.DOCUMENTED_DELTAS.get(pid, [])]
+                self.assertEqual(argv, expected["argv"])
+                for flag in self.DOCUMENTED_DELTAS.get(pid, []):
+                    self.assertIn(flag, got["argv"], f"{pid}: documented delta {flag} missing")
+                self.assertEqual(got["env"], expected["env"])
+                self.assertEqual(got["stdin"], expected["stdin"])
+

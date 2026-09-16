@@ -1,0 +1,69 @@
+# OpenAI-compatible chat-completions provider (`provider: openai`, v2.1.0+).
+#
+# The action owns the review loop in-process — zero CLI install, bounded
+# turns, predictable cost — and talks to any OpenAI-compatible
+# chat-completions endpoint. With the default `api-base` that is OpenAI
+# itself; through `api-base` the SAME runner covers Azure Foundry, xAI and
+# Z.ai (see the variants at the bottom).
+#
+# Default model `gpt-5.6-luna` (current-gen budget model that still finds
+# subtle bugs — and, as of 2026-09-16 pricing, cheaper than gpt-5.4-mini).
+# Use `model: economy | balanced | deep` for a one-word cost profile.
+# SECURITY: `api-key` is sent to the `api-base` host.
+
+name: PR review (OpenAI-compatible)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+
+      # ---- OpenAI (default backend) ----------------------------------------
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: openai
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # model: economy                 # one-word cost profile (economy | balanced | deep)
+
+      # ---- Azure Foundry (v1 endpoint) --------------------------------------
+      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      #   with:
+      #     provider: openai
+      #     api-base: https://<resource>.services.ai.azure.com/openai/v1
+      #     api-key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     model: gpt-5.4-mini-azure        # your DEPLOYMENT name
+
+      # ---- xAI Grok -----------------------------------------------------------
+      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      #   with:
+      #     provider: openai
+      #     api-base: https://api.x.ai/v1
+      #     api-key: ${{ secrets.XAI_API_KEY }}
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     model: grok-4.3                  # grok-4.6 for a deeper pass
+
+      # ---- Z.ai GLM (Coding Plan, OpenAI-compatible) -------------------------
+      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      #   with:
+      #     provider: openai
+      #     api-base: https://api.z.ai/api/coding/paas/v4
+      #     api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+      #     github-token: ${{ secrets.GITHUB_TOKEN }}
+      #     model: glm-5.3

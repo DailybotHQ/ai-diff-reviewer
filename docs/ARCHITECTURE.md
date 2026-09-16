@@ -114,7 +114,7 @@ The public contract. Declares every input the consumer can set and every output 
 
 ### `scripts/reviewer.py`
 
-The entire runtime in one file (~4000 LOC, fully type-hinted, stdlib-only). Sections, in source order:
+The entire runtime in one file (~10k LOC as of v2.1.0, fully type-hinted, stdlib-only). Sections, in source order:
 
 1. **Constants** — every magic number is a named module-level constant. URLs, timeouts, retry delays, severity ranks.
 2. **Logging utilities** — `log()`, `redact_for_log()`, `truncate_for_tool()`. The redaction list is the gate that prevents accidental token leakage in tool-arg logging.
@@ -202,7 +202,7 @@ Distinguishing 1 from 2 lets the consumer's workflow `if:` clauses tell "the bot
 
 ### 7. Prompt caching
 
-The Anthropic provider sends the system prompt with `cache_control: ephemeral` so a long custom prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. This is what makes long, opinionated prompts economically viable.
+The Anthropic provider sends two `cache_control: ephemeral` breakpoints: on the system prompt and (v2.1.0+) on the last text block of the **first user message**, which carries the PR diff — by far the largest input. Anthropic caches prefixes in order tools → system → messages, and `drive_review` never prunes message 0, so turns 2..N of a review read both the prompt and the diff from cache (~10 % of the input price). The breakpoint is added on a copy at the provider boundary (`_with_first_user_cache_breakpoint`), so the in-memory conversation stays plain; it is sent only to `api.anthropic.com` (compatible gateways cache server-side). Each call logs a compact `usage:` line with cache reads/writes.
 
 ### 8. Two provider families (v1.1.0+)
 
@@ -213,7 +213,7 @@ The runtime supports two disjoint provider families, unified by the `ReviewResul
 - Executes tool calls (`read_file`, `grep`, `glob`, `post_inline_comment`, `submit_review`) from `scripts/reviewer.py` in-process.
 - Pros: zero install overhead for consumers; deterministic tool set; direct control.
 - Cons: reinvents the wheel of code comprehension; no LSP; no vendor-tuned coding-agent prompt.
-- Shipping: `AnthropicProvider` (`provider: anthropic`).
+- Shipping: `AnthropicProvider` (`provider: anthropic`) and `OpenAIProvider` (`provider: openai`, v2.1.0 — translation at the boundary, shared retry client).
 
 **Agent-runner (`AgentRunnerProvider`)** — the vendor's coding-agent CLI owns the tool-use loop:
 - Subprocess-invokes the CLI in headless mode with the layered prompt.
@@ -221,16 +221,20 @@ The runtime supports two disjoint provider families, unified by the `ReviewResul
 - Communicates back via the file-based `.aiprr/findings.json` contract (schema in [PROVIDERS.md](PROVIDERS.md)).
 - Pros: better code comprehension out of the box; MCP passthrough; vendor keeps their tool set current.
 - Cons: install step on the runner; larger LOC-per-review cost since the CLI can spend more turns.
-- Shipping: `ClaudeCodeProvider`, `CursorProvider`, `CodexProvider`.
+- Shipping: `ClaudeCodeProvider`, `CursorProvider`, `CodexProvider`, `GrokProvider` (v2.1.0).
 
-**Convergence point:** both families produce a `ReviewResult(summary, findings, overall_severity)` that flows into the SAME submission path (`gh_submit_review_with_fallback` — accepts a `ReviewResult`, encodes findings into the GitHub Reviews inline shape at the boundary). This means the strictness gate, tracking comment renderers, and action outputs are provider-agnostic.
+**Review identity (v2.1.0+).** The default backend retains its runner marker. A non-empty `api-base` adds a stable hash of the normalized endpoint to the review scope. Tracking, IAR history, label-once state and collapse use that scope; provider construction still uses the runner id. Different models on the same endpoint share a scope.
+
+**Endpoint profiles (v2.1.0+).** Orthogonal to the family: `resolve_endpoint_profile(api_base, provider_id)` turns the optional `api-base` input into an `EndpointProfile` (kind `anthropic` / `openai` / `azure` / `xai` / `zai` / `custom`, base URL, auth style, cache flags, Codex wire API and TOML extras). Every provider receives its profile at construction and never builds a URL of its own; empty `api-base` yields the runner's default profile, so existing consumers are byte-identical. Model tier aliases (`balanced` / `economy` / `deep`) resolve per `(runner, kind)` from `MODEL_TIER_TABLE`.
+
+**Convergence point:** both families produce a `ReviewResult(summary, findings, overall_severity, usage)` that flows into the SAME submission path (`gh_submit_review_with_fallback` — accepts a `ReviewResult`, encodes findings into the GitHub Reviews inline shape at the boundary). This means the strictness gate, tracking comment renderers, and action outputs are provider-agnostic.
 
 ### 9. Modular CLI install (v1.1.0+)
 
-The composite action's `runs.steps` list contains ONE install step per CLI provider, each guarded by `if: inputs.provider == '...'`. Consumers picking `provider: anthropic` (the default) see zero install overhead. Consumers picking `provider: cursor` see only the Cursor Agent installer run, etc. No consumer ever has all three CLIs installed on their runner.
+The composite action's `runs.steps` list contains ONE install step per CLI provider, each guarded by `if: inputs.provider == '...'`. Consumers picking `provider: anthropic` (the default) see zero install overhead. Consumers picking `provider: cursor` see only the Cursor Agent installer run, etc. No consumer ever has all four CLIs installed on their runner, and the `cursor` / `grok` steps skip the vendor installer when the binary is already on `PATH` (pre-provisioned runners).
 
 Each install step:
-1. Sets up its runtime dependency (Node.js for Claude Code and Codex; nothing for Cursor).
+1. Sets up its runtime dependency (Node.js for Claude Code and Codex; nothing for Cursor and Grok — static binaries).
 2. Runs the vendor's install command, optionally pinned via the corresponding `*-version` input.
 3. Emits a `--version` line as a smoke assertion — if the binary is not on PATH, the composite step fails loudly here instead of the reviewer's `install()` sanity check firing 20 lines later.
 

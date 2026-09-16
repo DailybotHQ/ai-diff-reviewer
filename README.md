@@ -42,7 +42,7 @@ The same [`prompts/default.md`](prompts/default.md) drives both surfaces. Pinnin
 ### As a coding-agent skill (local)
 
 - [Quick start (skill)](#quick-start-skill)
-- [The four sub-skills](#the-four-sub-skills)
+- [The five sub-skills](#the-five-sub-skills)
 - [First-run bootstrap prompt](#first-run-bootstrap-prompt)
 - [Sub-skill: run a local review](#sub-skill-run-a-local-review-default-flow)
 - [Sub-skill: `setup` — install the Action via wizard](#sub-skill-setup--install-the-action-via-wizard)
@@ -111,20 +111,24 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 - **Optional "reviewed" label**: applied automatically after a successful, non-blocked review.
 - **Self-healing on GitHub 422**: if the model anchors a comment outside the diff, the action retries summary-only instead of losing every other comment.
 - **Iteration-Aware Review**: dedup findings against prior rounds so the same warnings don't come back forever. Every review runs with `convergence-policy: first-pass-exhaustive` by default — exhaustive first pass (up to 3× the normal cap), dedup on subsequent rounds. Four convergence policies (`iterative`, `first-pass-exhaustive`, `round-capped`, `critical-gate`), a 30% new-lines safety net that forces an exhaustive pass when a big push arrives, and a hardcoded "criticals always surface" rail that no policy can bypass. Two escape gestures: apply the `iteration-escape-label` to bypass dedup for one run (state preserved) or remove the `applied-label` before the next review to force a full state reset (fresh generation, dedup memory wiped). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) for the full spec and [examples/iteration-aware.yml](examples/iteration-aware.yml) for tuning knobs.
+- **Incremental follow-up reviews** (v2.1.0+): on rounds 2+ the model receives the actual diff since its last review plus its own still-open findings from paginated PR threads. Resolution claims remain advisory until a maintainer resolves the thread: changing a file is not proof that its bug is fixed. Outstanding findings still contribute to the strictness gate without duplicate comments. The summary reports prior-finding status; cap and turn budgets scale with the delta. Base movement, rebases / force-pushes, incomplete history, the escape label and the 30% safety net force a full review. See [docs/ITERATION_AWARENESS.md § 14](docs/ITERATION_AWARENESS.md).
 - **Emergency-bypass label** (`skip-review-label`): opt-in short-circuit when a PR carries e.g. `skip-ai-review` — no LLM call, check stays green, audit tracking comment posted. Pair with a ruleset restricting who can apply the label. See [docs/TRIGGER_MODES.md § Emergency-bypass label](docs/TRIGGER_MODES.md) and [examples/skip-review-label.yml](examples/skip-review-label.yml).
 
 ## Providers
 
-The action ships **four LLM providers** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen provider. The default (`anthropic`) needs no CLI install; the three agent-runner CLIs are installed automatically by the action only when you select them.
+The action ships **six LLM providers (runners)** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen backend, and the optional `api-base` input points a runner at a different backend (Azure Foundry, xAI, Z.ai, self-hosted). The in-process providers (`anthropic`, `openai`) need no CLI install; the four agent-runner CLIs are installed automatically by the action only when you select them.
 
 | `provider` | Family | `api-key` value | Default model | Billing |
 |---|---|---|---|---|
 | `anthropic` *(default)* | chat-completions | Anthropic API key (`sk-ant-api…`) | `claude-sonnet-4-6` | metered API |
+| `openai` | chat-completions | OpenAI API key — or the key of the `api-base` backend (Azure Foundry, xAI, Z.ai) | `gpt-5.6-luna` | metered API (flat-rate on Z.ai Coding Plan) |
 | `claude-code` | agent-runner CLI | Anthropic API key **or** a `claude setup-token` token (`sk-ant-oat…`) | `claude-sonnet-4-6` | metered API **or** Claude Pro/Max subscription |
 | `cursor` | agent-runner CLI | Cursor subscription key | `auto` | Cursor subscription (unlimited on Pro) |
 | `codex` | agent-runner CLI | OpenAI API key | `gpt-5.6-luna` | metered API |
+| `grok` | agent-runner CLI | xAI API key | `grok-4.3` | metered API (xAI credits) |
 
 - **`anthropic`** is the simplest and cheapest to run — no install, a bounded tool-use loop, prompt caching. Recommended for most repos.
+- **`openai`** is the same bounded, zero-install loop for OpenAI-compatible backends — OpenAI itself, or Azure Foundry / xAI / Z.ai through `api-base`.
 - **The CLI providers** hand the review to a vendor coding agent (deeper code comprehension, vendor-tuned tools) at the cost of an install step and higher token use. They run with broad local access — on public repos use them only on trusted (non-fork) PRs.
 
 ### Switching provider
@@ -147,7 +151,38 @@ The action ships **four LLM providers** in two families. Pick one with the `prov
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Ready-to-copy workflows per provider: [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
+```yaml
+# xAI Grok CLI — full review contract, web search off, token never reaches the agent
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: grok
+    api-key: ${{ secrets.XAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+```yaml
+# OpenAI Codex on Azure Foundry — model is your deployment name
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: codex
+    api-base: https://<resource>.services.ai.azure.com/openai/v1
+    api-key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: gpt-5.4-mini-azure
+```
+
+```yaml
+# Z.ai GLM through Claude Code — the recommended GLM runner (flat-rate Coding Plan)
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: claude-code
+    api-base: https://api.z.ai/api/anthropic
+    api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: glm-5.3          # required on a custom backend
+```
+
+Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
 
@@ -169,8 +204,10 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 |---|---|---|---|
 | `api-key` | ✅ | — | Provider API key. For Anthropic this is your `ANTHROPIC_API_KEY`. |
 | `github-token` | ✅ | — | Token with `pull-requests: write` and `contents: read`. The default `secrets.GITHUB_TOKEN` works; pass a PAT or automation-bot token if you want the review attributed to a specific account. |
-| `provider` | | `anthropic` | LLM provider. `anthropic` (chat-completions), `claude-code` / `cursor` / `codex` (agent-runner CLIs). See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
-| `model` | | provider default | Model id (defaults balance review quality vs cost). Anthropic → `claude-sonnet-4-6`, Claude Code → `claude-sonnet-4-6` (never `auto`; Claude Code's `api-key` also accepts a `claude setup-token` subscription token, `sk-ant-oat…`), Cursor → `auto` (flat-rate on Pro), Codex → `gpt-5.6-luna` (`gpt-5-codex` is deprecated). See [docs/PROVIDERS.md](docs/PROVIDERS.md#choosing-a-cost-efficient-model). |
+| `provider` | | `anthropic` | LLM provider (the runner). `anthropic` / `openai` (chat-completions, zero install), `claude-code` / `cursor` / `codex` / `grok` (agent-runner CLIs, installed only when selected). Pair with `api-base` to choose the backend. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
+| `model` | | provider default | Model id **or a tier alias** (`balanced` / `economy` / `deep`, resolved per runner × backend — see the cost-efficient defaults matrix). Built-in defaults balance review quality vs cost. Anthropic → `claude-sonnet-4-6`, Claude Code → `claude-sonnet-4-6` (never `auto`; Claude Code's `api-key` also accepts a `claude setup-token` subscription token, `sk-ant-oat…`), Cursor → `auto` (flat-rate on Pro), Codex → `gpt-5.6-luna` (`gpt-5-codex` is deprecated). See [docs/PROVIDERS.md](docs/PROVIDERS.md#choosing-a-cost-efficient-model). |
+| `ignore-paths` | | _(built-ins only)_ | Extra globs whose diff sections are **omitted from the prompt**, on top of the built-in lockfile / minified / source-map / vendored / snapshot list. Omitted files are still listed to the model with line counts; exclusion happens before the diff-size cap so lockfiles never crowd out real changes. Saves tokens on every turn. Example: `**/*.generated.ts, docs/api/**`. |
+| `api-base` | | provider default | Bring your own endpoint for the chosen provider. Empty keeps the provider's default (unchanged behaviour). Point `anthropic` / `claude-code` at an Anthropic-compatible gateway (Z.ai GLM: `https://api.z.ai/api/anthropic`; xAI: `https://api.x.ai`) or `codex` / `openai` at an OpenAI-compatible one (Azure Foundry v1: `https://<resource>.services.ai.azure.com/openai/v1` with `model` = deployment name; xAI: `https://api.x.ai/v1`; Z.ai: `https://api.z.ai/api/v1` for Codex, `https://api.z.ai/api/coding/paas/v4` for `openai`). The host selects the endpoint profile automatically. **Your `api-key` is sent to this host** — trusted endpoints only; `https://` required. Ignored by `cursor`. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | `prompt-file` | | bundled `prompts/default.md` | Path **inside the consumer checkout** to a markdown system prompt. FULLY REPLACES the base. Customising the prompt is the main lever for adapting the review to your codebase — see [docs/PROMPTS.md](docs/PROMPTS.md). |
 | `prompt-extension-file` | | _(empty)_ | Path **inside the consumer checkout** to a markdown file APPENDED to the base prompt. Use to layer overrides without copying the whole default. Combines with `prompt-file` (base + extension). Starter templates in [`examples/prompts/`](examples/prompts/). |
 | `author-association` | | `OWNER,MEMBER,COLLABORATOR` | Comma-separated whitelist of GitHub `pull_request.author_association` values allowed to trigger a review. Default is write-tier only — the safe baseline for public open-source repos (prevents external-contributor PR spam from burning your LLM budget). On **private / internal** repos, when the webhook value is not in the list, the runtime also checks collaborator permission (`admin` / `maintain` / `write` still pass — fixes webhook under-reporting). Public repos stay association-only. Add `CONTRIBUTOR` to allow returning contributors, or set to empty string to disable the gate. See [docs/SECURITY.md § "Author-association gate"](docs/SECURITY.md). |
@@ -187,12 +224,13 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `complexity-labels-enabled` | | `false` | When `true`, the reviewer applies a `complexity:low/medium/high` label to the PR. |
 | `complexity-label-prefix` | | `complexity:` | Prefix for the complexity label (change to match your labeling conventions). |
 | `max-turns` | | `30` | Hard cap on the agentic-loop iterations (chat-completions providers only). |
-| `agent-max-turns` | | `''` | Reserved budget hint for CLI providers. Currently logs a warning instead of enforcing a cap because the shipping CLIs do not expose one stable cross-provider turn-count flag. Ignored for chat-completions providers. |
+| `agent-max-turns` | | `''` | Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns`); Claude Code / Codex / Cursor expose no stable turn flag, so the run logs a per-provider warning with the equivalent knob (`--max-budget-usd` via `agent-extra-args` for Claude Code) and the 900 s timeout bounds the run. Ignored for chat-completions providers. |
 | `agent-extra-args` | | `''` | Raw string appended to the CLI invocation. Parsed with `shlex.split` (never `shell=True`). Escape hatch for provider-specific flags. |
 | `mcp-config-file` | | `''` | Path inside the consumer checkout to an MCP servers JSON config. If set, the file is copied to the CLI's expected location before invocation. |
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
 | `cursor-version` | | `''` | Pin the Cursor Agent CLI version. Empty = latest stable. |
 | `codex-version` | | `''` | Pin the OpenAI Codex CLI version (npm semver). Empty = latest. |
+| `grok-version` | | latest | Pin the xAI Grok CLI version (`bash -s <X.Y.Z>` on the official installer). Only used when `provider: grok`. |
 | `convergence-policy` | | `first-pass-exhaustive` | Iteration-Aware Review policy. Default `first-pass-exhaustive` (exhaustive round 1 + higher cap, dedup on rounds 2+) — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, cost-neutral), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
 | `max-review-rounds` | | `0` | Hard cap for `round-capped`. `0` = unlimited. After N rounds only critical severity findings surface. Ignored by other policies. |
 | `exhaustive-first-pass-cap-multiplier` | | `3` | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Set to `1` to keep exhaustive prompting without amplification. |
@@ -213,7 +251,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every successful IAR pipeline run; empty if the pipeline crashed mid-flight (caught by the try/except safety net). |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | int (as string) | Cost-telemetry counter. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata; see [`docs/ITERATION_AWARENESS.md § 13.2`](docs/ITERATION_AWARENESS.md) for the follow-up plan. Empty ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | int (as string) | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | string | Coarse cost-delta heuristic derived from cap expansion + a small addendum flag. Always `"0%"` or `"+N%"` today (silenced-finding savings not yet modelled — see [`docs/ITERATION_AWARENESS.md § 9.5`](docs/ITERATION_AWARENESS.md)). Empty if the IAR pipeline crashed. |
 
 Consume them in a later step by giving the action step an `id`:
@@ -265,8 +303,11 @@ Every review spends tokens, so the action layers three controls, evaluated **che
 
 **3. How much each run spends — `model`, `max-inline-comments`, `max-turns`:**
 
-- Defaults are **quality-tier** for real reviews (Sonnet-class / current-gen). Pin a cheaper model for smoke passes (`model: claude-haiku-4-5` or `gpt-5.4-mini`), or use `provider: cursor` for flat-rate cost on Pro. See [docs/PROVIDERS.md § "Choosing a cost-efficient model"](docs/PROVIDERS.md#choosing-a-cost-efficient-model).
+- Pick a cost profile in one word: `model: balanced` (quality/cost sweet spot — the recommendation), `model: economy` (smoke passes, docs-only PRs) or `model: deep` (high-risk PRs). The runtime resolves the concrete id per runner × backend from the dated matrix in [docs/PROVIDERS.md § "Cost-efficient defaults matrix"](docs/PROVIDERS.md#cost-efficient-defaults-matrix-verified-2026-09-16--ids-and-prices-move-re-check-when-bumping) — modelled on Cursor `auto`, which stays the flat-rate pick on Pro. Empty `model` keeps the built-in default; an explicit id always passes through. `agent-max-turns` is enforced natively on `grok`.
 - `max-inline-comments` (default `10`) caps how many comments a run can post; `max-turns` (default `30`, chat-completions only) is a safety ceiling on the agentic loop.
+- **Fewer tokens per turn, automatically:** lockfiles, minified bundles, source maps, vendored trees and snapshots are dropped from the diff the model sees (and listed back as omitted). Add your own generated paths with `ignore-paths`.
+- **Cheaper turns after the first:** the `anthropic` runner caches both the prompt and the diff-bearing first message across turns; OpenAI/xAI cache long prefixes automatically.
+- **Know what you spent:** every tracking comment ends with a `**Usage:**` line (tokens in/out, cache hit rate, cost — vendor-reported where the CLI gives it, marked `(indicative)` when estimated) and the `iteration-tokens-used` output carries the real number; round 2+ of a PR runs in incremental mode (only what changed plus your open threads) so follow-ups cost a fraction of round 1.
 
 These compose. For a public open-source repo the safe combination is author-association (default) **+** a label gate — see the [recipe below](#public-open-source-repo-safest-defaults).
 
@@ -438,27 +479,29 @@ npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer
 
 `npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` in your repo and records source + content hash in `skills-lock.json` so teammates restore identical bytes with `npx skills experimental_install`. Bump with `npx skills update ai-diff-reviewer`.
 
-Once installed, natural-language triggers activate each of the four capabilities — no memorized commands to look up:
+Once installed, natural-language triggers activate each of the five capabilities — no memorized commands to look up:
 
 ```text
 "Review my current branch"                         → local review
 "Set up AI Diff Reviewer for this repo"            → install the CI Action
 "Generate a .review/extension.md for this repo"    → tailor the reviewer to your stack
-"Open the PR for this branch"                      → author the PR from the diff
+"Open the PR for this branch"                      → sync with main, then author the PR from the diff
+"What did the CI review say?"                      → read the CI review on the PR and walk through the findings
 ```
 
-Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`.
+Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`, `/ai-diff-reviewer-apply-review`.
 
-## The four sub-skills
+## The five sub-skills
 
-The skill is a **router** — it inspects your intent from natural language and routes to one of four capabilities, all sharing the same shipped prompt as the review base:
+The skill is a **router** — it inspects your intent from natural language and routes to one of five capabilities, all sharing the same shipped prompt as the review base:
 
 | Sub-skill | Purpose | Fires when you say… |
 |---|---|---|
 | **[Local review](skills/ai-diff-reviewer/SKILL.md)** *(default flow)* | Run the CI review methodology locally on your current branch's diff | *"Review my current branch"* · *"Do a pre-flight review before I push"* |
 | **[`setup`](skills/ai-diff-reviewer/setup/SKILL.md)** | Install & configure the CI GitHub Action via a 6-question wizard. Also the reference manual for every `action.yml` input | *"Set up AI Diff Reviewer for this repo"* · *"What does `strictness` do?"* |
 | **[`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** | Bootstrap a repo-tailored `.review/extension.md` after inspecting your stack (≥ 12 Discovery tool calls) | *"Generate a `.review/extension.md` for this repo"* · *"Customize the review for our project"* |
-| **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Author a well-documented pull request (title + body) from the current diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
+| **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Sync the branch with the remote base (merge, resolve conflicts, push), then author a well-documented pull request (title + body) from the diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
+| **[`apply-review`](skills/ai-diff-reviewer/apply-review/SKILL.md)** | Read the CI review posted on the branch's PR (latest marker, collapsed history filtered, per-leg attribution) and walk through each finding to apply / defer / skip with per-finding consent — never commits, never pushes | *"What did the CI review say?"* · *"Apply the AI review's fixes"* · *"Walk me through the findings"* |
 
 Together they form a **lifecycle**: `setup` installs the Action once per repo → `generate-extension` tailors the review once per repo → the default review flow catches issues before pushing on every branch → `open-pr` authors the PR that ships the change.
 
@@ -549,7 +592,9 @@ It reads the diff, empirically detects your repo's title convention from the las
 - **Migrations** — when `migrations/`, `alembic/versions/`, `prisma/migrations/`, etc. are touched
 - **Dependencies** — when `package.json`, `poetry.lock`, `go.sum`, etc. are touched
 
-Your existing `.github/pull_request_template.md` is **merged, never overwritten** — repo-specific `## Checklist` / `## Rollout plan` sections are preserved intact; only the diff-derived sections override the template's placeholders. Preview → single `yes` / `edit` / `cancel` → `gh pr create` (new PR) or `gh pr edit` (refresh existing — with a body diff shown). Never pushes commits, never auto-merges, never fabricates issue refs.
+Before drafting anything it **brings the branch up to date with the remote base** (v2.1.0+): fetch, merge `origin/<base>` into the current branch when it is behind, resolve conflicts by reading both sides (never dropping the base's change), run the repo's quick validation, commit, and push the current branch — non-force, current branch only, announced in one line, no extra prompt. Dirty tree, an unjustifiable conflict, a failing quick gate, or a rejected push **stop** the skill with the exact commands instead. Repos that mandate a linear history get one question before any rebase + `--force-with-lease`.
+
+Your existing `.github/pull_request_template.md` is **merged, never overwritten** — repo-specific `## Checklist` / `## Rollout plan` sections are preserved intact; only the diff-derived sections override the template's placeholders. Preview (with the sync outcome on its own line) → single `yes` / `edit` / `cancel` → `gh pr create` (new PR) or `gh pr edit` (refresh existing — with a body diff shown). A `## Merge notes` section lists resolved conflicts when there were any. Never force-pushes, never auto-merges, never fabricates issue refs.
 
 Full skill: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](skills/ai-diff-reviewer/open-pr/SKILL.md).
 
@@ -622,7 +667,8 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRO
 | Claude Code CLI | agent-runner | ✅ shipping (v1.2.1+) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. Works with subscription auth. |
 | Cursor Agent CLI | agent-runner | ✅ shipping (v1.2.1+) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. Default model `auto` — unlimited on Cursor Pro. |
 | OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
-| OpenAI (raw API) | chat-completions | 🛠 roadmap | Direct chat-completions, no CLI install. |
+| xAI Grok CLI | agent-runner | ✅ shipping (v2.1.0+) | Official `grok` CLI in headless mode. Uses `XAI_API_KEY`. Web search/subagents off by default; native `--max-turns`. |
+| OpenAI-compatible (raw API) | chat-completions | ✅ shipping (v2.1.0+) | `provider: openai` — direct chat-completions, no CLI install. Covers OpenAI, Azure Foundry, xAI and Z.ai through `api-base`. |
 | Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |
 

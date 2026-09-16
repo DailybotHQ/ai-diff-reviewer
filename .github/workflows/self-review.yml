@@ -9,8 +9,10 @@ name: Self-review
 #      already carries `ready`), NOT on every push — so to re-review you remove
 #      and re-add the `ready` label. This keeps the maintainer in explicit
 #      control of when tokens burn.
-#   2. FULL COVERAGE — every configured provider (Anthropic + the three CLI
-#      providers: claude-code, cursor, codex) reviews EVERY ready-labeled PR,
+#   2. FULL COVERAGE — every configured runner/backend (Anthropic; the CLI
+#      runners claude-code, cursor, codex, grok; and the `api-base` legs
+#      claude-code+Z.ai, codex+Azure, plus the opt-in in-process `openai`
+#      leg) reviews EVERY ready-labeled PR,
 #      including docs-only and AI-tooling-only diffs. Rationale is trust
 #      surface: skill vendors under `.agents/`, workflow tweaks under
 #      `.github/`, prompt edits under `prompts/`, and doc changes are exactly
@@ -110,6 +112,16 @@ jobs:
           HAS_CLAUDE_CODE: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
           HAS_CURSOR: ${{ secrets.CURSOR_API_KEY != '' }}
           HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
+          # v2.1.0 legs — presence toggles only; secret VALUES never enter
+          # this shell. Azure needs its endpoint + deployment from repo
+          # *variables* (they are not secrets); the in-process `openai` leg
+          # is opt-in so OpenAI spend is not doubled by default.
+          HAS_XAI: ${{ secrets.XAI_API_KEY != '' }}
+          HAS_ZAI: ${{ secrets.ZAI_CODING_API_KEY != '' }}
+          HAS_AZURE: ${{ secrets.AZURE_OPENAI_API_KEY != '' }}
+          AZURE_BASE: ${{ vars.AZURE_OPENAI_BASE_URL }}
+          AZURE_MODEL: ${{ vars.AZURE_OPENAI_MODEL_DAILY }}
+          OPENAI_CHAT_LEG: ${{ vars.SELF_REVIEW_OPENAI_CHAT }}
         run: |
           set -euo pipefail
           lc() { tr '[:upper:]' '[:lower:]'; }
@@ -149,10 +161,13 @@ jobs:
           #    model — never `auto` for metered providers; Cursor uses `auto`
           #    deliberately (flat-rate on Pro).
           matrix='[]'
+          # add <provider> <secret> <label> <model> [<api_base>] — an empty
+          # api_base means the runner's default endpoint (byte-identical to
+          # the pre-2.1.0 behaviour of the four original legs).
           add() {
             matrix=$(printf '%s' "$matrix" | jq -c \
-              --arg p "$1" --arg s "$2" --arg l "$3" --arg m "$4" \
-              '. += [{provider:$p, secret:$s, label:$l, model:$m}]')
+              --arg p "$1" --arg s "$2" --arg l "$3" --arg m "$4" --arg b "${5:-}" \
+              '. += [{provider:$p, secret:$s, label:$l, model:$m, api_base:$b}]')
           }
           [ "$HAS_ANTHROPIC" = "true" ]   && add anthropic ANTHROPIC_API_KEY "self-reviewed:anthropic" claude-haiku-4-5
           # Claude Code dogfoods the SUBSCRIPTION auth path: CLAUDE_CODE_OAUTH_TOKEN
@@ -161,12 +176,22 @@ jobs:
           [ "$HAS_CLAUDE_CODE" = "true" ] && add claude-code CLAUDE_CODE_OAUTH_TOKEN "self-reviewed:claude-code" claude-haiku-4-5
           [ "$HAS_CURSOR" = "true" ]      && add cursor CURSOR_API_KEY "self-reviewed:cursor" auto
           [ "$HAS_OPENAI" = "true" ]      && add codex OPENAI_API_KEY "self-reviewed:codex" gpt-5.4-mini
+          # v2.1.0 legs. Smoke passes use the `economy` tier alias so the
+          # dated defaults matrix (docs/PROVIDERS.md) stays the single source
+          # of truth for the concrete model id; Azure deployments have no
+          # tier rows, so the deployment name comes from a repo variable.
+          [ "$HAS_XAI" = "true" ]         && add grok XAI_API_KEY "self-reviewed:grok" economy
+          [ "$HAS_ZAI" = "true" ]         && add claude-code ZAI_CODING_API_KEY "self-reviewed:claude-code-glm" economy "https://api.z.ai/api/anthropic"
+          [ "$HAS_AZURE" = "true" ] && [ -n "$AZURE_BASE" ] \
+                                          && add codex AZURE_OPENAI_API_KEY "self-reviewed:codex-azure" "${AZURE_MODEL:-gpt-5.4-mini-azure}" "$AZURE_BASE"
+          [ "$HAS_OPENAI" = "true" ] && [ "$OPENAI_CHAT_LEG" = "true" ] \
+                                          && add openai OPENAI_API_KEY "self-reviewed:openai" economy
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
           # print an accurate hint. Reaching here means `ready` is applied, so an
           # empty matrix means "no provider secret is configured on this repo".
           if [ "$matrix" = "[]" ]; then
-            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, or OPENAI_API_KEY as a repo secret so the self-review gate can run."
+            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, or AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable) as a repo secret so the self-review gate can run."
             echo 'empty_reason=no-provider-secret' >> "$GITHUB_OUTPUT"
           else
             echo 'empty_reason=' >> "$GITHUB_OUTPUT"
@@ -216,6 +241,9 @@ jobs:
           # label, but pass it through so the action's own gate agrees.
           label-gate: ready
           model: ${{ matrix.model }}
+          # Empty for the default-endpoint legs; the Z.ai / Azure legs route
+          # the same runner to another backend (docs/PROVIDERS.md).
+          api-base: ${{ matrix.api_base }}
           # `block-on-critical` — the check fails only on `critical` findings
           # (security, data loss, breaking API), while `warning`/`info` still
           # post inline but don't gate the merge. This is the calibrated
@@ -407,7 +435,7 @@ jobs:
           # secret is configured on the repo. That's a real config bug worth
           # surfacing — a review was requested but nothing can run it.
           if [ "${MATRIX:-[]}" = "[]" ]; then
-            echo "::error::Self-review did not run — a review was requested (via 'ready' label) but no provider secret is configured on this repo. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, or OPENAI_API_KEY as a repo secret to unblock the merge gate."
+            echo "::error::Self-review did not run — a review was requested (via 'ready' label) but no provider secret is configured on this repo. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, or AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable) as a repo secret to unblock the merge gate."
             exit 1
           fi
           # Count the `Self-review — <provider>` legs of THIS run that concluded

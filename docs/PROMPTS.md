@@ -82,6 +82,20 @@ The point of the example is the *structure* — persona, severity overrides, hou
 - **One file, not many.** A single prompt file is easier to maintain than three. The bundled default is ~250 lines and that's plenty of headroom.
 - **Iterate from real PRs.** When the reviewer misses something obvious or flags something it shouldn't, that's data. Update the prompt; the next PR benefits.
 
+## What changed in the bundled prompt (v3, 2.1.0)
+
+The default prompt keeps its severity model, its "what NOT to comment on" list and the summary shape unchanged, so extensions written against v2 still layer cleanly. v3 adds:
+
+- **Plan the review first (triage)** — rank changed files by risk (auth/secrets/input/migrations/API/concurrency first; tests/docs/generated last) and spend verification there.
+- **Verification budget** — read slices around hunks, grep before claiming something is missing, stop once a concrete failure mode is confirmed or ruled out; no builds/tests/installs unless one cheap command is decisive.
+- **Calibration: things that look like bugs but usually are not** — the most common false positives (guarantees provided by callers/types/validators, intentional propagation, reflection-referenced "unused" code, documented constants, test-only patterns, CI-enforced formatting).
+- **Finding shape** — issue with its concrete failure mode → smallest fix (suggestion block when short) → what you checked. Unverified suspicions go to the summary as a question, never inline with a lowered severity.
+- **Triage is not severity** — triage decides where verification effort goes; severity is decided per finding on impact alone, and the calibration list is a set of hypotheses to check, not verdicts.
+- **Follow-up reviews** — how to behave in incremental rounds (verify prior findings through the prior-findings channel, do not repeat, review only what changed).
+- An acknowledgement of the omitted-files block and a note that other tool environments substitute the file tools.
+
+Before/after evidence for the change (offline, same four merged PRs, same backend) ships with the plan that introduced it. The first v3 draft showed severity inflation and one run that ended without calling `submit_review`; a calibration pass (the `prompt-engineer` agent) produced the shipped v3.1 text, which separates triage from severity, restores "verify or don't post", and always closes with `submit_review`. Net on the evaluation set: same or better recall on risky paths, inflation back to v2 levels, every run posting a summary, cost roughly neutral. If a review round still looks expensive, check the `**Usage:**` line in the tracking comment before touching the prompt.
+
 ## How the action loads your prompt
 
 You have three levers, from least to most invasive:
@@ -136,6 +150,10 @@ Workflow:
 
 This approach beats generic templates for teams whose stack is unusual, whose architecture is unconventional, or who have accumulated a lot of tacit "we learned this the hard way" knowledge worth encoding in the prompt.
 
+## What the model receives besides your prompt
+
+The first user message is built by the runtime, not by your prompt: PR title, author, branches, stats, description, the changed-files list and the diff (`git diff origin/<base>...HEAD`, capped at 200k characters). Since v2.1.0 the diff is **shaped** before it is sent: sections for lockfiles, minified bundles, source maps, vendored trees and test snapshots (plus anything you add via `ignore-paths`) are removed and listed back under `## Omitted from the diff (generated / lock files)` with their line counts, and the changed-files list flags them. The model is told not to report on omitted files. Write your prompt with that in mind — it never needs to say "ignore lockfiles".
+
 ## How the prompt is applied per provider family
 
 The two provider families use your prompt slightly differently. Both accept the same file — the difference is where it lands in the model's context.
@@ -159,7 +177,7 @@ If you need the exact same behaviour across providers, use the chat-completions 
 
 ## Prompt caching
 
-The action sends the system prompt with `cache_control: ephemeral` on every Anthropic call, so a long, opinionated prompt only pays the full token cost on the first turn of each review. Subsequent turns within the same review (and within the ~5-minute cache TTL) read from cache. **Don't worry about prompt length** — go as long as you need to be specific.
+The action sends **two** cache breakpoints on every Anthropic call: one on the system prompt and, since v2.1.0, one on the diff-bearing first user message. A long, opinionated prompt *and* the PR diff therefore pay the full token cost only on the first turn of each review; turns 2..N (within the ~5-minute cache TTL) read both from cache — the run logs `usage: in=… cache_read=… cache_write=… out=…` per call so you can see the hit rate. The loop never prunes the first message, so the cached prefix stays stable. **Don't worry about prompt length** — go as long as you need to be specific. On Anthropic-compatible gateways (Z.ai, xAI) the breakpoints are not sent — those cache server-side automatically.
 
 Agent-runner providers do their own caching internally (Claude Code, Cursor Agent and Codex all cache their system prompts with the underlying model provider), so the same "long, opinionated prompt is free after the first call" principle applies — you just don't set the cache flag yourself.
 
@@ -297,10 +315,11 @@ Natural-language triggers:
 
 What it does, in order:
 
+0. **Syncs the branch with the remote base** (v2.1.0+) — `git fetch`, `git merge origin/<base>` into the current branch when it is behind, conflict resolution that keeps both sides' intent, the repo's quick validation, a `chore: merge origin/<base> into <branch>` commit, and a non-force push of the current branch. Announced in one line, no extra confirmation; a dirty tree, an unjustifiable conflict, a failing gate or a rejected push stops it with the exact commands. Linear-history repos are asked once before any rebase.
 1. **Reads the branch's diff and commit trail** — infers a Conventional Commits title (`feat(scope): summary`) or the repo's native title style if a `.github/pull_request_template.md` or the commit history reveals a different convention.
 2. **Drafts a structured body** with the sections a good PR review actually needs: Summary (the *why*), Changes (the *what*, per file), Test plan (checklist), Related issues (auto-linked from `Fixes #123` / `Refs #456` in commits), Screenshots (when UI files changed), Breaking changes (when applicable), Risks (called out for architectural or security-adjacent diffs).
 3. **Merges with `.github/pull_request_template.md` when present** — never overwrites the team's template, layers the generated content into the template's placeholders.
-4. **Previews everything to the developer** with a single confirmation before executing — the sub-skill never opens a PR unattended.
+4. **Previews everything to the developer** — including the base-sync outcome and a `## Merge notes` section when conflicts were resolved — with a single confirmation before executing; the sub-skill never opens a PR unattended.
 5. **Executes via `gh`** — supports `--draft`, stacked PRs against non-default bases, and forks.
 
 Full flow, quality gates, and sample dialogues: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md).

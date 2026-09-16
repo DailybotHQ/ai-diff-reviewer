@@ -100,7 +100,7 @@ Do not install a consumer `pr-review.yml` in this repo; dogfood CI is already [`
 
 ## Working with the dogfood loop
 
-Every PR triggers `.github/workflows/self-review.yml`, which runs the action against itself. The direct `anthropic` leg is the always-on baseline. The `claude-code`, `cursor`, and `codex` legs are present in the matrix but only invoke the LLM when the diff touches provider-sensitive action/runtime surfaces. Each active leg posts an independent review with a distinct `self-reviewed:<provider>` label so you can tell them apart in the PR conversation.
+Every PR triggers `.github/workflows/self-review.yml`, which runs the action against itself. The matrix is built from secret presence only: `anthropic`, `claude-code`, `cursor`, `codex`, `grok`, `claude-code` on Z.ai and `codex` on Azure (via `api-base`), plus an opt-in in-process `openai` leg — every configured leg reviews every `ready`-labelled PR, and a leg without its secret is absent rather than a misleading green. Each active leg posts an independent review with a distinct `self-reviewed:<provider>` label so you can tell them apart in the PR conversation.
 
 - **Watch the active tracking comments.** Each transitions in-place from `Working…` to `View review →` (or `failed`). If a leg's API-key secret is not set on the repo, or the scope gate decides that a CLI-provider leg is unnecessary for this diff, that leg emits a `::notice::` and short-circuits before invoking the reviewer.
 - **Read the inline comments per leg.** Provider-family behaviour can diverge: the `anthropic` leg is the strictest control (this action drives the loop), the three CLI legs may find different classes of issue because their vendor CLIs run their own tools.

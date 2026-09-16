@@ -7,8 +7,206 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review the actual new diff and carry outstanding findings forward, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
+
+### Added
+
+- **`api-base` input — bring your own endpoint (the backend contract).**
+  `provider` keeps naming the *runner* (who owns the review loop); the new
+  optional `api-base` names the *backend* (where the model lives). The
+  host is classified into an endpoint profile (`anthropic`, `openai`,
+  `azure`, `xai`, `zai`, or `custom`) that carries the per-runner quirks
+  (auth header style, prompt-caching flags, Codex wire API, Azure
+  workarounds). Empty keeps every existing provider byte-identical.
+  Values are validated before any outward call: absolute `https://` URL
+  (plain `http://` for localhost only), no embedded credentials, no
+  query/fragment. This entry ships the contract and the resolver
+  (`EndpointProfile`, `resolve_endpoint_profile`, `validate_api_base`);
+  the runners honour it in the follow-up entries below as they land.
+  Ignored by `cursor` (subscription-only).
+- **`anthropic` runner honours `api-base`** — Anthropic-compatible
+  backends (Z.ai GLM at `https://api.z.ai/api/anthropic`, xAI at
+  `https://api.x.ai`, or any compatible gateway). URL composed as
+  `<api-base>/v1/messages`; non-Anthropic hosts receive both `x-api-key`
+  and `Authorization: Bearer`; the `cache_control` breakpoint is sent only
+  to `api.anthropic.com`; errors name the endpoint kind and host, never the
+  key. The default profile's request is byte-identical to before (locked by
+  a snapshot test). New example `examples/provider-anthropic-zai.yml`.
+- **`openai` provider — OpenAI-compatible chat-completions runner.** A
+  second in-process runner (zero install, bounded turns) that translates
+  the Anthropic-shaped loop at the boundary: tools ↔ function tools, tool
+  results ↔ `role: tool` messages, `tool_calls` ↔ `tool_use` blocks,
+  `finish_reason` ↔ `stop_reason`; malformed tool arguments are surfaced
+  to the model instead of crashing. Default model `gpt-5.6-luna`. With
+  `api-base` the same runner covers Azure Foundry (v1 endpoint; Bearer +
+  `api-key` headers; `max_completion_tokens`), xAI (`https://api.x.ai/v1`)
+  and Z.ai (`https://api.z.ai/api/coding/paas/v4`) — `max_tokens` on those.
+  Shared retrying HTTP client (`_post_json_with_retries`) now backs both
+  chat-completions providers. New example `examples/provider-openai.yml`.
+- **`claude-code` runner honours `api-base` (Z.ai GLM — the recommended
+  GLM runner; xAI Anthropic-compatible too).** On a custom backend the CLI
+  receives the documented env contract (`ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN`, `API_TIMEOUT_MS`, the three
+  `ANTHROPIC_DEFAULT_*_MODEL` aliases pinned to `model`) and `--model` is
+  always passed; `ANTHROPIC_API_KEY` is not set there. `model: auto` and
+  Claude subscription tokens fail fast on non-Anthropic hosts. Default
+  profile env/argv unchanged (snapshot tests). New example
+  `examples/provider-claude-code-glm.yml`; `docs/PROVIDERS.md` § "Z.ai GLM —
+  recommended runner and why".
+- **`codex` runner honours `api-base` (Azure Foundry / xAI / Z.ai).** A
+  per-run `config.toml` is written next to `auth.json` in the isolated
+  `CODEX_HOME` declaring an OpenAI-compatible Responses-API provider
+  (`wire_api = "responses"`, `env_key = "OPENAI_API_KEY"`); Azure hosts get
+  the image-generation header workaround and `image_generation = false`.
+  `model` (deployment name or backend id) is required there; `--model` is
+  always passed. Strings are TOML-escaped; the key never lands in the file.
+  A `models.json` cloned from Codex's bundled catalog (conservative
+  capabilities, no OpenAI-only tool namespaces) is written alongside and
+  referenced via `model_catalog_json` — required for xAI, harmless on
+  Azure; degrades to no catalog if the CLI cannot list its bundled models.
+  Live-verified on Azure Foundry (Codex 0.154.0). **Known limitation:**
+  Codex 0.154 always sends its freeform `apply_patch` tool
+  (`tools[].type: custom`), which xAI's Responses API rejects (HTTP 422) —
+  the runtime warns on `xai` / `zai` / `custom` hosts; use `provider:
+  openai` or `provider: grok` for xAI. Z.ai via Codex is unverified.
+- **`grok` provider — xAI Grok CLI agent-runner, modular install.** The
+  official `grok` CLI runs headless inside the full review contract: rubric
+  + findings schema via `--rules`, the PR diff via a private 0600
+  `--prompt-file`, findings through `.aiprr/findings.json` (gating, IAR,
+  cap, collapse all apply), `XAI_API_KEY` the only credential in the
+  subprocess env, web search / subagents / plan mode **off by default**,
+  `--output-format json` for usage telemetry. Default model `grok-4.3`.
+  `action.yml` installs the CLI only when `provider: grok`, with a new
+  `grok-version` pin input; `code_check.yml` smoke-tests the installer.
+  New example `examples/provider-grok.yml`.
+- **Model tier aliases + cost-efficient defaults matrix.** `model` accepts
+  `balanced` / `economy` / `deep`, resolved per runner × backend from one
+  table (`MODEL_TIER_TABLE`) and logged; empty `model` keeps the built-in
+  default (no behaviour change), explicit ids pass through, Azure /
+  custom hosts fail fast with guidance. The dated matrix (verified
+  2026-09-16) lives in `docs/PROVIDERS.md` with rationale per row and a
+  label-routed recipe. Notable verified facts: `claude-sonnet-5` ($2/$10)
+  is current and cheaper than the legacy `claude-sonnet-4-6` ($3/$15)
+  the built-in default still names (the run logs a hint; `model:
+  balanced` opts in); `gpt-5.6-luna` ($0.20/$1.20) is cheaper than
+  `gpt-5.4-mini` ($0.75/$4.50). An indicative price table
+  (`INDICATIVE_PRICES_USD_PER_MTOK`) is shared with the usage telemetry.
+- **`agent-max-turns` is enforced natively on `grok`** (`--max-turns`);
+  other CLIs get an accurate per-provider warning (Claude Code:
+  `--max-budget-usd` via `agent-extra-args`). Junk values abort.
+- **Diff shaping — `ignore-paths` input + built-in generated-file
+  exclusions.** Lockfiles, minified bundles, source maps, vendored trees
+  (`node_modules/`, `vendor/`, `dist/`) and test snapshots are removed
+  from the diff the model receives — **before** the 200k-char cap, so a
+  huge lockfile can no longer crowd out real changes — and listed back
+  under an "Omitted from the diff" block with line counts (the
+  changed-files list flags them too). `ignore-paths` adds gitignore-style
+  globs (`**` spans directories; a bare pattern matches basenames). Saves
+  tokens on every turn. IAR's range hash and new-lines % still use raw
+  git output and are unaffected.
+- **Anthropic path caches the diff message too.** A second
+  `cache_control` breakpoint on the first user message (added on a copy at
+  the provider boundary; the in-memory conversation is untouched; sent only
+  to `api.anthropic.com`) makes turns 2..N read the PR diff from cache.
+  Both chat-completions providers now log a compact per-call
+  `usage: in=… cache_read=… cache_write=… out=…` line.
+- **Real usage telemetry and cost surfacing on every review.**
+  `UsageTelemetry` is captured from the provider: API `usage` objects
+  (`anthropic`, `openai`), the Claude Code stream-json `result` event
+  (incl. vendor cost), Codex `--json` `turn.completed` events (the
+  provider now passes `--json`), the Grok JSON document (incl. vendor
+  cost); Cursor reports nothing and says so. The tracking comment gains a
+  `**Usage:** 341.2k in (88% cached) · 2.1k out · est. $0.05 (indicative)
+  · 6 turns · 71s` line, the run log prints the same, and the
+  `iteration-tokens-used` output is real (no longer `"0"`). Cost is
+  vendor-reported when available, otherwise an indicative estimate from
+  the dated price table; never gate CI on it.
+- **Incremental follow-up reviews.** Rounds 2+ with a trusted delta (prior
+  reviewed head is an ancestor of HEAD, no escape/safety-net override, at
+  least one prior finding still open) send the model only the hunks that
+  changed since its last review, one-liners for the other files, and a
+  table of its own still-open findings read back from the PR threads. The
+  model classifies each prior finding (`update_prior_finding` tool /
+  `prior_findings` array). Resolution claims are advisory until a
+  maintainer resolves the thread; outstanding findings retain their
+  blocking severity without duplicate comments. Inline cap and `max-turns` scale with the
+  delta (floors 3 / 6; prior criticals never starve). Summary footer
+  `Since last review: resolved N · still open M · regressed K · new J`;
+  marker annotation `mode=incremental`. Every inline comment now carries
+  a stable hidden marker `<!-- ai-pr-reviewer-finding: fp=… sev=… -->`.
+  Full review remains the fallback on rebase / force-push, the escape
+  label, the 30 % safety net, or any error.
+- **§ 13.1 closed:** the agent-runner inline cap is enforced inside the
+  IAR post-LLM step after fingerprinting, so overflow findings are known
+  to dedup instead of re-surfacing as new.
+- **Default prompt v3.** Adds triage-first planning, a verification
+  budget, a false-positive calibration list, an explicit finding shape,
+  an omitted-files acknowledgement and the follow-up-review section;
+  severity model, "what NOT to comment on" and summary shape are
+  unchanged so extensions keep layering. Triage is explicitly decoupled
+  from severity and unverified suspicions go to the summary instead of
+  inline with a lowered severity; the session always ends with
+  `submit_review`. The agent-runner findings directive keeps only the
+  file-safety rule (no duplicated budget text). Evaluated offline
+  before/after on four merged PRs with two live backends, then refined
+  after a calibration review (see `docs/PROMPTS.md`). The agent-runner
+  findings directive's JSON example is now valid JSON (the `// optional`
+  comment that the review itself flagged is gone; the rule text below the
+  example already says the field is optional).
+  Default profile argv/env unchanged and no config/catalog file is
+  written. New example `examples/provider-codex-azure.yml`.
+
+### Security
+
+- **`api-base` hardening.** Hostnames must be ASCII (internationalised
+  domains only in their explicit punycode form) so a homoglyph host can
+  never masquerade as a vendor domain in logs; IPv6 literals are handled
+  (`http://[::1]` is a loopback exception like `localhost`). When the
+  host is not a recognised vendor endpoint the run logs a WARNING naming
+  the host that will receive `api-key`.
+- **Bounded untrusted input from vendor CLIs.** The agent-runner findings
+  file is capped at 5 MB (`MAX_FINDINGS_FILE_BYTES`; larger files are
+  refused, not parsed); usage parsers already scan a bounded stdout tail.
+- **`ignore-paths` cannot stall the runner.** Globs are matched by a
+  backtracking-free segment matcher (`_GlobMatcher`) instead of a compiled
+  regex — the regex form backtracked exponentially on patterns such as
+  `*.*.*.*.ts` against a long non-matching file name, and file names are
+  PR-controlled. Globs are also capped in count (200) and length (256
+  characters). Semantics are unchanged (`**`, `*`, `?`, `/` anchoring,
+  trailing `/`).
+- **Persisted marker state cannot inject git arguments.** `base_sha` /
+  `head_sha` read back from the tracking comment's `ai-pr-reviewer-state`
+  JSON are accepted only as hex object ids (4–64 chars); anything else
+  (e.g. `--output=/path`) becomes `""`, which disables the delta fast
+  path instead of reaching `git diff` / `git merge-base` as an argv
+  token. Found by the Task 13 security review of the branch.
+- **Installer steps honour a pre-installed CLI.** The `cursor` and `grok`
+  install steps skip the `curl | bash` installer when the binary is
+  already on `PATH` (self-hosted / pre-provisioned runners can mirror the
+  installer in-house). `provider: cursor` now logs a WARNING and ignores
+  `api-base` instead of silently accepting it (Cursor has no
+  bring-your-own-endpoint lane).
+- `docs/SECURITY.md` documents the new surface: where the key goes with a
+  custom endpoint, per-run generated files and their permissions, Grok's
+  web-search/subagent defaults, vendor stdout as untrusted input, the
+  Grok installer supply chain, and a credential-lanes table asserted by
+  tests. `.review/extension.md` gains matching `critical`/`warning`
+  rules for the reviewer itself.
+
 ### Fixed
 
+- **Incremental review safety:** preserve outstanding criticals in the gate and marker state, use the actual previous-head delta before truncation, paginate prior threads, and force full review on base movement. File edits and absent fingerprints no longer auto-resolve threads.
+- **Backend isolation and credential routing:** custom endpoints have separate tracking, collapse and IAR scopes; the in-process HTTP client refuses redirects, and endpoint validation rejects raw control characters.
+- **Usage accounting:** include uncached input, cache reads, cache writes and output exactly once; normalize Codex cached-input subsets. Add offline safety regressions, including the one-selected-CLI installation invariant.
+
+- **Skill descriptions fit the 1,024-character Open Agent Skills limit.**
+  Pi printed `description exceeds 1024 characters (1695)` for the
+  vendored skill; the parent `SKILL.md` and `apply-review/SKILL.md`
+  descriptions are rewritten as compact routing summaries (the full
+  trigger catalogues stay in the body) and
+  `scripts/validate-frontmatter.py` now fails on descriptions over 1,024
+  characters or names over 64. Downstream vendored copies clear the
+  warning when they pick up the release that ships this.
 - **Author-association gate is permission-aware on private org repos.** When the webhook `pull_request.author_association` under-reports membership (e.g. `CONTRIBUTOR` for an org admin with team-granted access), the runtime checks collaborator permission on **private / internal** repos only and allows `admin`, `maintain`, or `write` before skipping. Public repos stay association-only so narrowed presets like `OWNER,MEMBER` remain strict. Permission lookup failures fail-open on private/internal repos and fail-closed on public repos. Actionable logs include webhook association, resolved permission, visibility, allow-list, and decision. Private-repo consumers no longer need `author-association: ''` solely to work around the webhook quirk (Option B — permission-aware gate; see `docs/SECURITY.md`).
 
 - **Complexity labels now work on all providers.** When `complexity-labels-enabled` is `true`, agent-runner providers (`cursor`, `claude-code`, `codex`) include a required `complexity` field in `.aiprr/findings.json`; chat-completions uses `set_pr_complexity`. If the model omits the level, a diff-based heuristic fallback still applies the label so the feature is provider-agnostic end-to-end. `pr-description-mode: autocomplete` on agent-runners remains chat-completions-only.
@@ -30,6 +228,44 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Dogfood follow-ups from the first self-review of the release PR.** An
+  `api-base` given with a trailing `/v1` (as many vendor docs show it) no
+  longer produces `/v1/v1/messages` (`join_endpoint_path`); the Grok
+  installer steps carry their trust justification inline; the runtime's
+  size is stated honestly (~10k LOC, historical soft ceiling crossed
+  deliberately — `docs/STANDARDS.md`). CI actions bumped:
+  `actions/setup-node` and `actions/setup-python` to v7 (supersedes the
+  Dependabot PR #48).
+- **`setup` wizard knows runners × backends.** Q1 is now *runner* +
+  *backend* with a resolution table (`api-base`, secret name, suggested
+  `model` per pair, incl. Azure Foundry, xAI, Z.ai, self-hosted
+  gateways), recommendation shortcuts, agent-runner hardening lines
+  (`persist-credentials: false`, non-fork `if:`) emitted for every CLI
+  runner including `grok`, and per-backend console URLs for the key.
+- **`open-pr` sub-skill syncs the branch with the remote base before
+  opening or refreshing a PR.** New automatic Step 1.5: fetch, merge
+  `origin/<base>` into the current branch when behind, resolve conflicts
+  keeping both sides' intent, run the repo's quick validation, commit,
+  and push the current branch (non-force, announced in one line, no
+  extra prompt). Honest trust boundary rewritten accordingly; explicit
+  stop conditions (dirty tree, unjustifiable/binary conflict, failing
+  gate, rejected push, linear-history repos ask once before rebase +
+  `--force-with-lease`). Preview shows the sync outcome; the PR body
+  gains a `## Merge notes` section when conflicts were resolved.
+- **Dogfood matrix covers the new runners and backends.** `self-review.yml`
+  adds legs for `grok` (`XAI_API_KEY`), `claude-code` on Z.ai GLM
+  (`ZAI_CODING_API_KEY` + `api-base`), `codex` on Azure Foundry
+  (`AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` /
+  `AZURE_OPENAI_MODEL_DAILY` repo variables) and an opt-in in-process
+  `openai` leg (`SELF_REVIEW_OPENAI_CHAT=true`); smoke legs use the
+  `economy` tier alias; `api-base` flows per leg. The four original legs
+  are unchanged and legs without secrets stay absent from the matrix.
+- **Test suite grew to 703 tests across 16 files** with three
+  cross-cutting nets for the multi-backend work: a runner × backend
+  matrix, a default-profile back-compat snapshot table captured from
+  `main` (intentional deltas listed explicitly), and hardening
+  regressions. `docs/TESTING_GUIDE.md` and `tests/README.md` now describe
+  the real suite.
 - **Harness: Deep Work Plan skill bumped to v2.17.0 + AI Diff Reviewer
   addon wired (Flow B).** Vendored `deepworkplan` via
   `npx skills update deepworkplan` (lockfile hash refresh). New addon

@@ -46,13 +46,15 @@ Agent-runner providers don't hit this section — they own their own loop intern
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
 - Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed diff (capped at `MAX_DIFF_CHARS = 200 000` chars — see below).
+- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, and both the inline cap and `max-turns` scale with the delta (floors: 3 comments, 6 turns). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14`.
+- Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
 
 If you increase `max-turns` or `MAX_CONVERSATION_TURNS_RETAINED`, **estimate the token impact first**. `AGENTS.md` DON'T #9 makes this explicit: raising defaults without measuring the per-review cost delta is not merged.
 
 ## The agent-runner budget
 
-For the `claude-code`, `cursor`, and `codex` providers, we don't run a turn loop — the vendor CLI does. Our cost surface is:
+For the `claude-code`, `cursor`, `codex`, and `grok` providers, we don't run a turn loop — the vendor CLI does. Our cost surface is:
 
 | Knob | Effect |
 |---|---|
@@ -73,8 +75,10 @@ The `runs.steps` in `action.yml` install the selected agent-runner CLI **only wh
 | `claude-code` | `npm install -g @anthropic-ai/claude-code@<claude-code-version>` | 10–25 s |
 | `cursor` | `curl -fsSL https://cursor.com/install | bash -s -- --version <cursor-version>` | 20–40 s |
 | `codex` | `npm install -g @openai/codex@<codex-version>` | 10–25 s |
+| `grok` | `curl -fsSL https://x.ai/cli/install.sh \| bash -s <grok-version>` (static binary) | 5–15 s |
+| `openai` | (none — in-process) | 0 s |
 
-Selecting `provider: anthropic` (the default) pays the classic zero-install cost this repo is optimised for. Selecting a CLI provider pays a one-off install per workflow job; there is no cross-job cache (GitHub-hosted runners don't share filesystem state), so pinning a specific `<cli>-version` matters mostly for reproducibility, not for warm-boot speed.
+Selecting `provider: anthropic` or `provider: openai` pays the classic zero-install cost this repo is optimised for; the `cursor` / `grok` steps also skip the installer when the CLI is already on `PATH`. Selecting a CLI provider pays a one-off install per workflow job; there is no cross-job cache (GitHub-hosted runners don't share filesystem state), so pinning a specific `<cli>-version` matters mostly for reproducibility, not for warm-boot speed.
 
 ## Tool-loop guardrails
 
@@ -86,6 +90,7 @@ Every tool the model can call has a hard cap so a bad `read_file(path, limit=999
 | [`MAX_FILE_READ_LINES`](../scripts/reviewer.py) | `2_000` | Hard ceiling on `read_file` line count per call. |
 | [`MAX_SEARCH_RESULTS`](../scripts/reviewer.py) | `200` | Hard ceiling on `grep` / `glob` result counts. |
 | [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `200_000` | Cap on the seed diff embedded in the first user message. Larger diffs are truncated with a pointer to `read_file`. |
+| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the `MAX_DIFF_CHARS` cap and reported to the model as omitted. Extended by `ignore-paths`. |
 
 These caps mean the model **cannot** flood its own context. A huge file or an over-broad grep degrades gracefully into a truncation message — the review continues, the offending call retries with a narrower scope.
 
@@ -124,7 +129,8 @@ The runtime handles this by **retrying summary-only** on 422 — the review stil
 Common to both provider families:
 
 - **`max-inline-comments`** (default `10`) — hard cap on inline comments; the review summary is not capped. Applied uniformly across both families.
-- **`model`** — swapping model tiers has the biggest effect on both cost and quality. The `DEFAULT_MODELS` table at the top of `scripts/reviewer.py` picks a deliberate midpoint per provider; override if your budget or quality bar is different.
+- **`ignore-paths`** (+ built-in exclusions) — lockfiles, minified bundles, source maps, vendored trees and snapshots are dropped from the diff the model receives and listed back as omitted. On lockfile-heavy PRs this is the single largest token saving, and it applies to every turn of the chat-completions loop.
+- **`model`** — swapping model tiers has the biggest effect on both cost and quality. Pick a profile in one word — `model: balanced | economy | deep` — resolved per runner × backend from the dated matrix in [`PROVIDERS.md` § "Cost-efficient defaults matrix"](PROVIDERS.md#cost-efficient-defaults-matrix-verified-2026-09-16--ids-and-prices-move-re-check-when-bumping); empty keeps the built-in default; an explicit id passes through.
 
 Chat-completions family only:
 
@@ -132,7 +138,7 @@ Chat-completions family only:
 
 Agent-runner family only:
 
-- **`agent-max-turns`** — currently warns on CLI providers instead of enforcing a cap. Use `agent-extra-args` for vendor-native budget flags when a CLI exposes one.
+- **`agent-max-turns`** — enforced natively on `grok` (`--max-turns`); on Claude Code / Codex / Cursor the run logs a per-provider warning (Claude Code: use `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s timeout is the bound).
 - **`agent-extra-args`** — free-form vendor flags. Not cost-capped by us.
 - **`mcp-config-file`** — path to an MCP config for the vendor CLI. Extra tools = more turns = more spend.
 
@@ -253,8 +259,10 @@ Every run writes five outputs (empty strings only if the IAR pipeline crashed):
 | `iteration-round` | Round number in the current generation (1, 2, …). | `if: steps.review.outputs.iteration-round == '1'` for round-1-only steps. |
 | `iteration-generation` | Monotonic generation counter across the PR's lifetime. | Track how many force-pushes / rebases the PR has seen. |
 | `iteration-policy-applied` | The policy actually applied (may differ from configured — safety net or escape label can override). | Detect when the safety net fired. |
-| `iteration-tokens-used` | Cost-telemetry placeholder. Always emits `"0"` today because the per-provider usage-metadata capture path into `RunTelemetry.tokens_used` is not yet wired (see [`docs/ITERATION_AWARENESS.md § 13.2`](ITERATION_AWARENESS.md)). Safe to surface on dashboards; MUST NOT be gated on numeric thresholds until the follow-up lands. |
+| `iteration-tokens-used` | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic derived from cap expansion + a small prompt-addendum flag. Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled, so a `"-N%"` value never appears (see [`docs/ITERATION_AWARENESS.md § 13.3`](ITERATION_AWARENESS.md)). Never gate CI on `== '-N%'`. |
+
+The tracking comment on the PR shows the human version on every run — e.g. `**Usage:** 341.2k in (88% cached) · 2.1k out · est. $0.05 (indicative) · 6 turns · 71s` — so the effect of diff shaping, the diff cache breakpoint and the model tier is visible per review without opening the logs.
 
 Example CI dashboard snippet — surface cost telemetry as a workflow annotation:
 
@@ -268,6 +276,12 @@ Example CI dashboard snippet — surface cost telemetry as a workflow annotation
     cost=${{ steps.review.outputs.iteration-cost-vs-baseline-estimate }} \
     tokens=${{ steps.review.outputs.iteration-tokens-used }}"
 ```
+
+## Complete token accounting and focused context
+
+Token totals include all input partitions (uncached, cache-read and cache-write) plus output, exactly once. OpenAI and Codex report cached input as a subset of input; Anthropic reports disjoint input/cache partitions. The displayed cache ratio uses total input as its denominator. Cost estimates remain indicative, not billing records.
+
+Incremental reviews construct the actual previous-head-to-current-head diff before truncation, instead of reusing a truncated full PR diff. This reduces repeated old hunks without losing new edits merely because their files appeared late in the original PR diff. Outstanding prior issues still gate the check.
 
 ## Related docs
 

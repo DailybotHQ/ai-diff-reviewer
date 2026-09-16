@@ -7,7 +7,7 @@ Repository conventions that apply across all contributions. For Python-specific 
 - **Product name (user-facing):** "AI Diff Reviewer". Capitalise exactly that way in user-facing copy (README, docs, marketplace listing, error messages, comments visible to users).
 - **Slug:** `ai-diff-reviewer` (lowercase, hyphenated) — matches both the GitHub repo (`DailybotHQ/ai-diff-reviewer`) and the Marketplace listing. The old `ai-pr-reviewer` slug still resolves via GitHub's permanent 301 redirect on renamed repos, so pre-rename `uses:` pins keep working; new copy-paste examples should always use the canonical slug.
 - **Env-var prefix:** `AIPRR_` (private contract, unchanged across the rename — internal only, but stable because it's referenced in local-dev docs and `CONTRIBUTING.md`).
-- **Marker constants:** `<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`, `<!-- ai-pr-reviewer-provider:… -->`, `<!-- ai-pr-reviewer-description-autocompleted -->` — deliberately preserved as-is across the rename so already-posted PR tracking comments continue to be detected by `collapse-previous` and state-lookup logic.
+- **Marker constants:** `<!-- ai-pr-reviewer-marker -->`, `<!-- ai-pr-reviewer-state: … -->`, `<!-- ai-pr-reviewer-provider:… -->`, `<!-- ai-pr-reviewer-description-autocompleted -->`, and (v2.1.0+) the per-inline-comment `<!-- ai-pr-reviewer-finding: fp=… sev=… -->` — deliberately preserved as-is across the rename so already-posted PR tracking comments and inline findings continue to be detected by `collapse-previous`, state-lookup and incremental-review logic.
 
 Don't invent variants like "AI-Diff-Reviewer", "AIDR", "AiDiffReviewer", "AI PR Reviewer" (the old name), etc. The single canonical capitalisation makes search consistent across the marketplace, GitHub, and docs.
 
@@ -71,7 +71,7 @@ All code, comments, documentation, commit messages, and PR descriptions are in E
 
 ## File size
 
-- `scripts/reviewer.py` — soft ceiling ~4500 LOC. We're at ~4000 today (up from ~1500 pre-v1.1.0; the v1.1.0 growth was the two provider families plus the three CLI provider impls, and v1.3–v1.4 added the author-association gate + PR-metadata check tools + PR-description autocomplete + complexity-labeling paths). If the file approaches the limit, the conversation is "should we split into multiple files" — make that decision deliberately, not by drift. The next feature that would push us past the ceiling (a raw-OpenAI/Gemini provider, `.aiprr/findings.json` v2) is likely the trigger for that conversation.
+- `scripts/reviewer.py` — historical soft ceiling ~4500 LOC, **crossed deliberately in v2.1.0**: the file is ~10k LOC after the runner × backend work (endpoint profiles, `OpenAIProvider`, `GrokProvider`, telemetry, incremental review, hardening). The single-file constraint (zero install, one artefact to audit) still holds and is still the feature; the open decision is *how* to split (e.g. a `scripts/aiprr/` package vendored by the composite action) without breaking `python3 scripts/reviewer.py` for local debugging or the stdlib-only rule. Track it as a dedicated change, not by drift; until then reviewers treat size creep as `info`.
 - Doc files — under 500 lines. Long docs are signal that they need to be split.
 - Examples — under 50 lines each. They're showcase, not reference.
 - Test files — under 500 lines. Split by concern rather than growing an existing file (the current four-file split is the model).
@@ -100,7 +100,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md). The summary:
 - `py_compile` is the static gate.
 - `actionlint` is the workflow gate.
 - The stdlib `unittest` suite in `tests/` is the unit gate (242 tests across four files, no third-party deps).
-- `cli-install-smoke` is the CLI-installer gate (matrix over the three agent-runner providers).
+- `cli-install-smoke` is the CLI-installer gate (matrix over the four agent-runner providers: `claude-code`, `cursor`, `codex`, `grok`).
 - `self-review.yml` is the integration gate (always-on Anthropic baseline plus scoped CLI-provider dogfooding for provider-sensitive changes).
 
 ## Security
@@ -129,3 +129,7 @@ SemVer. Tags `vX.Y.Z`. The moving major tag for the current line (`v2`) auto-upd
 ## License
 
 MIT for everything in this repo unless a specific file says otherwise. By contributing you agree that your contribution is licensed under the same.
+
+## Skill frontmatter limits
+
+Every `skills/**/SKILL.md` follows the Open Agent Skills contract: `name` is kebab-case and at most 64 characters; `description` is one dense paragraph of at most **1,024 characters** (hosts such as Pi warn or refuse beyond that). Keep the description to the routing summary and put the full trigger catalogue in the body (`## Activation` / `## When it fires`). `scripts/validate-frontmatter.py` fails CI on either overrun and prints the measured length.

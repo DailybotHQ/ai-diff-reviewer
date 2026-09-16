@@ -87,7 +87,7 @@ All three would fail CI. This is by design.
 | `iteration-round` | integer string | Round number within the current generation. `1` on first review, resets to `1` on generation change. Empty string if the IAR pipeline crashed. |
 | `iteration-generation` | integer string | Generation counter. Increments on new commits or rebase. Empty string if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive`, and the escape label overrides it to `escape-label-forced-full-review`. Consumers should key on the full override string (grep `policy=\`safety-net-forced-` / `policy=\`escape-label-forced-`), not the short policy name. Empty string if the IAR pipeline crashed. |
-| `iteration-tokens-used` | integer string | Cost-telemetry placeholder. Always emits `"0"` today — the runtime does not yet capture per-provider usage metadata into `RunTelemetry.tokens_used`; see § 13.2 for the follow-up plan. Stable enough to surface on dashboards without gating on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | integer string | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | string | Coarse cost-delta heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small prompt-addendum flag. Always non-negative today: `"0%"` when no cap expansion fires; `"+N%"` when round 1 of `first-pass-exhaustive` or the safety net raises the cap. Silenced-finding savings are not yet modelled (see § 9.5); the promised `"-N%"` / `"unknown"` values do NOT ship in this cost function today — do not gate CI steps on them. Empty string if the IAR pipeline crashed. |
 
 ### 3.3 Environment variable mapping
@@ -473,7 +473,7 @@ The bit becomes `False` only when NONE of these hold — i.e., the reviewer has 
 ### 9.1 Design principles
 
 - **DON'T #9 compliance:** IAR does NOT modify `max_tokens` or `MAX_TURNS` defaults. The `exhaustive-first-pass-cap-multiplier` raises `max-inline-comments` (the tool-call ceiling), which affects output token DEMAND but does not change the per-call `max_tokens` budget.
-- **Cost telemetry is free (zero LLM tokens).** `iteration-cost-vs-baseline-estimate` is derived locally from cap expansion + a small addendum flag. `iteration-tokens-used` is a stable placeholder that always emits `"0"` today — the metadata-capture path from provider responses is not yet wired (see § 13.2). Neither output adds LLM cost.
+- **Cost telemetry is free (zero LLM tokens).** `iteration-cost-vs-baseline-estimate` is derived locally from cap expansion + a small addendum flag. `iteration-tokens-used` is read from the provider's own usage report (v2.1.0+). Neither output adds LLM cost.
 
 ### 9.2 Lifetime cost matrix (theoretical — validated by dogfooding)
 
@@ -515,11 +515,12 @@ For a typical PR that would converge in 5 rounds without dedup:
 Every IAR-enabled run emits a debug log line at end-of-run:
 
 ```
-IAR cost: input_tokens=0, output_tokens=0, git_ops_ms=1250, total_wall_clock_ms=47320, findings_surfaced=8, findings_silenced=3
+IAR cost: tokens=41234, git_ops_ms=1250, total_wall_clock_ms=47320, findings_surfaced=8, findings_silenced=3
+Usage: source=estimated in=41200 cache_read=300000 cache_write=0 out=2100 turns=6 cost_usd=0.05
 ```
 
 Two outputs allow programmatic access:
-- `iteration-tokens-used` — **stable placeholder**. Always emits `"0"` today because the per-provider usage-metadata capture path into `RunTelemetry.tokens_used` is not yet wired (see § 13.2 for the follow-up plan). The debug-log `input_tokens=` / `output_tokens=` fields report the same `0` values. Consumers can safely surface this output on dashboards but MUST NOT gate CI steps on numeric thresholds until the follow-up lands.
+- `iteration-tokens-used` — **real since v2.1.0**: all input partitions (uncached, cache-read and cache-write, counted once) + output tokens captured from the provider (see § 3.2 for the per-provider source). The end-of-run `Usage:` log line and the tracking comment add cache reads/writes, turns and an indicative cost (`INDICATIVE_PRICES_USD_PER_MTOK`, dated in `scripts/reviewer.py`) or the vendor-reported cost when the CLI gives one (Claude Code, Grok). Estimates are for humans and dashboards — never gate CI on them.
 - `iteration-cost-vs-baseline-estimate` — a **coarse, always-non-negative** heuristic derived from cap expansion (`effective_cap / base_cap`) plus a small addendum flag (`+5%` when the IAR exhaustive prompt addendum is spliced). Today the function returns either `"0%"` (no cap expansion) or `"+N%"` (round 1 of `first-pass-exhaustive` / safety net raises the cap). **The signal savings from silenced findings and `state.history[]` averages are not yet modelled** — a future revision may extend the function to emit `"-N%"` / `"unknown"` as originally sketched, but consumers today MUST NOT gate CI steps on those values (the condition will simply never fire).
 
 Example: gate a downstream CI step on IAR cost:
@@ -719,23 +720,15 @@ No schema version is ever removed. Marker state written by prior versions will a
 
 Documented edge cases and follow-up items that consumers should be aware of. None of these break the primary IAR contract (convergence + critical-always-surfaces + failure-fallback); they are quality-of-implementation gaps tracked for future work.
 
-### 13.1 Agent-runner overflow findings are not fingerprinted
+### 13.1 Agent-runner overflow findings — resolved (v2.1.0)
 
-The tool-call cap enforcement in the agent-runner code path (Claude Code / Cursor / Codex integrations) truncates any surplus findings the CLI emits above `effective-max-inline-comments` — after the criticals-first sort, so the safety rail still holds — BEFORE `run_iar_post_llm` fingerprints them. This means overflow findings do not enter `open_fingerprints_this_gen`, so if the next round's LLM re-emits the same findings the dedup engine cannot suppress them and they re-surface.
+The inline cap for the agent-runner path is now enforced **inside `run_iar_post_llm`, after fingerprinting** (`surface_cap` argument): every finding the CLI emitted is fingerprinted and recorded in `open_fingerprints_this_gen`, then the surfaced list is truncated criticals-first. Overflow findings are therefore known to the dedup engine on the next round instead of re-surfacing as "new". If the IAR pipeline is unavailable for a run, `main()` falls back to the previous pre-IAR truncation so the documented safety control still holds.
 
-**Failure mode:** an agent-runner provider emits 40 findings in round 1 (effective cap 30, so 10 dropped after criticals-first sort). Round 2 re-emits the same 40; the 30 previously surfaced are correctly deduped, but the 10 that were dropped surface as "new" findings — the very "infinite loop" symptom IAR is designed to prevent, scoped to the overflow tail.
+### 13.2 Per-generation telemetry — token capture resolved (v2.1.0), history attribution still pending
 
-**Scope:** only bites when the agent-runner CLI overshoots the cap (typical LLM output stays under 30 findings, so the failure mode is a tail-risk edge case). Does not affect the chat-completions Provider path (Anthropic / OpenAI / Gemini) which fingerprints the full result set before the pipeline caps it.
+**Resolved in v2.1.0:** the metadata-capture path from provider responses into `RunTelemetry.tokens_used` is wired for every provider (API `usage` for `anthropic` / `openai`; Claude Code stream-json `result`; Codex `--json` `turn.completed`; Grok JSON document; Cursor reports nothing). `iteration-tokens-used` is real, and the tracking comment carries a `**Usage:**` line (tokens, cache ratio, turns, indicative or vendor-reported cost).
 
-**Follow-up:** the clean fix is either (a) plumb `code_contexts` to the agent-runner truncation site so `finding_fingerprint` can produce merge-compatible hashes, or (b) move the cap enforcement into `run_iar_post_llm` so the pipeline is single-path. Either resolves the semantic mismatch of `code_context=None` fingerprints from the truncation site vs `code_context=<real>` fingerprints from the post-LLM stage.
-
-### 13.2 Per-generation telemetry stays at placeholder values
-
-`state.history[]` entries carry `tokens_used=0` + `wall_clock_ms=0` placeholders that are never populated. On a `NEW_COMMITS` / `REBASED` transition, `advance_generation` closes the prior generation's `history[]` entry and IAR could — but currently does not — backfill telemetry into that closed entry. The previous approach (backfilling with the CURRENT run's telemetry at post-LLM time) was incorrect because the current run is round 1 of the NEW generation, so its tokens / wall-clock belong to the new gen, not the closed one. Attributing them backward misreports per-generation cost history and poisons the cost-vs-baseline estimate once token accounting lands.
-
-**Scope:** the `tokens_used` gap is systemic — the metadata-capture path from provider responses into `RunTelemetry.tokens_used` is not yet wired, so BOTH the per-generation `history[]` field AND the `iteration-tokens-used` action output emit `0` on every run (documented as such on both surfaces to keep consumers from gating on the value). `wall_clock_ms` DOES capture correctly for the current run at output-writing time, but shows the same mis-attribution symptom in `history[]` on a generation change (the current run's wall clock lands in the CLOSED entry rather than the new one).
-
-**Follow-up:** two coordinated pieces: (a) capture per-provider usage metadata into `RunTelemetry.tokens_used` at the LLM-response boundary in each Provider implementation, and (b) accumulate telemetry across a generation's rounds (add `tokens_used_this_gen` + `wall_clock_ms_this_gen` accumulators to `IterationState`, increment on every post-LLM step, and only fold the accumulators into `history[-1]` when `advance_generation` closes the entry). Non-blocking for the shipped runtime; both matter most when cost dashboards get built on the outputs.
+**Still pending:** per-generation attribution in `state.history[]`. On a `NEW_COMMITS` / `REBASED` transition `advance_generation` closes the prior generation's entry, and the current run's tokens belong to the *new* generation — so the closed entry keeps `tokens_used=0` rather than being back-filled with the wrong run. The clean fix remains accumulators on `IterationState` (`tokens_used_this_gen`, `wall_clock_ms_this_gen`) folded into `history[-1]` when the entry closes; deferred because the state schema is closed (`additionalProperties: false`) and a new field needs a schema generation bump.
 
 ### 13.3 Cost-vs-baseline heuristic is coarse and non-negative
 
@@ -772,3 +765,54 @@ Both paths deferred to a dedicated refactor PR that can be reviewed on its own w
 ## Change log
 
 - **v1 (2026-07-16):** initial spec authored during Task 1 of `PLAN_iteration_aware_review`. Post-launch corrections in the same day (three-dot generation range hash, five-condition USER_FORCED_RESET guard with three-signal `reviewed_label_applied` write logic + `label_fetch_ok` transient-failure guard, § 13 known-limitations catalogue) folded in during self-review dogfooding.
+
+---
+
+## 14. Incremental follow-up mode (v2.1.0+)
+
+Rounds 2+ no longer re-review the whole PR. When a prior review exists and the delta can be trusted, the run switches to **incremental mode**:
+
+### 14.1 When it engages
+
+All of the following must hold — otherwise the run is a **full** review (the reason is logged as `IAR pre-LLM: … mode=full (<reason>)`):
+
+- a prior IAR state exists and the transition is not `first_review` / `user_forced_reset` / `rebased` (including base movement);
+- no policy override forced an exhaustive pass (`escape-label-forced-full-review`, `safety-net-forced-first-pass-exhaustive`);
+- the previously reviewed head is an **ancestor** of the current HEAD (`git merge-base --is-ancestor`) — a rebase, force-push or amend makes the delta untrustworthy;
+- at least one of the reviewer's own inline findings is still **open** on the PR.
+
+There is no input to enable it; the `iteration-escape-label` is the per-PR off switch (one full pass, state preserved).
+
+### 14.2 What the model receives
+
+The `## Full Diff` section is replaced by:
+
+1. `## Changes since your last review (<prior> → <head>)` — the actual two-tree delta between those heads, respecting file omissions before applying its own size limit;
+2. `## Other files changed in this PR (unchanged since your last review)` — one line per remaining file;
+3. `## Your prior findings still open (N)` — a table (criticals first, capped at 40) with the fingerprint, severity, location, a summary and whether the file changed since; read back from the PR's review threads (`fetch_prior_findings`: first comment authored by the bot, parent review carrying this provider's marker, inline marker present, thread not resolved).
+
+The system prompt gains the incremental addendum instead of the exhaustive one, and the bundled prompt's "Follow-up reviews" section tells the model to verify rather than repeat.
+
+### 14.3 The inline finding marker
+
+Every inline comment now ends with a hidden, **stable** marker: `<!-- ai-pr-reviewer-finding: fp=<fingerprint> sev=<severity> -->` (registered in `docs/STANDARDS.md`). It is how prior findings are matched back without growing the tracking-marker state. Comments posted before v2.1.0 have no marker and are skipped (logged).
+
+### 14.4 Verdicts and conservative resolution
+
+The model reports `resolved`, `open` or `regressed` through `update_prior_finding` or the findings file. A resolution claim is **advisory**, not proof: an edited/deleted file and an absent fingerprint do not establish that the concrete bug disappeared. Claims stay open and appear as *unverified* until a maintainer resolves the thread. The runtime does not automatically reply to or resolve review threads.
+
+Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them. An incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+
+The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J`, and the tracking marker annotation carries `mode=incremental`.
+
+### 14.5 Budget scaling
+
+`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)` and `max-turns = max(6, ceil(max-turns × delta ratio))`, both capped at the base values; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+
+### 14.6 Failure semantics
+
+Unreadable or incomplete thread pagination, Git errors, a non-ancestor prior head and base movement select a **full** review. Reconciliation failures are logged; previously known severity is retained by the post-review gate, not cleared by absence of new comments. The dedup engine, the 30 % safety net, the escape label and the critical-always-surfaces rail are unchanged.
+
+### Incremental context and history completeness
+
+The focused body is `git diff <last-reviewed-head> <current-head>`, filtered before its own size limit, not filtered from an already-truncated full PR diff. Old hunks in the same file are not retransmitted solely because that file changed. Review-thread history uses bounded cursor pagination; incomplete pagination cannot enable incremental mode. Base changes also force full mode even when the old head remains an ancestor.

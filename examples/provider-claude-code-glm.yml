@@ -1,0 +1,57 @@
+# Claude Code CLI on Z.ai GLM (agent-runner family + `api-base`, v2.1.0+) —
+# the RECOMMENDED runner for GLM reviews.
+#
+# Why this pairing: Z.ai's Coding Plan is flat-rate (≈ 0 marginal cost per
+# review) and Z.ai's first-class integration target is the Claude Code
+# harness, so GLM's tool use is tuned for exactly this loop. You get the
+# vendor coding-agent baseline prompt, LSP/semantic tools and the deepest
+# review the GLM family can do, billed against the plan you already pay for.
+#
+# The action installs `@anthropic-ai/claude-code` (only for this provider)
+# and runs it headless with the Z.ai env contract:
+#   ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
+#   ANTHROPIC_AUTH_TOKEN=<your Z.ai key>   (never ANTHROPIC_API_KEY)
+#   ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL=<model>   API_TIMEOUT_MS=3000000
+# `model` is REQUIRED here (`auto` is rejected on a custom backend).
+#
+# Cheaper GLM path with zero install: examples/provider-anthropic-zai.yml.
+# SECURITY: `api-key` is sent to the `api-base` host; agent-runner CLIs run
+# with broad local access — trusted (non-fork) PRs only.
+
+name: PR review (Claude Code · Z.ai GLM)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false   # never leave GITHUB_TOKEN in .git/config for the CLI to read
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: claude-code
+          api-base: https://api.z.ai/api/anthropic
+          api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: glm-5.3                # required on a custom backend; glm-5.3-flash for smoke passes
+          # claude-code-version: '2.1.273'   # optional CLI pin
+
+# xAI's Anthropic-compatible surface works the same way:
+#   api-base: https://api.x.ai
+#   api-key:  ${{ secrets.XAI_API_KEY }}
+#   model:    grok-4.3

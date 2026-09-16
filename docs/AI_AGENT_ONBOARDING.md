@@ -19,10 +19,10 @@ An LLM-driven code-review system that ships on **two surfaces from the same code
 
 **Both surfaces are equally important.** If you're changing the review prompt, the severity model, or anything that affects how the reviewer sees a diff, your change affects both surfaces — the `Skills — prompt-sync invariant` CI job in `code_check.yml` enforces this.
 
-As of v1.1.0 the runtime ships with **four providers across two families**:
+As of v2.1.0 the runtime ships with **six runners across two families**, plus an optional `api-base` backend input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom gateways):
 
-- **Chat-completions family** (this action drives the tool-use loop): `anthropic`.
-- **Agent-runner family** (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`.
+- **Chat-completions family** (this action drives the tool-use loop): `anthropic`, `openai`.
+- **Agent-runner family** (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`, `grok`.
 
 The two families converge on a shared `ReviewResult` payload before submission, so downstream behaviour (severity gating, 422 fallback, tracking comment) is identical.
 
