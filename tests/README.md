@@ -4,15 +4,32 @@
 
 ## Contents
 
-| File | Purpose |
+| File | Purpose (tests) |
 |---|---|
-| [`test_reviewer.py`](test_reviewer.py) | The full suite — imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). |
+| [`test_agent_runner_providers.py`](test_agent_runner_providers.py) | The four `AgentRunnerProvider` implementations (`claude-code`, `cursor`, `codex`, `grok`) (99) |
+| [`test_backends.py`](test_backends.py) | `api-base` contract (48) |
+| [`test_end_to_end_roundtrip.py`](test_end_to_end_roundtrip.py) | Cross-family invariants (13) |
+| [`test_findings_parser.py`](test_findings_parser.py) | `parse_findings_file()` (33) |
+| [`test_iar_dedup.py`](test_iar_dedup.py) | IAR fingerprinting and dedup of findings against prior rounds (32) |
+| [`test_iar_dispatch.py`](test_iar_dispatch.py) | IAR trigger dispatch (29) |
+| [`test_iar_failure_fallback.py`](test_iar_failure_fallback.py) | IAR failure-fallback contract (20) |
+| [`test_iar_generation_tracking.py`](test_iar_generation_tracking.py) | IAR generation and range-hash tracking across force-pushes and rebases (30) |
+| [`test_iar_incremental.py`](test_iar_incremental.py) | Incremental review mode (rounds 2+) (36) |
+| [`test_iar_observability.py`](test_iar_observability.py) | IAR outputs, tracking-comment rendering, base/head SHA round trips, budget accounting (57) |
+| [`test_iar_policies.py`](test_iar_policies.py) | IAR policies (iterative / exhaustive) and their budget rules (16) |
+| [`test_iar_state_layer.py`](test_iar_state_layer.py) | Iteration-Aware Review state (39) |
+| [`test_model_tiers.py`](test_model_tiers.py) | `model` tier aliases (`balanced` / `economy` / `deep`), the dated defaults matrix, legacy-default hints, `agent-max-turns` parsing and native caps (17) |
+| [`test_openai_provider.py`](test_openai_provider.py) | `provider: openai` (20) |
+| [`test_reviewer.py`](test_reviewer.py) | Core runtime (192) |
+| [`test_telemetry.py`](test_telemetry.py) | Usage telemetry (22) |
+
+Every file imports `scripts/reviewer.py` directly via `importlib.util` (no install, no `PYTHONPATH` hackery, no third-party test runner). Total: **703** tests.
 
 ## What is (and isn't) covered
 
 | Covered — pure logic | Not covered — I/O paths |
 |---|---|
-| `parse_bool` | HTTP calls to Anthropic |
+| `parse_bool` | HTTP calls to Anthropic / OpenAI-compatible backends |
 | `redact_for_log` + `LOG_REDACT_SUBSTRINGS` | HTTP calls to the GitHub REST + GraphQL APIs |
 | `truncate_for_tool` / output caps | `git diff origin/<base>...HEAD` subprocess |
 | Severity ranking + strictness gate | Real review submission |
@@ -20,7 +37,10 @@
 | Tool handlers (`read_file`, `grep`, `glob`, `post_inline_comment`, `submit_review`) | End-to-end agentic loop against a live provider |
 | Tracking-comment renderers | |
 | `write_action_output` | |
-| Provider construction (`build_provider()`) | |
+| Provider construction (`build_provider()`), `api-base` profiles, runner × backend matrix | |
+| Agent-runner argv/env (stubbed subprocess), default-profile back-compat snapshots | |
+| Usage telemetry parsers, cost estimate, tracking-comment usage line | |
+| Diff shaping (`ignore-paths`), IAR state/dedup/incremental mode | |
 | The conversation-pruning invariant (`MAX_CONVERSATION_TURNS_RETAINED`) | |
 
 The I/O paths on the right are validated by the **dogfooding** workflow — every PR to this repo runs the action against itself via [`../.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). See [`../docs/PR_REVIEW_WORKFLOW.md`](../docs/PR_REVIEW_WORKFLOW.md).

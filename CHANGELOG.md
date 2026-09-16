@@ -214,6 +214,12 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Test suite grew to 703 tests across 16 files** with three
+  cross-cutting nets for the multi-backend work: a runner × backend
+  matrix, a default-profile back-compat snapshot table captured from
+  `main` (intentional deltas listed explicitly), and hardening
+  regressions. `docs/TESTING_GUIDE.md` and `tests/README.md` now describe
+  the real suite.
 - **Harness: Deep Work Plan skill bumped to v2.17.0 + AI Diff Reviewer
   addon wired (Flow B).** Vendored `deepworkplan` via
   `npx skills update deepworkplan` (lockfile hash refresh). New addon

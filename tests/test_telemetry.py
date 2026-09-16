@@ -213,6 +213,18 @@ class WiringTests(unittest.TestCase):
         body2 = reviewer.render_tracking_body_done(head_sha="abcdef1234", review_url="u", inline_attached=1, inline_dropped=0, severity="info", blocked=False, block_reason="ok", provider="anthropic")
         self.assertNotIn("**Usage:**", body2)
 
+    def test_tracking_body_usage_variants(self) -> None:
+        """Unavailable / CLI-reported / estimated lines all render verbatim
+        at the end of the body and never add a `$` when nothing is known."""
+        kw = dict(head_sha="abcdef1234", review_url="u", inline_attached=0, inline_dropped=0, severity="none", blocked=False, block_reason="ok", provider="grok")
+        unavailable = reviewer.format_usage_line(None, model="m", wall_clock_ms=33000)
+        self.assertEqual(unavailable, "**Usage:** not reported by this provider · 33s")
+        self.assertTrue(reviewer.render_tracking_body_done(usage_line=unavailable, **kw).rstrip().endswith(unavailable))
+        est = reviewer.UsageTelemetry(input_tokens=1000, output_tokens=100, source=reviewer.USAGE_SOURCE_ESTIMATED, cost_usd=0.0123, turns=2)
+        line = reviewer.format_usage_line(est, model="m", wall_clock_ms=0)
+        self.assertIn("(indicative)", line); self.assertIn("2 turns", line); self.assertNotIn("$0.00", line)
+        self.assertTrue(reviewer.render_tracking_body_done(usage_line=line, **kw).rstrip().endswith(line))
+
     def test_iar_output_reflects_real_tokens(self) -> None:
         import os, tempfile
         tel = reviewer.RunTelemetry(start_time_monotonic=0.0)

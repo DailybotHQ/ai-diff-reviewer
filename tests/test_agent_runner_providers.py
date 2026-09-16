@@ -1421,3 +1421,66 @@ class GrokInvocationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DefaultProfileBackCompatSnapshotTests(unittest.TestCase):
+    """Default-profile argv/env for the three pre-existing CLI runners,
+    captured from `main` before the multi-backend work (2026-09-16) and
+    stored as literals. Documented, intentional deltas are listed per
+    runner; anything else is a back-compat regression."""
+
+    # Captured on `main` with model="" and no extra args. Prompt/system text
+    # arguments are elided as <TEXT> (their content is covered elsewhere).
+    MAIN_SNAPSHOT: dict[str, dict[str, Any]] = {
+        "claude-code": {
+            "argv": ["claude", "-p", "--append-system-prompt", "<TEXT>", "--output-format",
+                     "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
+            "env": {"ANTHROPIC_API_KEY": "sk-test-KEY"},
+            "stdin": True,
+        },
+        "cursor": {
+            "argv": ["cursor-agent", "-p", "--output-format", "text", "--force", "--trust"],
+            "env": {"CURSOR_API_KEY": "sk-test-KEY"},
+            "stdin": True,
+        },
+        "codex": {
+            "argv": ["codex", "exec", "--skip-git-repo-check",
+                     "--dangerously-bypass-approvals-and-sandbox", "-"],
+            "env": {"OPENAI_API_KEY": "sk-test-KEY", "CODEX_HOME": "<TMP>"},
+            "stdin": True,
+        },
+    }
+    # Intentional deltas vs main (task → change). Keep this list honest.
+    DOCUMENTED_DELTAS: dict[str, list[str]] = {
+        "codex": ["--json"],  # Task 10: JSONL events on stdout carry usage telemetry
+    }
+
+    def _capture(self, pid: str) -> dict[str, Any]:
+        captured: dict[str, Any] = {}
+
+        def fake_run(argv, **kw):
+            captured["argv"] = list(argv); captured["env"] = dict(kw["env"]); captured["stdin"] = kw.get("input") is not None
+            fp = Path(kw["cwd"]) / reviewer.FINDINGS_JSON_REL
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(json.dumps({"summary": "s", "findings": []}))
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+        keep = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME")}
+        with mock.patch.dict(os.environ, keep, clear=True), tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+            provider = reviewer.build_provider(pid, api_key="sk-test-KEY", model="")
+            provider.run_review(pr_context=_make_pr_context(), review_instructions="R", workspace=Path(tmp), output_dir=Path(tmp))
+        argv = ["<TEXT>" if len(x) >= 200 else x for x in captured["argv"]]
+        env = {k: ("<TMP>" if k == "CODEX_HOME" else v) for k, v in captured["env"].items() if k not in ("PATH", "HOME")}
+        return {"argv": argv, "env": env, "stdin": captured["stdin"]}
+
+    def test_default_profiles_match_main_snapshot_modulo_documented_deltas(self) -> None:
+        for pid, expected in self.MAIN_SNAPSHOT.items():
+            with self.subTest(runner=pid):
+                got = self._capture(pid)
+                argv = [x for x in got["argv"] if x not in self.DOCUMENTED_DELTAS.get(pid, [])]
+                self.assertEqual(argv, expected["argv"])
+                for flag in self.DOCUMENTED_DELTAS.get(pid, []):
+                    self.assertIn(flag, got["argv"], f"{pid}: documented delta {flag} missing")
+                self.assertEqual(got["env"], expected["env"])
+                self.assertEqual(got["stdin"], expected["stdin"])
+

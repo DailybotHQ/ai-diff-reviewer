@@ -137,6 +137,7 @@ class EnvVarBuildProviderIntegration(unittest.TestCase):
                 ("claude-code", reviewer.ClaudeCodeProvider),
                 ("cursor", reviewer.CursorProvider),
                 ("codex", reviewer.CodexProvider),
+                ("grok", reviewer.GrokProvider),
             ]:
                 p = reviewer.build_provider(
                     provider_id, api_key="k", model="m"
@@ -173,6 +174,18 @@ class EnvVarBuildProviderIntegration(unittest.TestCase):
         finally:
             os.environ.pop("AIPRR_AGENT_EXTRA_ARGS", None)
 
+    def test_in_process_providers_ignore_agent_env_vars(self) -> None:
+        os.environ["AIPRR_AGENT_EXTRA_ARGS"] = "should-be-ignored"
+        try:
+            for pid, klass in (("anthropic", reviewer.AnthropicProvider), ("openai", reviewer.OpenAIProvider)):
+                p = reviewer.build_provider(pid, api_key="k", model="m")
+                self.assertIsInstance(p, klass)
+                self.assertFalse(hasattr(p, "extra_args"), pid)
+                self.assertIsInstance(p, reviewer.Provider)
+                self.assertNotIsInstance(p, reviewer.AgentRunnerProvider)
+        finally:
+            os.environ.pop("AIPRR_AGENT_EXTRA_ARGS", None)
+
 
 class ProviderIndependenceInvariant(unittest.TestCase):
     """The submission path (gh_submit_review_with_fallback consumers)
@@ -199,6 +212,23 @@ class ProviderIndependenceInvariant(unittest.TestCase):
         finally:
             os.environ.clear()
             os.environ.update(prev)
+
+
+class UsageNeverLeaksIntoGitHubPayload(unittest.TestCase):
+    """Telemetry rides on ReviewResult.usage but the GitHub-shape encoders
+    are unchanged by it — identical findings serialise identically whether
+    usage is present or not (provider-independence extended to v2.1.0)."""
+
+    def test_same_payload_with_and_without_usage(self) -> None:
+        f = [reviewer.Finding(path="a.py", line=3, body="b", severity="warning")]
+        with_usage = reviewer.ReviewResult(summary="s", findings=list(f))
+        with_usage.usage = reviewer.UsageTelemetry(input_tokens=10, output_tokens=2, source=reviewer.USAGE_SOURCE_CLI)
+        without = reviewer.ReviewResult(summary="s", findings=list(f))
+        self.assertEqual(
+            reviewer.findings_to_gh_inline_comments(with_usage.findings),
+            reviewer.findings_to_gh_inline_comments(without.findings),
+        )
+        self.assertEqual(with_usage.summary, without.summary)
 
 
 class ConstantWiringTests(unittest.TestCase):
