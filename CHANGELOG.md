@@ -92,6 +92,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`agent-max-turns` is enforced natively on `grok`** (`--max-turns`);
   other CLIs get an accurate per-provider warning (Claude Code:
   `--max-budget-usd` via `agent-extra-args`). Junk values abort.
+- **Diff shaping — `ignore-paths` input + built-in generated-file
+  exclusions.** Lockfiles, minified bundles, source maps, vendored trees
+  (`node_modules/`, `vendor/`, `dist/`) and test snapshots are removed
+  from the diff the model receives — **before** the 200k-char cap, so a
+  huge lockfile can no longer crowd out real changes — and listed back
+  under an "Omitted from the diff" block with line counts (the
+  changed-files list flags them too). `ignore-paths` adds gitignore-style
+  globs (`**` spans directories; a bare pattern matches basenames). Saves
+  tokens on every turn. IAR's range hash and new-lines % still use raw
+  git output and are unaffected.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

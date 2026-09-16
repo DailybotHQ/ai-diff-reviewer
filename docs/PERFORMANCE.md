@@ -86,6 +86,7 @@ Every tool the model can call has a hard cap so a bad `read_file(path, limit=999
 | [`MAX_FILE_READ_LINES`](../scripts/reviewer.py) | `2_000` | Hard ceiling on `read_file` line count per call. |
 | [`MAX_SEARCH_RESULTS`](../scripts/reviewer.py) | `200` | Hard ceiling on `grep` / `glob` result counts. |
 | [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `200_000` | Cap on the seed diff embedded in the first user message. Larger diffs are truncated with a pointer to `read_file`. |
+| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the `MAX_DIFF_CHARS` cap and reported to the model as omitted. Extended by `ignore-paths`. |
 
 These caps mean the model **cannot** flood its own context. A huge file or an over-broad grep degrades gracefully into a truncation message — the review continues, the offending call retries with a narrower scope.
 
@@ -124,6 +125,7 @@ The runtime handles this by **retrying summary-only** on 422 — the review stil
 Common to both provider families:
 
 - **`max-inline-comments`** (default `10`) — hard cap on inline comments; the review summary is not capped. Applied uniformly across both families.
+- **`ignore-paths`** (+ built-in exclusions) — lockfiles, minified bundles, source maps, vendored trees and snapshots are dropped from the diff the model receives and listed back as omitted. On lockfile-heavy PRs this is the single largest token saving, and it applies to every turn of the chat-completions loop.
 - **`model`** — swapping model tiers has the biggest effect on both cost and quality. Pick a profile in one word — `model: balanced | economy | deep` — resolved per runner × backend from the dated matrix in [`PROVIDERS.md` § "Cost-efficient defaults matrix"](PROVIDERS.md#cost-efficient-defaults-matrix-verified-2026-09-16--ids-and-prices-move-re-check-when-bumping); empty keeps the built-in default; an explicit id passes through.
 
 Chat-completions family only:

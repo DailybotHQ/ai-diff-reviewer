@@ -136,6 +136,10 @@ Workflow:
 
 This approach beats generic templates for teams whose stack is unusual, whose architecture is unconventional, or who have accumulated a lot of tacit "we learned this the hard way" knowledge worth encoding in the prompt.
 
+## What the model receives besides your prompt
+
+The first user message is built by the runtime, not by your prompt: PR title, author, branches, stats, description, the changed-files list and the diff (`git diff origin/<base>...HEAD`, capped at 200k characters). Since v2.1.0 the diff is **shaped** before it is sent: sections for lockfiles, minified bundles, source maps, vendored trees and test snapshots (plus anything you add via `ignore-paths`) are removed and listed back under `## Omitted from the diff (generated / lock files)` with their line counts, and the changed-files list flags them. The model is told not to report on omitted files. Write your prompt with that in mind — it never needs to say "ignore lockfiles".
+
 ## How the prompt is applied per provider family
 
 The two provider families use your prompt slightly differently. Both accept the same file — the difference is where it lands in the model's context.

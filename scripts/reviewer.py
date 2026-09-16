@@ -39,6 +39,9 @@ Environment (set by the composite action's `env:` block; see action.yml):
     AIPRR_PROMPT_EXTENSION_FILE  Path to a markdown file APPENDED to the
                             base prompt. Layer overrides without copying
                             the whole default.
+    AIPRR_IGNORE_PATHS       Extra globs (comma/newline separated) whose diff
+                            sections are omitted from the prompt, on top of
+                            the built-in lock/minified/generated list.
     AIPRR_AUTHOR_ASSOCIATION Comma-separated whitelist of accepted
                              GitHub `pull_request.author_association`
                              values. Default `OWNER,MEMBER,COLLABORATOR`
@@ -476,6 +479,56 @@ MAX_SEARCH_RESULTS: int = 200
 # Cap on the seed diff embedded in the first user message (characters). Larger
 # diffs are truncated with a pointer to the read_file tool.
 MAX_DIFF_CHARS: int = 200_000
+
+# Diff shaping (v2.1.0+): lock / minified / generated / vendored files carry
+# near-zero review value but dominate PR diffs and are re-sent on every
+# turn. Sections matching these globs are removed from the diff body before
+# truncation and listed back to the model as "omitted" with their line
+# counts, so it knows what it did not see. Consumers extend the list with
+# the `ignore-paths` input (additive; comma- or newline-separated globs).
+# Globs are matched against repo-relative POSIX paths: `**` spans
+# directories, `*` / `?` do not cross `/`, and a pattern without `/` matches
+# the basename anywhere. IAR's own git inputs (range hash, new-lines %) are
+# computed from unshaped git output and are unaffected.
+IGNORE_PATHS_ENV: str = "AIPRR_IGNORE_PATHS"
+DEFAULT_IGNORE_PATH_GLOBS: tuple[str, ...] = (
+    # JavaScript / TypeScript lockfiles
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+    # Python
+    "poetry.lock",
+    "Pipfile.lock",
+    "uv.lock",
+    "pdm.lock",
+    # Other ecosystems
+    "Cargo.lock",
+    "go.sum",
+    "composer.lock",
+    "Gemfile.lock",
+    "mix.lock",
+    "pubspec.lock",
+    "packages.lock.json",
+    "Podfile.lock",
+    "gradle.lockfile",
+    "flake.lock",
+    # Minified / bundled / maps
+    "*.min.js",
+    "*.min.css",
+    "*.map",
+    # Vendored trees and build output that landed in a diff
+    "**/node_modules/**",
+    "**/vendor/**",
+    "**/dist/**",
+    # Test snapshots
+    "**/__snapshots__/**",
+    "*.snap",
+)
+DIFF_SECTION_HEADER_PREFIX: str = "diff --git "
+OMITTED_FILES_HEADING: str = "## Omitted from the diff (generated / lock files)"
 # Substrings (case-insensitive) that mark a tool-arg key as sensitive in
 # logs. The model isn't expected to ever pass these — but if a prompt
 # injection tricked it into echoing env vars, we don't want them in the
@@ -5535,12 +5588,134 @@ class PRContext:
     body: str
     changed_files: list[dict[str, Any]] = field(default_factory=list)
     diff: str = ""
+    # (path, line_count) for diff sections removed by `shape_diff`.
+    omitted_files: list[tuple[str, int]] = field(default_factory=list)
+
+
+def parse_ignore_paths(raw: str) -> tuple[str, ...]:
+    """`ignore-paths` input → globs (comma/newline separated, trimmed,
+    de-duplicated, order preserved). Empty → `()`. Additive to the built-in
+    `DEFAULT_IGNORE_PATH_GLOBS` (the caller concatenates)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for chunk in re.split(r"[,\n]", raw or ""):
+        glob: str = chunk.strip().strip("\"'")
+        if not glob or glob.startswith("#") or glob in seen:
+            continue
+        seen.add(glob)
+        out.append(glob)
+    return tuple(out)
+
+
+def _glob_to_regex(glob: str) -> "re.Pattern[str]":
+    """Compile a gitignore-style glob against repo-relative POSIX paths.
+
+    `**` spans path separators (`**/` also matches "no directory"); `*` and
+    `?` never cross `/`; a pattern without `/` is anchored to the basename
+    anywhere in the tree; a leading `/` anchors to the repo root.
+    """
+    pattern: str = glob.strip()
+    anchored: bool = pattern.startswith("/")
+    pattern = pattern.lstrip("/")
+    if not anchored and "/" not in pattern.rstrip("/"):
+        pattern = "**/" + pattern
+    regex: list[str] = []
+    i: int = 0
+    while i < len(pattern):
+        ch: str = pattern[i]
+        if ch == "*":
+            if pattern.startswith("**/", i):
+                regex.append("(?:.*/)?")
+                i += 3
+                continue
+            if pattern.startswith("**", i):
+                regex.append(".*")
+                i += 2
+                continue
+            regex.append("[^/]*")
+        elif ch == "?":
+            regex.append("[^/]")
+        else:
+            regex.append(re.escape(ch))
+        i += 1
+    body: str = "".join(regex)
+    if pattern.endswith("/"):
+        body += ".*"
+    return re.compile("^" + body + "$")
+
+
+def path_is_ignored(path: str, globs: tuple[str, ...]) -> bool:
+    """True when `path` (repo-relative, POSIX) matches any glob."""
+    normalized: str = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    for glob in globs:
+        if _glob_to_regex(glob).match(normalized):
+            return True
+    return False
+
+
+def _diff_section_path(header_line: str) -> str:
+    """Extract the post-image path from a `diff --git a/x b/y` header."""
+    rest: str = header_line[len(DIFF_SECTION_HEADER_PREFIX):].strip()
+    marker: str = " b/"
+    idx: int = rest.rfind(marker)
+    if idx == -1:
+        return rest
+    return rest[idx + len(marker):].strip().strip('"')
+
+
+def shape_diff(
+    diff_text: str, globs: tuple[str, ...]
+) -> tuple[str, list[tuple[str, int]]]:
+    """Drop per-file sections whose path matches `globs`.
+
+    Returns `(kept_diff, omitted)` where `omitted` is an ordered list of
+    `(path, line_count)` for every removed section (line count of the whole
+    section, header included). Sections are split on `diff --git` headers;
+    text before the first header (normally empty) is kept verbatim.
+    """
+    if not diff_text or not globs:
+        return diff_text, []
+    lines: list[str] = diff_text.splitlines(keepends=True)
+    kept: list[str] = []
+    omitted: list[tuple[str, int]] = []
+    section: list[str] = []
+    section_path: str | None = None
+
+    def flush() -> None:
+        if not section:
+            return
+        if section_path is not None and path_is_ignored(section_path, globs):
+            omitted.append((section_path, len(section)))
+        else:
+            kept.extend(section)
+
+    for line in lines:
+        if line.startswith(DIFF_SECTION_HEADER_PREFIX):
+            flush()
+            section = [line]
+            section_path = _diff_section_path(line.rstrip("\n"))
+        else:
+            section.append(line)
+    flush()
+    return "".join(kept), omitted
 
 
 def fetch_pr_context(
-    *, repo: str, pr_number: int, base_ref: str, token: str
+    *,
+    repo: str,
+    pr_number: int,
+    base_ref: str,
+    token: str,
+    ignore_globs: tuple[str, ...] = DEFAULT_IGNORE_PATH_GLOBS,
 ) -> PRContext:
-    """Pull PR metadata + diff once and shape it into a single dataclass."""
+    """Pull PR metadata + diff once and shape it into a single dataclass.
+
+    `ignore_globs` sections are removed from the diff body (and reported in
+    `PRContext.omitted_files`) BEFORE the `MAX_DIFF_CHARS` truncation, so
+    lockfiles never crowd real changes out of the window.
+    """
     owner, name = repo.split("/", 1)
     pr: dict[str, Any] = gh_request(
         "GET", f"/repos/{owner}/{name}/pulls/{pr_number}", token=token
@@ -5580,7 +5755,14 @@ def fetch_pr_context(
             "checkout likely needs `fetch-depth: 0`. Proceeding with whatever "
             "diff git produced."
         )
-    diff_text: str = diff_proc.stdout
+    diff_text, omitted_files = shape_diff(diff_proc.stdout, ignore_globs)
+    if omitted_files:
+        log(
+            "Diff shaping: omitted "
+            f"{len(omitted_files)} file(s) / "
+            f"{sum(n for _, n in omitted_files)} diff line(s) "
+            f"(generated / lock globs); kept {len(diff_text)} chars."
+        )
     if len(diff_text) > MAX_DIFF_CHARS:
         diff_text = (
             diff_text[:MAX_DIFF_CHARS]
@@ -5604,10 +5786,12 @@ def fetch_pr_context(
                 "status": f.get("status", ""),
                 "additions": f.get("additions", 0),
                 "deletions": f.get("deletions", 0),
+                "omitted": path_is_ignored(f.get("filename", ""), ignore_globs),
             }
             for f in files_resp
         ],
         diff=diff_text,
+        omitted_files=omitted_files,
     )
 
 
@@ -5626,8 +5810,27 @@ def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str
     """
     files_block: str = "\n".join(
         f"- {f['path']} ({f['status']}) +{f['additions']}/-{f['deletions']}"
+        + (
+            " — omitted from the diff below (generated / lock file)"
+            if f.get("omitted")
+            else ""
+        )
         for f in ctx.changed_files
     )
+    omitted_block: str = ""
+    if ctx.omitted_files:
+        listing: str = "\n".join(
+            f"- `{path}` ({count} diff lines)"
+            for path, count in ctx.omitted_files
+        )
+        omitted_block = (
+            f"{OMITTED_FILES_HEADING}\n\n"
+            "These files changed in the PR but their diff sections were not "
+            "included (lockfiles, minified bundles, source maps, vendored or "
+            "generated content). Do not report on them and do not guess their "
+            "contents; mention one only if a kept change clearly depends on "
+            "it.\n\n" + listing + "\n\n"
+        )
     body_block: str = ctx.body.strip() or "(no body)"
     if for_agent_runner:
         closing: str = (
@@ -5660,7 +5863,8 @@ def render_user_prompt(ctx: PRContext, *, for_agent_runner: bool = False) -> str
         f"## Description\n\n{body_block}\n\n"
         f"## Changed Files\n\n{files_block or '(none)'}\n\n"
         f"## Full Diff\n\n```diff\n{ctx.diff}\n```\n\n"
-        "---\n\n"
+        + omitted_block
+        + "---\n\n"
         + closing
     )
 
@@ -8053,8 +8257,17 @@ def main() -> int:
         max_inline_comments=effective_max_inline_comments
     )
     try:
+        ignore_globs: tuple[str, ...] = DEFAULT_IGNORE_PATH_GLOBS + tuple(
+            g
+            for g in parse_ignore_paths(os.environ.get(IGNORE_PATHS_ENV, ""))
+            if g not in DEFAULT_IGNORE_PATH_GLOBS
+        )
         pr_ctx: PRContext = fetch_pr_context(
-            repo=repo, pr_number=pr_number, base_ref=base_ref, token=gh_token
+            repo=repo,
+            pr_number=pr_number,
+            base_ref=base_ref,
+            token=gh_token,
+            ignore_globs=ignore_globs,
         )
         log(
             f"PR loaded: +{pr_ctx.additions}/-{pr_ctx.deletions} across "

@@ -24,6 +24,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -2421,6 +2422,176 @@ class AuthorAssociationGatePermissionTests(unittest.TestCase):
             repo_visibility="private",
         )
         self.assertTrue(d.should_run)
+
+
+# ---------------------------------------------------------------------------
+# Diff shaping: ignore-paths globs + built-in exclusions (v2.1.0+)
+# ---------------------------------------------------------------------------
+
+_SYNTH_DIFF = (
+    "diff --git a/src/app.py b/src/app.py\n"
+    "--- a/src/app.py\n+++ b/src/app.py\n@@ -1 +1,2 @@\n x = 1\n+y = 2\n"
+    "diff --git a/package-lock.json b/package-lock.json\n"
+    "--- a/package-lock.json\n+++ b/package-lock.json\n@@ -1 +1 @@\n-a\n+b\n"
+    "diff --git a/web/static/app.min.js b/web/static/app.min.js\n"
+    "--- a/web/static/app.min.js\n+++ b/web/static/app.min.js\n@@ -1 +1 @@\n-m\n+n\n"
+    "diff --git a/old/name.py b/new/name.py\n"
+    "similarity index 90%\nrename from old/name.py\nrename to new/name.py\n"
+    "diff --git a/src/lockfile_parser.py b/src/lockfile_parser.py\n"
+    "--- a/src/lockfile_parser.py\n+++ b/src/lockfile_parser.py\n@@ -1 +1 @@\n-p\n+q\n"
+    "diff --git a/img/logo.png b/img/logo.png\n"
+    "Binary files a/img/logo.png and b/img/logo.png differ\n"
+)
+
+
+class ParseIgnorePathsTests(unittest.TestCase):
+    def test_comma_newline_whitespace_dedupe(self) -> None:
+        got = reviewer.parse_ignore_paths(" docs/api/**, **/*.generated.ts\n\n docs/api/** ,'quoted/*' ,# comment\n")
+        self.assertEqual(got, ("docs/api/**", "**/*.generated.ts", "quoted/*"))
+
+    def test_empty(self) -> None:
+        self.assertEqual(reviewer.parse_ignore_paths(""), ())
+        self.assertEqual(reviewer.parse_ignore_paths(None), ())  # type: ignore[arg-type]
+
+
+class PathIsIgnoredTests(unittest.TestCase):
+    G = reviewer.DEFAULT_IGNORE_PATH_GLOBS
+
+    def test_builtin_matches(self) -> None:
+        for path in ("package-lock.json", "apps/web/pnpm-lock.yaml", "Cargo.lock", "a/b/c/go.sum",
+                     "web/static/app.min.js", "dist/bundle.js.map", "node_modules/x/index.js",
+                     "vendor/github.com/pkg/x.go", "dist/index.js", "tests/__snapshots__/a.snap", "tests/a.test.ts.snap"):
+            with self.subTest(path=path):
+                self.assertTrue(reviewer.path_is_ignored(path, self.G), path)
+
+    def test_builtin_non_matches(self) -> None:
+        for path in ("src/lockfile_parser.py", "src/app.py", "docs/lock.md", "src/vendor_client.py",
+                     "src/distribution.py", "package.json", "yarn.lock.md", "src/main.js", "README.md"):
+            with self.subTest(path=path):
+                self.assertFalse(reviewer.path_is_ignored(path, self.G), path)
+
+    def test_custom_glob_semantics(self) -> None:
+        self.assertTrue(reviewer.path_is_ignored("docs/api/v1/x.md", ("docs/api/**",)))
+        self.assertFalse(reviewer.path_is_ignored("docs/apix/x.md", ("docs/api/**",)))
+        self.assertTrue(reviewer.path_is_ignored("src/a/b.generated.ts", ("**/*.generated.ts",)))
+        self.assertTrue(reviewer.path_is_ignored("b.generated.ts", ("**/*.generated.ts",)))
+        self.assertFalse(reviewer.path_is_ignored("src/a/b.ts", ("*.generated.ts",)))
+        self.assertTrue(reviewer.path_is_ignored("schema.sql", ("/schema.sql",)))
+        self.assertFalse(reviewer.path_is_ignored("db/schema.sql", ("/schema.sql",)))
+        self.assertTrue(reviewer.path_is_ignored("a/x1.txt", ("a/x?.txt",)))
+        self.assertFalse(reviewer.path_is_ignored("a/x/1.txt", ("a/x?.txt",)))
+
+
+class ShapeDiffTests(unittest.TestCase):
+    def test_removes_ignored_sections_and_reports_counts(self) -> None:
+        kept, omitted = reviewer.shape_diff(_SYNTH_DIFF, reviewer.DEFAULT_IGNORE_PATH_GLOBS)
+        self.assertEqual([p for p, _ in omitted], ["package-lock.json", "web/static/app.min.js"])
+        self.assertEqual(dict(omitted)["package-lock.json"], 6)
+        self.assertIn("diff --git a/src/app.py b/src/app.py", kept)
+        self.assertIn("diff --git a/src/lockfile_parser.py", kept)
+        self.assertIn("rename to new/name.py", kept)
+        self.assertIn("Binary files a/img/logo.png", kept)
+        self.assertNotIn("package-lock.json", kept)
+        self.assertNotIn("app.min.js", kept)
+        # order of kept sections preserved
+        self.assertLess(kept.index("src/app.py"), kept.index("new/name.py"))
+
+    def test_rename_uses_post_image_path(self) -> None:
+        kept, omitted = reviewer.shape_diff(_SYNTH_DIFF, ("new/**",))
+        self.assertEqual(omitted, [("new/name.py", 4)])
+        self.assertNotIn("rename to new/name.py", kept)
+
+    def test_no_globs_or_empty_diff_is_identity(self) -> None:
+        self.assertEqual(reviewer.shape_diff(_SYNTH_DIFF, ()), (_SYNTH_DIFF, []))
+        self.assertEqual(reviewer.shape_diff("", reviewer.DEFAULT_IGNORE_PATH_GLOBS), ("", []))
+
+    def test_preamble_before_first_header_is_kept(self) -> None:
+        kept, _ = reviewer.shape_diff("warning: something\n" + _SYNTH_DIFF, ("package-lock.json",))
+        self.assertTrue(kept.startswith("warning: something\n"))
+
+
+class OmittedFilesPromptTests(unittest.TestCase):
+    def _ctx(self, **kw: Any) -> Any:
+        base = dict(title="T", author="a", head_ref="h", base_ref="main", state="open", additions=1, deletions=0, commits=1, body="", changed_files=[], diff="d")
+        base.update(kw)
+        return reviewer.PRContext(**base)
+
+    def test_block_present_only_when_omitted(self) -> None:
+        plain = reviewer.render_user_prompt(self._ctx())
+        self.assertNotIn(reviewer.OMITTED_FILES_HEADING, plain)
+        ctx = self._ctx(
+            changed_files=[{"path": "package-lock.json", "status": "modified", "additions": 1, "deletions": 1, "omitted": True},
+                           {"path": "src/app.py", "status": "modified", "additions": 1, "deletions": 0}],
+            omitted_files=[("package-lock.json", 6)],
+        )
+        for agent in (False, True):
+            text = reviewer.render_user_prompt(ctx, for_agent_runner=agent)
+            self.assertIn(reviewer.OMITTED_FILES_HEADING, text)
+            self.assertIn("`package-lock.json` (6 diff lines)", text)
+            self.assertIn("- package-lock.json (modified) +1/-1 — omitted from the diff below", text)
+            self.assertIn("- src/app.py (modified) +1/-0\n", text)
+            # the block sits between the diff and the closing instructions
+            self.assertLess(text.index("## Full Diff"), text.index(reviewer.OMITTED_FILES_HEADING))
+            self.assertLess(text.index(reviewer.OMITTED_FILES_HEADING), text.index("---\n\nReview this PR"))
+
+
+class FetchPrContextShapingTests(unittest.TestCase):
+    """fetch_pr_context shapes BEFORE truncation and annotates changed files."""
+
+    def _run(self, diff: str, globs: tuple[str, ...]) -> Any:
+        files = [{"filename": "src/app.py", "status": "modified", "additions": 1, "deletions": 0},
+                 {"filename": "package-lock.json", "status": "modified", "additions": 1, "deletions": 1}]
+        pr = {"title": "t", "user": {"login": "u"}, "head": {"ref": "h"}, "base": {"ref": "main"}, "state": "open",
+              "additions": 2, "deletions": 1, "commits": 1, "body": ""}
+        calls = iter([pr, files, []])
+        fake_proc = type("P", (), {"returncode": 0, "stdout": diff, "stderr": ""})()
+        with mock.patch.object(reviewer, "gh_request", side_effect=lambda *a, **k: next(calls)), \
+             mock.patch.object(reviewer, "run_cmd", return_value=fake_proc):
+            return reviewer.fetch_pr_context(repo="o/r", pr_number=1, base_ref="main", token="t", ignore_globs=globs)
+
+    def test_shaping_and_annotation(self) -> None:
+        ctx = self._run(_SYNTH_DIFF, reviewer.DEFAULT_IGNORE_PATH_GLOBS)
+        self.assertEqual([p for p, _ in ctx.omitted_files], ["package-lock.json", "web/static/app.min.js"])
+        self.assertNotIn("package-lock.json", ctx.diff)
+        by_path = {f["path"]: f for f in ctx.changed_files}
+        self.assertTrue(by_path["package-lock.json"]["omitted"])
+        self.assertFalse(by_path["src/app.py"]["omitted"])
+
+    def test_shaping_happens_before_truncation(self) -> None:
+        huge_lock = "diff --git a/yarn.lock b/yarn.lock\n" + ("+x\n" * (reviewer.MAX_DIFF_CHARS // 2))
+        real = "diff --git a/src/app.py b/src/app.py\n+real change\n"
+        ctx = self._run(huge_lock + real, reviewer.DEFAULT_IGNORE_PATH_GLOBS)
+        self.assertIn("+real change", ctx.diff, "the real change must survive because the lockfile was removed first")
+        self.assertNotIn("[diff truncated", ctx.diff)
+
+    def test_no_globs_keeps_everything(self) -> None:
+        ctx = self._run(_SYNTH_DIFF, ())
+        self.assertEqual(ctx.omitted_files, [])
+        self.assertIn("package-lock.json", ctx.diff)
+
+
+class IarInputsUnaffectedByShapingTests(unittest.TestCase):
+    """IAR hashes/percentages come from their own git calls, never from the
+    shaped prompt diff."""
+
+    def test_range_hash_uses_raw_git_output(self) -> None:
+        import subprocess as _sp
+        raw = _SYNTH_DIFF
+        shaped, _ = reviewer.shape_diff(raw, reviewer.DEFAULT_IGNORE_PATH_GLOBS)
+
+        def fake_run(argv: Any, **kwargs: Any) -> Any:
+            return _sp.CompletedProcess(argv, 0, stdout=fake_run.stdout, stderr="")  # type: ignore[attr-defined]
+
+        fake_run.stdout = raw  # type: ignore[attr-defined]
+        with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run) as rc:
+            h1 = reviewer.compute_generation_range_hash(base_sha="a" * 40, head_sha="b" * 40)
+        self.assertTrue(rc.called)
+        self.assertEqual(rc.call_args.args[0][:2], ["git", "diff"], "IAR hashes its own git diff, not the shaped prompt")
+        fake_run.stdout = shaped  # type: ignore[attr-defined]
+        with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run):
+            h2 = reviewer.compute_generation_range_hash(base_sha="a" * 40, head_sha="b" * 40)
+        self.assertTrue(h1 and h2)
+        self.assertNotEqual(h1, h2, "sanity: the hash depends on the raw text git returns")
 
 
 if __name__ == "__main__":

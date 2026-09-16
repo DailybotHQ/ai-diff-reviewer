@@ -167,6 +167,28 @@ Every workflow using AI Diff Reviewer sets these two.
   `prompt-file` becomes the new base and `prompt-extension-file` is
   appended to it.
 
+### `ignore-paths`
+
+- **Default:** `''` — the built-in list still applies.
+- **What it is:** extra path globs whose diff sections are omitted from
+  the review prompt, additive to the built-in exclusions: lockfiles
+  (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`,
+  `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Cargo.lock`, `go.sum`,
+  `composer.lock`, `Gemfile.lock`, `mix.lock`, `pubspec.lock`, …),
+  minified bundles and source maps (`*.min.js`, `*.min.css`, `*.map`),
+  vendored trees (`node_modules/`, `vendor/`, `dist/`) and test snapshots
+  (`__snapshots__/`, `*.snap`).
+- **Glob rules:** comma- or newline-separated; `**` spans directories,
+  `*` / `?` do not cross `/`, a pattern without `/` matches the basename
+  anywhere, a leading `/` anchors to the repo root.
+- **What the model sees:** omitted files are listed with their diff line
+  counts and flagged in the changed-files list, with an instruction not to
+  report on them. Exclusion happens **before** the diff-size cap, so a huge
+  lockfile can no longer push real changes out of the window.
+- **Why:** every omitted line is saved on every turn of the review loop.
+- **No opt-out this release:** the built-in list is deliberately minimal;
+  open an issue if a built-in glob hides something you need reviewed.
+
 ---
 
 ## Trigger gating

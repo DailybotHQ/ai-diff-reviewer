@@ -46,6 +46,11 @@ inputs:
     required: false
     default: ''
 
+  ignore-paths:
+    description: 'Extra path globs whose diff sections are OMITTED from the review prompt (comma- or newline-separated; gitignore-style: `**` spans directories, `*`/`?` do not cross `/`, a pattern without `/` matches the basename anywhere). Additive to the built-in list of lockfiles (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `poetry.lock`, `uv.lock`, `Cargo.lock`, `go.sum`, `composer.lock`, `Gemfile.lock`, …), minified bundles / source maps (`*.min.js`, `*.min.css`, `*.map`), vendored trees (`node_modules/`, `vendor/`, `dist/`) and test snapshots. Omitted files are still listed to the model with their line counts (and flagged in the changed-files list) so it knows what it did not see; the exclusion happens BEFORE the diff-size truncation so lockfiles never crowd real changes out. Saves tokens on every turn. Example: `**/*.generated.ts, docs/api/**`.'
+    required: false
+    default: ''
+
   api-base:
     description: 'Optional backend base URL — bring your own endpoint for the chosen provider (runner). Empty = the provider''s default endpoint (byte-identical to previous behaviour). Well-known values: Z.ai GLM via the Anthropic-compatible API `https://api.z.ai/api/anthropic` (for `anthropic` / `claude-code`), xAI Grok via `https://api.x.ai` (Anthropic-compatible) or `https://api.x.ai/v1` (OpenAI-compatible, for `codex` / `openai`), Azure Foundry v1 `https://<resource>.services.ai.azure.com/openai/v1` (for `codex` / `openai`; `model` is then the deployment name), Z.ai `https://api.z.ai/api/v1` (Codex Responses API) or `https://api.z.ai/api/coding/paas/v4` (`openai`). The host selects an endpoint profile (auth header style, caching, Codex wire API, Azure workarounds); unknown hosts are treated as plain protocol-compatible gateways. SECURITY: the credential in `api-key` is sent to this host — only point it at endpoints you trust. Must be an absolute `https://` URL without credentials, query or fragment (plain `http://` is accepted for localhost only). Ignored by `cursor` (subscription-only CLI). See docs/PROVIDERS.md.'
     required: false
@@ -347,6 +352,7 @@ runs:
         AIPRR_API_BASE: ${{ inputs.api-base }}
         AIPRR_PROMPT_FILE: ${{ inputs.prompt-file }}
         AIPRR_PROMPT_EXTENSION_FILE: ${{ inputs.prompt-extension-file }}
+        AIPRR_IGNORE_PATHS: ${{ inputs.ignore-paths }}
         AIPRR_AUTHOR_ASSOCIATION: ${{ inputs.author-association }}
         AIPRR_LABEL_GATE: ${{ inputs.label-gate }}
         AIPRR_TRIGGER_MODE: ${{ inputs.trigger-mode }}
