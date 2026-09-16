@@ -17,6 +17,7 @@
 | [`provider-claude-code.yml`](provider-claude-code.yml) | Use the Claude Code CLI (agent-runner) instead of the direct Anthropic API. Shows both auth modes: a metered Anthropic API key **or** a Claude Pro/Max **subscription** token (`claude setup-token` → `sk-ant-oat…`). |
 | [`provider-cursor.yml`](provider-cursor.yml) | Use the Cursor Agent CLI (agent-runner) for review. |
 | [`provider-codex.yml`](provider-codex.yml) | Use the OpenAI Codex CLI (agent-runner) for review. |
+| [`provider-anthropic-zai.yml`](provider-anthropic-zai.yml) | **Bring your own endpoint** (`api-base`, v2.1.0+): the direct Anthropic-compatible loop against Z.ai GLM (zero install, flat-rate Coding Plan). Same shape works for xAI's Anthropic-compatible endpoint. |
 | [`mcp-passthrough.yml`](mcp-passthrough.yml) | Inject a custom MCP servers config into whichever CLI provider you picked. |
 | [`trigger-always.yml`](trigger-always.yml) | Run on every push (v1.1 behaviour, explicit). |
 | [`trigger-label-once.yml`](trigger-label-once.yml) | Run exactly once per label application; toggle the label off/on to re-run. Recommended for teams that want the AI to review "when ready" and not on every push. |

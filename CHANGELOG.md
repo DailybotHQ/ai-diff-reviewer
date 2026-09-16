@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`EndpointProfile`, `resolve_endpoint_profile`, `validate_api_base`);
   the runners honour it in the follow-up entries below as they land.
   Ignored by `cursor` (subscription-only).
+- **`anthropic` runner honours `api-base`** — Anthropic-compatible
+  backends (Z.ai GLM at `https://api.z.ai/api/anthropic`, xAI at
+  `https://api.x.ai`, or any compatible gateway). URL composed as
+  `<api-base>/v1/messages`; non-Anthropic hosts receive both `x-api-key`
+  and `Authorization: Bearer`; the `cache_control` breakpoint is sent only
+  to `api.anthropic.com`; errors name the endpoint kind and host, never the
+  key. The default profile's request is byte-identical to before (locked by
+  a snapshot test). New example `examples/provider-anthropic-zai.yml`.
 
 ### Fixed
 

@@ -98,6 +98,28 @@ The Anthropic provider uses prompt caching aggressively, so a long custom prompt
 
 ---
 
+## Anthropic-compatible backends (`provider: anthropic` + `api-base`, v2.1.0+)
+
+`provider` names the **runner** (who owns the review loop); the optional `api-base` input names the **backend** (where the model lives). For the direct chat-completions runner that means any Anthropic-compatible Messages endpoint:
+
+| Backend | `api-base` | `api-key` | Models | Notes |
+|---|---|---|---|---|
+| Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | Byte-identical to previous releases: `x-api-key` auth, `cache_control` on the system prompt. |
+| Z.ai GLM (Coding Plan) | `https://api.z.ai/api/anthropic` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | Flat-rate plan ⇒ ≈ 0 marginal cost per review. Zero-install GLM path; the deepest GLM reviews use `provider: claude-code` with the same base (see below). |
+| xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.3`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
+| Any other host | `https://<gateway>` | gateway key | gateway-defined | Treated as a plain Anthropic-compatible gateway (the run logs a warning naming the host). |
+
+How the profile changes the request:
+
+- **URL:** `<api-base>/v1/messages` — a trailing slash on `api-base` is stripped; the default composes to exactly `https://api.anthropic.com/v1/messages`.
+- **Auth headers:** Anthropic gets `x-api-key` only. Other hosts get **both** `x-api-key` and `Authorization: Bearer <key>` (Z.ai documents bearer auth, xAI documents `x-api-key`; sending both is harmless and avoids a per-gateway matrix).
+- **Prompt caching:** the `cache_control` breakpoint is sent **only** to `api.anthropic.com`. Compatible gateways cache server-side automatically and may reject unknown block fields, so the runtime omits it there.
+- **Errors and logs** name the endpoint kind and host (`zai messages API (api.z.ai) HTTP 401 …`), never the key.
+
+Copy-paste workflow: [`examples/provider-anthropic-zai.yml`](../examples/provider-anthropic-zai.yml). Validation rules for `api-base` (https only, no embedded credentials) and the security note live in the README inputs table and [`SECURITY.md`](SECURITY.md).
+
+---
+
 ## Agent Runner Provider Contract (v1.1.0)
 
 Alongside the chat-completions `Provider` above, `scripts/reviewer.py` supports a second provider family: **`AgentRunnerProvider`**. Rather than owning the tool-use loop, this family shells out to a vendor's coding-agent CLI in headless mode and receives structured findings via a file-based contract. This is what powers `provider: claude-code`, `provider: cursor`, and `provider: codex`.

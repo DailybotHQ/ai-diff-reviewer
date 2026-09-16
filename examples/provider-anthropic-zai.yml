@@ -1,0 +1,55 @@
+# Direct Anthropic-compatible API against Z.ai GLM (chat-completions family,
+# v2.1.0+) — the zero-install GLM path.
+#
+# `provider: anthropic` owns the bounded tool-use loop in-process; `api-base`
+# points it at Z.ai's Anthropic-compatible endpoint, so no CLI is installed
+# and the review costs a predictable, small number of turns. Z.ai's Coding
+# Plan is flat-rate, so the marginal cost per review is ≈ 0.
+#
+# This is the *bounded / cheap* GLM path. For the deepest GLM reviews the
+# recommended runner is `provider: claude-code` with the same `api-base`
+# (see examples/provider-claude-code-glm.yml and docs/PROVIDERS.md
+# § "Z.ai GLM — recommended runner and why").
+#
+# Auth: your Z.ai Coding Plan API key (https://z.ai/manage-apikey/apikey-list),
+# stored as a repo secret. SECURITY: `api-key` is sent to the `api-base` host.
+
+name: PR review (Anthropic-compatible · Z.ai GLM)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          api-base: https://api.z.ai/api/anthropic
+          api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # GLM model ids: `glm-5.3` (balanced default for GLM backends),
+          # `glm-5.3-flash` for a cheaper/shallower smoke review.
+          model: glm-5.3
+          # Same knobs as any other provider:
+          # strictness: block-on-critical
+          # prompt-extension-file: .review/extension.md
+
+# xAI's Anthropic-compatible endpoint works the same way — swap:
+#   api-base: https://api.x.ai
+#   api-key:  ${{ secrets.XAI_API_KEY }}
+#   model:    grok-4.3
