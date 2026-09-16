@@ -98,8 +98,10 @@ Every workflow using AI Diff Reviewer sets these two.
     `model: economy` for the cheap tier — as of 2026-09-16 `gpt-5.4-mini`
     is no longer cheaper than `gpt-5.6-luna`, so pin it only if you
     specifically want that model).
-  - `grok` → `grok-4.3` (daily tier; `grok-4.6` for a deeper reasoning
-    pass; never `auto` on a metered CLI).
+  - `grok` → `grok-4.3` (built-in default and `economy`); `model: balanced`
+    or `deep` → `grok-4.6` — measured 2026-09-16: 4.3 found 0 of 4 known
+    defects through the CLI, 4.6 found 3 of 4 with no false positives at
+    ~$0.5–0.85 per review. Never `auto` on a metered CLI.
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
 
@@ -126,12 +128,17 @@ Every workflow using AI Diff Reviewer sets these two.
     (Anthropic-shaped for `anthropic` / `claude-code`, OpenAI-shaped for
     `codex` / `openai`); the run logs a warning naming the host.
 - **Rules:** absolute `https://` URL (plain `http://` only for
-  `localhost` / `127.0.0.1`), no embedded credentials, no query string or
-  fragment; a trailing slash is stripped. Invalid values abort the run
-  before any LLM or GitHub call.
+  `localhost` / `127.0.0.1` / `[::1]`), ASCII hostname only (give an
+  internationalised domain in its punycode `xn--` form), no control
+  characters, no embedded credentials, no query string or fragment; a
+  trailing slash is stripped, and a base that already ends in `/v1` is
+  joined without doubling the segment. Invalid values abort the run
+  before any LLM or GitHub call. Provider redirects (3xx) are refused so
+  the credential never follows a redirect to another host.
 - **Security:** the credential in `api-key` is sent to this host. Only
   point it at endpoints you trust; a subscription OAuth token
   (`sk-ant-oat…`) cannot be used against a non-Anthropic host.
+- **`model` is required with `api-base`** (v2.2.0+): the run aborts with the expected value instead of sending the runner's default vendor model to another backend.
 - **Ignored by:** `cursor` (subscription-only CLI; a warning is logged).
 - **See:** `docs/PROVIDERS.md` in the action repo (runner × backend matrix).
 
@@ -340,6 +347,7 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `max-inline-comments`
 
 - **Default:** `10`
+- **Agent-runner CLIs (v2.2.0+):** the effective cap for the round is stated in the output contract the CLI receives, so it prioritises by severity instead of being truncated after the fact.
 - **What it is:** Hard cap on the number of inline comments the
   reviewer can queue per run.
 - **How it works:** the model is instructed to stay well under this;
@@ -462,9 +470,12 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 ### `cursor-version`
 
-- **Default:** `''` (empty — resolves to latest stable).
-- **What it is:** Pin the Cursor Agent CLI version. Forwarded to
-  Cursor's installer via `VERSION` env var.
+- **Default:** `''` (empty — the current release).
+- **What it is:** pin the Cursor Agent CLI version (format `YYYY.MM.DD-<sha>`,
+  e.g. `2026.09.15-d2fe57e`). A pinned version installs the versioned
+  package directly from Cursor's download host; the vendor's installer
+  script ignores version hints, so this is the only way a pin takes effect.
+- **Only used when:** `provider: cursor`.
 
 ### `codex-version`
 
@@ -476,6 +487,26 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 - **Default:** `''` (latest stable).
 - **What it is:** version pin for the xAI Grok CLI, passed to the official
   installer as `bash -s <X.Y.Z>` (e.g. `1.0.30`).
+- **Only used when:** `provider: grok`.
+
+### `cursor-installer-sha256`
+
+- **Default:** `''` (unverified — the step logs the observed hash).
+- **What it is:** SHA-256 of the artefact the Cursor install step downloads:
+  the versioned package when `cursor-version` is set, otherwise the
+  installer script from `cursor.com/install` (stamped with the current
+  release, so its hash also pins a version). A mismatch fails the step
+  before anything is executed or extracted.
+- **How to pin:** run once without it, copy the `sha256:` value from the
+  step log, set it. Update it when you move the version.
+- **Only used when:** `provider: cursor`.
+
+### `grok-installer-sha256`
+
+- **Default:** `''` (unverified — the step logs the observed hash).
+- **What it is:** SHA-256 of the xAI Grok installer script
+  (`x.ai/cli/install.sh`). A mismatch fails the step before it runs. Pin
+  the binary with `grok-version`; pin the installer logic with this.
 - **Only used when:** `provider: grok`.
 
 ---
@@ -493,7 +524,7 @@ Full spec: [docs/ITERATION_AWARENESS.md](../../../docs/ITERATION_AWARENESS.md).
 with a trusted delta (the previously reviewed head is an ancestor of
 HEAD) the model sees only the changed hunks plus its own still-open
 findings, must classify each as resolved / open / regressed, and the
-runtime keeps resolution claims advisory until a maintainer resolves the thread. Still-open prior findings continue to gate the check even when no duplicate comment is posted. The
+runtime keeps resolution claims advisory until a maintainer resolves the thread (opt into `prior-findings-resolution: verified` to let corroborated fixes close their threads). Still-open prior findings continue to gate the check even when no duplicate comment is posted. The
 `iteration-escape-label` is the per-PR off switch (forces a full pass);
 rebases, force-pushes and the 30% safety net also force full mode.
 
@@ -546,6 +577,23 @@ rebases, force-pushes and the 30% safety net also force full mode.
   removing `applied-label` is "start clean, state discarded". Full spec
   in [docs/ITERATION_AWARENESS.md § 8.5](https://github.com/DailybotHQ/ai-diff-reviewer/blob/v1/docs/ITERATION_AWARENESS.md).
 
+
+### `prior-findings-resolution`
+
+- **Default:** `advisory`.
+- **Choices:** `advisory` | `verified`.
+- **What it is:** what a `resolved` verdict from the model does in incremental
+  follow-up rounds (v2.2.0+). `advisory`: reported in the summary as
+  *claimed resolved but unverified*; the thread is left to a maintainer and
+  the finding keeps counting toward the strictness gate. `verified`: the
+  runtime resolves the thread (with a reply) **only** when it can corroborate
+  the verdict — fingerprint absent from this round **and** the file changed
+  since the last reviewed head or was deleted; the finding then stops gating.
+  Unverifiable claims stay open under both policies.
+- **Recommendation:** keep `advisory` on public repos and on runners with
+  broad local access; use `verified` on trusted repos where the review loop
+  should close its own threads.
+- **See:** `docs/ITERATION_AWARENESS.md § 14.4`.
 ---
 
 ## Outputs
@@ -564,7 +612,7 @@ downstream steps to consume.
 | `iteration-round` | IAR round number within the current generation. Populated on every successful IAR pipeline run. Empty string if the pipeline crashed (caught by the try/except safety net). |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic (cap expansion + addendum flag). Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled. Empty if the IAR pipeline crashed. |
 
 ---
