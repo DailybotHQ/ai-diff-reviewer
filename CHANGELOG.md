@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dogfood: the Grok leg runs on `economy` (grok-4.3) again**, deliberately, to
+  re-test the cheaper tier on live PRs after the corpus run found nothing with
+  it; the `balanced` tier itself stays on grok-4.6 until that re-test says
+  otherwise.
 - **Agent-runner retry:** a CLI that exits 0 without writing its findings
   file gets one fresh attempt before the run is posted as an incomplete
   review; both attempts' usage is reported and the summary says
