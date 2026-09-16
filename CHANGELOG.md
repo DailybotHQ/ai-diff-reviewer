@@ -214,6 +214,14 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **Dogfood matrix covers the new runners and backends.** `self-review.yml`
+  adds legs for `grok` (`XAI_API_KEY`), `claude-code` on Z.ai GLM
+  (`ZAI_CODING_API_KEY` + `api-base`), `codex` on Azure Foundry
+  (`AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` /
+  `AZURE_OPENAI_MODEL_DAILY` repo variables) and an opt-in in-process
+  `openai` leg (`SELF_REVIEW_OPENAI_CHAT=true`); smoke legs use the
+  `economy` tier alias; `api-base` flows per leg. The four original legs
+  are unchanged and legs without secrets stay absent from the matrix.
 - **Test suite grew to 703 tests across 16 files** with three
   cross-cutting nets for the multi-backend work: a runner × backend
   matrix, a default-profile back-compat snapshot table captured from
