@@ -352,3 +352,17 @@ edited `prompts/default.md` in a PR that also touches `skills/`.
 For anything not covered here, file a bug at
 <https://github.com/DailybotHQ/ai-diff-reviewer/issues> with the
 workflow-run URL and the observed remote state.
+
+### Scenario: the release silently skipped because a commit body *quoted* the marker
+
+`auto-release.yml` skips when the head commit **message** (subject + body)
+contains `[skip release]`. A squash merge concatenates every PR commit body
+into the merge commit, so a task commit that merely *mentions* the marker in
+prose ("rides the existing `[skip release]` sync commit") suppresses the
+release of the whole PR — this happened with PR #51 (`bb7deec`): the run
+reported `skipped`, no tag, no CHANGELOG stamp, no vendored-skill refresh.
+
+Recovery: merge one more conventional commit to `main` (a `feat:` or `fix:`
+subject decides the bump; the squash **subject** is what the bump derivation
+reads, `git log --format=%s`). Prevention: never write the literal marker in a
+commit body unless you mean it — spell it `skip-release marker` in prose.

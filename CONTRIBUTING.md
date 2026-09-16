@@ -76,3 +76,8 @@ Be kind. Assume good faith. Reviewers should treat contributors with the same ch
 ## License
 
 By contributing, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
+
+## Commit-message hygiene that affects releases
+
+- The squash merge's **subject** decides the version bump (`feat:` → minor, `fix:`/`perf:` → patch, `!`/`BREAKING CHANGE` → major); give PRs a Conventional Commits title.
+- Never write the literal `[skip release]` marker in a commit body unless you want to suppress the release — squash merges carry every commit body into the merge commit and the release job reads the whole message (see `docs/RELEASE_RECOVERY.md`).

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Release hygiene:** documented that a squash body quoting `[skip release]` suppresses the release (PR #51 shipped untagged), with the recovery and the commit-message rule (`docs/RELEASE_RECOVERY.md`, `CONTRIBUTING.md`).
+
 ### Changed
 
 - **Releases stamp the CHANGELOG.** `auto-release.yml` now turns
