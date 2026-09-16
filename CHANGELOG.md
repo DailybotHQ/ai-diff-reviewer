@@ -222,6 +222,12 @@ Full guide: [`docs/MIGRATION_v2.md`](docs/MIGRATION_v2.md).
   [`docs/TRIGGER_MODES.md`](docs/TRIGGER_MODES.md).
 
 ### Changed
+- **`setup` wizard knows runners × backends.** Q1 is now *runner* +
+  *backend* with a resolution table (`api-base`, secret name, suggested
+  `model` per pair, incl. Azure Foundry, xAI, Z.ai, self-hosted
+  gateways), recommendation shortcuts, agent-runner hardening lines
+  (`persist-credentials: false`, non-fork `if:`) emitted for every CLI
+  runner including `grok`, and per-backend console URLs for the key.
 - **`open-pr` sub-skill syncs the branch with the remote base before
   opening or refreshing a PR.** New automatic Step 1.5: fetch, merge
   `origin/<base>` into the current branch when behind, resolve conflicts
