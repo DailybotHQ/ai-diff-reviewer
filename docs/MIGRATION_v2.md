@@ -12,6 +12,10 @@ Exact pin when you want a frozen tag: `@v2.0.0` (skill frontmatter `version: "2.
 - Env-var prefix stays `AIPRR_`.
 - Repo path: `DailybotHQ/ai-diff-reviewer`.
 
+## v2.1.0 is additive
+
+Nothing to migrate: the new runners (`openai`, `grok`), the `api-base` / `ignore-paths` / `grok-version` inputs, model tier aliases, usage telemetry and incremental follow-up reviews are all opt-in or invisible defaults. An empty `api-base` keeps every existing runner byte-identical to v2.0.x.
+
 ## Platform behaviour (v2)
 
 1. **Iteration-Aware Review** runs on every CI review (default `first-pass-exhaustive`). Round 2+ of a generation may dedupe non-critical findings already seen.

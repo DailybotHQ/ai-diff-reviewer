@@ -43,7 +43,7 @@ The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised e
 - **Python 3.10+ standard library only.** No `requirements.txt`, no `pyproject.toml`, no virtualenv. Every dependency is a supply-chain question for every consumer.
 - **Composite GitHub Action** — not Docker, not Node. The runtime is whatever Python ships with `ubuntu-latest`.
 - **Single source file** for the runtime: `scripts/reviewer.py`. The simplicity is the feature.
-- **Provider abstraction** for future LLM providers; today only Anthropic ships.
+- **Runner × backend abstraction.** Six runners (`anthropic`, `openai` in-process; `claude-code`, `cursor`, `codex`, `grok` CLIs) and an `EndpointProfile` resolved from the optional `api-base` input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom). Every backend URL comes from `resolve_endpoint_profile`; empty `api-base` keeps each runner byte-identical to earlier releases.
 
 ---
 
@@ -169,6 +169,7 @@ Whenever you change runtime behaviour:
 - `docs/STRICTNESS.md` / `PROMPTS.md` / `PROVIDERS.md` → update the section that covers the area you touched.
 - `examples/` → add an example if you added an input that has a non-trivial usage pattern.
 - `skills/ai-diff-reviewer/setup/reference.md` → update if `action.yml` inputs, defaults, or descriptions changed (this file is the local companion skill's reference manual; drift breaks the "any agent can answer setup questions" promise).
+- `examples/README.md` → add a row for every new `examples/*.yml` (the index is checked by script against the files on disk).
 - `skills/**/SKILL.md` frontmatter → `description` ≤ 1,024 characters and `name` ≤ 64 (Open Agent Skills limits; `scripts/validate-frontmatter.py` enforces both in CI — hosts such as Pi warn on longer descriptions). Put trigger catalogues in the body, not the frontmatter.
 - `AGENTS.md` (this file) → update the "Critical Rules" or "DO/DON'T" sections if you change a project standard.
 
@@ -372,6 +373,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 12. Edit content in `.claude/...` or `CLAUDE.md` — both are symlinks. Edit the canonical paths under `.agents/...` and `AGENTS.md`.
 13. Spell the action name "AI-Diff-Reviewer" / "AIDR" / "AI/Diff Reviewer" / "AI PR Reviewer" (the old name) in user-facing copy — the canonical user-facing capitalisation is **"AI Diff Reviewer"**. The git repo slug is `ai-diff-reviewer` (renamed 2026-07-14; the old `ai-pr-reviewer` URL still resolves via GitHub's permanent 301 redirect), and the Marketplace listing slug is `ai-diff-reviewer` (derived from `action.yml` `name:`) — they match exactly. Rule #9 has the full rename decision log.
 14. Hand-edit `.agents/skills/ai-diff-reviewer/**` on a feature branch — that's the vendored snapshot of the released version, refreshed automatically by `auto-release.yml` Step 3.5 after each release. Work on the source-of-truth copy at `skills/ai-diff-reviewer/**` instead. Rule #10 has the two-layer dogfooding model.
+15. Build a backend URL outside `resolve_endpoint_profile()` / `EndpointProfile.base_url`, read `AIPRR_API_BASE` directly in a provider, or forward a credential to a CLI under a name it does not need — `docs/SECURITY.md § "Custom endpoints"` is the contract (`.review/extension.md` flags all three as `critical`).
 
 ### DO
 
@@ -386,6 +388,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 9. Verify the change via `.github/workflows/self-review.yml` running on the PR.
 10. Edit the canonical `AGENTS.md` / `.agents/...` paths.
 11. Use **"AI Diff Reviewer"** for product copy (Marketplace-facing), `DailybotHQ/ai-diff-reviewer` for the canonical repo slug (the old `DailybotHQ/ai-pr-reviewer` still redirects for back-compat), `ai-diff-reviewer` for the Marketplace slug (derived from `action.yml`), and `AIPRR_` for the env-var prefix (private, unchanged).
+12. Follow the runner/backend checklist when adding one (`docs/PROVIDERS.md § "Adding a runner or backend"`): endpoint profile → provider class → `DEFAULT_MODELS` + tier row → `action.yml` install step (CLI only, skip-if-present) → `cli-install-smoke` entry → `self-review.yml` leg → `examples/provider-<id>.yml` + index row → README runners table + inputs row → `setup/reference.md` + wizard Q1 table → `docs/SECURITY.md` credential lanes → CHANGELOG.
 
 ---
 

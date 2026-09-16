@@ -1,18 +1,123 @@
 # Providers — current status and how to add a new one
 
-## Status
+## Runner × backend matrix (v2.1.0+)
 
-| Provider | Status | Default model | Tracking issue |
-|---|---|---|---|
-| Anthropic | ✅ shipping in v1 | `claude-sonnet-4-6` | n/a |
-| OpenAI-compatible (`openai`) | ✅ shipping (v2.1.0) | `gpt-5.6-luna` | n/a |
-| Azure Foundry / Azure OpenAI | ✅ via `api-base` (`openai`, `codex`) | deployment name | n/a |
-| Google Gemini | 🛠 roadmap (v1.2) | tbd (`gemini-2.5-pro`?) | tbd |
-| AWS Bedrock | 🤔 considering | claude via Bedrock | tbd |
-| Self-hosted (vLLM/Ollama, any OpenAI- or Anthropic-compatible gateway) | ✅ via `api-base` (custom host) | gateway-defined | n/a |
-| xAI Grok CLI (`grok`) | ✅ shipping (v2.1.0) — agent-runner | `grok-4.3` | n/a |
+Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* (where the model lives). Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
 
-The roadmap is loose and contributor-driven. If you want a provider sooner than the order above suggests, send a PR.
+| Runner (`provider`) | Anthropic | OpenAI | Azure Foundry | xAI | Z.ai GLM | Subscription / flat-rate |
+|---|---|---|---|---|---|---|
+| `anthropic` (in-process, default) | ✅ default (`claude-sonnet-4-6`) | — | — | ✅ `api-base: https://api.x.ai` | ✅ `api-base: https://api.z.ai/api/anthropic` | — |
+| `openai` (in-process) | — | ✅ default (`gpt-5.6-luna`) | ✅ `api-base: https://<resource>.services.ai.azure.com/openai/v1`, `model` = deployment | ✅ `api-base: https://api.x.ai/v1` | ✅ `api-base: https://api.z.ai/api/coding/paas/v4` | Z.ai Coding Plan |
+| `claude-code` (CLI) | ✅ default (`claude-sonnet-4-6`) | — | — | ✅ (Anthropic-compatible `api-base`) | ✅ **recommended for GLM** (`api-base: https://api.z.ai/api/anthropic`) | Claude Pro/Max token (`sk-ant-oat…`), Z.ai Coding Plan |
+| `codex` (CLI) | — | ✅ default (`gpt-5.6-luna`) | ✅ (`config.toml` generated per run; `model` = deployment) | ⚠️ not usable with Codex ≥ 0.154 (rejects its `custom` tool) — use `grok` / `openai` | ✅ (Responses API, `api-base: https://api.z.ai/api/v1`) | — |
+| `grok` (CLI) | — | — | — | ✅ default (`grok-4.3`) | — | — |
+| `cursor` (CLI) | — | — | — | — | — | ✅ Cursor Pro (`model: auto`); no `api-base` lane |
+
+Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
+
+**Choosing in one minute**
+
+- **Cheapest, predictable, zero install:** `anthropic` (or `openai` for OpenAI-compatible models) — bounded loop, prompt caching, real usage line.
+- **Deepest review:** an agent-runner (`claude-code` first; `codex` / `grok` when that vendor is already paid for). Trusted (non-fork) PRs only.
+- **Z.ai GLM:** run it through **`claude-code`** — the CLI's Anthropic-compatible backend contract (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`) is what Z.ai documents and what works best locally; `anthropic` (in-process) is the bounded alternative. Verified offline only in this release (weekly quota exhausted during verification).
+- **xAI Grok:** `provider: grok` (agent, native `--max-turns`, web search and subagents off) or `provider: openai` + `api-base: https://api.x.ai/v1` (bounded). Both verified live.
+- **Azure Foundry:** `codex` (agent) or `openai` (bounded), `model` = deployment name. Both verified live.
+
+## Choosing a cost-efficient model
+
+Two things drive review cost: **how often it runs** and **which model it uses**.
+
+- **Frequency** is the biggest lever. Running several providers on every push is N× the reviews. Pick one provider for routine use, or gate the expensive legs (this repo's `self-review.yml` runs a cheap baseline on every `ready` PR and reserves deeper passes for high-risk changes).
+- **Model** matters most for the agent-runner CLIs (`claude-code`, `codex`, `grok`), which are autonomous agents that explore the repo and spend far more tokens than the bounded chat-completions path.
+
+### Quality is not optional for review
+
+Code review's value is catching **subtle** bugs — logic errors, race conditions, security issues. That is exactly where model capability pays off, so the cheapest model is not always the best *value*: a cheap review that misses real issues can be worse than none (false confidence). The **balanced** tier below is the quality/cost sweet spot for real reviews; **economy** is for smoke/dogfood passes and docs-only PRs; **deep** for high-risk PRs.
+
+### Pick a cost profile in one word — `model: balanced | economy | deep`
+
+Cursor `auto` proved the pattern: a one-word cost profile is what teams actually use day to day. The `model` input now accepts the same idea for every runner × backend — the runtime resolves the tier from the matrix below and logs the concrete id. Empty `model` keeps resolving to the built-in default (unchanged for existing consumers); an explicit id always passes through.
+
+### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
+
+Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free).
+
+| Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
+|---|---|---|---|---|---|
+| `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
+| `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
+| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.3` — $1.25 / $2.50 | `grok-4.3` | `grok-4.6` — $2 / $6 | 4.3 is the daily tier at a low price point; 4.6 is the reasoning tier. (Prices are the <200k-token rates; above that they double.) |
+| `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
+| `openai`, `codex` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
+| `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
+| `grok` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. |
+| `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
+| any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
+
+Built-in defaults when `model` is empty (unchanged this release): `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.3` (grok), `auto` (cursor).
+
+### Route tiers by risk (recipe)
+
+Run `economy` on every push and `deep` only when the PR is risky — the complexity label the reviewer itself applies (`complexity-labels-enabled`) or a human `deep-review` label are the natural triggers. Two jobs with distinct `applied-label`s; per-provider collapse keeps their reviews apart:
+
+```yaml
+jobs:
+  review-economy:
+    if: "!contains(github.event.pull_request.labels.*.name, 'deep-review')"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          model: economy
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          applied-label: reviewed:economy
+  review-deep:
+    if: "contains(github.event.pull_request.labels.*.name, 'deep-review') || contains(github.event.pull_request.labels.*.name, 'complexity:high')"
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          model: deep
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          applied-label: reviewed:deep
+```
+
+### Turn and budget caps per CLI
+
+- `agent-max-turns` is enforced **natively on `grok`** (`--max-turns`). Claude Code has no turn cap but exposes `--max-budget-usd <amount>` (pass it via `agent-extra-args`); Codex and Cursor expose neither — the effective bound is the 900 s invocation timeout. The run logs an accurate per-provider warning when the input cannot be forwarded.
+- `max-turns` (chat-completions only, default `30`) is a safety ceiling, not a target — the loop stops at `submit_review`, usually well under 10 turns.
+
+### Billing Claude Code against a subscription (instead of API tokens)
+
+Like Cursor's subscription model, `provider: claude-code` can bill reviews against a **Claude Pro/Max subscription** instead of metered API usage — useful if you already pay for a plan and want a flat cost.
+
+1. On a machine logged into Claude Code with your subscription, run:
+   ```bash
+   claude setup-token
+   ```
+   It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
+2. Store that token as a repository secret and pass it as the action's `api-key`:
+   ```yaml
+   - uses: DailybotHQ/ai-diff-reviewer@v2
+     with:
+       provider: claude-code
+       api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token
+       github-token: ${{ secrets.GITHUB_TOKEN }}
+   ```
+
+The action detects the `sk-ant-oat…` prefix and passes the value to Claude Code as `CLAUDE_CODE_OAUTH_TOKEN` (subscription auth); a normal `sk-ant-api…` key is passed as `ANTHROPIC_API_KEY` (metered) as before. No new input — the same `api-key` accepts either.
+
+> **Security:** a subscription OAuth token grants broader account access than a scoped API key. It lives in the CLI subprocess env like any provider credential, so the [agent-runner exfiltration controls](SECURITY.md) apply with extra force — use it only with `persist-credentials: false` and on **trusted (non-fork) PRs**, never with `pull_request_target`.
+>
+> **Codex has no clean equivalent:** its ChatGPT-subscription auth (`codex login`) is an interactive OAuth flow whose `auth.json` tokens rotate, and using a ChatGPT plan for CI automation likely violates OpenAI's terms. Keep `provider: codex` on an API key (`gpt-5.6-luna` / `gpt-5.4-mini` are already cheap).
+
+---
 
 ## Why an abstraction at all?
 
@@ -24,7 +129,7 @@ The action is fundamentally a tool-use loop. Every modern instruct-tuned model h
 - **Response shape** — `stop_reason` vs `finish_reason`; tool calls embedded in `content` vs separate `tool_calls`.
 - **Streaming and retries** — different status codes, different error envelopes, different rate-limit headers.
 
-Rather than abstract the messaging upward (which would force every code path to handle the lowest common denominator), the `Provider` interface makes each implementation translate **at the boundary**: we keep the in-memory representation in Anthropic's shape (because it's currently the only provider), and a future OpenAI provider would translate Anthropic-shape messages into OpenAI requests on the way out, and OpenAI responses back into Anthropic-shape `content` blocks on the way in.
+Rather than abstract the messaging upward (which would force every code path to handle the lowest common denominator), the `Provider` interface makes each implementation translate **at the boundary**: we keep the in-memory representation in Anthropic's shape (the first provider, and the one the tool loop was designed around), and `OpenAIProvider` translates Anthropic-shape messages into chat-completions requests on the way out and responses back into Anthropic-shape `content` blocks on the way in (v2.1.0).
 
 ## What a provider has to satisfy
 
@@ -56,7 +161,7 @@ The return value must look like an Anthropic `Messages.create` response — mini
 
 Then register the implementation in `build_provider()` and add a default model in `DEFAULT_MODELS`. That's it.
 
-## Specific gotchas per planned provider
+## Per-provider translation notes and roadmap
 
 ### OpenAI / Azure / OpenAI-compatible — shipped as `provider: openai`
 
@@ -82,23 +187,23 @@ See § "OpenAI-compatible backends" below for the consumer-facing matrix.
 
 ### Self-hosted (vLLM, Ollama, llama.cpp)
 
-- Most expose an OpenAI-compatible chat-completions endpoint. If yours does, the OpenAI provider should work with `api-key: <whatever>` and a custom base URL. Plan to add an `api-base` input alongside the OpenAI provider for this case.
+- Most expose an OpenAI-compatible chat-completions endpoint: `provider: openai` + `api-base: https://<your-gateway>/v1` (plain `http://` is accepted for `localhost` / `127.0.0.1` / `[::1]` so a local dev gateway works). Anthropic-shaped gateways use `provider: anthropic` + `api-base`. Custom hosts log a WARNING naming where the key goes.
 
-## Testing a new provider
+## Adding a runner or backend
 
-The bar for merging a provider implementation:
+The bar for merging, in the order the code is wired:
 
-1. **Compile-check passes** (`python3 -m py_compile scripts/reviewer.py`).
-2. **Manual smoke test on a real PR** — open a PR in a fork or sandbox repo, run the action with `provider: <new>`, paste the resulting tracking comment + review URL in the PR description.
-3. **No regressions on existing providers** — run the smoke test on a second PR with `provider: anthropic` to confirm nothing leaked.
-4. **`docs/PROVIDERS.md` updated** with the new entry, default model, and any provider-specific inputs.
-5. **`CHANGELOG.md` updated** under `[Unreleased]`.
-
-We don't ask for a unit-test framework yet — the testing surface is the integration with the provider's API, which is hard to mock honestly. Smoke tests on real PRs are the bar.
+1. **Backend first, when it is only a new host.** Add the host suffix to `ENDPOINT_HOST_SUFFIXES` → a kind → `_profile_for_kind` quirks (auth style, cache flags, Codex wire API) → a tier row in `MODEL_TIER_TABLE` + `INDICATIVE_PRICES_USD_PER_MTOK` (dated). Every URL must still come from `resolve_endpoint_profile`; never build one in a provider.
+2. **Runner (new `provider` id).** A `Provider` (in-process; translate at the boundary) or an `AgentRunnerProvider` (CLI; file-based findings contract, `_build_cli_env`, private temp files 0600, usage parser bounded by `CLI_STDOUT_SCAN_MAX_BYTES`), `PROVIDER_ID`, `DEFAULT_MODELS`, `PROVIDER_DEFAULT_ENDPOINT_KIND` / `PROVIDER_DEFAULT_API_BASE`, `build_provider` dispatch, `register_secret` for any new credential.
+3. **`action.yml`.** An install step guarded by `if: inputs.provider == '<id>'` (skips when the binary is already on `PATH`), an optional `<cli>-version` input, the `provider` description; `validate_action.py` must stay green.
+4. **CI.** `cli-install-smoke` matrix entry; a `self-review.yml` leg keyed on secret presence.
+5. **Tests.** Default-profile snapshot (`DefaultProfileBackCompatSnapshotTests`), matrix row (`RunnerBackendMatrixTests`), credential lane (`HardeningRegressionTests`), telemetry fixture.
+6. **Docs.** This matrix + the cost matrix, `README.md` (runners table, inputs row, roadmap), `examples/provider-<id>.yml` + `examples/README.md` row, `skills/ai-diff-reviewer/setup/reference.md` and the wizard's Q1 table, `docs/SECURITY.md` credential lanes, `CHANGELOG.md`.
+7. **Live evidence.** One real PR reviewed with the new runner/backend, tracking comment + usage line pasted in the PR description (the `/prompt-test` skill has the procedure).
 
 ## Cost considerations
 
-The Anthropic provider uses prompt caching aggressively, so a long custom prompt only pays full token cost on the first turn. When adding new providers, replicate this where possible: it cuts the cost of a typical review by ~5x once the cache warms.
+The Anthropic provider caches both the system prompt and the diff-bearing first user message, so turns 2..N read them at ~10 % of the input price; OpenAI/xAI cache long prefixes automatically. Every review ends with a `**Usage:**` line in the tracking comment (see "Usage telemetry per provider") — read it before tuning anything.
 
 ---
 
@@ -424,97 +529,3 @@ This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses t
 > **Scoping keys on the marker, not the author.** A useful side effect: `collapse-previous` no longer collapses unrelated `github-actions[bot]` comments (a coverage bot, a labeler) — only comments carrying this action's provider marker are ever minimized.
 
 ---
-
-## Choosing a cost-efficient model
-
-Two things drive review cost: **how often it runs** and **which model it uses**.
-
-- **Frequency** is the biggest lever. Running several providers on every push is N× the reviews. Pick one provider for routine use, or gate the expensive legs (this repo's `self-review.yml` runs a cheap baseline on every `ready` PR and reserves deeper passes for high-risk changes).
-- **Model** matters most for the agent-runner CLIs (`claude-code`, `codex`, `grok`), which are autonomous agents that explore the repo and spend far more tokens than the bounded chat-completions path.
-
-### Quality is not optional for review
-
-Code review's value is catching **subtle** bugs — logic errors, race conditions, security issues. That is exactly where model capability pays off, so the cheapest model is not always the best *value*: a cheap review that misses real issues can be worse than none (false confidence). The **balanced** tier below is the quality/cost sweet spot for real reviews; **economy** is for smoke/dogfood passes and docs-only PRs; **deep** for high-risk PRs.
-
-### Pick a cost profile in one word — `model: balanced | economy | deep`
-
-Cursor `auto` proved the pattern: a one-word cost profile is what teams actually use day to day. The `model` input now accepts the same idea for every runner × backend — the runtime resolves the tier from the matrix below and logs the concrete id. Empty `model` keeps resolving to the built-in default (unchanged for existing consumers); an explicit id always passes through.
-
-### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
-
-Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free).
-
-| Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
-|---|---|---|---|---|---|
-| `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
-| `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
-| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.3` — $1.25 / $2.50 | `grok-4.3` | `grok-4.6` — $2 / $6 | 4.3 is the daily tier at a low price point; 4.6 is the reasoning tier. (Prices are the <200k-token rates; above that they double.) |
-| `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
-| `openai`, `codex` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
-| `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
-| `grok` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. |
-| `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
-| any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
-
-Built-in defaults when `model` is empty (unchanged this release): `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.3` (grok), `auto` (cursor).
-
-### Route tiers by risk (recipe)
-
-Run `economy` on every push and `deep` only when the PR is risky — the complexity label the reviewer itself applies (`complexity-labels-enabled`) or a human `deep-review` label are the natural triggers. Two jobs with distinct `applied-label`s; per-provider collapse keeps their reviews apart:
-
-```yaml
-jobs:
-  review-economy:
-    if: "!contains(github.event.pull_request.labels.*.name, 'deep-review')"
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: DailybotHQ/ai-diff-reviewer@v2
-        with:
-          provider: anthropic
-          model: economy
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          applied-label: reviewed:economy
-  review-deep:
-    if: "contains(github.event.pull_request.labels.*.name, 'deep-review') || contains(github.event.pull_request.labels.*.name, 'complexity:high')"
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: DailybotHQ/ai-diff-reviewer@v2
-        with:
-          provider: anthropic
-          model: deep
-          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          applied-label: reviewed:deep
-```
-
-### Turn and budget caps per CLI
-
-- `agent-max-turns` is enforced **natively on `grok`** (`--max-turns`). Claude Code has no turn cap but exposes `--max-budget-usd <amount>` (pass it via `agent-extra-args`); Codex and Cursor expose neither — the effective bound is the 900 s invocation timeout. The run logs an accurate per-provider warning when the input cannot be forwarded.
-- `max-turns` (chat-completions only, default `30`) is a safety ceiling, not a target — the loop stops at `submit_review`, usually well under 10 turns.
-
-### Billing Claude Code against a subscription (instead of API tokens)
-
-Like Cursor's subscription model, `provider: claude-code` can bill reviews against a **Claude Pro/Max subscription** instead of metered API usage — useful if you already pay for a plan and want a flat cost.
-
-1. On a machine logged into Claude Code with your subscription, run:
-   ```bash
-   claude setup-token
-   ```
-   It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
-2. Store that token as a repository secret and pass it as the action's `api-key`:
-   ```yaml
-   - uses: DailybotHQ/ai-diff-reviewer@v2
-     with:
-       provider: claude-code
-       api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token
-       github-token: ${{ secrets.GITHUB_TOKEN }}
-   ```
-
-The action detects the `sk-ant-oat…` prefix and passes the value to Claude Code as `CLAUDE_CODE_OAUTH_TOKEN` (subscription auth); a normal `sk-ant-api…` key is passed as `ANTHROPIC_API_KEY` (metered) as before. No new input — the same `api-key` accepts either.
-
-> **Security:** a subscription OAuth token grants broader account access than a scoped API key. It lives in the CLI subprocess env like any provider credential, so the [agent-runner exfiltration controls](SECURITY.md) apply with extra force — use it only with `persist-credentials: false` and on **trusted (non-fork) PRs**, never with `pull_request_target`.
->
-> **Codex has no clean equivalent:** its ChatGPT-subscription auth (`codex login`) is an interactive OAuth flow whose `auth.json` tokens rotate, and using a ChatGPT plan for CI automation likely violates OpenAI's terms. Keep `provider: codex` on an API key (`gpt-5.6-luna` / `gpt-5.4-mini` are already cheap).

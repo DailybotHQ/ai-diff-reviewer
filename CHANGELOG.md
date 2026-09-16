@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Theme — runners × backends, measured cost, better follow-ups.** The action keeps its six-line quick start, but every runner can now be pointed at another backend with one input (`api-base`), two runners are new (`openai` in-process, `grok` CLI), cost is controlled by a one-word tier and shaped diffs and reported per review, follow-up rounds review only what changed and close the threads you fixed, the default prompt is v3.1, and the whole new surface went through a security pass. No input was renamed or removed; empty `api-base` is byte-identical to v2.0.x. Details per area below; the local skill pack gains base-sync on `open-pr`, a runner × backend setup wizard, and descriptions that fit every host's limit.
+
 ### Added
 
 - **`api-base` input — bring your own endpoint (the backend contract).**

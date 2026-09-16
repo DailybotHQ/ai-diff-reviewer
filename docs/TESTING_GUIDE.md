@@ -16,7 +16,7 @@ The [`.github/workflows/code_check.yml`](../.github/workflows/code_check.yml) wo
 |---|---|---|
 | `compile-check` | `python3 -m py_compile scripts/reviewer.py` | Catches syntax errors and undefined imports before we ship. |
 | `validate-action-yml` | Runs `python3 .github/scripts/validate_action.py`, which asserts the required top-level keys, that every input the runtime reads is declared, and that every declared output matches a runtime writer. | Catches accidental key renames or forgotten `write_action_output()` calls in PRs. |
-| `unit-tests` | `python3 -m unittest discover -s tests` — the full 242-test stdlib suite (four files: `test_reviewer.py`, `test_agent_runner_providers.py`, `test_findings_parser.py`, `test_end_to_end_roundtrip.py`). | Catches regressions in pure logic without any network dependency. |
+| `unit-tests` | `python3 -m unittest discover -s tests` — the full 703-test stdlib suite (16 files, listed below). | Catches regressions in pure logic without any network dependency. |
 | `cli-install-smoke` (matrix: `claude-code`, `cursor`, `codex`, `grok`) | Runs each agent-runner CLI's install command on a fresh runner, verifies `--version`, then imports `scripts/reviewer.py` and asserts `build_provider(PROVIDER_ID)` returns an `AgentRunnerProvider` instance. | Catches upstream CLI-installer breakage before it hits consumers. |
 | `actionlint` | Downloads the official actionlint binary and runs it across `.github/workflows/`. | Catches malformed workflow YAML, unsafe `${{ }}` interpolations in `run:` blocks, and shellcheck issues in inline shell. |
 

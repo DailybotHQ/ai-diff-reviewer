@@ -54,7 +54,7 @@ If you increase `max-turns` or `MAX_CONVERSATION_TURNS_RETAINED`, **estimate the
 
 ## The agent-runner budget
 
-For the `claude-code`, `cursor`, and `codex` providers, we don't run a turn loop — the vendor CLI does. Our cost surface is:
+For the `claude-code`, `cursor`, `codex`, and `grok` providers, we don't run a turn loop — the vendor CLI does. Our cost surface is:
 
 | Knob | Effect |
 |---|---|
@@ -75,8 +75,10 @@ The `runs.steps` in `action.yml` install the selected agent-runner CLI **only wh
 | `claude-code` | `npm install -g @anthropic-ai/claude-code@<claude-code-version>` | 10–25 s |
 | `cursor` | `curl -fsSL https://cursor.com/install | bash -s -- --version <cursor-version>` | 20–40 s |
 | `codex` | `npm install -g @openai/codex@<codex-version>` | 10–25 s |
+| `grok` | `curl -fsSL https://x.ai/cli/install.sh \| bash -s <grok-version>` (static binary) | 5–15 s |
+| `openai` | (none — in-process) | 0 s |
 
-Selecting `provider: anthropic` (the default) pays the classic zero-install cost this repo is optimised for. Selecting a CLI provider pays a one-off install per workflow job; there is no cross-job cache (GitHub-hosted runners don't share filesystem state), so pinning a specific `<cli>-version` matters mostly for reproducibility, not for warm-boot speed.
+Selecting `provider: anthropic` or `provider: openai` pays the classic zero-install cost this repo is optimised for; the `cursor` / `grok` steps also skip the installer when the CLI is already on `PATH`. Selecting a CLI provider pays a one-off install per workflow job; there is no cross-job cache (GitHub-hosted runners don't share filesystem state), so pinning a specific `<cli>-version` matters mostly for reproducibility, not for warm-boot speed.
 
 ## Tool-loop guardrails
 

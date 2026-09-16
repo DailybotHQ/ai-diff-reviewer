@@ -33,14 +33,20 @@ Pick the provider family you want to exercise:
 
 ```bash
 # Chat-completions family (this action drives the tool-use loop)
-export AIPRR_PROVIDER=anthropic
+export AIPRR_PROVIDER=anthropic             # or `openai`
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY
+# Optional backend (v2.1.0+): point the runner at another host — the key
+# above must be that backend's key. Empty = the runner's own vendor.
+# export AIPRR_API_BASE=https://api.z.ai/api/anthropic   # Z.ai GLM
+# export AIPRR_API_BASE=https://api.x.ai/v1              # xAI via `openai`
 
 # --- or ---
 
 # Agent-runner family (vendor CLI drives the loop; needs the CLI installed locally)
-export AIPRR_PROVIDER=claude-code           # or `cursor`, or `codex`
+export AIPRR_PROVIDER=claude-code           # or `cursor`, `codex`, `grok`
 export AIPRR_API_KEY=$ANTHROPIC_API_KEY     # or the vendor's key for the chosen CLI
+# export AIPRR_API_BASE=...                 # claude-code → Z.ai / xAI; codex → Azure Foundry
+# export AIPRR_GROK_VERSION=1.2.3           # CI-only: pins the installer; locally install `grok` yourself
 ```
 
 Then set the shared context:
@@ -66,6 +72,7 @@ export AIPRR_LABEL_GATE=ready
 export AIPRR_APPLIED_LABEL=pr-reviewed
 export AIPRR_PROMPT_FILE=$PWD/prompts/default.md
 export AIPRR_MAX_INLINE_COMMENTS=10
+export AIPRR_IGNORE_PATHS='**/fixtures/**,*.snap'   # extra globs on top of the built-in lockfile/minified/vendored exclusions
 ```
 
 Chat-completions family only:
@@ -77,7 +84,7 @@ export AIPRR_MAX_TURNS=30                   # the action's own turn cap
 Agent-runner family only:
 
 ```bash
-export AIPRR_AGENT_MAX_TURNS=30             # warns today; no universal CLI cap
+export AIPRR_AGENT_MAX_TURNS=30             # enforced natively on grok; other CLIs log a per-provider warning
 export AIPRR_AGENT_EXTRA_ARGS='--verbose'   # raw vendor flags (shlex-split)
 export AIPRR_MCP_CONFIG_FILE=$PWD/mcp.json  # optional MCP passthrough
 ```

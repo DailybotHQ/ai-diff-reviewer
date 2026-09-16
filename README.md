@@ -42,7 +42,7 @@ The same [`prompts/default.md`](prompts/default.md) drives both surfaces. Pinnin
 ### As a coding-agent skill (local)
 
 - [Quick start (skill)](#quick-start-skill)
-- [The four sub-skills](#the-four-sub-skills)
+- [The five sub-skills](#the-five-sub-skills)
 - [First-run bootstrap prompt](#first-run-bootstrap-prompt)
 - [Sub-skill: run a local review](#sub-skill-run-a-local-review-default-flow)
 - [Sub-skill: `setup` — install the Action via wizard](#sub-skill-setup--install-the-action-via-wizard)
@@ -224,7 +224,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `complexity-labels-enabled` | | `false` | When `true`, the reviewer applies a `complexity:low/medium/high` label to the PR. |
 | `complexity-label-prefix` | | `complexity:` | Prefix for the complexity label (change to match your labeling conventions). |
 | `max-turns` | | `30` | Hard cap on the agentic-loop iterations (chat-completions providers only). |
-| `agent-max-turns` | | `''` | Reserved budget hint for CLI providers. Currently logs a warning instead of enforcing a cap because the shipping CLIs do not expose one stable cross-provider turn-count flag. Ignored for chat-completions providers. |
+| `agent-max-turns` | | `''` | Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns`); Claude Code / Codex / Cursor expose no stable turn flag, so the run logs a per-provider warning with the equivalent knob (`--max-budget-usd` via `agent-extra-args` for Claude Code) and the 900 s timeout bounds the run. Ignored for chat-completions providers. |
 | `agent-extra-args` | | `''` | Raw string appended to the CLI invocation. Parsed with `shlex.split` (never `shell=True`). Escape hatch for provider-specific flags. |
 | `mcp-config-file` | | `''` | Path inside the consumer checkout to an MCP servers JSON config. If set, the file is copied to the CLI's expected location before invocation. |
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
@@ -306,6 +306,8 @@ Every review spends tokens, so the action layers three controls, evaluated **che
 - Pick a cost profile in one word: `model: balanced` (quality/cost sweet spot — the recommendation), `model: economy` (smoke passes, docs-only PRs) or `model: deep` (high-risk PRs). The runtime resolves the concrete id per runner × backend from the dated matrix in [docs/PROVIDERS.md § "Cost-efficient defaults matrix"](docs/PROVIDERS.md#cost-efficient-defaults-matrix-verified-2026-09-16--ids-and-prices-move-re-check-when-bumping) — modelled on Cursor `auto`, which stays the flat-rate pick on Pro. Empty `model` keeps the built-in default; an explicit id always passes through. `agent-max-turns` is enforced natively on `grok`.
 - `max-inline-comments` (default `10`) caps how many comments a run can post; `max-turns` (default `30`, chat-completions only) is a safety ceiling on the agentic loop.
 - **Fewer tokens per turn, automatically:** lockfiles, minified bundles, source maps, vendored trees and snapshots are dropped from the diff the model sees (and listed back as omitted). Add your own generated paths with `ignore-paths`.
+- **Cheaper turns after the first:** the `anthropic` runner caches both the prompt and the diff-bearing first message across turns; OpenAI/xAI cache long prefixes automatically.
+- **Know what you spent:** every tracking comment ends with a `**Usage:**` line (tokens in/out, cache hit rate, cost — vendor-reported where the CLI gives it, marked `(indicative)` when estimated) and the `iteration-tokens-used` output carries the real number; round 2+ of a PR runs in incremental mode (only what changed plus your open threads) so follow-ups cost a fraction of round 1.
 
 These compose. For a public open-source repo the safe combination is author-association (default) **+** a label gate — see the [recipe below](#public-open-source-repo-safest-defaults).
 
@@ -477,20 +479,21 @@ npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer
 
 `npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` in your repo and records source + content hash in `skills-lock.json` so teammates restore identical bytes with `npx skills experimental_install`. Bump with `npx skills update ai-diff-reviewer`.
 
-Once installed, natural-language triggers activate each of the four capabilities — no memorized commands to look up:
+Once installed, natural-language triggers activate each of the five capabilities — no memorized commands to look up:
 
 ```text
 "Review my current branch"                         → local review
 "Set up AI Diff Reviewer for this repo"            → install the CI Action
 "Generate a .review/extension.md for this repo"    → tailor the reviewer to your stack
-"Open the PR for this branch"                      → author the PR from the diff
+"Open the PR for this branch"                      → sync with main, then author the PR from the diff
+"What did the CI review say?"                      → read the CI review on the PR and walk through the findings
 ```
 
-Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`.
+Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`, `/ai-diff-reviewer-apply-review`.
 
-## The four sub-skills
+## The five sub-skills
 
-The skill is a **router** — it inspects your intent from natural language and routes to one of four capabilities, all sharing the same shipped prompt as the review base:
+The skill is a **router** — it inspects your intent from natural language and routes to one of five capabilities, all sharing the same shipped prompt as the review base:
 
 | Sub-skill | Purpose | Fires when you say… |
 |---|---|---|
@@ -498,6 +501,7 @@ The skill is a **router** — it inspects your intent from natural language and 
 | **[`setup`](skills/ai-diff-reviewer/setup/SKILL.md)** | Install & configure the CI GitHub Action via a 6-question wizard. Also the reference manual for every `action.yml` input | *"Set up AI Diff Reviewer for this repo"* · *"What does `strictness` do?"* |
 | **[`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** | Bootstrap a repo-tailored `.review/extension.md` after inspecting your stack (≥ 12 Discovery tool calls) | *"Generate a `.review/extension.md` for this repo"* · *"Customize the review for our project"* |
 | **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Sync the branch with the remote base (merge, resolve conflicts, push), then author a well-documented pull request (title + body) from the diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
+| **[`apply-review`](skills/ai-diff-reviewer/apply-review/SKILL.md)** | Read the CI review posted on the branch's PR (latest marker, collapsed history filtered, per-leg attribution) and walk through each finding to apply / defer / skip with per-finding consent — never commits, never pushes | *"What did the CI review say?"* · *"Apply the AI review's fixes"* · *"Walk me through the findings"* |
 
 Together they form a **lifecycle**: `setup` installs the Action once per repo → `generate-extension` tailors the review once per repo → the default review flow catches issues before pushing on every branch → `open-pr` authors the PR that ships the change.
 

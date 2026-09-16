@@ -84,10 +84,11 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v2`.
 - **Repo path:** `DailybotHQ/ai-diff-reviewer`.
 - **Versioning:** SemVer. Default pin is the moving major `@v2` (tracks latest `v2.x.y`).
-- **Provider parity:** as of `v1.1.0` the action ships with **four** providers across two families:
-  - Chat-completions family (this action drives the tool-use loop): `anthropic`.
-  - Agent-runner family (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`.
-  Each CLI provider only installs when selected — `provider: anthropic` (the default) pays zero install cost. Adding a new chat-completions provider (OpenAI, Gemini, Azure OpenAI, self-hosted vLLM/Ollama) or a new agent-runner CLI is a one-class addition. See [PROVIDERS.md](PROVIDERS.md).
+- **Runners × backends:** as of `v2.1.0` the action ships **six runners** across two families, and an optional `api-base` input that points a runner at another backend:
+  - Chat-completions family (this action drives the tool-use loop): `anthropic`, `openai`.
+  - Agent-runner family (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`, `grok`.
+  - Backends via `api-base`: Anthropic, OpenAI, Azure Foundry, xAI, Z.ai GLM, and any Anthropic-/OpenAI-compatible gateway.
+  Each CLI installs only when selected — `provider: anthropic` (the default) and `provider: openai` pay zero install cost. Adding a runner or backend is a documented checklist. See [PROVIDERS.md](PROVIDERS.md).
 
 ### Local companion skill
 
@@ -101,11 +102,11 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 - **Stdlib-only runtime** — no install phase, no supply-chain surface beyond Python itself.
 - **Single-file implementation** — `scripts/reviewer.py` is ~4000 LOC, fully type-hinted, runnable directly without the action wrapper for local debugging.
-- **Compile-checked in CI** on every PR, plus a **242-test stdlib `unittest` suite** covering the pure logic (core reviewer helpers in `test_reviewer.py`, `.aiprr/findings.json` schema in `test_findings_parser.py`, CLI providers + subprocess-security invariants in `test_agent_runner_providers.py`, cross-family serialization in `test_end_to_end_roundtrip.py`).
+- **Compile-checked in CI** on every PR, plus a **700+-test stdlib `unittest` suite** across 16 files covering the pure logic (core runtime, `api-base` profiles and the runner × backend matrix, the OpenAI translation layer, model tiers, telemetry, the findings-file schema, CLI providers with subprocess-security invariants and a back-compat snapshot table captured from `main`, cross-family serialization, and the Iteration-Aware Review subsystem) — see [TESTING_GUIDE.md](TESTING_GUIDE.md).
 - **CLI installers smoke-tested** — a matrix job exercises each agent-runner CLI installer on a fresh runner before it reaches consumers.
 - **Prompt sync enforced** — `Skills — prompt-sync invariant` in `code_check.yml` fails any PR where the skill's `prompt.md` byte-copy has drifted from the Action's `prompts/default.md`. Local↔CI parity is a hard CI gate, not a convention.
 - **Dogfooded on both surfaces:**
-  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The direct Anthropic baseline runs on every PR/push; the CLI-provider legs run when their secret is configured. Active legs use distinct `self-reviewed:*` labels so each provider's review is separately identifiable in the PR conversation.
+  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The matrix is built from secret presence: every configured runner/backend (Anthropic, Claude Code, Cursor, Codex, Grok, Claude Code on Z.ai, Codex on Azure, opt-in `openai`) reviews each `ready` PR with a distinct `self-reviewed:*` label; legs without secrets are absent, never a misleading green.
   - **Skill:** the vendored copy at `.agents/skills/ai-diff-reviewer/` is re-installed via `npx skills update` after every release, so a broken install flow fails the release itself.
 
 ## Current major + roadmap (not a commitment)
@@ -118,7 +119,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 Upcoming work — no commitment on ordering; ships on the **v2.x** line unless flagged as a new major:
 
-- **Raw chat-completions providers** (`openai`, `gemini`, `bedrock`) — for teams who want those models without installing the corresponding vendor CLI. Bedrock is pending a stdlib-only SigV4 design discussion.
+- **More raw chat-completions providers** (`gemini`, `bedrock`) — `openai` shipped in v2.1.0 (and covers Azure Foundry / xAI / Z.ai through `api-base`). Bedrock is pending a stdlib-only SigV4 design discussion.
 - **Community-curated prompt library** at `prompts/community/<stack>.md` — Rails, Django, Next.js, Go services, etc. Curated extension files consumers can reference from `prompt-extension-file:`.
 - **`.aiprr/findings.json` schema extensions** — optional `suggestions` field for line-range code snippets, backwards-compatible via forward-compat parser.
 - **More local sub-skills** as the pattern proves out — likely candidates: a `triage` sub-skill for filing follow-up issues from remaining findings, a `changelog` sub-skill for authoring `CHANGELOG.md` entries in the same shape as the commits.
