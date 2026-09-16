@@ -17,7 +17,7 @@ Two inputs decide a review: **`provider`** picks the *runner* (who drives the to
 | `grok` (CLI) | — | — | — | ✅ default (`grok-4.3`) | — | — |
 | `cursor` (CLI) | — | — | — | — | — | ✅ Cursor Pro (`model: auto`); no `api-base` lane |
 
-Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
+`model` is **required** whenever `api-base` is set (v2.2.0+): a runner's built-in default names its own vendor's model, so the run aborts with the expected value (deployment name, `glm-5.3`, `grok-4.6`, the gateway's id) instead of sending the wrong model. Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
 
 **Choosing in one minute**
 

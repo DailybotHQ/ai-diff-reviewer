@@ -211,19 +211,46 @@ class InvokeCliAgentTests(unittest.TestCase):
                 )
             self.assertIn("exited with code 1", str(ctx.exception))
 
-    def test_missing_findings_after_success_raises_from_parser(self) -> None:
+    def test_missing_findings_after_success_degrades_to_summary_only(self) -> None:
+        """v2.2.0: exit 0 without a findings file → an explicit summary-only
+        review (the agent ended without producing the contract output),
+        never a failed run and never a silent 'no findings'."""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
-            # Exit 0 but no findings file written.
             argv = ["python3", "-c", "pass"]
-            with self.assertRaises(FileNotFoundError):
-                reviewer._invoke_cli_agent(
-                    argv=argv,
-                    workspace=tmp,
-                    findings_path=tmp / ".aiprr" / "findings.json",
-                    env={**os.environ},
-                    cli_name="TestCLI",
+            with mock.patch.object(reviewer, "log") as fake_log:
+                res = reviewer._invoke_cli_agent(
+                    argv=argv, workspace=tmp, findings_path=tmp / ".aiprr" / "findings.json",
+                    env={**os.environ}, cli_name="TestCLI",
                 )
+            self.assertEqual(res.findings, [])
+            self.assertIn("without writing its findings file", res.summary)
+            self.assertIn("incomplete review", res.summary)
+            self.assertTrue(any("WARNING" in str(c.args[0]) and "did not write" in str(c.args[0]) for c in fake_log.call_args_list))
+
+    def test_nonzero_exit_with_findings_file_is_a_partial_review(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            _write_findings(tmp, {"summary": "s", "findings": [{"path": "a.py", "line": 1, "body": "b", "severity": "info"}]})
+            argv = ["python3", "-c", "import sys; sys.exit(3)"]
+            with mock.patch.object(reviewer, "log") as fake_log:
+                res = reviewer._invoke_cli_agent(
+                    argv=argv, workspace=tmp, findings_path=tmp / ".aiprr" / "findings.json",
+                    env={**os.environ}, cli_name="TestCLI",
+                )
+            self.assertEqual(len(res.findings), 1)
+            self.assertIn("Partial review: TestCLI exited with code 3", res.summary)
+            self.assertTrue(any("partial review" in str(c.args[0]) for c in fake_log.call_args_list))
+
+    def test_nonzero_exit_without_findings_file_still_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with self.assertRaises(RuntimeError) as ctx:
+                reviewer._invoke_cli_agent(
+                    argv=["python3", "-c", "import sys; sys.exit(2)"], workspace=tmp,
+                    findings_path=tmp / ".aiprr" / "findings.json", env={**os.environ}, cli_name="TestCLI",
+                )
+            self.assertIn("exited with code 2", str(ctx.exception))
 
 
 class CliBinaryConstantsTests(unittest.TestCase):

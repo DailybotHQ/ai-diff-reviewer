@@ -164,7 +164,7 @@ Any tool argument whose key contains one of those substrings is replaced with `*
 **What the action does NOT do:**
 - Log the API key under any circumstances (audit: `grep -n 'log(f' scripts/reviewer.py | grep -iE 'api_key|token|authorization'` is empty). Backend logs name the endpoint kind and host only.
 - Write secrets to the runner's filesystem, except Codex's private per-run `auth.json` described above.
-- Send secrets to any endpoint other than the one they authenticate against — the host is fixed by `resolve_endpoint_profile` from `api-base`, and unrecognised hosts are called out with a WARNING.
+- Send secrets to any endpoint other than the one they authenticate against — the host is fixed by `resolve_endpoint_profile` from `api-base`, and unrecognised hosts are called out with a WARNING. The one legacy hook, `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` set in the workflow env, is forwarded to a CLI only on the runner's default profile, only after `validate_api_base` (a malformed value aborts) and with a WARNING naming the host; when `api-base` is set the inherited value is dropped (v2.2.0+).
 
 ### Recommendations for consumers
 

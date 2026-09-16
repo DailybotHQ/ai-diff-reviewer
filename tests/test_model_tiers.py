@@ -164,3 +164,27 @@ class AgentMaxTurnsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelRequiredOnCustomBackendTests(unittest.TestCase):
+    """P-01: an empty `model` on a non-default api-base must fail fast for
+    every runner except cursor (which has no api-base lane); default
+    profiles keep resolving to the built-in default."""
+
+    def test_empty_model_on_custom_base_raises_with_hint(self) -> None:
+        cases = [("claude-code", "https://api.z.ai/api/anthropic", "glm"), ("codex", "https://r.services.ai.azure.com/openai/v1", "deployment"),
+                 ("anthropic", "https://api.x.ai", "Grok"), ("openai", "https://gw.example.com/v1", "gateway")]
+        with mock.patch.object(reviewer, "log"):
+            for pid, base, hint in cases:
+                prof = reviewer.resolve_endpoint_profile(base, pid)
+                with self.assertRaises(ValueError) as ctx:
+                    reviewer.resolve_model(pid, prof, "")
+                self.assertIn(hint, str(ctx.exception), pid)
+
+    def test_default_profile_and_cursor_unchanged(self) -> None:
+        with mock.patch.object(reviewer, "log"):
+            for pid in ("anthropic", "openai", "claude-code", "codex", "grok", "cursor"):
+                self.assertEqual(reviewer.resolve_model(pid, reviewer.resolve_endpoint_profile("", pid), ""), reviewer.DEFAULT_MODELS[pid])
+            self.assertEqual(reviewer.resolve_model("cursor", reviewer.resolve_endpoint_profile("https://gw.example.com/v1", "cursor"), ""), "auto")
+            self.assertEqual(reviewer.resolve_model("claude-code", reviewer.resolve_endpoint_profile("https://api.z.ai/api/anthropic", "claude-code"), "balanced"), "glm-5.3")
+

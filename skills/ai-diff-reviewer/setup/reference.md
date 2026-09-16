@@ -138,6 +138,7 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Security:** the credential in `api-key` is sent to this host. Only
   point it at endpoints you trust; a subscription OAuth token
   (`sk-ant-oat…`) cannot be used against a non-Anthropic host.
+- **`model` is required with `api-base`** (v2.2.0+): the run aborts with the expected value instead of sending the runner's default vendor model to another backend.
 - **Ignored by:** `cursor` (subscription-only CLI; a warning is logged).
 - **See:** `docs/PROVIDERS.md` in the action repo (runner × backend matrix).
 
@@ -346,6 +347,7 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `max-inline-comments`
 
 - **Default:** `10`
+- **Agent-runner CLIs (v2.2.0+):** the effective cap for the round is stated in the output contract the CLI receives, so it prioritises by severity instead of being truncated after the fact.
 - **What it is:** Hard cap on the number of inline comments the
   reviewer can queue per run.
 - **How it works:** the model is instructed to stay well under this;

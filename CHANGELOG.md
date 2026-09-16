@@ -40,6 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Empty `model` on a custom `api-base` now fails fast** with the expected
+  value (deployment name / `glm-5.3` / `grok-4.6` / gateway id) instead of
+  silently sending the runner's default vendor model to another backend
+  (`resolve_model` ran before the providers' guards, which were unreachable).
+- **Inherited `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL`** from the workflow
+  env are validated (`validate_api_base`) and logged with a WARNING before a
+  CLI receives them on a default profile, and dropped when `api-base` is set.
+- **Agent-runner CLIs no longer lose a review on exit:** a non-zero exit
+  with a written findings file posts a partial review (footer + WARNING);
+  exit 0 without a findings file posts an explicit summary-only "incomplete
+  review" instead of failing the run (observed live with the Grok CLI).
+- **Agent-runner output contract** states the effective inline cap and shows
+  an escaped suggestion-block example; the prompt's tool-substitution note
+  now covers `post_inline_comment` / `submit_review` (prompt v3.1.1); the
+  incremental delta's truncation notice carries the read-the-rest hint.
 - **`cursor-version` now takes effect.** The vendor's installer script
   ignores version hints, so the pin was silently a no-op; a pinned version
   now installs the versioned package directly from Cursor's download host

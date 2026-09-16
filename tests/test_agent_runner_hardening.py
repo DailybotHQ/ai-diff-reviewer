@@ -293,3 +293,50 @@ class CliEnvAllowlistTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ContractFixesTests(unittest.TestCase):
+    """Task 9 of the docs/gap-audit plan: inherited base URLs, directive
+    cap + suggestion example, tool-substitution sentence."""
+
+    def test_inherited_base_url_is_validated_and_warned_on_default_profile(self) -> None:
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://gw.example.com/v1"}), mock.patch.object(reviewer, "log") as fake_log:
+            env = reviewer._build_cli_env(extra_vars={"ANTHROPIC_API_KEY": "k"})
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://gw.example.com/v1")
+        self.assertTrue(any("WARNING" in str(c.args[0]) and "gw.example.com" in str(c.args[0]) for c in fake_log.call_args_list))
+
+    def test_inherited_base_url_invalid_aborts(self) -> None:
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "http://evil.example/v1"}), mock.patch.object(reviewer, "log"):
+            with self.assertRaises(ValueError):
+                reviewer._build_cli_env(extra_vars={"OPENAI_API_KEY": "k"})
+
+    def test_inherited_base_url_dropped_when_api_base_set(self) -> None:
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://gw.example.com/v1"}), mock.patch.object(reviewer, "log"):
+            env = reviewer._build_cli_env(extra_vars={"ANTHROPIC_AUTH_TOKEN": "k", "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic"}, allow_inherited_base_urls=False)
+            self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://api.z.ai/api/anthropic")
+            env2 = reviewer._build_cli_env(extra_vars={"CURSOR_API_KEY": "k"}, allow_inherited_base_urls=False)
+            self.assertNotIn("ANTHROPIC_BASE_URL", env2)
+
+    def test_claude_code_custom_backend_drops_inherited_base_url(self) -> None:
+        captured: dict = {}
+        def fake_run(argv, **kw):
+            captured["env"] = dict(kw["env"]); fp = Path(kw["cwd"]) / reviewer.FINDINGS_JSON_REL
+            fp.parent.mkdir(parents=True, exist_ok=True); fp.write_text(json.dumps({"summary": "s", "findings": []}))
+            return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+        prov = reviewer.build_provider("claude-code", api_key="zai-key", model="glm-5.3", api_base="https://api.z.ai/api/anthropic")
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "https://gw.example.com"}), mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
+            prov.run_review(pr_context=_make_pr_context(), review_instructions="R", workspace=Path(tmp), output_dir=Path(tmp))
+        self.assertEqual(captured["env"]["ANTHROPIC_BASE_URL"], "https://api.z.ai/api/anthropic")
+
+    def test_directive_states_cap_and_suggestion_example(self) -> None:
+        d = reviewer.write_findings_prompt_directive("RUBRIC", Path("/tmp/f.json"), max_inline_comments=7)
+        self.assertIn("At most 7 findings are posted inline this round", d)
+        self.assertIn("```suggestion", d)
+        d0 = reviewer.write_findings_prompt_directive("RUBRIC", Path("/tmp/f.json"))
+        self.assertNotIn("posted inline this round", d0)
+
+    def test_prompt_substitution_note_covers_output_tools(self) -> None:
+        prompt = (_ROOT / "prompts" / "default.md").read_text(encoding="utf-8")
+        self.assertIn("where this prompt says `post_inline_comment` or `submit_review` and your environment gives you an output contract instead", prompt)
+        self.assertEqual(prompt, (_ROOT / "skills" / "ai-diff-reviewer" / "prompt.md").read_text(encoding="utf-8"))
+

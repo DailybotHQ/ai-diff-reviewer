@@ -213,6 +213,15 @@ DEFAULT_MODELS: dict[str, str] = {
 MODEL_TIER_BALANCED: str = "balanced"
 MODEL_TIER_ECONOMY: str = "economy"
 MODEL_TIER_DEEP: str = "deep"
+# What `model` must name when `api-base` points at each kind of backend.
+MODEL_REQUIRED_HINTS: dict[str, str] = {
+    "azure": "your Azure deployment name (e.g. `gpt-5.4-mini-azure`)",
+    "zai": "a GLM id (e.g. `glm-5.3`)",
+    "xai": "a Grok id (e.g. `grok-4.6`)",
+    "anthropic": "an Anthropic model id",
+    "openai": "an OpenAI model id",
+    "custom": "the gateway's model id",
+}
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
     MODEL_TIER_ECONOMY,
@@ -1784,6 +1793,21 @@ def resolve_model(
     Logs the resolution so the effective model is always visible.
     """
     value: str = (raw_model or "").strip()
+    if not value and not profile.is_default and provider_id != "cursor":
+        # A runner's built-in default names the runner's own vendor model;
+        # sending it to another backend is silently wrong (Z.ai would get
+        # `claude-sonnet-4-6`, Azure `gpt-5.6-luna` as a deployment name).
+        expected: str = MODEL_REQUIRED_HINTS.get(
+            profile.kind, "the gateway's model id"
+        )
+        raise ValueError(
+            f"model is required when provider {provider_id!r} runs on "
+            f"api-base {profile.base_url!r} ({profile.kind}); the built-in "
+            f"default is a {PROVIDER_DEFAULT_ENDPOINT_KIND.get(provider_id, 'vendor')} "
+            f"model. Set `model` to {expected}, or to a tier alias "
+            f"(`{MODEL_TIER_BALANCED}` / `{MODEL_TIER_ECONOMY}` / "
+            f"`{MODEL_TIER_DEEP}`) where the backend has tier rows."
+        )
     if not value:
         default: str = DEFAULT_MODELS.get(provider_id, "")
         hint: str = LEGACY_DEFAULT_MODEL_HINTS.get(default, "")
@@ -2561,6 +2585,7 @@ class AgentRunnerProvider:
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         """Invoke the vendor CLI headless; return a ReviewResult."""
         raise NotImplementedError
@@ -2634,8 +2659,11 @@ _CLI_ENV_ALLOWLIST: tuple[str, ...] = (
 )
 
 
+_INHERITED_BASE_URL_VARS: tuple[str, ...] = ("ANTHROPIC_BASE_URL", "OPENAI_BASE_URL")
+
+
 def _build_cli_env(
-    *, extra_vars: dict[str, str]
+    *, extra_vars: dict[str, str], allow_inherited_base_urls: bool = True
 ) -> dict[str, str]:
     """Build a scrubbed environment for a vendor-CLI subprocess.
 
@@ -2644,12 +2672,35 @@ def _build_cli_env(
     the vendor-specific API key). Everything else — notably the
     consumer's GitHub token and any other secrets in the workflow's
     env: block — stays in the parent process.
+
+    `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` inherited from the workflow env
+    are the pre-2.1.0 bring-your-own-endpoint hook. They are forwarded only
+    on a runner's default profile (`allow_inherited_base_urls=True`), after
+    `validate_api_base` (an invalid value aborts) and with a WARNING naming
+    the host, because the credential follows them. On a custom `api-base`
+    the profile's own value wins and the inherited ones are dropped.
     """
     scrubbed: dict[str, str] = {}
     for name in _CLI_ENV_ALLOWLIST:
         val: str | None = os.environ.get(name)
-        if val is not None:
-            scrubbed[name] = val
+        if val is None:
+            continue
+        if name in _INHERITED_BASE_URL_VARS and name not in extra_vars:
+            if not allow_inherited_base_urls:
+                log(
+                    f"Ignoring inherited {name} from the workflow env: "
+                    "api-base is set and takes precedence."
+                )
+                continue
+            validated: str = validate_api_base(val)  # raises on a malformed value
+            host: str = urllib.parse.urlsplit(validated).hostname or validated
+            log(
+                f"WARNING: {name}={host!r} inherited from the workflow env "
+                "redirects the CLI (and its credential) to that host. Prefer "
+                "the `api-base` input, which is validated and logged per run."
+            )
+            val = validated
+        scrubbed[name] = val
     scrubbed.update(extra_vars)
     return scrubbed
 
@@ -2695,17 +2746,54 @@ def _invoke_cli_agent(
             f"or narrowing the PR scope."
         ) from e
 
+    partial_note: str = ""
     if result.returncode != 0:
         stderr_tail: str = (result.stderr or "")[-MAX_ERROR_BODY_CHARS:]
         stdout_tail: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
-        raise RuntimeError(
-            f"{cli_name} CLI exited with code {result.returncode}. "
-            f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
+        if not findings_path.exists():
+            raise RuntimeError(
+                f"{cli_name} CLI exited with code {result.returncode}. "
+                f"stderr tail: {stderr_tail!r}. stdout tail: {stdout_tail!r}."
+            )
+        # The agent wrote its findings before exiting non-zero (e.g. a
+        # native turn cap or a late vendor error): keep the review and say
+        # so, instead of failing the whole run (v2.2.0+).
+        log(
+            f"WARNING: {cli_name} CLI exited with code {result.returncode} "
+            f"but wrote the findings file — posting a partial review. "
+            f"stderr tail: {stderr_tail!r}."
+        )
+        partial_note = (
+            f"\n\n---\n\n_Partial review: {cli_name} exited with code "
+            f"{result.returncode}; findings recovered from the findings file._"
+        )
+    elif not findings_path.exists():
+        # Exit 0 without a findings file: the agent ended its session
+        # without producing the contract output (observed live with the
+        # Grok CLI). Post an explicit summary-only review rather than a
+        # failed run; the tracking comment and log both name the cause.
+        stdout_tail_ok: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+        log(
+            f"WARNING: {cli_name} CLI exited 0 but did not write "
+            f"{findings_path}; posting a summary-only review. "
+            f"stdout tail: {stdout_tail_ok!r}."
+        )
+        return ReviewResult(
+            summary=(
+                "## Code Review Summary\n\n"
+                f"_The {cli_name} agent finished without writing its findings "
+                "file, so this round carries no findings. This is an incomplete "
+                "review — re-run (toggle the label) or check the workflow log "
+                "for the agent's own output._"
+            ),
+            findings=[],
         )
 
     parsed: ReviewResult = parse_findings_file(
         findings_path, allow_malformed_summary_fallback=True
     )
+    if partial_note:
+        parsed.summary = (parsed.summary or "").rstrip() + partial_note
     if usage_parser is not None:
         try:
             parsed.usage = usage_parser(result.stdout or "")
@@ -2818,6 +2906,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2834,6 +2923,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
 
         mcp_dest, mcp_backup = _swap_mcp_config(
@@ -2881,7 +2971,8 @@ class ClaudeCodeProvider(AgentRunnerProvider):
                 argv += shlex.split(self.extra_args)
 
             env: dict[str, str] = _build_cli_env(
-                extra_vars=self.auth_env_vars()
+                extra_vars=self.auth_env_vars(),
+                allow_inherited_base_urls=self.profile.is_default,
             )
             if not self.profile.is_default:
                 log(
@@ -2971,6 +3062,7 @@ class CursorProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2983,6 +3075,7 @@ class CursorProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         user_prompt: str = (
             enriched_instructions
@@ -3020,7 +3113,8 @@ class CursorProvider(AgentRunnerProvider):
                 argv += shlex.split(self.extra_args)
 
             env: dict[str, str] = _build_cli_env(
-                extra_vars={"CURSOR_API_KEY": self.api_key}
+                extra_vars={"CURSOR_API_KEY": self.api_key},
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -3308,6 +3402,7 @@ class CodexProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3317,6 +3412,7 @@ class CodexProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         user_prompt: str = (
             enriched_instructions
@@ -3413,7 +3509,8 @@ class CodexProvider(AgentRunnerProvider):
                 extra_vars={
                     "OPENAI_API_KEY": self.api_key,
                     "CODEX_HOME": str(codex_home),
-                }
+                },
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -3516,6 +3613,7 @@ class GrokProvider(AgentRunnerProvider):
         workspace: Path,
         output_dir: Path,
         require_complexity_in_findings: bool = False,
+        max_inline_comments: int = 0,
     ) -> ReviewResult:
         findings_path: Path = output_dir / FINDINGS_JSON_REL
         findings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3529,6 +3627,7 @@ class GrokProvider(AgentRunnerProvider):
             findings_path,
             require_complexity=require_complexity_in_findings,
             prior_findings_expected=pr_context_is_incremental(pr_context),
+            max_inline_comments=max_inline_comments,
         )
         if self.mcp_config_file:
             log(
@@ -3551,7 +3650,8 @@ class GrokProvider(AgentRunnerProvider):
                 prompt_path=prompt_path, instructions=enriched_instructions
             )
             env: dict[str, str] = _build_cli_env(
-                extra_vars={GROK_API_KEY_ENV: self.api_key}
+                extra_vars={GROK_API_KEY_ENV: self.api_key},
+                allow_inherited_base_urls=self.profile.is_default,
             )
             return _invoke_cli_agent(
                 argv=argv,
@@ -6946,7 +7046,8 @@ def render_incremental_sections(
     if len(delta_diff) > MAX_DIFF_CHARS:
         delta_diff = (
             delta_diff[:MAX_DIFF_CHARS]
-            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters]"
+            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters — use your "
+            "file-reading tool to inspect specific changed files in full]"
         )
     unchanged_lines: list[str] = [
         f"- {f['path']} ({f['status']}) +{f['additions']}/-{f['deletions']}"
@@ -8715,9 +8816,14 @@ def write_findings_prompt_directive(
     *,
     require_complexity: bool = False,
     prior_findings_expected: bool = False,
+    max_inline_comments: int = 0,
 ) -> str:
     """Append the "write your findings to this file" directive to the
     review instructions handed to an agent-runner CLI.
+
+    `max_inline_comments` (v2.2.0+): the effective inline cap for this
+    round, stated to the agent so it prioritises instead of being truncated
+    after the fact (0 = not stated).
 
     Standardised so every CLI provider emits the same schema — the receiving
     parser (`parse_findings_file`) is a single implementation shared across
@@ -8754,7 +8860,7 @@ def write_findings_prompt_directive(
         + "    {\n"
         + '      "path": "repo-relative file path (must appear in the PR diff)",\n'
         + '      "line": 123,\n'
-        + '      "body": "markdown body of this inline comment",\n'
+        + '      "body": "markdown body of this inline comment; a short fix goes in a suggestion block, escaped for JSON: \\n\\n```suggestion\\nfixed line\\n```",\n'
         + '      "severity": "critical | warning | info",\n'
         + '      "start_line": 121,\n'
         + '      "side": "RIGHT"\n'
@@ -8781,6 +8887,13 @@ def write_findings_prompt_directive(
         + "(new code); use `LEFT` for removed code.\n"
         + "- Empty `findings` is valid — it means "
         + '"no issues found; just the summary".\n'
+        + (
+            f"- At most {max_inline_comments} findings are posted inline this "
+            "round: list the most severe first; anything beyond the cap is "
+            "kept for later rounds, not posted.\n"
+            if max_inline_comments > 0
+            else ""
+        )
         + "- Only write the file once, at the end. Do NOT stream partials.\n"
         + "- Never modify any file other than the findings file (the review "
         + "instructions above carry the triage and verification budget).\n"
@@ -9786,6 +9899,7 @@ def main() -> int:
                 workspace=workspace,
                 output_dir=workspace,
                 require_complexity_in_findings=complexity_labels_enabled,
+                max_inline_comments=effective_max_inline_comments,
             )
             # The inline cap for the agent-runner path is enforced in
             # `run_iar_post_llm` AFTER fingerprinting (single path; overflow
