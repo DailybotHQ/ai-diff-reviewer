@@ -30,9 +30,11 @@ The design philosophy mirrors the family's:
   writes anything. Only when the developer explicitly asks to *"walk
   through"* or *"apply the fixes"* does the sub-skill open source
   files, and each individual apply still requires a yes.
-- **Multi-provider aware.** This repo (and any consumer that opts
-  into the 4-leg matrix) posts up to four independent reviews per PR,
-  distinguished by `self-reviewed:<provider>` labels. The sub-skill
+- **Multi-provider aware.** This repo (and any consumer that runs a
+  matrix of legs) can post several independent reviews per PR —
+  one per configured runner/backend (`anthropic`, `claude-code`,
+  `cursor`, `codex`, `grok`, `claude-code-glm`, `codex-azure`,
+  `openai`) — distinguished by `self-reviewed:<provider>` labels. The sub-skill
   reads all live legs, attributes each finding to its leg, and
   surfaces cross-leg consensus (*"agreed by 3/3 legs → strong signal;
   called by 1/3 → could be leg-specific"*).
@@ -480,9 +482,11 @@ Prefer `sev=` from that marker when present — it is per-comment and
 exact. **Strip the whole `<!-- ai-pr-reviewer-finding: … -->` marker
 before presenting the body verbatim** (Step 4), and keep the `fp=`
 value in your working notes: it is the same fingerprint the CI runtime
-uses to de-duplicate and, in incremental follow-up rounds, to verify
-and resolve fixed threads — so a thread that is already resolved on
-GitHub is one the reviewer confirmed fixed.
+uses to de-duplicate and, in incremental follow-up rounds, to carry
+the finding forward and report whether the model still sees it. That
+report is **advisory**: the runtime does not resolve review threads on
+the model's word, so an open thread is open until a maintainer resolves
+it — even when the round-2 summary lists the finding as resolved.
 
 For reviews posted **before v2.1.0** the inline comment carries `body`
 only — `findings_to_gh_inline_comments()` did not encode severity —
@@ -659,8 +663,10 @@ when present, otherwise inferred from the highest-severity finding.>
 
 Add a **Legs** column to the findings table and a per-leg breakdown
 at the bottom. Each leg's abbreviation (`A` = anthropic, `C` =
-cursor, `CC` = claude-code, `CO` = codex) is derived from the
-`self-reviewed:*` labels; document the mapping once at the top.
+cursor, `CC` = claude-code, `CO` = codex, `G` = grok, `CCG` =
+claude-code on Z.ai GLM, `COA` = codex on Azure, `O` = openai) is
+derived from the `self-reviewed:*` labels; document the mapping once at
+the top.
 
 ```markdown
 ## Verdict (consensus across <n> legs)

@@ -126,9 +126,13 @@ Every workflow using AI Diff Reviewer sets these two.
     (Anthropic-shaped for `anthropic` / `claude-code`, OpenAI-shaped for
     `codex` / `openai`); the run logs a warning naming the host.
 - **Rules:** absolute `https://` URL (plain `http://` only for
-  `localhost` / `127.0.0.1`), no embedded credentials, no query string or
-  fragment; a trailing slash is stripped. Invalid values abort the run
-  before any LLM or GitHub call.
+  `localhost` / `127.0.0.1` / `[::1]`), ASCII hostname only (give an
+  internationalised domain in its punycode `xn--` form), no control
+  characters, no embedded credentials, no query string or fragment; a
+  trailing slash is stripped, and a base that already ends in `/v1` is
+  joined without doubling the segment. Invalid values abort the run
+  before any LLM or GitHub call. Provider redirects (3xx) are refused so
+  the credential never follows a redirect to another host.
 - **Security:** the credential in `api-key` is sent to this host. Only
   point it at endpoints you trust; a subscription OAuth token
   (`sk-ant-oat…`) cannot be used against a non-Anthropic host.
@@ -564,7 +568,7 @@ downstream steps to consume.
 | `iteration-round` | IAR round number within the current generation. Populated on every successful IAR pipeline run. Empty string if the pipeline crashed (caught by the try/except safety net). |
 | `iteration-generation` | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
-| `iteration-tokens-used` | Total tokens (input + output) this review actually consumed, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
+| `iteration-tokens-used` | Total tokens this review actually consumed — every input partition (uncached, cache-read, cache-write, each counted once) plus output —, captured from the provider — API `usage` objects (`anthropic` / `openai`), the Claude Code stream-json `result` event, Codex `--json` `turn.completed` events, or the Grok JSON document. `0` when the provider reports nothing (Cursor). The tracking comment shows the same numbers with cache ratio, turns and an indicative cost; never gate CI on the value. Empty string ONLY if the IAR pipeline crashed. |
 | `iteration-cost-vs-baseline-estimate` | Coarse cost-delta heuristic (cap expansion + addendum flag). Always `"0%"` or `"+N%"` today — silenced-finding savings are not yet modelled. Empty if the IAR pipeline crashed. |
 
 ---
