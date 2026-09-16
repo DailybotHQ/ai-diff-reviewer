@@ -112,24 +112,28 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 - **Self-healing on GitHub 422**: if the model anchors a comment outside the diff, the action retries summary-only instead of losing every other comment.
 - **Iteration-Aware Review**: dedup findings against prior rounds so the same warnings don't come back forever. Every review runs with `convergence-policy: first-pass-exhaustive` by default — exhaustive first pass (up to 3× the normal cap), dedup on subsequent rounds. Four convergence policies (`iterative`, `first-pass-exhaustive`, `round-capped`, `critical-gate`), a 30% new-lines safety net that forces an exhaustive pass when a big push arrives, and a hardcoded "criticals always surface" rail that no policy can bypass. Two escape gestures: apply the `iteration-escape-label` to bypass dedup for one run (state preserved) or remove the `applied-label` before the next review to force a full state reset (fresh generation, dedup memory wiped). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) for the full spec and [examples/iteration-aware.yml](examples/iteration-aware.yml) for tuning knobs.
 - **Incremental follow-up reviews** (v2.1.0+): on rounds 2+ the model receives the actual diff since its last review plus its own still-open findings from paginated PR threads. Resolution claims remain advisory until a maintainer resolves the thread: changing a file is not proof that its bug is fixed. Outstanding findings still contribute to the strictness gate without duplicate comments. The summary reports prior-finding status; cap and turn budgets scale with the delta. Base movement, rebases / force-pushes, incomplete history, the escape label and the 30% safety net force a full review. See [docs/ITERATION_AWARENESS.md § 14](docs/ITERATION_AWARENESS.md).
+- **Six providers, your billing** (v2.1.0+): Anthropic, OpenAI, Azure Foundry, xAI, Z.ai GLM and Cursor, each through the in-process loop or a vendor CLI — see [Providers](#providers). One-word model tiers (`balanced` / `economy` / `deep`) resolve per vendor from a dated matrix.
+- **Cost you can see** (v2.1.0+): every tracking comment ends with a `**Usage:**` line (tokens in/out, cache hit rate, turns, cost — vendor-reported where the CLI gives it, marked `(indicative)` when estimated) and `iteration-tokens-used` carries the real number. Lockfiles, minified bundles, source maps and vendored trees are dropped from the diff automatically (`ignore-paths` adds yours); the prompt and the diff are cached across turns.
+- **Hardened by default** (v2.1.0+): the key goes to exactly one configured host (custom hosts are called out in the log), vendor CLIs receive only their own credential, per-run config files are private and removed, vendor output is size-bounded, redirects are refused. See [docs/SECURITY.md](docs/SECURITY.md).
 - **Emergency-bypass label** (`skip-review-label`): opt-in short-circuit when a PR carries e.g. `skip-ai-review` — no LLM call, check stays green, audit tracking comment posted. Pair with a ruleset restricting who can apply the label. See [docs/TRIGGER_MODES.md § Emergency-bypass label](docs/TRIGGER_MODES.md) and [examples/skip-review-label.yml](examples/skip-review-label.yml).
 
 ## Providers
 
-The action ships **six LLM providers (runners)** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen backend, and the optional `api-base` input points a runner at a different backend (Azure Foundry, xAI, Z.ai, self-hosted). The in-process providers (`anthropic`, `openai`) need no CLI install; the four agent-runner CLIs are installed automatically by the action only when you select them.
+Six providers ship. Pick the **vendor** whose models and billing you want; each runs through one or more **runners**. The `provider` input names the runner — who drives the review loop: the action's own bounded in-process loop (`anthropic`, `openai`, zero install) or a vendor coding-agent CLI installed on the fly (`claude-code`, `codex`, `grok`, `cursor`). The optional `api-base` input points a runner at a vendor other than its default; `api-key` always carries the credential of the vendor you chose. Full mechanics and the dated cost matrix: [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
-| `provider` | Family | `api-key` value | Default model | Billing |
-|---|---|---|---|---|
-| `anthropic` *(default)* | chat-completions | Anthropic API key (`sk-ant-api…`) | `claude-sonnet-4-6` | metered API |
-| `openai` | chat-completions | OpenAI API key — or the key of the `api-base` backend (Azure Foundry, xAI, Z.ai) | `gpt-5.6-luna` | metered API (flat-rate on Z.ai Coding Plan) |
-| `claude-code` | agent-runner CLI | Anthropic API key **or** a `claude setup-token` token (`sk-ant-oat…`) | `claude-sonnet-4-6` | metered API **or** Claude Pro/Max subscription |
-| `cursor` | agent-runner CLI | Cursor subscription key | `auto` | Cursor subscription (unlimited on Pro) |
-| `codex` | agent-runner CLI | OpenAI API key | `gpt-5.6-luna` | metered API |
-| `grok` | agent-runner CLI | xAI API key | `grok-4.3` | metered API (xAI credits) |
+| Provider (vendor) | Runs through — `provider:` | `api-base` | Secret to store as `api-key` | Default / recommended model | Billing | Status (2026-09-16) |
+|---|---|---|---|---|---|---|
+| **Anthropic (Claude)** | `anthropic` *(default, in-process)* · `claude-code` *(CLI)* | *(default)* | `ANTHROPIC_API_KEY` — or a `claude setup-token` subscription token (`sk-ant-oat…`) with `claude-code` | `claude-sonnet-4-6` (built-in); `model: balanced` → `claude-sonnet-5` | metered API, or Claude Pro/Max subscription | ✅ since v1.0 / v1.2.1 |
+| **OpenAI** | `openai` *(in-process)* · `codex` *(CLI)* | *(default)* | `OPENAI_API_KEY` | `gpt-5.6-luna` (`balanced` and `economy`) | metered API | ✅ `codex` v1.2.1 · `openai` v2.1.0 |
+| **Azure Foundry / Azure OpenAI** | `openai` *(in-process)* · `codex` *(CLI)* | `https://<resource>.services.ai.azure.com/openai/v1` (or `https://<resource>.openai.azure.com/openai/v1`) | `AZURE_OPENAI_API_KEY` | your **deployment name** (no tier aliases on Azure) | Azure metered | ✅ v2.1.0 — both runners verified live |
+| **xAI (Grok)** | `grok` *(CLI, default vendor)* · `openai` *(in-process)* · `anthropic` *(in-process)* | *(default)* for `grok`; `https://api.x.ai/v1` for `openai`; `https://api.x.ai` for `anthropic` | `XAI_API_KEY` | `grok-4.3` (`balanced` / `economy`); `deep` → `grok-4.6` | xAI credits | ✅ v2.1.0 — `grok` and `openai` verified live; `codex` on xAI not usable (Codex ≥ 0.154 sends a tool type xAI rejects) |
+| **Z.ai GLM** | `claude-code` *(CLI — recommended)* · `anthropic` *(in-process)* · `openai` *(in-process)* · `codex` *(CLI)* | `https://api.z.ai/api/anthropic` (`claude-code`, `anthropic`) · `https://api.z.ai/api/coding/paas/v4` (`openai`) · `https://api.z.ai/api/v1` (`codex`) | `ZAI_CODING_API_KEY` | `glm-5.3` (`balanced`); `glm-5.3-flash` (`economy`) | flat-rate Coding Plan (marginal cost ≈ 0) | ✅ v2.1.0 — verified offline; first live run pending |
+| **Cursor** | `cursor` *(CLI)* | *(none — no bring-your-own endpoint)* | `CURSOR_API_KEY` | `auto` | Cursor Pro (unlimited) | ✅ v1.2.1 |
+| **Self-hosted / any compatible gateway** | `anthropic` · `claude-code` (Anthropic-shaped) · `openai` · `codex` (OpenAI-shaped) | your `https://` URL (`http://` only for `localhost`) | your gateway's key | the gateway's model id | — | ✅ v2.1.0 — treated as a custom host; the run logs where the key goes |
 
-- **`anthropic`** is the simplest and cheapest to run — no install, a bounded tool-use loop, prompt caching. Recommended for most repos.
-- **`openai`** is the same bounded, zero-install loop for OpenAI-compatible backends — OpenAI itself, or Azure Foundry / xAI / Z.ai through `api-base`.
-- **The CLI providers** hand the review to a vendor coding agent (deeper code comprehension, vendor-tuned tools) at the cost of an install step and higher token use. They run with broad local access — on public repos use them only on trusted (non-fork) PRs.
+- **In-process runners (`anthropic`, `openai`)** are the simplest and cheapest to operate: no install, a bounded tool-use loop, prompt caching, a real usage line on every review. Recommended for most repos.
+- **CLI runners (`claude-code`, `codex`, `grok`, `cursor`)** hand the review to a vendor coding agent (deeper code comprehension, vendor-tuned tools) at the cost of an install step and higher token use. They run with broad local access — on public repos use them only on trusted (non-fork) PRs.
+- **One word for the model:** `model: balanced` (recommended), `economy` (smoke passes) or `deep` (high-risk PRs) resolves to the vendor's current pick from the dated matrix; an explicit id always passes through; empty keeps the built-in default.
 
 ### Switching provider
 
@@ -182,6 +186,39 @@ The action ships **six LLM providers (runners)** in two families. Pick one with 
     model: glm-5.3          # required on a custom backend
 ```
 
+```yaml
+# Z.ai GLM in-process (bounded loop, zero install)
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: anthropic
+    api-base: https://api.z.ai/api/anthropic
+    api-key: ${{ secrets.ZAI_CODING_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: balanced         # → glm-5.3
+```
+
+```yaml
+# Azure Foundry in-process (bounded loop, zero install) — model is your deployment name
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: openai
+    api-base: https://<resource>.services.ai.azure.com/openai/v1
+    api-key: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: <your-deployment-name>
+```
+
+```yaml
+# xAI in-process (bounded loop) — same key as the Grok CLI
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: openai
+    api-base: https://api.x.ai/v1
+    api-key: ${{ secrets.XAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    model: balanced         # → grok-4.3
+```
+
 Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
@@ -230,7 +267,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
 | `cursor-version` | | `''` | Pin the Cursor Agent CLI version. Empty = latest stable. |
 | `codex-version` | | `''` | Pin the OpenAI Codex CLI version (npm semver). Empty = latest. |
-| `grok-version` | | latest | Pin the xAI Grok CLI version (`bash -s <X.Y.Z>` on the official installer). Only used when `provider: grok`. |
+| `grok-version` | | `''` | Pin the xAI Grok CLI version (`bash -s <X.Y.Z>` on the official installer). Only used when `provider: grok`. |
 | `convergence-policy` | | `first-pass-exhaustive` | Iteration-Aware Review policy. Default `first-pass-exhaustive` (exhaustive round 1 + higher cap, dedup on rounds 2+) — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, cost-neutral), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
 | `max-review-rounds` | | `0` | Hard cap for `round-capped`. `0` = unlimited. After N rounds only critical severity findings surface. Ignored by other policies. |
 | `exhaustive-first-pass-cap-multiplier` | | `3` | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Set to `1` to keep exhaustive prompting without amplification. |
@@ -463,7 +500,7 @@ The job-level `timeout-minutes: 15` is recommended — the agentic loop has its 
 
 # Locally — as a coding-agent skill
 
-The second surface: the **exact same review methodology** the CI Action runs, executed by your local coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) on the branch you're working on right now — no push required. Useful for pre-flight checks, iterating on prompt-extension rules, or getting a second opinion on a WIP branch without opening a draft PR.
+The second surface: the **exact same review methodology** the CI Action runs, executed by your local coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf, Grok CLI, Pi, OpenCode) on the branch you're working on right now — no push required. Useful for pre-flight checks, iterating on prompt-extension rules, or getting a second opinion on a WIP branch without opening a draft PR.
 
 The skill's [`prompt.md`](skills/ai-diff-reviewer/prompt.md) is a byte-identical copy of the Action's shipped [`prompts/default.md`](prompts/default.md), kept in sync by [`auto-release.yml`](.github/workflows/auto-release.yml) on every release cut. Pin the same version on both surfaces → **same methodology and severity model locally and in CI** (CI may additionally dedupe on round 2+ via Iteration-Aware Review; local reviews stay a full pass).
 
@@ -669,6 +706,9 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRO
 | OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
 | xAI Grok CLI | agent-runner | ✅ shipping (v2.1.0+) | Official `grok` CLI in headless mode. Uses `XAI_API_KEY`. Web search/subagents off by default; native `--max-turns`. |
 | OpenAI-compatible (raw API) | chat-completions | ✅ shipping (v2.1.0+) | `provider: openai` — direct chat-completions, no CLI install. Covers OpenAI, Azure Foundry, xAI and Z.ai through `api-base`. |
+| Azure Foundry / Azure OpenAI | via `api-base` | ✅ shipping (v2.1.0+) | Through `openai` (in-process) or `codex` (CLI, generated per-run `config.toml`). `model` is the deployment name. Both verified live. |
+| Z.ai GLM | via `api-base` | ✅ shipping (v2.1.0+) | Through `claude-code` (recommended, Anthropic-compatible endpoint), `anthropic`, `openai` or `codex`. Flat-rate Coding Plan. Verified offline; first live run pending. |
+| xAI (in-process) | via `api-base` | ✅ shipping (v2.1.0+) | `anthropic` or `openai` runner against xAI's Anthropic-/OpenAI-compatible endpoints, same `XAI_API_KEY` as the Grok CLI. |
 | Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |
 
@@ -677,7 +717,7 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRO
 - **`Provider`** (chat-completions family) — the action owns the tool-use loop, calling the model's API in a bounded turn count. No install step needed. Zero overhead for consumers.
 - **`AgentRunnerProvider`** (agent-runner family) — a vendor's coding-agent CLI owns the tool-use loop; we shell out in headless mode and receive findings via `.aiprr/findings.json`. Better code comprehension (vendor-tuned tools, LSP, semantic search) at the cost of a CLI install step (only when the consumer opts in — modular install; see [docs/PROVIDERS.md](docs/PROVIDERS.md)).
 
-Adding a new provider means implementing one class and registering it in `build_provider()`. Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Adding a new **vendor** is often just a host suffix and a tier row (see [docs/PROVIDERS.md § Adding a runner or backend](docs/PROVIDERS.md)); adding a new **runner** means implementing one class and registering it in `build_provider()`. Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -726,6 +766,15 @@ Yes. The default `secrets.GITHUB_TOKEN` has the right scope; just make sure the 
 
 **Can I dogfood the reviewer on its own PRs?**
 Yes — see [`.github/workflows/self-review.yml`](.github/workflows/self-review.yml) in this repo for the pattern. This repo also vendors its own skill copy at [`.agents/skills/ai-diff-reviewer/`](.agents/skills/ai-diff-reviewer/) refreshed automatically on every release — dogfooding the install flow every time we publish.
+
+**Which runner should I use for Z.ai GLM, Azure Foundry or xAI?**
+GLM: `claude-code` + `api-base: https://api.z.ai/api/anthropic` (Z.ai's first-class integration; flat-rate Coding Plan), or `anthropic` with the same base for the bounded zero-install loop. Azure Foundry: `openai` (bounded) or `codex` (agentic), `model` = your deployment name. xAI: `grok` (the agent, web search and subagents off, native turn cap) or `openai` + `api-base: https://api.x.ai/v1` (bounded). Codex on xAI is not usable today (Codex ≥ 0.154 sends a tool type xAI rejects). Details: [docs/PROVIDERS.md](docs/PROVIDERS.md).
+
+**Does the usage / cost telemetry add cost to a review?**
+No. It reads the `usage` block every API response already carries, or parses the CLI's own JSON output (Claude Code `stream-json`, Codex `--json`, Grok `--output-format json`). No extra request, no extra prompt tokens; the cost estimate is local arithmetic against a dated price table, replaced by the vendor's real figure when the CLI reports one.
+
+**Why doesn't the reviewer resolve my review threads when it says a finding is fixed?**
+Because a changed file and the model's word are not proof that a bug disappeared. Since v2.1.0 the model's `resolved` verdicts are advisory: they appear in the summary, the thread stays open until a maintainer resolves it, and an outstanding prior finding keeps counting toward the strictness gate. See [docs/ITERATION_AWARENESS.md § 14.4](docs/ITERATION_AWARENESS.md).
 
 **How do version pins between the Action and the skill line up?**
 They're intended to be identical. `uses: DailybotHQ/ai-diff-reviewer@v2.0.0` in CI + `npx skills add DailybotHQ/ai-diff-reviewer@v2.0.0 --skill ai-diff-reviewer` locally = byte-identical prompt on both surfaces. Pinning to the moving `@v2` alias on both sides also works — new patches and minor features flow to both simultaneously.
