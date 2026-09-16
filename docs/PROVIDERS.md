@@ -44,7 +44,7 @@ Cursor `auto` proved the pattern: a one-word cost profile is what teams actually
 
 ### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
 
-Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free).
+Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free). The runtime's copy of this table is dated by the constant `MODEL_TIERS_VERIFIED_ON` in `scripts/reviewer.py` (currently `2026-09-16`) — the `**Usage:**` line marks estimates as `(indicative)` for that reason; xAI prices are the <200k-token rates and double above that, so long reviews under-report.
 
 | Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
 |---|---|---|---|---|---|
@@ -524,7 +524,7 @@ To run multiple providers cleanly:
 1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
 2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.
 
-This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses this pattern: every runner/backend whose secret is configured reviews each `ready`-labelled PR with its own label — `self-reviewed:anthropic`, `self-reviewed:claude-code`, `self-reviewed:cursor`, `self-reviewed:codex`, `self-reviewed:grok`, `self-reviewed:claude-code-glm` (Z.ai via `api-base`), `self-reviewed:codex-azure` (Azure Foundry via `api-base`) and the opt-in `self-reviewed:openai`. The same runner can appear twice with different backends: a non-empty `api-base` adds a stable endpoint hash to the marker scope, isolating collapse, IAR and label-once tracking state. Default endpoints retain the historical runner marker. Give each lane a distinct applied label; different models on the same runner/endpoint still share a lane.
+This repo's own [`self-review.yml`](../.github/workflows/self-review.yml) uses this pattern: every runner/backend whose secret is configured reviews each `ready`-labelled PR with its own label — `self-reviewed:anthropic`, `self-reviewed:claude-code`, `self-reviewed:cursor`, `self-reviewed:codex`, `self-reviewed:grok`, `self-reviewed:claude-code-glm` (Z.ai via `api-base`), `self-reviewed:codex-azure` (Azure Foundry via `api-base`) and `self-reviewed:openai` (in-process, default-on whenever `OPENAI_API_KEY` exists). The same runner can appear twice with different backends: a non-empty `api-base` adds a stable endpoint hash to the marker scope, isolating collapse, IAR and label-once tracking state. Default endpoints retain the historical runner marker. Give each lane a distinct applied label; different models on the same runner/endpoint still share a lane.
 
 > **Passing multiple provider API keys** (e.g. both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` as repo secrets) is fine and does **not** cause cross-contamination: each job forwards only its own provider's key to the CLI subprocess (`_build_cli_env` scrubs everything else), and a single action invocation uses exactly one `provider` + one `api-key`. There is no "both keys in one run" mode — the keys only coexist as separate secrets consumed by separate jobs.
 

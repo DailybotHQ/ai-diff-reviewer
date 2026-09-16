@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Releases stamp the CHANGELOG.** `auto-release.yml` now turns
+  `## [Unreleased]` into `## [X.Y.Z] — date` (and opens a fresh empty
+  section) in the same sync commit that bumps the skill version, via
+  `.github/scripts/stamp_changelog.py` (idempotent; empty section → notice).
+  v2.0.0, v2.0.1 and v2.1.0 were restored by hand in v2.1.1.
+- **Dogfood: the in-process `openai` leg runs by default** whenever
+  `OPENAI_API_KEY` exists (opt out with the repo variable
+  `SELF_REVIEW_OPENAI_CHAT=false`); the repo's required checks now include
+  `CLI install smoke — grok`.
 - **xAI `balanced` tier now resolves to `grok-4.6`** (was `grok-4.3`; `economy`
   stays `grok-4.3`, the built-in default for `provider: grok` is unchanged).
   Measured on the labelled corpus in `tests/eval/`: through the Grok CLI,

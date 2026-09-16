@@ -136,13 +136,18 @@ jobs:
           # self-contained (Open Agent Skills convention).
           cp prompts/default.md skills/ai-diff-reviewer/prompt.md
 
-          if git diff --quiet -- skills/; then
-            echo "Skill artifacts already in sync with ${NEW_VERSION}; nothing to commit."
+          # Stamp the CHANGELOG: `## [Unreleased]` becomes `## [X.Y.Z] — date`
+          # and a fresh empty [Unreleased] is opened. Idempotent; an empty
+          # section is skipped with a notice (release still proceeds).
+          python3 .github/scripts/stamp_changelog.py --version "${NEW_VERSION}" --date "$(date -u +%F)" CHANGELOG.md
+
+          if git diff --quiet -- skills/ CHANGELOG.md; then
+            echo "Skill artifacts and CHANGELOG already in sync with ${NEW_VERSION}; nothing to commit."
             echo "has_commit=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git add skills/
+          git add skills/ CHANGELOG.md
           git commit -m "chore(release): sync skill artifacts for ${NEW_VERSION} [skip release]"
           echo "has_commit=true" >> "$GITHUB_OUTPUT"
 

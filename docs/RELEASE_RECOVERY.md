@@ -327,6 +327,10 @@ silently mask a broken skill-install smoke test (the whole point of
 Step 3.5's third purpose is to loudly catch broken `npx skills` fetches
 on the just-published tag), turning green what should be red.
 
+### CHANGELOG not stamped (or stamp step failed)
+
+Since v2.2.0 Step 2.5 runs `python3 .github/scripts/stamp_changelog.py --version vX.Y.Z --date <UTC date> CHANGELOG.md` before the sync commit, turning `## [Unreleased]` into `## [X.Y.Z] — date` and opening a fresh empty `[Unreleased]`. Three outcomes are normal and logged: stamped; already stamped (idempotent re-run); empty section (`::notice`, release proceeds). The step fails only when the file has no `## [Unreleased]` header at all — restore the header and re-run the release job. If a release shipped before the stamp existed (v2.0.0, v2.0.1 and v2.1.0 did), add the dated section by hand from `git log <prev>..<tag>` and keep the bullet count intact; `--dry-run` previews what the script would do.
+
 ### `skills-prompt-sync` CI check fires on a release PR
 
 Means `prompts/default.md` and `skills/ai-diff-reviewer/prompt.md`

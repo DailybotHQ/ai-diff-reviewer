@@ -106,7 +106,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **CLI installers smoke-tested** — a matrix job exercises each agent-runner CLI installer on a fresh runner before it reaches consumers.
 - **Prompt sync enforced** — `Skills — prompt-sync invariant` in `code_check.yml` fails any PR where the skill's `prompt.md` byte-copy has drifted from the Action's `prompts/default.md`. Local↔CI parity is a hard CI gate, not a convention.
 - **Dogfooded on both surfaces:**
-  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The matrix is built from secret presence: every configured runner/backend (Anthropic, Claude Code, Cursor, Codex, Grok, Claude Code on Z.ai, Codex on Azure, opt-in `openai`) reviews each `ready` PR with a distinct `self-reviewed:*` label; legs without secrets are absent, never a misleading green.
+  - **CI action:** reviews its own PRs via [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml). The matrix is built from secret presence: every configured runner/backend (Anthropic, Claude Code, Cursor, Codex, Grok, Claude Code on Z.ai, Codex on Azure, `openai` in-process) reviews each `ready` PR with a distinct `self-reviewed:*` label; legs without secrets are absent, never a misleading green.
   - **Skill:** the vendored copy at `.agents/skills/ai-diff-reviewer/` is re-installed via `npx skills update` after every release, so a broken install flow fails the release itself.
 
 ## Current major + roadmap (not a commitment)
