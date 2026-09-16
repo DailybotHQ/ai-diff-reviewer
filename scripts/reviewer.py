@@ -238,8 +238,14 @@ _OPENAI_TIERS: dict[str, str] = {
     MODEL_TIER_DEEP: "gpt-5.6-terra",
 }
 _XAI_TIERS: dict[str, str] = {
-    # grok-4.3 ($1.25/$2.50 under 200k) daily tier; grok-4.6 ($2/$6) deep.
-    MODEL_TIER_BALANCED: "grok-4.3",
+    # Measured 2026-09-16 on the labelled corpus (tests/eval): through the
+    # Grok CLI, grok-4.3 ($1.25/$2.50 under 200k) reported 0 of 4 known
+    # defects (and once wrote no findings file) at ~$0.07/review, while
+    # grok-4.6 ($2/$6) found 3 of 4 with zero false positives at
+    # $0.47–0.85 and 4–10 min. A "balanced" review that finds nothing is not
+    # balanced, so 4.6 is both the balanced and the deep pick; 4.3 remains
+    # the economy/smoke tier.
+    MODEL_TIER_BALANCED: "grok-4.6",
     MODEL_TIER_ECONOMY: "grok-4.3",
     MODEL_TIER_DEEP: "grok-4.6",
 }

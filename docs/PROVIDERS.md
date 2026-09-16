@@ -50,11 +50,11 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 |---|---|---|---|---|---|
 | `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
 | `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
-| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.3` — $1.25 / $2.50 | `grok-4.3` | `grok-4.6` — $2 / $6 | 4.3 is the daily tier at a low price point; 4.6 is the reasoning tier. (Prices are the <200k-token rates; above that they double.) |
+| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.6` — $2 / $6 | `grok-4.3` — $1.25 / $2.50 | `grok-4.6` | Measured 2026-09-16 (`tests/eval`): 4.3 reported 0 of 4 known defects; 4.6 found 3 of 4 with no false positives — so 4.6 is the balanced pick and 4.3 the smoke tier. (Prices are the <200k-token rates; above that they double.) |
 | `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
-| `openai`, `codex` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
+| `openai`, `codex` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
 | `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
-| `grok` | xAI | `grok-4.3` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. |
+| `grok` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget 4–10 min and ~$0.5–0.85 per mid-size PR on 4.6; the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
 

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **xAI `balanced` tier now resolves to `grok-4.6`** (was `grok-4.3`; `economy`
+  stays `grok-4.3`, the built-in default for `provider: grok` is unchanged).
+  Measured on the labelled corpus in `tests/eval/`: through the Grok CLI,
+  `grok-4.3` reported 0 of 4 known defects (and once wrote no findings
+  file) while `grok-4.6` found 3 of 4 with no false positives at ~$0.5–0.85
+  and 4–10 minutes per review. The repo's own Grok dogfood leg moves to
+  `balanced`.
+- **Review-quality harness in the tree.** `tests/eval/run_eval.py` +
+  `tests/eval/corpus.json` (labelled expectations for four merged PRs) —
+  offline, never posts; documented in `docs/TESTING_GUIDE.md`.
+
 ### Added
 
 - **`prior-findings-resolution` input (`advisory` | `verified`).** Incremental

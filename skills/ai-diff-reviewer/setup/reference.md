@@ -98,8 +98,10 @@ Every workflow using AI Diff Reviewer sets these two.
     `model: economy` for the cheap tier — as of 2026-09-16 `gpt-5.4-mini`
     is no longer cheaper than `gpt-5.6-luna`, so pin it only if you
     specifically want that model).
-  - `grok` → `grok-4.3` (daily tier; `grok-4.6` for a deeper reasoning
-    pass; never `auto` on a metered CLI).
+  - `grok` → `grok-4.3` (built-in default and `economy`); `model: balanced`
+    or `deep` → `grok-4.6` — measured 2026-09-16: 4.3 found 0 of 4 known
+    defects through the CLI, 4.6 found 3 of 4 with no false positives at
+    ~$0.5–0.85 per review. Never `auto` on a metered CLI.
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
 

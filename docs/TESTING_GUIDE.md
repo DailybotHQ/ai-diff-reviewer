@@ -63,6 +63,10 @@ Two guiding rules:
 1. **No network.** The agentic loop, when covered, is driven by a fake provider. Subprocess-boundary tests stub the vendor CLI. There is nothing to install; the suite runs on `python3` and nothing else.
 2. **Pure logic only.** If a test would require mocking the Anthropic API's exact response shape or the GitHub API's exact 422 body, it isn't pulling its weight — write a smoke test on a real PR instead.
 
+## Review-quality evaluation (offline, labelled corpus)
+
+Counting findings is not a quality metric — a prompt that doubles false positives "finds more". `tests/eval/run_eval.py` (stdlib; deliberately outside `unittest discover`) runs the action's own loop against a **merged** PR without posting, and scores the result against `tests/eval/corpus.json`: must-find recall, false positives against known-wrong findings, unlabelled findings, severity match, contract compliance (summary present), suggestion-block rate, coverage, tokens and cost. Works for in-process runners (`drive_review`) and agent-runner CLIs installed locally (`run_review` in a worktree at the PR head). See [`tests/eval/README.md`](../tests/eval/README.md) for usage and how labels are authored (from fix commits, never from a model's output). Measurements for v2.1.0 live in the plan record `analysis_results/REVIEW_QUALITY_EVAL.md`; the harness is what a prompt or tier change must be run through before it ships.
+
 ## What CI does NOT run
 
 - **`pytest` or any third-party test runner.** Stdlib `unittest` is enough.
