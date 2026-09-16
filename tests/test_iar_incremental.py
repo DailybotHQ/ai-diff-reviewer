@@ -492,3 +492,10 @@ class IncrementalTruncationHintTests(unittest.TestCase):
         rendered = reviewer.render_incremental_sections(pr, pre)
         self.assertIn("diff truncated at", rendered)
         self.assertIn("use your file-reading tool", rendered)
+
+    def test_verified_policy_never_joins_absolute_or_parent_paths(self) -> None:
+        bad = reviewer.PriorFinding(thread_id="t", comment_id="c", comment_database_id=1, path="/etc/passwd", line=1, severity="info", fingerprint="b" * 16, body_excerpt="x", is_outdated=False)
+        with tempfile.TemporaryDirectory() as td:
+            r = reviewer.reconcile_prior_findings(prior_findings=(bad,), updates={"b" * 16: ("resolved", "n")}, current_fingerprints=set(), delta=_delta(files=("other.py",)), workspace=Path(td), policy="verified")
+        self.assertEqual((len(r.resolved), len(r.unverified)), (0, 1), "an absolute path must not count as a deleted file")
+

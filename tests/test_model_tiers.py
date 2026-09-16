@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
 class ModelRequiredOnCustomBackendTests(unittest.TestCase):
     """P-01: an empty `model` on a non-default api-base must fail fast for
-    every runner except cursor (which has no api-base lane); default
+    every runner that routes api-base (cursor and grok ignore it); default
     profiles keep resolving to the built-in default."""
 
     def test_empty_model_on_custom_base_raises_with_hint(self) -> None:
@@ -181,10 +181,13 @@ class ModelRequiredOnCustomBackendTests(unittest.TestCase):
                     reviewer.resolve_model(pid, prof, "")
                 self.assertIn(hint, str(ctx.exception), pid)
 
-    def test_default_profile_and_cursor_unchanged(self) -> None:
+    def test_default_profile_and_runners_without_api_base_lane_unchanged(self) -> None:
         with mock.patch.object(reviewer, "log"):
             for pid in ("anthropic", "openai", "claude-code", "codex", "grok", "cursor"):
                 self.assertEqual(reviewer.resolve_model(pid, reviewer.resolve_endpoint_profile("", pid), ""), reviewer.DEFAULT_MODELS[pid])
+            # cursor and grok ignore api-base (warned, not routed): a stray value must not break an empty model.
             self.assertEqual(reviewer.resolve_model("cursor", reviewer.resolve_endpoint_profile("https://gw.example.com/v1", "cursor"), ""), "auto")
+            self.assertEqual(reviewer.resolve_model("grok", reviewer.resolve_endpoint_profile("https://gw.example.com/v1", "grok"), ""), reviewer.DEFAULT_MODELS["grok"])
+            self.assertEqual(reviewer.PROVIDERS_WITHOUT_API_BASE_LANE, ("cursor", "grok"))
             self.assertEqual(reviewer.resolve_model("claude-code", reviewer.resolve_endpoint_profile("https://api.z.ai/api/anthropic", "claude-code"), "balanced"), "glm-5.3")
 

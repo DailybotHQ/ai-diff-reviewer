@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Empty `model` on a custom `api-base` now fails fast** with the expected
+- **Empty `model` on a custom `api-base` now fails fast** (for runners that route `api-base`; `cursor`/`grok` ignore it and keep their defaults) with the expected
   value (deployment name / `glm-5.3` / `grok-4.6` / gateway id) instead of
   silently sending the runner's default vendor model to another backend
   (`resolve_model` ran before the providers' guards, which were unreachable).

@@ -213,6 +213,9 @@ DEFAULT_MODELS: dict[str, str] = {
 MODEL_TIER_BALANCED: str = "balanced"
 MODEL_TIER_ECONOMY: str = "economy"
 MODEL_TIER_DEEP: str = "deep"
+# Runners that ignore `api-base` (they only talk to their own vendor): an
+# empty `model` keeps resolving to the built-in default for them.
+PROVIDERS_WITHOUT_API_BASE_LANE: tuple[str, ...] = ("cursor", "grok")
 # What `model` must name when `api-base` points at each kind of backend.
 MODEL_REQUIRED_HINTS: dict[str, str] = {
     "azure": "your Azure deployment name (e.g. `gpt-5.4-mini-azure`)",
@@ -1793,7 +1796,11 @@ def resolve_model(
     Logs the resolution so the effective model is always visible.
     """
     value: str = (raw_model or "").strip()
-    if not value and not profile.is_default and provider_id != "cursor":
+    if (
+        not value
+        and not profile.is_default
+        and provider_id not in PROVIDERS_WITHOUT_API_BASE_LANE
+    ):
         # A runner's built-in default names the runner's own vendor model;
         # sending it to another backend is silently wrong (Z.ai would get
         # `claude-sonnet-4-6`, Azure `gpt-5.6-luna` as a deployment name).
@@ -6108,7 +6115,12 @@ def reconcile_prior_findings(
         if status == PRIOR_FINDING_STATUS_RESOLVED:
             if policy == RESOLUTION_POLICY_VERIFIED:
                 file_changed: bool = pf.path in changed
-                file_gone: bool = bool(pf.path) and not (root / pf.path).exists()
+                # `pf.path` comes from a GitHub review thread; keep the
+                # repo-relative invariant anyway (never join an absolute or
+                # `..` path onto the workspace).
+                rel: Path = Path(pf.path) if pf.path else Path()
+                path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
+                file_gone: bool = path_ok and not (root / rel).exists()
                 if pf.fingerprint not in current_fingerprints and (
                     file_changed or file_gone
                 ):
