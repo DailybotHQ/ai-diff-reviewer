@@ -67,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tools[].type: custom`), which xAI's Responses API rejects (HTTP 422) —
   the runtime warns on `xai` / `zai` / `custom` hosts; use `provider:
   openai` or `provider: grok` for xAI. Z.ai via Codex is unverified.
+- **`grok` provider — xAI Grok CLI agent-runner, modular install.** The
+  official `grok` CLI runs headless inside the full review contract: rubric
+  + findings schema via `--rules`, the PR diff via a private 0600
+  `--prompt-file`, findings through `.aiprr/findings.json` (gating, IAR,
+  cap, collapse all apply), `XAI_API_KEY` the only credential in the
+  subprocess env, web search / subagents / plan mode **off by default**,
+  `--output-format json` for usage telemetry. Default model `grok-4.3`.
+  `action.yml` installs the CLI only when `provider: grok`, with a new
+  `grok-version` pin input; `code_check.yml` smoke-tests the installer.
+  New example `examples/provider-grok.yml`.
   Default profile argv/env unchanged and no config/catalog file is
   written. New example `examples/provider-codex-azure.yml`.
 

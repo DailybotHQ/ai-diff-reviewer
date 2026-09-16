@@ -10,6 +10,7 @@
 | Google Gemini | 🛠 roadmap (v1.2) | tbd (`gemini-2.5-pro`?) | tbd |
 | AWS Bedrock | 🤔 considering | claude via Bedrock | tbd |
 | Self-hosted (vLLM/Ollama, any OpenAI- or Anthropic-compatible gateway) | ✅ via `api-base` (custom host) | gateway-defined | n/a |
+| xAI Grok CLI (`grok`) | ✅ shipping (v2.1.0) — agent-runner | `grok-4.3` | n/a |
 
 The roadmap is loose and contributor-driven. If you want a provider sooner than the order above suggests, send a PR.
 
@@ -243,6 +244,7 @@ Each vendor CLI needs three things to work headlessly: the review instructions d
 | Claude Code | `--append-system-prompt <text>` | `--permission-mode bypassPermissions` | stdin (`claude -p`) |
 | Cursor | inlined into the prompt | `--force --trust` | stdin (`cursor-agent -p`) |
 | Codex | inlined into the prompt | `--dangerously-bypass-approvals-and-sandbox` | stdin (`codex exec -`) |
+| Grok | `--rules <text>` (appended to the system prompt) | `--always-approve` | private 0600 temp file via `--prompt-file` (`-p` needs an inline value and does not read stdin) |
 
 The write-permission flags are load-bearing: the runner is already an isolated ephemeral sandbox, but the CLIs default to gating file writes (Claude Code's permission prompt) or a read-only sandbox (Codex `exec`), either of which silently prevents `findings.json` from being written. See [`docs/SECURITY.md`](SECURITY.md) § "Agent-runner providers: residual exfiltration surface" for the trust-boundary implications of these flags.
 
@@ -310,6 +312,26 @@ The runtime logs a WARNING naming this limitation whenever Codex runs on an `xai
 - **Malformed CLI JSON fallback:** agent-runner providers are instructed to write strict JSON to `.aiprr/findings.json`. If a CLI exits successfully but writes malformed JSON with a recoverable top-level `summary`, AI Diff Reviewer posts a summary-only review and logs a warning; inline findings are dropped because malformed finding objects cannot be trusted. Direct parser validation remains strict unless this fallback is explicitly enabled at the subprocess boundary.
 
 ---
+
+## xAI Grok CLI — `provider: grok` (v2.1.0+)
+
+The official `grok` CLI as an agent-runner, kept inside the action's review contract rather than xAI's suggested bare workflow (`grok -p "Review this PR" --always-approve` with `GH_TOKEN` in the env):
+
+| Concern | xAI's bare workflow | `provider: grok` |
+|---|---|---|
+| GitHub token | handed to the agent | **never reaches the CLI** — the runtime posts the review |
+| Output | free-form text the agent posts itself | `.aiprr/findings.json` → severity gating, IAR dedup, inline cap, collapse-previous, tracking comment |
+| Web search / subagents | on | **off by default** (`--disable-web-search`, `--no-subagents`; plan mode off too) — re-enable via `agent-extra-args` |
+| Turn cap | none | `agent-max-turns` → native `--max-turns` |
+| Prompt delivery | inline `-p` (argv limit) | rubric + contract via `--rules`; diff via a private `--prompt-file` (0600 in a 0700 temp dir, removed after the run) |
+
+- **Auth / billing:** `XAI_API_KEY` from `api-key`, billed as xAI API credits. `api-base` is ignored (the CLI talks to xAI only; use `provider: openai` + `https://api.x.ai/v1` if you want the in-process path).
+- **Models:** `grok-4.3` default (daily tier); `grok-4.6` for a deeper reasoning pass. Never `auto`.
+- **Install:** the official installer (`curl -fsSL https://x.ai/cli/install.sh | bash`) drops a static binary in `~/.grok/bin`; `grok-version` pins it (`bash -s <X.Y.Z>`). Same supply-chain consideration as the Cursor installer (see [`SECURITY.md`](SECURITY.md)).
+- **Output format:** the runtime asks for `--output-format json`; the CLI returns one JSON document with `usage` (input/output/cache tokens), `num_turns` and `total_cost_usd` — consumed by the usage telemetry.
+- **MCP:** `mcp-config-file` is not wired for Grok (warned); configure MCP through `grok mcp` or `agent-extra-args`.
+
+Copy-paste workflow: [`examples/provider-grok.yml`](../examples/provider-grok.yml).
 
 ## Cursor CLI — billing and model selection
 

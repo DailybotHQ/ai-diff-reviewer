@@ -23,7 +23,7 @@ self-hosted runner that has Python 3.10+.
 Environment (set by the composite action's `env:` block; see action.yml):
 
     AIPRR_PROVIDER           Provider id (`anthropic`, `openai`, `claude-code`,
-                            `cursor`, or `codex`).
+                            `cursor`, `codex`, or `grok`).
     AIPRR_API_KEY            Provider API key.
     AIPRR_GH_TOKEN           GitHub token for PR/review operations.
     AIPRR_MODEL              Model id (empty = provider default).
@@ -191,6 +191,11 @@ DEFAULT_MODELS: dict[str, str] = {
     # (`api-base`) consumers pin the backend's own id (e.g. `grok-4.3`,
     # `glm-5.3`, or an Azure deployment name).
     "openai": "gpt-5.6-luna",
+    # xAI Grok CLI. `grok-4.3` is the "daily" tier the maintainer runs
+    # locally: strong enough for real review at the lower price point;
+    # `grok-4.6` is the reasoning tier for deeper passes. Never `auto` for a
+    # metered CLI. (Ids/prices re-verified in the cost-controls task.)
+    "grok": "grok-4.3",
 }
 
 DEFAULT_MAX_TURNS: int = 30
@@ -282,7 +287,35 @@ PROVIDER_DEFAULT_API_BASE: dict[str, str] = {
     "grok": XAI_OPENAI_COMPAT_API_BASE,
     "cursor": "",
 }
-PROVIDERS_WITHOUT_API_BASE: tuple[str, ...] = ("cursor",)
+# `grok` (xAI Grok CLI) talks to xAI only — no BYO endpoint either.
+PROVIDERS_WITHOUT_API_BASE: tuple[str, ...] = ("cursor", "grok")
+
+# xAI Grok CLI agent-runner (`provider: grok`, v2.1.0+). Headless surface
+# verified on grok 1.0.30: `--prompt-file <path>` (the diff-carrying prompt;
+# `-p` requires an inline value and does not read stdin), `--rules <text>`
+# (appended to the system prompt — the analogue of Claude Code's
+# `--append-system-prompt`), `--always-approve`, `--output-format json`
+# (one JSON document with `usage`, `num_turns`, `total_cost_usd`),
+# `--disable-web-search`, `--no-subagents`, `--no-plan`, `-m`, `--max-turns`.
+GROK_CLI_BIN: str = "grok"
+GROK_CLI_NAME: str = "xAI Grok"
+GROK_API_KEY_ENV: str = "XAI_API_KEY"
+GROK_PROMPT_FILE_FLAG: str = "--prompt-file"
+GROK_RULES_FLAG: str = "--rules"
+GROK_OUTPUT_FORMAT: str = "json"
+GROK_PROMPT_FILENAME: str = "prompt.md"
+# Hardening + cost defaults for a CI reviewer: a reviewer has no business
+# fetching the web from an attacker-influenced diff, subagents multiply
+# cost, and plan mode adds turns. Consumers can re-enable any of these via
+# `agent-extra-args` (last flag wins in the CLI's own parsing).
+GROK_HEADLESS_DEFAULT_FLAGS: tuple[str, ...] = (
+    "--always-approve",
+    "--output-format",
+    GROK_OUTPUT_FORMAT,
+    "--disable-web-search",
+    "--no-subagents",
+    "--no-plan",
+)
 
 # Codex on a custom backend (`api-base`, v2.1.0+): a `config.toml` written
 # into the isolated per-run CODEX_HOME routes Codex to an OpenAI-compatible
@@ -2719,6 +2752,129 @@ class CodexProvider(AgentRunnerProvider):
                 )
 
 
+class GrokProvider(AgentRunnerProvider):
+    """xAI Grok CLI (headless) as an agent-runner provider.
+
+    Deliberately NOT xAI's suggested `grok -p "Review this PR" --always-approve`
+    workflow: the agent never receives a GitHub token, it writes the shared
+    `.aiprr/findings.json` contract (so severity gating, IAR dedup, collapse
+    and the cap all apply), web search and subagents are disabled by default
+    (exfiltration + cost hardening), and turns are capped natively when
+    `agent-max-turns` is set.
+
+    Auth: `XAI_API_KEY` (from the consumer's `api-key` input). CLI: installed
+    by the composite step (`curl -fsSL https://x.ai/cli/install.sh | bash`)
+    into `~/.grok/bin` when `provider: grok`. `api-base` is ignored — the
+    CLI talks to xAI only. `mcp-config-file` is not wired (warned).
+    """
+
+    PROVIDER_ID: str = "grok"
+    CLI_NAME: str = GROK_CLI_NAME
+    CLI_BIN: str = GROK_CLI_BIN
+    MCP_DEST: Path = Path.home() / ".grok" / "mcp.json"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        extra_args: str = "",
+        mcp_config_file: str = "",
+        profile: EndpointProfile | None = None,
+    ) -> None:
+        self.api_key: str = api_key
+        self.model: str = model
+        self.extra_args: str = extra_args
+        self.mcp_config_file: str = mcp_config_file
+        self.profile: EndpointProfile = (
+            profile
+            if profile is not None
+            else resolve_endpoint_profile("", self.PROVIDER_ID)
+        )
+
+    def install(self) -> None:
+        result = run_cmd([self.CLI_BIN, "--version"])
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"{self.CLI_NAME} CLI not found on PATH. The composite step "
+                "should install it (https://x.ai/cli/install.sh → "
+                "~/.grok/bin) before invoking reviewer.py."
+            )
+
+    def build_argv(self, *, prompt_path: Path, instructions: str) -> list[str]:
+        """The headless invocation (pure — unit-tested directly)."""
+        argv: list[str] = [
+            self.CLI_BIN,
+            GROK_PROMPT_FILE_FLAG,
+            str(prompt_path),
+            GROK_RULES_FLAG,
+            instructions,
+            *GROK_HEADLESS_DEFAULT_FLAGS,
+        ]
+        if self.model and self.model != "auto":
+            argv += ["-m", self.model]
+        if self.extra_args:
+            argv += shlex.split(self.extra_args)
+        return argv
+
+    def run_review(
+        self,
+        *,
+        pr_context: PRContext,
+        review_instructions: str,
+        workspace: Path,
+        output_dir: Path,
+        require_complexity_in_findings: bool = False,
+    ) -> ReviewResult:
+        findings_path: Path = output_dir / FINDINGS_JSON_REL
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Rubric + findings contract go into the system prompt via `--rules`
+        # (a few KB of text — well under argv limits). The PR metadata + diff
+        # can exceed ARG_MAX and Grok's `-p` does not read stdin, so it goes
+        # through `--prompt-file` from a private temp dir (0700/0600).
+        enriched_instructions: str = write_findings_prompt_directive(
+            review_instructions,
+            findings_path,
+            require_complexity=require_complexity_in_findings,
+        )
+        if self.mcp_config_file:
+            log(
+                "WARNING: mcp-config-file is set but the Grok CLI passthrough "
+                "is not wired (configure MCP via `grok mcp` / agent-extra-args). "
+                "The MCP passthrough will NOT take effect for provider=grok."
+            )
+        prompt_dir: Path = Path(tempfile.mkdtemp(prefix="aiprr-grok-"))
+        try:
+            prompt_path: Path = prompt_dir / GROK_PROMPT_FILENAME
+            prompt_path.write_text(
+                render_user_prompt(pr_context, for_agent_runner=True),
+                encoding="utf-8",
+            )
+            try:
+                os.chmod(prompt_path, 0o600)
+            except OSError as e:  # noqa: BLE001 — perms are defense in depth
+                log(f"WARNING: could not chmod 0600 on {prompt_path}: {e}")
+            argv: list[str] = self.build_argv(
+                prompt_path=prompt_path, instructions=enriched_instructions
+            )
+            env: dict[str, str] = _build_cli_env(
+                extra_vars={GROK_API_KEY_ENV: self.api_key}
+            )
+            return _invoke_cli_agent(
+                argv=argv,
+                workspace=workspace,
+                findings_path=findings_path,
+                env=env,
+                cli_name=self.CLI_NAME,
+            )
+        finally:
+            try:
+                shutil.rmtree(prompt_dir)
+            except OSError as e:  # noqa: BLE001 — cleanup is best-effort
+                log(f"Could not remove Grok temp prompt dir {prompt_dir}: {e}")
+
+
 def build_provider(
     provider_id: str, *, api_key: str, model: str, api_base: str = ""
 ) -> Provider | AgentRunnerProvider:
@@ -2777,6 +2933,14 @@ def build_provider(
         )
     if provider_id == "codex":
         return CodexProvider(
+            api_key=api_key,
+            model=model,
+            extra_args=extra_args,
+            mcp_config_file=mcp_config,
+            profile=profile,
+        )
+    if provider_id == "grok":
+        return GrokProvider(
             api_key=api_key,
             model=model,
             extra_args=extra_args,

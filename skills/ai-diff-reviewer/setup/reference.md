@@ -59,7 +59,7 @@ Every workflow using AI Diff Reviewer sets these two.
 ### `provider`
 
 - **Default:** `anthropic`
-- **Choices:** `anthropic` | `openai` | `claude-code` | `cursor` | `codex`
+- **Choices:** `anthropic` | `openai` | `claude-code` | `cursor` | `codex` | `grok`
 - **Behavior:**
   - `anthropic` — chat-completions API. Zero install overhead. Sonnet-tier
     default model. Best baseline.
@@ -71,6 +71,9 @@ Every workflow using AI Diff Reviewer sets these two.
   - `cursor` — Cursor Agent CLI, headless. `model: auto` is unlimited on
     Cursor Pro plans.
   - `codex` — OpenAI Codex CLI, headless. GPT-5.6-luna default.
+  - `grok` — xAI Grok CLI, headless, through the full review contract
+    (no GitHub token to the agent, web search/subagents off by default,
+    native `--max-turns`). `grok-4.3` default.
 
 ### `model`
 
@@ -88,6 +91,8 @@ Every workflow using AI Diff Reviewer sets these two.
   - `codex` → `gpt-5.6-luna` (current-gen budget model; the parallel of
     the Sonnet-class choice above; `gpt-5-codex` is deprecated; pin
     `gpt-5.4-mini` for a shallower smoke review).
+  - `grok` → `grok-4.3` (daily tier; `grok-4.6` for a deeper reasoning
+    pass; never `auto` on a metered CLI).
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
 
@@ -435,6 +440,13 @@ These inputs affect only the CLI providers (`claude-code`, `cursor`,
 
 - **Default:** `''` (empty — resolves to `latest`).
 - **What it is:** Pin the OpenAI Codex CLI version (npm semver).
+
+### `grok-version`
+
+- **Default:** `''` (latest stable).
+- **What it is:** version pin for the xAI Grok CLI, passed to the official
+  installer as `bash -s <X.Y.Z>` (e.g. `1.0.30`).
+- **Only used when:** `provider: grok`.
 
 ---
 

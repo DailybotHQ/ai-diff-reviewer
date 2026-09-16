@@ -115,7 +115,7 @@ That's the minimum. Open a PR; the action posts a tracking comment, runs a revie
 
 ## Providers
 
-The action ships **five LLM providers (runners)** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen backend, and the optional `api-base` input points a runner at a different backend (Azure Foundry, xAI, Z.ai, self-hosted). The in-process providers (`anthropic`, `openai`) need no CLI install; the three agent-runner CLIs are installed automatically by the action only when you select them.
+The action ships **six LLM providers (runners)** in two families. Pick one with the `provider` input; `api-key` always carries the credential for the chosen backend, and the optional `api-base` input points a runner at a different backend (Azure Foundry, xAI, Z.ai, self-hosted). The in-process providers (`anthropic`, `openai`) need no CLI install; the four agent-runner CLIs are installed automatically by the action only when you select them.
 
 | `provider` | Family | `api-key` value | Default model | Billing |
 |---|---|---|---|---|
@@ -124,6 +124,7 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
 | `claude-code` | agent-runner CLI | Anthropic API key **or** a `claude setup-token` token (`sk-ant-oat…`) | `claude-sonnet-4-6` | metered API **or** Claude Pro/Max subscription |
 | `cursor` | agent-runner CLI | Cursor subscription key | `auto` | Cursor subscription (unlimited on Pro) |
 | `codex` | agent-runner CLI | OpenAI API key | `gpt-5.6-luna` | metered API |
+| `grok` | agent-runner CLI | xAI API key | `grok-4.3` | metered API (xAI credits) |
 
 - **`anthropic`** is the simplest and cheapest to run — no install, a bounded tool-use loop, prompt caching. Recommended for most repos.
 - **`openai`** is the same bounded, zero-install loop for OpenAI-compatible backends — OpenAI itself, or Azure Foundry / xAI / Z.ai through `api-base`.
@@ -150,6 +151,15 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
 ```
 
 ```yaml
+# xAI Grok CLI — full review contract, web search off, token never reaches the agent
+- uses: DailybotHQ/ai-diff-reviewer@v2
+  with:
+    provider: grok
+    api-key: ${{ secrets.XAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+```yaml
 # OpenAI Codex on Azure Foundry — model is your deployment name
 - uses: DailybotHQ/ai-diff-reviewer@v2
   with:
@@ -171,7 +181,7 @@ The action ships **five LLM providers (runners)** in two families. Pick one with
     model: glm-5.3          # required on a custom backend
 ```
 
-Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
+Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
 ### Bill Claude Code against a subscription (instead of API tokens)
 
@@ -193,7 +203,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 |---|---|---|---|
 | `api-key` | ✅ | — | Provider API key. For Anthropic this is your `ANTHROPIC_API_KEY`. |
 | `github-token` | ✅ | — | Token with `pull-requests: write` and `contents: read`. The default `secrets.GITHUB_TOKEN` works; pass a PAT or automation-bot token if you want the review attributed to a specific account. |
-| `provider` | | `anthropic` | LLM provider. `anthropic` (chat-completions), `claude-code` / `cursor` / `codex` (agent-runner CLIs). See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
+| `provider` | | `anthropic` | LLM provider (the runner). `anthropic` / `openai` (chat-completions, zero install), `claude-code` / `cursor` / `codex` / `grok` (agent-runner CLIs, installed only when selected). Pair with `api-base` to choose the backend. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | `model` | | provider default | Model id (defaults balance review quality vs cost). Anthropic → `claude-sonnet-4-6`, Claude Code → `claude-sonnet-4-6` (never `auto`; Claude Code's `api-key` also accepts a `claude setup-token` subscription token, `sk-ant-oat…`), Cursor → `auto` (flat-rate on Pro), Codex → `gpt-5.6-luna` (`gpt-5-codex` is deprecated). See [docs/PROVIDERS.md](docs/PROVIDERS.md#choosing-a-cost-efficient-model). |
 | `api-base` | | provider default | Bring your own endpoint for the chosen provider. Empty keeps the provider's default (unchanged behaviour). Point `anthropic` / `claude-code` at an Anthropic-compatible gateway (Z.ai GLM: `https://api.z.ai/api/anthropic`; xAI: `https://api.x.ai`) or `codex` / `openai` at an OpenAI-compatible one (Azure Foundry v1: `https://<resource>.services.ai.azure.com/openai/v1` with `model` = deployment name; xAI: `https://api.x.ai/v1`; Z.ai: `https://api.z.ai/api/v1` for Codex, `https://api.z.ai/api/coding/paas/v4` for `openai`). The host selects the endpoint profile automatically. **Your `api-key` is sent to this host** — trusted endpoints only; `https://` required. Ignored by `cursor`. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | `prompt-file` | | bundled `prompts/default.md` | Path **inside the consumer checkout** to a markdown system prompt. FULLY REPLACES the base. Customising the prompt is the main lever for adapting the review to your codebase — see [docs/PROMPTS.md](docs/PROMPTS.md). |
@@ -218,6 +228,7 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `claude-code-version` | | `''` | Pin the Claude Code CLI version (npm semver). Empty = latest. |
 | `cursor-version` | | `''` | Pin the Cursor Agent CLI version. Empty = latest stable. |
 | `codex-version` | | `''` | Pin the OpenAI Codex CLI version (npm semver). Empty = latest. |
+| `grok-version` | | latest | Pin the xAI Grok CLI version (`bash -s <X.Y.Z>` on the official installer). Only used when `provider: grok`. |
 | `convergence-policy` | | `first-pass-exhaustive` | Iteration-Aware Review policy. Default `first-pass-exhaustive` (exhaustive round 1 + higher cap, dedup on rounds 2+) — solves the "10 loops of trickled warnings" pain. Alternatives: `iterative` (dedup only, cost-neutral), `round-capped` (post-cap only critical surfaces), `critical-gate` (strict cross-gen dedup). See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md). |
 | `max-review-rounds` | | `0` | Hard cap for `round-capped`. `0` = unlimited. After N rounds only critical severity findings surface. Ignored by other policies. |
 | `exhaustive-first-pass-cap-multiplier` | | `3` | Multiplier applied to `max-inline-comments` on round 1 of each generation when policy is `first-pass-exhaustive`. Set to `1` to keep exhaustive prompting without amplification. |
@@ -647,6 +658,7 @@ For the full design, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PRO
 | Claude Code CLI | agent-runner | ✅ shipping (v1.2.1+) | `@anthropic-ai/claude-code` npm CLI in headless mode. Uses `ANTHROPIC_API_KEY`. Works with subscription auth. |
 | Cursor Agent CLI | agent-runner | ✅ shipping (v1.2.1+) | `cursor-agent` local CLI in headless mode. Uses `CURSOR_API_KEY`. Default model `auto` — unlimited on Cursor Pro. |
 | OpenAI Codex CLI | agent-runner | ✅ shipping (v1.2.1+) | `@openai/codex` npm CLI in headless mode. Uses `OPENAI_API_KEY`. |
+| xAI Grok CLI | agent-runner | ✅ shipping (v2.1.0+) | Official `grok` CLI in headless mode. Uses `XAI_API_KEY`. Web search/subagents off by default; native `--max-turns`. |
 | OpenAI-compatible (raw API) | chat-completions | ✅ shipping (v2.1.0+) | `provider: openai` — direct chat-completions, no CLI install. Covers OpenAI, Azure Foundry, xAI and Z.ai through `api-base`. |
 | Google Gemini | chat-completions | 🛠 roadmap | Function-calling translation. |
 | AWS Bedrock | chat-completions | 🤔 considering | Anthropic-shape under Bedrock. |

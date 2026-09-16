@@ -38,7 +38,7 @@ inputs:
     required: true
 
   provider:
-    description: 'LLM provider — the RUNNER that owns the review loop. `anthropic` (default, chat-completions), `openai` (OpenAI-compatible chat-completions; covers OpenAI, Azure Foundry, xAI, Z.ai and self-hosted gateways via `api-base`), `claude-code` (Claude Code CLI, agent-runner), `cursor` (Cursor Agent CLI, agent-runner), `codex` (OpenAI Codex CLI, agent-runner). Combine with `api-base` to pick WHERE the model lives.'
+    description: 'LLM provider — the RUNNER that owns the review loop. `anthropic` (default, chat-completions), `openai` (OpenAI-compatible chat-completions; covers OpenAI, Azure Foundry, xAI, Z.ai and self-hosted gateways via `api-base`), `claude-code` (Claude Code CLI, agent-runner), `cursor` (Cursor Agent CLI, agent-runner), `codex` (OpenAI Codex CLI, agent-runner), `grok` (xAI Grok CLI, agent-runner). Combine with `api-base` to pick WHERE the model lives.'
     required: false
     default: 'anthropic'
   model:
@@ -165,6 +165,10 @@ inputs:
     default: ''
   codex-version:
     description: 'Pin the OpenAI Codex CLI version (npm semver). Empty = latest.'
+    required: false
+    default: ''
+  grok-version:
+    description: 'Pin the xAI Grok CLI version (e.g. `1.0.30`; passed to the official installer as `bash -s <version>`). Empty = latest stable. Only used when `provider: grok`.'
     required: false
     default: ''
 
@@ -301,6 +305,28 @@ runs:
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         "$HOME/.local/bin/cursor-agent" --version
 
+    - name: Install xAI Grok CLI
+      if: inputs.provider == 'grok'
+      shell: bash
+      env:
+        GROK_VERSION: ${{ inputs.grok-version }}
+      run: |
+        set -euo pipefail
+        # Official installer (https://x.ai/cli/install.sh). It installs a
+        # single static binary into ~/.grok/bin (override: GROK_BIN_DIR) and
+        # accepts an explicit version as `bash -s <X.Y.Z>`; with no argument
+        # it resolves the latest stable release.
+        if [ -n "${GROK_VERSION}" ]; then
+          echo "::group::Install grok (pinned to ${GROK_VERSION})"
+          curl -fsSL https://x.ai/cli/install.sh | bash -s "${GROK_VERSION}"
+        else
+          echo "::group::Install grok (latest stable)"
+          curl -fsSL https://x.ai/cli/install.sh | bash
+        fi
+        echo "::endgroup::"
+        echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
+        "$HOME/.grok/bin/grok" --version
+
     # ---------------------------------------------------------------
     # Main review runtime — invoked for every provider (chat-completions
     # OR agent-runner). scripts/reviewer.py dispatches on AIPRR_PROVIDER.
@@ -338,13 +364,14 @@ runs:
         AIPRR_COMPLEXITY_LABEL_PREFIX: ${{ inputs.complexity-label-prefix }}
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
-        # `claude-code`, `cursor`, and `codex` provider branches.
+        # `claude-code`, `cursor`, `codex`, and `grok` provider branches.
         AIPRR_AGENT_MAX_TURNS: ${{ inputs.agent-max-turns }}
         AIPRR_AGENT_EXTRA_ARGS: ${{ inputs.agent-extra-args }}
         AIPRR_MCP_CONFIG_FILE: ${{ inputs.mcp-config-file }}
         AIPRR_CLAUDE_CODE_VERSION: ${{ inputs.claude-code-version }}
         AIPRR_CURSOR_VERSION: ${{ inputs.cursor-version }}
         AIPRR_CODEX_VERSION: ${{ inputs.codex-version }}
+        AIPRR_GROK_VERSION: ${{ inputs.grok-version }}
 
         # Iteration-Aware Review (IAR). The four env vars below shape
         # the pipeline. See docs/ITERATION_AWARENESS.md.
