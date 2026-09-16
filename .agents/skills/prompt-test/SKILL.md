@@ -21,7 +21,7 @@ Without this evidence, prompt changes are opinion, not engineering.
 ## Non-goals
 
 - Does NOT modify the prompt for the user. The user owns the prompt edit; this skill evaluates it.
-- Does NOT post comments on the test PR — runs are configured with `AIPRR_TRACKING_COMMENT=false` and `AIPRR_COLLAPSE_PREVIOUS=false` to avoid disturbing the target PR's conversation.
+- Does NOT post comments on the test PR — `tests/eval/run_eval.py` runs the review loop in-process with the GitHub submission path stubbed out, so the target PR's conversation is never touched.
 
 ## Inputs
 
@@ -124,6 +124,5 @@ Print the summary to stdout. Optionally write it to `tmp/prompt-test-<branch>.md
 
 
 - **Anthropic rate limits.** Add `time.sleep(5)` between PRs if you're testing >5 in a row.
-- **Stash conflict.** If `git stash pop` fails, the user has uncommitted changes elsewhere; stop and ask.
 - **Target PR closed.** PRs in closed/merged state still work for read-only review; skip if the diff is gone (rare).
 - **Provider cost.** Each run is one full review at the configured model. For 5 PRs × 2 runs = 10 reviews. Estimate cost up front; if that's a problem use a cheaper model via `AIPRR_MODEL` for the smoke test.

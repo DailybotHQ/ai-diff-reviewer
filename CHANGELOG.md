@@ -59,7 +59,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent-runner CLIs no longer lose a review on exit:** a non-zero exit
   with a written findings file posts a partial review (footer + WARNING);
   exit 0 without a findings file posts an explicit summary-only "incomplete
-  review" instead of failing the run (observed live with the Grok CLI).
+  review" (observed live with the Grok CLI). An incomplete review is never
+  a green review: every blocking strictness fails the check (`lenient` stays
+  green by definition), the reviewed label is not stamped, `label-once`
+  does not consume the label toggle, and the prior IAR state is re-embedded
+  unchanged so no open finding is retired by an empty round.
+- **Stale findings files are removed before the CLI runs:** a
+  `.aiprr/findings.json` left by a previous step or a persistent self-hosted
+  workspace can no longer be posted as this run's review.
+- **`verified` resolution corroborates against this round's fingerprints**
+  (surfaced, overflow and silenced findings): a re-posted issue is never
+  auto-retired even when the model also claims it resolved.
+- **Agent-runner output contract uses a four-backtick fence** so the escaped
+  ```suggestion example inside the schema cannot end the JSON block early
+  for CLIs that render the directive as Markdown.
+- **`verified_install.sh` hardening:** `cursor-version` / `grok-version` must
+  match `^[A-Za-z0-9._-]+$` before being used as a URL or path segment;
+  `sha256sum` falls back to `shasum -a 256` and the hash compare no longer
+  needs bash 4 (macOS self-hosted runners).
 - **Agent-runner output contract** states the effective inline cap and shows
   an escaped suggestion-block example; the prompt's tool-substitution note
   now covers `post_inline_comment` / `submit_review` (prompt v3.1.1); the

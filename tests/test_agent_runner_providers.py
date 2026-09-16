@@ -53,6 +53,18 @@ def _write_findings(tmp: Path, payload: dict) -> Path:
     return path
 
 
+def _writer_argv(path: Path, payload: dict, exit_code: int = 0) -> list[str]:
+    """A fake CLI that writes `payload` to `path` and exits with `exit_code`
+    (v2.2.0+: `_invoke_cli_agent` removes any pre-existing findings file
+    before the subprocess, so the file must come from the subprocess)."""
+    return [
+        "python3", "-c",
+        "import pathlib, sys; p = pathlib.Path(sys.argv[1]); p.parent.mkdir(parents=True, exist_ok=True); "
+        "p.write_text(sys.argv[2]); sys.exit(int(sys.argv[3]))",
+        str(path), json.dumps(payload), str(exit_code),
+    ]
+
+
 class BuildProviderDispatchTests(unittest.TestCase):
     """`build_provider()` returns the right class per `provider_id`."""
 
@@ -180,12 +192,8 @@ class InvokeCliAgentTests(unittest.TestCase):
     def test_success_parses_findings_file(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
-            findings_path = _write_findings(
-                tmp,
-                {"summary": "ok", "findings": []},
-            )
-            # Use `python3 -c "pass"` — always exits 0.
-            argv = ["python3", "-c", "pass"]
+            findings_path = tmp / ".aiprr" / "findings.json"
+            argv = _writer_argv(findings_path, {"summary": "ok", "findings": []})
             result = reviewer._invoke_cli_agent(
                 argv=argv,
                 workspace=tmp,
@@ -224,15 +232,39 @@ class InvokeCliAgentTests(unittest.TestCase):
                     env={**os.environ}, cli_name="TestCLI",
                 )
             self.assertEqual(res.findings, [])
+            self.assertTrue(res.incomplete, "main() reads this flag to fail the gate and skip the label")
             self.assertIn("without writing its findings file", res.summary)
             self.assertIn("incomplete review", res.summary)
             self.assertTrue(any("WARNING" in str(c.args[0]) and "did not write" in str(c.args[0]) for c in fake_log.call_args_list))
 
+    def test_stale_findings_file_is_removed_before_the_cli_runs(self) -> None:
+        """A findings file left by a previous step or a persistent workspace
+        must never be posted as this run's review."""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            stale = _write_findings(tmp, {"summary": "STALE", "findings": [{"path": "a.py", "line": 1, "body": "old", "severity": "critical"}]})
+            with mock.patch.object(reviewer, "log"):
+                res = reviewer._invoke_cli_agent(
+                    argv=["python3", "-c", "pass"], workspace=tmp, findings_path=stale,
+                    env={**os.environ}, cli_name="TestCLI",
+                )
+            self.assertTrue(res.incomplete)
+            self.assertNotIn("STALE", res.summary)
+            self.assertEqual(res.findings, [])
+
+    def test_incomplete_review_gate_never_greens_a_blocking_strictness(self) -> None:
+        for strictness in ("block-on-critical", "block-on-warning", "block-on-any"):
+            blocked, reason = reviewer.incomplete_review_gate(strictness, "Grok")
+            self.assertTrue(blocked, strictness)
+            self.assertIn("incomplete review", reason)
+        blocked, reason = reviewer.incomplete_review_gate("lenient", "Grok")
+        self.assertFalse(blocked)
+        self.assertIn("lenient", reason)
+
     def test_nonzero_exit_with_findings_file_is_a_partial_review(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
-            _write_findings(tmp, {"summary": "s", "findings": [{"path": "a.py", "line": 1, "body": "b", "severity": "info"}]})
-            argv = ["python3", "-c", "import sys; sys.exit(3)"]
+            argv = _writer_argv(tmp / ".aiprr" / "findings.json", {"summary": "s", "findings": [{"path": "a.py", "line": 1, "body": "b", "severity": "info"}]}, exit_code=3)
             with mock.patch.object(reviewer, "log") as fake_log:
                 res = reviewer._invoke_cli_agent(
                     argv=argv, workspace=tmp, findings_path=tmp / ".aiprr" / "findings.json",

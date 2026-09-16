@@ -32,9 +32,16 @@ cli="${1:-}"; version="${2:-}"; expected="${3:-}"
 if [ -n "$expected" ] && ! [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
   echo "::error::<cli>-installer-sha256 must be a 64-hex SHA-256, got ${#expected} characters" >&2; exit 2
 fi
+if [ -n "$version" ] && ! [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "::error::<cli>-version must match ^[A-Za-z0-9._-]+$ (it is used as a URL and path segment), got ${version@Q}" >&2; exit 2
+fi
 tmpdir="$(mktemp -d)"; trap 'rm -rf "$tmpdir"' EXIT
 
-sha_of() { sha256sum "$1" | awk '{print $1}'; }
+lower() { tr '[:upper:]' '[:lower:]'; }
+sha_of() {  # GNU coreutils on Linux runners; perl shasum on macOS
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
 verify() {  # verify <file> <label>
   local actual; actual="$(sha_of "$1")"
   echo "$2 sha256: $actual"
@@ -42,8 +49,9 @@ verify() {  # verify <file> <label>
     echo "::notice::$2 not verified (no expected sha256 configured). Pin it with the value above."
     return 0
   fi
-  if [ "${actual,,}" != "${expected,,}" ]; then
-    echo "::error::$2 sha256 mismatch: expected ${expected,,}, got $actual. Refusing to run it. Update the pin if the vendor published a new artefact." >&2
+  local want; want="$(printf '%s' "$expected" | lower)"
+  if [ "$(printf '%s' "$actual" | lower)" != "$want" ]; then
+    echo "::error::$2 sha256 mismatch: expected $want, got $actual. Refusing to run it. Update the pin if the vendor published a new artefact." >&2
     exit 4
   fi
   echo "$2 verified against the configured sha256"

@@ -333,6 +333,17 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 
 Missing files raise `FileNotFoundError` with an actionable message. Malformed JSON raises `ValueError` with the offending snippet quoted.
 
+### Degrade paths (v2.2.0+)
+
+| CLI outcome | What the action does | Check / label |
+|---|---|---|
+| exit 0, findings file written | normal review | strictness gate as usual |
+| non-zero exit, findings file written | posts the review with a `Partial review: <cli> exited with code N` footer and a WARNING in the log | strictness gate as usual |
+| exit 0, no findings file | posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
+| non-zero exit, no findings file | the run fails with the CLI's stderr/stdout tail | red |
+
+Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run.
+
 ### The prompt directive
 
 CLI providers wrap the review instructions with `write_findings_prompt_directive()`, which appends the schema + "write your findings to this file before ending your turn" instruction to whatever comes from `prompts/default.md`. The directive is standardised so every CLI writes the same schema — one parser, three producers.

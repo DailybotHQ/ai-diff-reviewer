@@ -340,3 +340,35 @@ class ContractFixesTests(unittest.TestCase):
         self.assertIn("where this prompt says `post_inline_comment` or `submit_review` and your environment gives you an output contract instead", prompt)
         self.assertEqual(prompt, (_ROOT / "skills" / "ai-diff-reviewer" / "prompt.md").read_text(encoding="utf-8"))
 
+
+
+
+class DirectiveFenceTests(unittest.TestCase):
+    def test_output_contract_uses_a_four_backtick_fence(self) -> None:
+        """The ```suggestion example inside the schema must not close the
+        JSON block (CommonMark closes a fence at the next line with at least
+        as many backticks)."""
+        d = reviewer.write_findings_prompt_directive("RUBRIC", Path("/tmp/f.json"))
+        start = d.index("````json\n"); end = d.index("\n````\n", start)
+        block = d[start:end]
+        self.assertIn("```suggestion", block)
+        self.assertNotIn("\n```\n", block, "a bare three-backtick line would end the fence early")
+
+
+class VerifiedInstallScriptTests(unittest.TestCase):
+    _SCRIPT = Path(__file__).resolve().parent.parent / ".github" / "scripts" / "verified_install.sh"
+
+    def _run(self, *args: str) -> "subprocess.CompletedProcess[str]":
+        return subprocess.run(["bash", str(self._SCRIPT), *args], capture_output=True, text=True, env={**os.environ, "VERIFIED_INSTALL_DRY_RUN": "1"})
+
+    def test_rejects_a_version_that_is_not_a_plain_segment(self) -> None:
+        for bad in ("../x", "1.0/../../etc", "a b", "$(id)"):
+            r = self._run("cursor", bad, "")
+            self.assertEqual(r.returncode, 2, bad)
+            self.assertIn("-version must match", r.stderr)
+
+    def test_rejects_a_malformed_sha(self) -> None:
+        r = self._run("grok", "", "abc")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("64-hex", r.stderr)
+

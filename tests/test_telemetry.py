@@ -179,15 +179,16 @@ class WiringTests(unittest.TestCase):
         import tempfile, subprocess as _sp
         with tempfile.TemporaryDirectory() as td:
             fp = Path(td) / ".aiprr" / "findings.json"; fp.parent.mkdir()
-            fp.write_text(json.dumps({"summary": "s", "findings": []}))
             fake = _sp.CompletedProcess(["x"], 0, stdout=CLAUDE_CODE_STREAM, stderr="")
-            with mock.patch.object(reviewer.subprocess, "run", return_value=fake):
+            def fake_run(*_a: Any, **_k: Any) -> Any:  # the "CLI" writes the file (stale files are unlinked first)
+                fp.write_text(json.dumps({"summary": "s", "findings": []})); return fake
+            with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run):
                 res = reviewer._invoke_cli_agent(argv=["x"], workspace=Path(td), findings_path=fp, env={}, cli_name="X", usage_parser=reviewer.parse_claude_code_usage)
             assert res.usage is not None
             self.assertEqual(res.usage.output_tokens, 49)
             def boom(_: str) -> Any:
                 raise RuntimeError("bad parser")
-            with mock.patch.object(reviewer.subprocess, "run", return_value=fake), mock.patch.object(reviewer, "log"):
+            with mock.patch.object(reviewer.subprocess, "run", side_effect=fake_run), mock.patch.object(reviewer, "log"):
                 res2 = reviewer._invoke_cli_agent(argv=["x"], workspace=Path(td), findings_path=fp, env={}, cli_name="X", usage_parser=boom)
             self.assertIsNone(res2.usage)
             self.assertEqual(res2.summary, "s")

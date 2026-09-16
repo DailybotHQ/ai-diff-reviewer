@@ -2735,6 +2735,10 @@ def _invoke_cli_agent(
     large prompt this way instead of via a positional CLI argument.
     """
     log(f"Invoking {cli_name}: {' '.join(shlex.quote(a) for a in argv[:2])} …")
+    # A findings file that exists AFTER the subprocess must have been written
+    # by THIS run — a leftover from a previous step or a persistent
+    # self-hosted workspace would otherwise be posted as a review.
+    findings_path.unlink(missing_ok=True)
     try:
         result = subprocess.run(
             argv,
@@ -2785,7 +2789,7 @@ def _invoke_cli_agent(
             f"{findings_path}; posting a summary-only review. "
             f"stdout tail: {stdout_tail_ok!r}."
         )
-        return ReviewResult(
+        incomplete_result: ReviewResult = ReviewResult(
             summary=(
                 "## Code Review Summary\n\n"
                 f"_The {cli_name} agent finished without writing its findings "
@@ -2794,7 +2798,14 @@ def _invoke_cli_agent(
                 "for the agent's own output._"
             ),
             findings=[],
+            incomplete=True,
         )
+        if usage_parser is not None:
+            try:
+                incomplete_result.usage = usage_parser(result.stdout or "")
+            except Exception as exc:  # noqa: BLE001 — telemetry never fails a run
+                log(f"Usage parse skipped ({cli_name}): {type(exc).__name__}: {exc}")
+        return incomplete_result
 
     parsed: ReviewResult = parse_findings_file(
         findings_path, allow_malformed_summary_fallback=True
@@ -4671,6 +4682,27 @@ class ReviewResult:
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
+    # Agent-runner degrade (v2.2.0+): the CLI exited 0 without writing its
+    # findings file. The summary explains it; `main()` never lets an
+    # incomplete review green the check or stamp the reviewed label.
+    incomplete: bool = False
+
+
+def incomplete_review_gate(strictness: str, cli_name: str) -> tuple[bool, str]:
+    """Gate verdict for an incomplete agent-runner review.
+
+    A review that never produced the contract output is not a clean review:
+    every blocking strictness fails the check (the PR was not reviewed);
+    only `lenient` — "never blocks" — stays green, and even then the
+    reviewed label is not stamped.
+    """
+    reason: str = (
+        f"incomplete review — {cli_name} ended without writing its findings "
+        "file; re-run the review"
+    )
+    if strictness == STRICTNESS_LENIENT:
+        return False, reason + " (lenient — check stays green)"
+    return True, reason
 
 
 # ---------------------------------------------------------------------------
@@ -6619,12 +6651,22 @@ def run_iar_post_llm(
         and resolution_policy == RESOLUTION_POLICY_VERIFIED
         and pre_context.mode == IAR_MODE_INCREMENTAL
     ):
+        # `Finding.fingerprint` is stamped further down; corroboration needs
+        # this round's fingerprints NOW, over every finding the model
+        # produced (surfaced, overflow and silenced) — a re-posted issue is
+        # never "absent this round".
+        round_fps: set[str] = {
+            finding_fingerprint(finding=f, code_context=code_contexts.get(f.path))
+            for f in list(surfaced)
+            + list(overflow)
+            + [sf.finding for sf in policy_result.findings_silenced]
+        }
         verified_resolved_fps = {
             pf.fingerprint
             for pf in reconcile_prior_findings(
                 prior_findings=pre_context.prior_findings,
                 updates=result.prior_finding_updates,
-                current_fingerprints={f.fingerprint for f in result.findings if f.fingerprint},
+                current_fingerprints=round_fps,
                 delta=pre_context.delta,
                 workspace=workspace,
                 policy=resolution_policy,
@@ -8864,8 +8906,9 @@ def write_findings_prompt_directive(
         + "## Output contract (MANDATORY)\n\n"
         + "Before ending your turn, write your review to the file:\n\n"
         + f"    {findings_path}\n\n"
-        + "as JSON matching this schema:\n\n"
-        + "```json\n"
+        + "as JSON matching this schema (the outer fence is four backticks so "
+        + "the three-backtick suggestion example inside stays part of it):\n\n"
+        + "````json\n"
         + "{\n"
         + '  "summary": "markdown body of the overall review",\n'
         + '  "findings": [\n'
@@ -8888,7 +8931,7 @@ def write_findings_prompt_directive(
             else ""
         )
         + "}\n"
-        + "```\n\n"
+        + "````\n\n"
         + "Rules:\n"
         + "- `path` and `line` MUST reference a line that appears in the PR "
         + "diff. Off-diff lines are rejected by GitHub with HTTP 422 and lose "
@@ -10012,7 +10055,19 @@ def main() -> int:
         result.overall_severity = overall_severity(
             [f.severity for f in result.findings]
         )
-    if iar_pre_context is not None:
+    if iar_pre_context is not None and result.incomplete:
+        # No findings were produced, so nothing was resolved: re-embed the
+        # prior state unchanged (as the escape-label path does) instead of
+        # recording an empty round that would retire every open finding.
+        log("IAR post-LLM: incomplete review — persisted state unchanged.")
+        iar_state_final = iar_pre_context.prior_state
+        iar_policy_final = iar_pre_context.pre_policy_result
+        if iar_pre_context.prior_findings:
+            result.overall_severity = overall_severity(
+                [result.overall_severity]
+                + [pf.severity for pf in iar_pre_context.prior_findings]
+            )
+    elif iar_pre_context is not None:
         try:
             iar_state_final, iar_policy_final = run_iar_post_llm(
                 iar_config=iar_config,
@@ -10235,6 +10290,13 @@ def main() -> int:
     # ------------------------------------------------------------------
     severity: str = result.overall_severity
     blocked, block_reason = evaluate_strictness(severity, strictness)
+    if result.incomplete:
+        # An incomplete agent-runner review must not green the check.
+        incomplete_blocked, incomplete_reason = incomplete_review_gate(
+            strictness, getattr(provider, "CLI_NAME", provider_id)
+        )
+        if incomplete_blocked or not blocked:
+            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
 
     # PR description gate — orthogonal to the strictness gate. When
     # `pr-description-mode: block`, an inadequate description forces
@@ -10275,7 +10337,7 @@ def main() -> int:
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".
-    if trigger_mode == TRIGGER_LABEL_ONCE and not blocked:
+    if trigger_mode == TRIGGER_LABEL_ONCE and not blocked and not result.incomplete:
         tracking_body = write_trigger_state(
             tracking_body,
             {"label_toggle_generation": label_toggle_generation},
@@ -10292,7 +10354,9 @@ def main() -> int:
     # keeps the marker honest.
     # ------------------------------------------------------------------
     label_stamped: bool = False
-    if applied_label and not blocked:
+    if applied_label and result.incomplete:
+        log(f"Skipped applying {applied_label!r} — incomplete review")
+    elif applied_label and not blocked:
         try:
             gh_apply_label(
                 token=gh_token,
