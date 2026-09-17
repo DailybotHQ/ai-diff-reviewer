@@ -18,7 +18,9 @@ Two defects, both covered here:
 2. Under `advisory`, an outstanding prior finding could never be retired once
    its thread was collapsed, so the check could not go green after a real fix.
 
-Every test below fails on v2.3.0 and passes after the fix.
+Companion module: `test_iar_advisory_escape.py` (the advisory escape,
+corroboration, real-git and production replays). Every test here fails on
+v2.3.0 and passes after the fix.
 """
 
 from __future__ import annotations
@@ -74,144 +76,6 @@ def _delta(files: tuple[str, ...] = ("src/auth.py",)) -> Any:
 
 def _resolved(fp: str) -> dict[str, tuple[str, str]]:
     return {fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "Fixed by validating the token.")}
-
-
-class AdvisoryDeadlockEscape(unittest.TestCase):
-    """(a) A corroborated fix on a COLLAPSED thread must stop gating."""
-
-    def _reconcile(self, prior: Any, updates: dict[str, tuple[str, str]], root: Path) -> Any:
-        return reviewer.reconcile_prior_findings(
-            prior_findings=[prior],
-            updates=updates,
-            current_fingerprints=set(),  # fingerprint NOT re-emitted this round
-            delta=_delta(),              # file changed since the last head
-            workspace=root,
-            policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-        )
-
-    def test_collapsed_thread_with_corroboration_is_retired(self) -> None:
-        fp = "a" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = self._reconcile(_prior(fp, minimized=True), _resolved(fp), root)
-        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
-        self.assertEqual(rec.still_open, [])
-        self.assertEqual(rec.unverified, [])
-
-    def test_outdated_thread_counts_as_collapsed(self) -> None:
-        fp = "b" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = self._reconcile(_prior(fp, outdated=True), _resolved(fp), root)
-        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
-
-    def test_live_thread_keeps_strict_advisory_behaviour(self) -> None:
-        """Not collapsed → a maintainer can still resolve it, so advisory
-        must NOT auto-retire. This is the guard on the escape hatch."""
-        fp = "c" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = self._reconcile(_prior(fp), _resolved(fp), root)
-        self.assertEqual(rec.resolved, [])
-        self.assertEqual([p.fingerprint for p in rec.unverified], [fp])
-        self.assertEqual([p.fingerprint for p in rec.still_open], [fp])
-
-    def test_collapsed_but_file_untouched_is_not_retired(self) -> None:
-        """Corroboration is never weakened: the file must have changed (or be
-        gone) even when the thread is collapsed."""
-        fp = "d" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates=_resolved(fp),
-                current_fingerprints=set(),
-                delta=_delta(files=("README.md",)),  # auth.py untouched
-                workspace=root,
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(rec.resolved, [])
-        self.assertEqual([p.fingerprint for p in rec.unverified], [fp])
-
-    def test_collapsed_but_finding_re_emitted_is_not_retired(self) -> None:
-        """The model said 'resolved' but produced the same finding again."""
-        fp = "e" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates=_resolved(fp),
-                current_fingerprints={fp},  # re-emitted this round
-                delta=_delta(),
-                workspace=root,
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(rec.resolved, [])
-        self.assertEqual([p.fingerprint for p in rec.unverified], [fp])
-
-
-class StillOpenPriorCriticalStillBlocks(unittest.TestCase):
-    """(b) A prior critical the model did NOT mark resolved keeps blocking,
-    and the body must say so."""
-
-    def test_no_verdict_stays_open_even_when_collapsed(self) -> None:
-        fp = "f" * 16
-        with tempfile.TemporaryDirectory() as td:
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates={},  # model gave no verdict
-                current_fingerprints=set(),
-                delta=_delta(),
-                workspace=Path(td),
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(rec.resolved, [])
-        self.assertEqual([p.fingerprint for p in rec.still_open], [fp])
-
-    def test_explicit_open_verdict_stays_open(self) -> None:
-        fp = "0" * 16
-        with tempfile.TemporaryDirectory() as td:
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates={fp: (reviewer.PRIOR_FINDING_STATUS_OPEN, "still broken")},
-                current_fingerprints=set(),
-                delta=_delta(),
-                workspace=Path(td),
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(rec.resolved, [])
-        self.assertEqual([p.fingerprint for p in rec.still_open], [fp])
-
-    def test_body_states_the_block_when_a_prior_critical_is_open(self) -> None:
-        blocked, reason = reviewer.compute_check_gate(
-            severity=reviewer.SEVERITY_CRITICAL,
-            strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-            incomplete=False,
-            cli_name="grok",
-            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
-            description_adequate=True,
-            description_reason="",
-        )
-        self.assertTrue(blocked)
-        block = reviewer.render_gate_status_block(
-            blocked=blocked,
-            block_reason=reason,
-            severity=reviewer.SEVERITY_CRITICAL,
-            strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-        )
-        self.assertIn("failing", block)
-        self.assertNotIn("passing", block)
-        self.assertIn("block-on-critical", block)
 
 
 class NewCriticalsStillBlock(unittest.TestCase):
@@ -381,527 +245,129 @@ class AgentRunnerPriorFindingRoundTrip(unittest.TestCase):
         self.assertFalse(blocked)
 
 
-class GateSeverityNoLongerEscalates(unittest.TestCase):
-    """The user-visible symptom, through the real IAR post-LLM path.
+class ReconciliationIsComputedOnce(unittest.TestCase):
+    """Finding #2 on PR #55: the footer used to run a SECOND reconciliation
+    with different `current_fingerprints` than the gate. Now the gate stores
+    the one it decided on and the footer reads it back."""
 
-    On v2.3.0 `run_iar_post_llm` folded EVERY outstanding prior severity into
-    `result.overall_severity` under `advisory`, so a fixed critical kept the
-    check red forever. It must now drop out once the reconciliation retires it
-    — and must still escalate when the finding is genuinely open.
-    """
-
-    def _run(self, prior: Any, updates: dict[str, tuple[str, str]], root: Path) -> Any:
-        result = reviewer.ReviewResult(
-            summary="Prior review items are addressed.",
-            findings=[],
-            overall_severity=reviewer.SEVERITY_NONE,
-        )
-        result.prior_finding_updates = dict(updates)
+    def test_run_iar_post_llm_stores_the_reconciliation_it_gated_on(self) -> None:
+        fp = "a" * 16
+        result = reviewer.ReviewResult(summary="s", findings=[], overall_severity=reviewer.SEVERITY_NONE)
+        result.prior_finding_updates = _resolved(fp)
         pre = reviewer.IARPreLLMContext(
-            prior_state=None,
-            transition=reviewer.GenerationTransition.NEW_COMMITS,
-            base_sha="b" * 40,
-            head_sha="6" * 40,
-            range_hash="h",
-            new_lines_pct=0.0,
-            pr_labels=[],
-            pre_policy_result=reviewer.PolicyResult(
-                findings_to_surface=[],
-                findings_silenced=[],
-                effective_max_inline_comments=30,
-                prompt_addendum="",
-                policy_applied=reviewer.IAR_POLICY_ITERATIVE,
-            ),
-            prior_findings=(prior,),
-            mode=reviewer.IAR_MODE_INCREMENTAL,
-            delta=_delta(),
+            prior_state=None, transition=reviewer.GenerationTransition.NEW_COMMITS,
+            base_sha="b" * 40, head_sha="6" * 40, range_hash="h", new_lines_pct=0.0, pr_labels=[],
+            pre_policy_result=reviewer.PolicyResult(findings_to_surface=[], findings_silenced=[],
+                effective_max_inline_comments=30, prompt_addendum="", policy_applied=reviewer.IAR_POLICY_ITERATIVE),
+            prior_findings=(_prior(fp, minimized=True),), mode=reviewer.IAR_MODE_INCREMENTAL, delta=_delta(),
         )
-        cfg = reviewer.IARConfig(
-            policy=reviewer.IAR_POLICY_ITERATIVE,
-            max_review_rounds=0,
-            cap_multiplier=1,
-            escape_label="full-review-please",
-        )
-        with mock.patch.object(reviewer, "_load_code_contexts_for_findings", return_value={}):
-            state, _ = reviewer.run_iar_post_llm(
-                iar_config=cfg,
-                pre_context=pre,
-                result=result,
-                base_max_inline_comments=30,
-                telemetry=reviewer.RunTelemetry(),
-                resolution_policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-                workspace=root,
-            )
-        return result, state
-
-    def _workspace(self, td: str) -> Path:
-        root = Path(td)
-        (root / "src").mkdir()
-        (root / "src" / "auth.py").write_text("validated\n", encoding="utf-8")
-        return root
-
-    def test_retired_critical_stops_gating_and_check_goes_green(self) -> None:
-        fp = "a" * 16
-        with tempfile.TemporaryDirectory() as td:
-            result, state = self._run(
-                _prior(fp, minimized=True), _resolved(fp), self._workspace(td)
-            )
-        self.assertEqual(result.overall_severity, reviewer.SEVERITY_NONE)
-        self.assertNotIn(fp, state.open_fingerprints_this_gen)
-        self.assertIn(fp, state.resolved_fingerprints)
-        blocked, _ = reviewer.compute_check_gate(
-            severity=result.overall_severity,
-            strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-            incomplete=False,
-            cli_name="grok",
-            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
-            description_adequate=True,
-            description_reason="",
-        )
-        self.assertFalse(blocked, "a corroborated fix must be able to green the check")
-
-    def test_open_critical_still_escalates_and_still_blocks(self) -> None:
-        fp = "f" * 16
-        with tempfile.TemporaryDirectory() as td:
-            result, state = self._run(
-                _prior(fp, minimized=True), {}, self._workspace(td)
-            )
-        self.assertEqual(result.overall_severity, reviewer.SEVERITY_CRITICAL)
-        self.assertIn(fp, state.open_fingerprints_this_gen)
-        blocked, _ = reviewer.compute_check_gate(
-            severity=result.overall_severity,
-            strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-            incomplete=False,
-            cli_name="grok",
-            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
-            description_adequate=True,
-            description_reason="",
-        )
-        self.assertTrue(blocked)
-
-    def test_live_thread_critical_still_escalates_under_advisory(self) -> None:
-        """Escape hatch stays shut while a maintainer can resolve the thread."""
-        fp = "c" * 16
-        with tempfile.TemporaryDirectory() as td:
-            result, _ = self._run(_prior(fp), _resolved(fp), self._workspace(td))
-        self.assertEqual(result.overall_severity, reviewer.SEVERITY_CRITICAL)
-
-
-class CollapseRunsBeforePriorFindingsAreRead(unittest.TestCase):
-    """The escape only works because `collapse-previous` has ALREADY minimized
-    the threads by the time `fetch_prior_findings` reads them.
-
-    If someone reorders `main()` so the IAR pre-context is built before the
-    collapse step, every prior finding would be read with `is_minimized=False`
-    and the escape would silently stop firing — the check would go back to
-    being un-unblockable. Lock the ordering.
-    """
-
-    def test_main_collapses_before_building_the_iar_pre_context(self) -> None:
-        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
-        collapse_call = src.index("            gh_collapse_previous_reviews(")
-        pre_llm_call = src.index("        iar_pre_context = run_iar_pre_llm(")
-        self.assertLess(
-            collapse_call,
-            pre_llm_call,
-            "collapse-previous must run before prior findings are read, or "
-            "PriorFinding.is_minimized is always False",
-        )
-
-    def test_collapse_targets_inline_review_comments(self) -> None:
-        """Minimizing only review bodies would leave inline threads live."""
-        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
-        self.assertIn('for ic in inline:', src)
-        self.assertIn('if not ic.get("isMinimized", False):', src)
-
-
-class AutoRetiredIsVisibleInTheFooter(unittest.TestCase):
-    """A green check nobody signed off on must still be traceable."""
-
-    def test_footer_names_the_auto_retirement(self) -> None:
-        pf = _prior("a" * 16, minimized=True)
-        rec = reviewer.PriorFindingReconciliation(
-            resolved=[pf], still_open=[], regressed=[], unverified=[], auto_retired=[pf]
-        )
-        footer = reviewer.render_incremental_footer(
-            delta=_delta(), reconciliation=rec, new_findings=0
-        )
-        self.assertIn("resolved 1", footer)
-        self.assertIn("1 auto-retired", footer)
-        self.assertIn("thread already collapsed", footer)
-
-    def test_verified_policy_retirement_is_not_labelled_auto(self) -> None:
-        """`verified` replies on and resolves the thread, so it is not the
-        silent path — it must not carry the auto-retired note."""
-        fp = "b" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates=_resolved(fp),
-                current_fingerprints=set(),
-                delta=_delta(),
-                workspace=root,
-                policy=reviewer.RESOLUTION_POLICY_VERIFIED,
-            )
-        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
-        self.assertEqual(rec.auto_retired, [])
-
-    def test_advisory_retirement_is_labelled_auto(self) -> None:
-        fp = "c" * 16
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "src").mkdir()
-            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[_prior(fp, minimized=True)],
-                updates=_resolved(fp),
-                current_fingerprints=set(),
-                delta=_delta(),
-                workspace=root,
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual([p.fingerprint for p in rec.auto_retired], [fp])
-
-
-class RealWorldRegression_ApiServices7987(unittest.TestCase):
-    """The exact production scenario, replayed from the real PR.
-
-    DailyBot-Inc/api-services#7987, grok, block-on-critical, advisory,
-    collapse-previous: round 1 at `30f1675` posted 5 findings (1 critical);
-    round 2 at `66003ff` reported all 5 resolved with 0 new inline comments.
-
-    Every input below was read off the live PR: the five fingerprints and
-    severities from the inline `ai-pr-reviewer-finding` markers, the thread
-    states from `reviewThreads` (all five `isMinimized: true`), and the
-    changed-file set from `git diff 30f1675...66003ff`. The footer on that
-    review — "5 claimed resolved but unverified" — is reachable only via a
-    `resolved` verdict, which is how we know grok populated all five.
-
-    v2.3.0 produced: resolved 0 · still open 5, severity `critical`, check
-    FAILED, body "Recommendation: approve". Both halves are asserted here.
-    """
-
-    FINDINGS: tuple[tuple[str, str, str], ...] = (
-        ("4b2a3c24aeabae3c", "critical", "docker/local/docker-compose.yaml"),
-        ("035fed8a5d5428e1", "warning", "docker/local/docker-compose.yaml"),
-        ("3b8717af7b89be10", "warning", ".github/workflows/0_pr-review.yml"),
-        ("763e8abf38fc6047", "warning", "docker/local/django/entrypoint.sh"),
-        ("bcf8530e3991aa70", "info", "docker/local/django/Dockerfile"),
-    )
-    CHANGED: tuple[str, ...] = (
-        ".github/workflows/0_pr-review.yml", "AGENTS.md", "docker/local/README.md",
-        "docker/local/django/Dockerfile", "docker/local/django/entrypoint.sh",
-        "docker/local/docker-compose.yaml", "docker/local/herdr-api-ssh-setup.md",
-        "skills-lock.json",
-    )
-
-    def _priors(self) -> list[Any]:
-        return [
-            reviewer.PriorFinding(
-                thread_id=f"T{i}", comment_id=f"C{i}", comment_database_id=i,
-                path=path, line=10, severity=sev, fingerprint=fp,
-                body_excerpt="", is_outdated=True, is_minimized=True,
-            )
-            for i, (fp, sev, path) in enumerate(self.FINDINGS)
-        ]
-
-    def _delta(self) -> Any:
-        return reviewer.IncrementalDelta(
-            prior_head_sha="30f1675" + "0" * 33,
-            head_sha="66003ff" + "0" * 33,
-            changed_files=self.CHANGED,
-            delta_ratio=0.4,
-        )
-
-    def _gate(self, priors: list[Any], retired: set[str]) -> tuple[str, bool]:
-        severity = reviewer.overall_severity(
-            [reviewer.SEVERITY_NONE]
-            + [p.severity for p in priors if p.fingerprint not in retired]
-        )
-        blocked, _ = reviewer.compute_check_gate(
-            severity=severity, strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-            incomplete=False, cli_name="grok",
-            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
-            description_adequate=True, description_reason="",
-        )
-        return severity, blocked
-
-    def test_all_five_resolved_unblocks_the_check(self) -> None:
-        priors = self._priors()
-        updates = {
-            fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "")
-            for fp, _, _ in self.FINDINGS
-        }
-        with tempfile.TemporaryDirectory() as td:
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=priors, updates=updates,
-                current_fingerprints=set(),  # 0 new inline findings that round
-                delta=self._delta(), workspace=Path(td),
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(len(rec.resolved), 5)
-        self.assertEqual(rec.still_open, [])
-        self.assertEqual(len(rec.auto_retired), 5)
-        severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
-        self.assertEqual(severity, reviewer.SEVERITY_NONE)
-        self.assertFalse(blocked, "v2.3.0 kept this check red with no way to unblock")
-
-    def test_next_run_after_upgrade_passes_clean(self) -> None:
-        """What happens on #7987 the first time 2.3.1 runs: the fix already
-        landed in `66003ff`, so whether the trigger is a same-head re-run
-        (empty delta) or an unrelated push, the last-round delta no longer
-        touches the four files. `changed_since_raised` (review SHA
-        `30f1675` → HEAD, the real compare) is what corroborates them."""
-        priors = [
-            reviewer.PriorFinding(**{**p.__dict__, "review_sha": "30f1675" + "0" * 33})
-            for p in self._priors()
-        ]
-        updates = {fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "") for fp, _, _ in self.FINDINGS}
-        since = {"30f1675" + "0" * 33: self.CHANGED}
-        for label, delta_files in (("same-head re-run", ()), ("unrelated push", ("docs/x.md",))):
-            with self.subTest(label), tempfile.TemporaryDirectory() as td:
-                rec = reviewer.reconcile_prior_findings(
-                    prior_findings=priors, updates=updates, current_fingerprints=set(),
-                    delta=reviewer.IncrementalDelta(
-                        prior_head_sha="66003ff" + "0" * 33, head_sha="66003ff" + "0" * 33,
-                        changed_files=delta_files, delta_ratio=0.0),
-                    workspace=Path(td), policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-                    changed_since_raised=since,
-                )
-                self.assertEqual(len(rec.resolved), 5)
-                severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
-                self.assertEqual(severity, reviewer.SEVERITY_NONE)
-                self.assertFalse(blocked, f"{label}: the stuck PR must go green")
-
-    def test_the_critical_alone_still_blocks_and_corrects_the_body(self) -> None:
-        """Same PR, but the critical is NOT fixed — must stay red and the
-        body must stop saying approve."""
-        priors = self._priors()
-        updates = {
-            fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "")
-            for fp, _, _ in self.FINDINGS[1:]  # everything except the critical
-        }
-        with tempfile.TemporaryDirectory() as td:
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=priors, updates=updates,
-                current_fingerprints=set(), delta=self._delta(),
-                workspace=Path(td), policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-            )
-        self.assertEqual(len(rec.resolved), 4)
-        self.assertEqual(
-            [p.fingerprint for p in rec.still_open], ["4b2a3c24aeabae3c"]
-        )
-        severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
-        self.assertEqual(severity, reviewer.SEVERITY_CRITICAL)
-        self.assertTrue(blocked)
-        body, rewritten = reviewer.reconcile_recommendation_line(
-            "**Recommendation:** approve", blocked=blocked
-        )
-        self.assertTrue(rewritten)
-        self.assertIn("request-changes", body)
-
-
-class RetiredFindingDoesNotFlapBackToRed(unittest.TestCase):
-    """A retired finding must not re-gate on a LATER round.
-
-    Under `advisory` the auto-retired thread stays unresolved on GitHub, so
-    `fetch_prior_findings` keeps returning it. On round 3 the delta no longer
-    touches the file that was fixed in round 2, corroboration fails, and the
-    finding would go back to outstanding — flipping the check green → red with
-    nothing having changed.
-    """
-
-    def test_retired_fingerprints_are_dropped_open_ones_kept(self) -> None:
-        retired, live = _prior("a" * 16, minimized=True), _prior("b" * 16, minimized=True)
-        kept = reviewer.filter_retired_prior_findings(
-            prior_findings=[retired, live],
-            resolved_fingerprints=["a" * 16],
-        )
-        self.assertEqual([p.fingerprint for p in kept], ["b" * 16])
-
-    def test_no_resolved_history_is_a_passthrough(self) -> None:
-        priors = [_prior("a" * 16), _prior("b" * 16)]
-        self.assertEqual(
-            reviewer.filter_retired_prior_findings(
-                prior_findings=priors, resolved_fingerprints=[]
-            ),
-            priors,
-        )
-
-    def test_round_three_stays_green_when_the_delta_moved_on(self) -> None:
-        """Round 2 retired the finding; round 3 touches an unrelated file.
-        Without the filter this re-gated and turned the check red again."""
-        fp = "a" * 16
-        priors = [_prior(fp, minimized=True)]  # thread still unresolved on GitHub
-        gating = reviewer.filter_retired_prior_findings(
-            prior_findings=priors, resolved_fingerprints=[fp]
-        )
-        severity = reviewer.overall_severity(
-            [reviewer.SEVERITY_NONE] + [p.severity for p in gating]
-        )
-        blocked, _ = reviewer.compute_check_gate(
-            severity=severity, strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
-            incomplete=False, cli_name="grok",
-            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
-            description_adequate=True, description_reason="",
-        )
-        self.assertEqual(gating, [])
-        self.assertEqual(severity, reviewer.SEVERITY_NONE)
-        self.assertFalse(blocked)
-
-    def test_filter_is_wired_into_the_pre_llm_path(self) -> None:
-        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
-        self.assertIn("prior_findings = filter_retired_prior_findings(", src)
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
-        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-             "GIT_COMMITTER_EMAIL": "t@t", "HOME": str(repo), "PATH": "/usr/bin:/bin:/usr/local/bin"},
-    ).stdout.strip()
-
-
-def _three_round_repo(root: Path) -> tuple[str, str, str]:
-    """A → finding raised on src/auth.py; B → auth.py fixed; C → unrelated
-    docs change. Returns (A, B, C)."""
-    _git(root, "init", "-q", "-b", "main")
-    (root / "src").mkdir()
-    (root / "src" / "auth.py").write_text("token = request.args['t']\n", encoding="utf-8")
-    (root / "README.md").write_text("v1\n", encoding="utf-8")
-    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "A")
-    a = _git(root, "rev-parse", "HEAD")
-    (root / "src" / "auth.py").write_text("token = validate(request.args['t'])\n", encoding="utf-8")
-    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "B: fix")
-    b = _git(root, "rev-parse", "HEAD")
-    (root / "README.md").write_text("v2\n", encoding="utf-8")
-    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "C: docs")
-    c = _git(root, "rev-parse", "HEAD")
-    return a, b, c
-
-
-class ChangedSinceRaised_RealGit(unittest.TestCase):
-    """`files_changed_between` / `compute_changed_since_raised` against a
-    real repository — the evidence that survives across rounds."""
-
-    def test_files_changed_between_reports_the_fix(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td); a, b, c = _three_round_repo(root)
-            self.assertEqual(
-                reviewer.files_changed_between(from_sha=a, to_sha=c, repo_root=td),
-                {"src/auth.py", "README.md"},
-            )
-            self.assertEqual(
-                reviewer.files_changed_between(from_sha=b, to_sha=c, repo_root=td),
-                {"README.md"},  # the last-round delta alone does NOT include the fix
-            )
-            self.assertEqual(reviewer.files_changed_between(from_sha=c, to_sha=c, repo_root=td), set())
-
-    def test_unknown_sha_is_none_never_a_false_positive(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td); _three_round_repo(root)
-            self.assertIsNone(
-                reviewer.files_changed_between(from_sha="0" * 40, to_sha="HEAD", repo_root=td)
-            )
-
-    def test_compute_map_one_diff_per_review_sha_and_skips_unresolvable(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td); a, b, c = _three_round_repo(root)
-            priors = [
-                _prior("1" * 16, minimized=True), _prior("2" * 16, minimized=True),
-            ]
-            priors = [
-                reviewer.PriorFinding(**{**p.__dict__, "review_sha": sha})
-                for p, sha in zip(priors, (a, "f" * 40))
-            ]
-            m = reviewer.compute_changed_since_raised(
-                prior_findings=priors, head_sha=c, repo_root=td
-            )
-            self.assertEqual(set(m), {a})
-            self.assertEqual(set(m[a]), {"src/auth.py", "README.md"})
-
-
-class FixFromAnEarlierRoundStillCorroborates(unittest.TestCase):
-    """THE scenario for an already-stuck PR upgrading to 2.3.1: the fix
-    landed in round 2, round 3's delta doesn't touch the file (or is empty
-    on a same-head re-run). It must still retire."""
-
-    def _reconcile(self, delta_files: tuple[str, ...], review_sha: str, since: dict[str, tuple[str, ...]]) -> Any:
-        fp = "a" * 16
-        pf = reviewer.PriorFinding(**{**_prior(fp, minimized=True).__dict__, "review_sha": review_sha})
+        cfg = reviewer.IARConfig(policy=reviewer.IAR_POLICY_ITERATIVE, max_review_rounds=0, cap_multiplier=1, escape_label="x")
         with tempfile.TemporaryDirectory() as td:
             root = Path(td); (root / "src").mkdir()
             (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
-            return reviewer.reconcile_prior_findings(
-                prior_findings=[pf], updates=_resolved(fp), current_fingerprints=set(),
-                delta=_delta(files=delta_files), workspace=root,
-                policy=reviewer.RESOLUTION_POLICY_ADVISORY, changed_since_raised=since,
-            )
+            with mock.patch.object(reviewer, "_load_code_contexts_for_findings", return_value={}):
+                reviewer.run_iar_post_llm(iar_config=cfg, pre_context=pre, result=result, base_max_inline_comments=30,
+                    telemetry=reviewer.RunTelemetry(), resolution_policy=reviewer.RESOLUTION_POLICY_ADVISORY, workspace=root)
+        self.assertIsNotNone(result.prior_reconciliation)
+        assert result.prior_reconciliation is not None
+        self.assertEqual([p.fingerprint for p in result.prior_reconciliation.resolved], [fp])
+        self.assertEqual(result.overall_severity, reviewer.SEVERITY_NONE)
+        footer = reviewer.render_incremental_footer(delta=_delta(), reconciliation=result.prior_reconciliation, new_findings=0)
+        self.assertIn("resolved 1 · still open 0", footer)
 
-    def test_unrelated_push_after_the_fix(self) -> None:
-        rec = self._reconcile(("README.md",), "A" * 40, {"A" * 40: ("src/auth.py", "README.md")})
-        self.assertEqual(len(rec.resolved), 1); self.assertEqual(rec.still_open, [])
-
-    def test_same_head_rerun_empty_delta(self) -> None:
-        rec = self._reconcile((), "A" * 40, {"A" * 40: ("src/auth.py",)})
-        self.assertEqual(len(rec.resolved), 1)
-
-    def test_pre_231_finding_without_review_sha_keeps_delta_only_evidence(self) -> None:
-        rec = self._reconcile(("README.md",), "", {})
-        self.assertEqual(rec.resolved, []); self.assertEqual(len(rec.unverified), 1)
-
-    def test_file_untouched_since_raised_is_still_unverified(self) -> None:
-        rec = self._reconcile(("README.md",), "A" * 40, {"A" * 40: ("README.md",)})
-        self.assertEqual(rec.resolved, []); self.assertEqual(len(rec.unverified), 1)
-
-    def test_unresolvable_review_sha_is_conservative(self) -> None:
-        """git couldn't diff it → absent from the map → no evidence → open."""
-        rec = self._reconcile(("README.md",), "A" * 40, {})
-        self.assertEqual(rec.resolved, [])
-
-    def test_end_to_end_with_real_git(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            root = Path(td); a, b, c = _three_round_repo(root)
-            fp = "a" * 16
-            pf = reviewer.PriorFinding(**{**_prior(fp, minimized=True).__dict__, "review_sha": a})
-            since = reviewer.compute_changed_since_raised(prior_findings=[pf], head_sha=c, repo_root=td)
-            delta = reviewer.compute_incremental_delta(prior_head_sha=b, head_sha=c, new_lines_pct=5.0, repo_root=td)
-            assert delta is not None
-            self.assertNotIn("src/auth.py", delta.changed_files)  # round-3 delta misses the fix
-            rec = reviewer.reconcile_prior_findings(
-                prior_findings=[pf], updates=_resolved(fp), current_fingerprints=set(),
-                delta=delta, workspace=root, policy=reviewer.RESOLUTION_POLICY_ADVISORY,
-                changed_since_raised=since,
-            )
-        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
-
-
-class PromptColumnUsesTheSameEvidence(unittest.TestCase):
-    def test_file_changed_since_column_reflects_changed_since_raised(self) -> None:
-        pf = reviewer.PriorFinding(**{**_prior("a" * 16).__dict__, "review_sha": "A" * 40})
-        block = reviewer.render_prior_findings_block(
-            [pf], changed_files=set(), changed_since_raised={"A" * 40: ("src/auth.py",)}
-        )
-        self.assertIn("| yes |", block)
-        block_no = reviewer.render_prior_findings_block([pf], changed_files=set())
-        self.assertIn("| no |", block_no)
-
-
-class PriorFindingCollapsedFlag(unittest.TestCase):
-    def test_is_collapsed_covers_minimized_and_outdated(self) -> None:
-        self.assertFalse(_prior("1" * 16).is_collapsed)
-        self.assertTrue(_prior("1" * 16, minimized=True).is_collapsed)
-        self.assertTrue(_prior("1" * 16, outdated=True).is_collapsed)
-
-    def test_graphql_query_selects_is_minimized(self) -> None:
-        """`fetch_prior_findings` cannot populate the flag it never asks for."""
+    def test_footer_fallback_never_claims_what_the_gate_did_not_honour(self) -> None:
+        """When post-LLM crashed, `main()` escalates every prior severity; a
+        recomputed footer must therefore not report retirements."""
         src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
-        self.assertIn("isMinimized body author { login }", src)
-        self.assertIn("pullRequestReview { body commit { oid } }", src)
+        self.assertIn("if result.prior_reconciliation is not None:", src)
+        self.assertIn("Post-LLM crashed: the gate kept every prior finding", src)
 
+
+class RecommendationRewriteCoversEveryLine(unittest.TestCase):
+    """Finding #6: the rewrite stopped at the first matching line."""
+
+    def test_two_recommendation_lines_are_both_rewritten(self) -> None:
+        summary = "**Recommendation:** approve\n\n…\n\nRecommendation: approve"
+        out, rewritten = reviewer.reconcile_recommendation_line(summary, blocked=True)
+        self.assertTrue(rewritten)
+        self.assertNotRegex(out, r"(?i)\bapprove\b")
+        self.assertEqual(out.count("request-changes"), 2)
+
+
+class InlineComment422Salvage(unittest.TestCase):
+    """The dogfood run on PR #55: 3 bad anchors cost all 7 inline comments.
+    On a 422 the runtime now retries with the provably-anchorable subset."""
+
+    DIFF = (
+        "diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n"
+        "@@ -10,3 +10,4 @@\n x\n+y\n z\n w\n"
+        "@@ -40,2 +41,2 @@\n a\n-b\n+c\n"
+        "diff --git a/gone.py b/gone.py\n--- a/gone.py\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-1\n-2\n-3\n"
+    )
+
+    def test_parse_hunk_ranges(self) -> None:
+        r = reviewer.parse_diff_hunk_ranges(self.DIFF)
+        self.assertEqual(r["src/a.py"], [(10, 13), (41, 42)])
+        self.assertNotIn("gone.py", r)
+
+    def test_anchor_status(self) -> None:
+        r = reviewer.parse_diff_hunk_ranges(self.DIFF)
+        st = reviewer.inline_comment_anchor_status
+        self.assertTrue(st({"path": "src/a.py", "line": 12}, r))
+        self.assertTrue(st({"path": "src/a.py", "line": 13, "start_line": 11}, r))
+        self.assertFalse(st({"path": "src/a.py", "line": 20}, r))          # outside every hunk
+        self.assertFalse(st({"path": "src/a.py", "line": 41, "start_line": 12}, r))  # crosses hunks
+        self.assertIsNone(st({"path": "docs/other.md", "line": 3}, r))     # unknown file → keep
+        self.assertIsNone(st({"path": "src/a.py", "line": 12, "side": "LEFT"}, r))
+
+    def _finding(self, path: str, line: int) -> Any:
+        return reviewer.Finding(path=path, line=line, body="b", severity="warning")
+
+    def test_422_keeps_the_valid_comments_and_names_the_dropped_ones(self) -> None:
+        result = reviewer.ReviewResult(summary="s", overall_severity="warning",
+            findings=[self._finding("src/a.py", 12), self._finding("src/a.py", 20), self._finding("docs/x.md", 3)])
+        calls: list[int] = []
+        def fake_submit(**kw: Any) -> dict[str, Any]:
+            calls.append(len(kw["inline_comments"]))
+            if len(calls) == 1:
+                import urllib.error, io as _io
+                raise urllib.error.HTTPError("u", 422, "Unprocessable", {}, _io.BytesIO(b'{"errors":["Line could not be resolved"]}'))
+            return {"html_url": "ok"}
+        logs: list[str] = []
+        with mock.patch.object(reviewer, "gh_submit_review", fake_submit), \
+             mock.patch.object(reviewer, "log", logs.append):
+            review, dropped = reviewer.gh_submit_review_with_fallback(
+                token="t", repo="o/r", pr_number=1, head_sha="h", result=result, diff_text=self.DIFF)
+        self.assertEqual(calls, [3, 2])          # full attempt, then the anchorable subset
+        self.assertEqual(dropped, 1)
+        self.assertTrue(any("src/a.py:20-20" in m for m in logs))
+
+    def test_without_diff_text_behaviour_is_unchanged_summary_only(self) -> None:
+        result = reviewer.ReviewResult(summary="s", overall_severity="warning", findings=[self._finding("src/a.py", 12)])
+        calls: list[int] = []
+        def fake_submit(**kw: Any) -> dict[str, Any]:
+            calls.append(len(kw["inline_comments"]))
+            if len(calls) == 1:
+                import urllib.error, io as _io
+                raise urllib.error.HTTPError("u", 422, "x", {}, _io.BytesIO(b"{}"))
+            return {}
+        with mock.patch.object(reviewer, "gh_submit_review", fake_submit), mock.patch.object(reviewer, "log", lambda m: None):
+            _, dropped = reviewer.gh_submit_review_with_fallback(token="t", repo="o/r", pr_number=1, head_sha="h", result=result)
+        self.assertEqual(calls, [1, 0]); self.assertEqual(dropped, 1)
+
+    def test_subset_still_rejected_falls_back_to_summary_only(self) -> None:
+        result = reviewer.ReviewResult(summary="s", overall_severity="warning",
+            findings=[self._finding("src/a.py", 12), self._finding("src/a.py", 20)])
+        calls: list[int] = []
+        def fake_submit(**kw: Any) -> dict[str, Any]:
+            calls.append(len(kw["inline_comments"]))
+            if kw["inline_comments"]:
+                import urllib.error, io as _io
+                raise urllib.error.HTTPError("u", 422, "x", {}, _io.BytesIO(b"{}"))
+            return {}
+        with mock.patch.object(reviewer, "gh_submit_review", fake_submit), mock.patch.object(reviewer, "log", lambda m: None):
+            _, dropped = reviewer.gh_submit_review_with_fallback(token="t", repo="o/r", pr_number=1, head_sha="h", result=result, diff_text=self.DIFF)
+        self.assertEqual(calls, [2, 1, 0]); self.assertEqual(dropped, 2)
 
 if __name__ == "__main__":
     unittest.main()

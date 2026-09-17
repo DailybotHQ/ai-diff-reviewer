@@ -862,12 +862,13 @@ PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
 PRIOR_FINDING_STATUS_REGRESSED: str = "regressed"
-# Prior-finding resolution policy (v2.2.0+). `advisory` (default, byte-identical
-# to v2.1.0): the model's `resolved` verdicts are reported but never retire a
-# finding — a maintainer resolves the thread. `verified`: a `resolved` verdict
-# is honoured only when the runtime can corroborate it (fingerprint absent
-# from this round AND the file changed since the last reviewed head or no
-# longer exists); the thread is then replied to and resolved.
+# Prior-finding resolution policy (v2.2.0+). Corroboration = the model said
+# `resolved` AND the fingerprint is absent from this round AND the file changed
+# since the finding was raised (or no longer exists). `verified`: a corroborated
+# verdict retires the finding and the thread is replied to and resolved.
+# `advisory` (default): a maintainer resolves the thread — except when
+# `collapse-previous` already minimized it (v2.3.1), in which case a
+# corroborated verdict retires the finding without touching the thread.
 PRIOR_FINDINGS_RESOLUTION_ENV: str = "AIPRR_PRIOR_FINDINGS_RESOLUTION"
 RESOLUTION_POLICY_ADVISORY: str = "advisory"
 RESOLUTION_POLICY_VERIFIED: str = "verified"
@@ -1532,6 +1533,61 @@ def gh_submit_review(
     )
 
 
+_HUNK_HEADER_RE: re.Pattern[str] = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def parse_diff_hunk_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
+    """RIGHT-side line ranges per file from a unified diff: the lines GitHub
+    will accept as inline-comment anchors (added + context lines).
+
+    `{path: [(first_line, last_line), …]}`; a file present with no ranges is a
+    pure deletion. Files absent from the diff (e.g. cut by truncation) are
+    simply missing — callers must treat "missing" as unknown, not invalid.
+    """
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    current: str | None = None
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++ "):
+            target: str = raw[4:].strip()
+            if target.startswith("b/"):
+                target = target[2:]
+            current = None if target == "/dev/null" else target
+            if current is not None:
+                ranges.setdefault(current, [])
+            continue
+        if current is None:
+            continue
+        m = _HUNK_HEADER_RE.match(raw)
+        if m:
+            start: int = int(m.group(1))
+            count: int = int(m.group(2)) if m.group(2) is not None else 1
+            if count > 0:
+                ranges[current].append((start, start + count - 1))
+    return ranges
+
+
+def inline_comment_anchor_status(
+    comment: dict[str, Any], ranges: dict[str, list[tuple[int, int]]]
+) -> bool | None:
+    """True = provably anchorable, False = provably not, None = unknown file.
+
+    A single- or multi-line anchor is valid when `line` (and `start_line`, if
+    present) fall inside ONE hunk of the file — GitHub rejects ranges that
+    cross a hunk boundary. Only RIGHT-side anchors are validated; LEFT-side
+    ones are left as unknown.
+    """
+    path: str = str(comment.get("path") or "")
+    if path not in ranges:
+        return None
+    if str(comment.get("side") or "RIGHT") != "RIGHT":
+        return None
+    line: int = _as_int(comment.get("line"))
+    start: int = _as_int(comment.get("start_line")) or line
+    if line <= 0 or start <= 0 or start > line:
+        return False
+    return any(lo <= start and line <= hi for lo, hi in ranges[path])
+
+
 def gh_submit_review_with_fallback(
     *,
     token: str,
@@ -1539,8 +1595,18 @@ def gh_submit_review_with_fallback(
     pr_number: int,
     head_sha: str,
     result: "ReviewResult",
+    diff_text: str = "",
 ) -> tuple[dict[str, Any], int]:
-    """Submit the review; on a 422, retry summary-only and report the drop.
+    """Submit the review; on a 422, salvage the anchorable inline comments,
+    then fall back to summary-only.
+
+    v2.3.1: GitHub rejects the WHOLE request when any one anchor is bad, and
+    the old fallback dropped every inline comment with it — on one dogfood
+    run 3 bad anchors cost all 7 comments. When `diff_text` is given, the
+    first retry keeps only the comments whose anchor is provably inside a
+    diff hunk (unknown files are kept — a truncated diff is not evidence
+    against them) and drops the rest by name. Summary-only remains the last
+    resort, so the review is never lost.
 
     Consumes a provider-independent `ReviewResult`. Encodes findings into the
     GitHub Reviews API inline shape at the boundary so agent-runner providers
@@ -1573,10 +1639,41 @@ def gh_submit_review_with_fallback(
         err_body: str = e.read().decode("utf-8", errors="replace")
         log(
             "GitHub rejected the review with HTTP 422 — most likely an inline "
-            f"comment referenced a line outside the diff. Retrying with "
-            f"summary-only ({len(inline_comments)} inline comment(s) will be "
-            f"dropped). Error body: {err_body[:MAX_422_BODY_CHARS]}"
+            f"comment referenced a line outside the diff. Error body: "
+            f"{err_body[:MAX_422_BODY_CHARS]}"
         )
+        if diff_text:
+            ranges: dict[str, list[tuple[int, int]]] = parse_diff_hunk_ranges(diff_text)
+            kept: list[dict[str, Any]] = []
+            rejected: list[str] = []
+            for c in inline_comments:
+                if inline_comment_anchor_status(c, ranges) is False:
+                    rejected.append(f"{c.get('path')}:{c.get('start_line', c.get('line'))}-{c.get('line')}")
+                else:
+                    kept.append(c)
+            if kept and len(kept) < len(inline_comments):
+                log(
+                    f"Retrying with the {len(kept)} anchorable inline comment(s); "
+                    f"dropping {len(rejected)} outside the diff: {', '.join(rejected)}"
+                )
+                try:
+                    review = gh_submit_review(
+                        token=token,
+                        repo=repo,
+                        pr_number=pr_number,
+                        head_sha=head_sha,
+                        body=result.summary,
+                        inline_comments=kept,
+                    )
+                    return review, len(inline_comments) - len(kept)
+                except urllib.error.HTTPError as retry_err:
+                    if retry_err.code != 422:
+                        raise
+                    log(
+                        "The anchorable subset was rejected too — falling back "
+                        "to summary-only."
+                    )
+        log(f"Retrying with summary-only ({len(inline_comments)} inline comment(s) will be dropped).")
         review = gh_submit_review(
             token=token,
             repo=repo,
@@ -4863,6 +4960,10 @@ class ReviewResult:
     usage: UsageTelemetry | None = None
     # Incremental mode: the model's verdict per prior finding fingerprint.
     prior_finding_updates: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # Incremental mode (v2.3.1): the ONE reconciliation the gate was decided
+    # on, stored by `run_iar_post_llm` so the summary footer reports exactly
+    # the retirements that stopped gating — never a second, divergent pass.
+    prior_reconciliation: "PriorFindingReconciliation | None" = None
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
@@ -5815,15 +5916,16 @@ class PriorFinding:
 
     @property
     def is_collapsed(self) -> bool:
-        """True when a maintainer can no longer retire this finding by
-        resolving its thread — the comment was minimized (`collapse-previous`
-        marks every prior round OUTDATED) or the thread's hunk is gone.
+        """True when `collapse-previous` has minimized the thread's anchoring
+        comment, hiding it from the Conversation tab — the state in which the
+        documented `advisory` exit ("a maintainer resolves the thread") is no
+        longer discoverable, so corroboration becomes the only escape.
 
-        This is the condition that makes model-claimed resolution the ONLY
-        remaining escape from the gate; `reconcile_prior_findings` uses it to
-        decide whether corroboration may retire a finding under `advisory`.
+        `is_outdated` is deliberately NOT part of this: an outdated thread on a
+        `collapse-previous: false` repo is still visible and resolvable, and
+        outdated is a "code moved" signal — evidence, not eligibility.
         """
-        return self.is_minimized or self.is_outdated
+        return self.is_minimized
 
 
 def files_changed_between(
@@ -6426,15 +6528,19 @@ def reconcile_prior_findings(
 ) -> PriorFindingReconciliation:
     """Classify the model's verdicts on prior findings.
 
-    `advisory` (default): a `resolved` claim is recorded as *unverified* and
-    the finding stays open — a diff change is not proof that the concrete
-    failure disappeared; a maintainer resolves the thread.
+    Corroboration (both policies): the fingerprint is absent from this round
+    AND the file changed since the finding was raised (or no longer exists).
+    A diff change alone is never proof; the model's `resolved` verdict alone
+    is never proof either.
 
-    `verified`: a `resolved` claim is honoured only when the runtime can
-    corroborate it — the fingerprint is absent from this round AND the file
-    changed since the last reviewed head (or no longer exists). Anything the
-    runtime cannot corroborate stays open and is listed as unverified.
-    `regressed` is model-asserted in both policies; no verdict → still open.
+    `verified`: a corroborated `resolved` claim retires the finding (the
+    caller replies on and resolves the thread).
+
+    `advisory` (default): a `resolved` claim is recorded as *unverified* and
+    the finding stays open for a maintainer to resolve the thread — unless the
+    thread is already collapsed, see below. Anything the runtime cannot
+    corroborate stays open and is listed as unverified under both policies.
+    `regressed` is model-asserted in both; no verdict → still open.
 
     Deadlock escape (v2.3.1): under `advisory` the documented way to retire a
     finding is for a maintainer to resolve its thread. When `collapse-previous`
@@ -7004,17 +7110,17 @@ def run_iar_post_llm(
             + list(overflow)
             + [sf.finding for sf in policy_result.findings_silenced]
         }
+        result.prior_reconciliation = reconcile_prior_findings(
+            prior_findings=pre_context.prior_findings,
+            updates=result.prior_finding_updates,
+            current_fingerprints=round_fps,
+            delta=pre_context.delta,
+            workspace=workspace,
+            policy=resolution_policy,
+            changed_since_raised=pre_context.changed_since_raised,
+        )
         verified_resolved_fps = {
-            pf.fingerprint
-            for pf in reconcile_prior_findings(
-                prior_findings=pre_context.prior_findings,
-                updates=result.prior_finding_updates,
-                current_fingerprints=round_fps,
-                delta=pre_context.delta,
-                workspace=workspace,
-                policy=resolution_policy,
-                changed_since_raised=pre_context.changed_since_raised,
-            ).resolved
+            pf.fingerprint for pf in result.prior_reconciliation.resolved
         }
     if pre_context.prior_findings:
         result.overall_severity = overall_severity(
@@ -9494,14 +9600,15 @@ def reconcile_recommendation_line(summary: str, *, blocked: bool) -> tuple[str, 
     if not blocked or not summary:
         return summary, False
     lines: list[str] = summary.splitlines()
+    rewritten: bool = False
     for i, line in enumerate(lines):
         if "recommendation" not in line.lower():
             continue
         new_line, swapped = _APPROVE_TOKEN_RE.subn("request-changes", line, count=1)
         if swapped:
             lines[i] = new_line + RECOMMENDATION_OVERRIDE_NOTE
-            return "\n".join(lines), True
-    return summary, False
+            rewritten = True
+    return ("\n".join(lines) if rewritten else summary), rewritten
 
 
 def render_gate_status_block(
@@ -10543,8 +10650,11 @@ def main() -> int:
             )
 
     # ------------------------------------------------------------------
-    # Incremental mode: classify advisory verdicts and append the footer.
-    # Human thread resolution is required to retire an outstanding finding.
+    # Incremental mode: apply the resolution policy and append the footer.
+    # The reconciliation is the ONE `run_iar_post_llm` decided the gate on
+    # (`result.prior_reconciliation`); it is recomputed here only when the
+    # post-LLM step crashed and never produced it — and in that fallback the
+    # gate escalated every prior severity, so nothing is reported resolved.
     # ------------------------------------------------------------------
     if (
         iar_pre_context is not None
@@ -10552,20 +10662,30 @@ def main() -> int:
         and iar_pre_context.delta is not None
     ):
         try:
-            current_fps: set[str] = set(
-                iar_state_final.open_fingerprints_this_gen
-                if iar_state_final is not None
-                else [f.fingerprint for f in result.findings if f.fingerprint]
-            )
-            reconciliation: PriorFindingReconciliation = reconcile_prior_findings(
-                prior_findings=iar_pre_context.prior_findings,
-                updates=result.prior_finding_updates,
-                current_fingerprints=current_fps,
-                delta=iar_pre_context.delta,
-                workspace=Path.cwd(),
-                policy=resolution_policy,
-                changed_since_raised=iar_pre_context.changed_since_raised,
-            )
+            reconciliation: PriorFindingReconciliation
+            if result.prior_reconciliation is not None:
+                reconciliation = result.prior_reconciliation
+            else:
+                reconciliation = reconcile_prior_findings(
+                    prior_findings=iar_pre_context.prior_findings,
+                    updates=result.prior_finding_updates,
+                    current_fingerprints={
+                        f.fingerprint for f in result.findings if f.fingerprint
+                    },
+                    delta=iar_pre_context.delta,
+                    workspace=Path.cwd(),
+                    policy=resolution_policy,
+                    changed_since_raised=iar_pre_context.changed_since_raised,
+                )
+                # Post-LLM crashed: the gate kept every prior finding, so the
+                # footer must not claim retirements the gate never honoured.
+                reconciliation = PriorFindingReconciliation(
+                    resolved=[],
+                    still_open=list(iar_pre_context.prior_findings),
+                    regressed=list(reconciliation.regressed),
+                    unverified=list(reconciliation.unverified) + list(reconciliation.resolved),
+                    auto_retired=[],
+                )
             # `advisory` (default): model-only resolution never mutates human
             # review threads. `verified`: reply on + resolve the threads the
             # runtime corroborated (best-effort).
@@ -10693,6 +10813,7 @@ def main() -> int:
             pr_number=pr_number,
             head_sha=head_sha,
             result=result,
+            diff_text=pr_ctx.diff,
         )
     except Exception as e:  # noqa: BLE001
         log(f"Failed to post review: {e}")

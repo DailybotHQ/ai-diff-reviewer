@@ -589,11 +589,11 @@ rebases, force-pushes and the 30% safety net also force full mode.
   the finding keeps counting toward the strictness gate. `verified`: the
   runtime resolves the thread (with a reply) **only** when it can corroborate
   the verdict — fingerprint absent from this round **and** the file changed
-  since the last reviewed head or was deleted; the finding then stops gating.
+  since the finding was raised or was deleted; the finding then stops gating.
   Unverifiable claims stay open under both policies.
 - **v2.3.1 — collapsed-thread escape.** `advisory`'s "a maintainer resolves
   the thread" path does not exist when `collapse-previous: true` has already
-  minimized that thread (or the thread went outdated). In that case
+  minimized that thread (an outdated-but-visible thread does not count). In that case
   `advisory` applies the **same corroboration test as `verified`** and
   retires the finding, so a fixed `critical` can no longer hold the check red
   forever. "The file changed" is measured since the finding was **raised**

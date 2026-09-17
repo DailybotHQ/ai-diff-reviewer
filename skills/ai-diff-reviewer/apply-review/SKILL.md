@@ -491,8 +491,9 @@ as resolved. Repos that opted into `prior-findings-resolution: verified`
 see corroborated fixes closed by the runtime (reply + resolve).
 
 **Since v2.3.1** there is one narrow exception under `advisory`: when the
-thread is already **collapsed** (minimized by `collapse-previous`, or
-outdated) the maintainer-resolves-it path no longer exists, so the runtime
+thread is already **collapsed** (minimized by `collapse-previous`; an
+outdated-but-visible thread does not count) the maintainer-resolves-it path
+is no longer discoverable, so the runtime
 retires the finding if — and only if — it can corroborate the fix (model
 said `resolved`, the fingerprint was not re-emitted this round, and the
 file changed since the finding was raised, or is gone). A finding retired this way stops gating the
