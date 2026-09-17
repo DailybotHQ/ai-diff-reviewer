@@ -14,7 +14,7 @@ Two inputs decide a review: **`provider`** picks the *runner* (who drives the to
 | `openai` (in-process) | — | ✅ default (`gpt-5.6-luna`) | ✅ `api-base: https://<resource>.services.ai.azure.com/openai/v1`, `model` = deployment | ✅ `api-base: https://api.x.ai/v1` | ✅ `api-base: https://api.z.ai/api/coding/paas/v4` | Z.ai Coding Plan |
 | `claude-code` (CLI) | ✅ default (`claude-sonnet-4-6`) | — | — | ✅ (Anthropic-compatible `api-base`) | ✅ **recommended for GLM** (`api-base: https://api.z.ai/api/anthropic`) | Claude Pro/Max token (`sk-ant-oat…`), Z.ai Coding Plan |
 | `codex` (CLI) | — | ✅ default (`gpt-5.6-luna`) | ✅ (`config.toml` generated per run; `model` = deployment) | ⚠️ not usable with Codex ≥ 0.154 (rejects its `custom` tool) — use `grok` / `openai` | ✅ (Responses API, `api-base: https://api.z.ai/api/v1`) | — |
-| `grok` (CLI) | — | — | — | ✅ default (`grok-4.3`) | — | — |
+| `grok` (CLI) | — | — | — | ✅ default (`grok-4.5`) | — | — |
 | `cursor` (CLI) | — | — | — | — | — | ✅ Cursor Pro (`model: auto`); no `api-base` lane |
 
 `model` is **required** whenever `api-base` is set for a runner that routes it (v2.2.0+): a runner's built-in default names its own vendor's model, so the run aborts with the expected value (deployment name, `glm-5.3`, `grok-4.6`, the gateway's id) instead of sending the wrong model. `cursor` and `grok` ignore `api-base` (warned) and keep their defaults. Any other `https://` host is a **custom** backend (plain Anthropic- or OpenAI-shaped protocol for the runner's family; the run logs a WARNING naming the host that receives the key). Details per family below; cost per cell in the next section.
@@ -50,15 +50,15 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 |---|---|---|---|---|---|
 | `anthropic`, `claude-code` | Anthropic | `claude-sonnet-5` — $2 / $10 | `claude-haiku-4-5` — $1 / $5 | `claude-opus-5` — $5 / $25 | Sonnet 5 is current **and** cheaper than the legacy `claude-sonnet-4-6` ($3 / $15) that the built-in default still names for back-compat — the run logs a hint; `model: balanced` opts in. Never `auto` on Claude Code (can silently be Opus). |
 | `anthropic`, `claude-code` | Z.ai (Coding Plan) | `glm-5.3` — $1.40 / $4.40 | `glm-5.3-flash` — $0.15 / $0.50 | `glm-5.3` | Flat-rate Coding Plan ⇒ marginal cost ≈ 0 either way; `claude-code` is the recommended GLM runner. |
-| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.6` — $2 / $6 | `grok-4.3` — $1.25 / $2.50 | `grok-4.6` | Measured 2026-09-16 (`tests/eval`): 4.3 reported 0 of 4 known defects; 4.6 found 3 of 4 with no false positives — so 4.6 is the balanced pick and 4.3 the smoke tier. (Prices are the <200k-token rates; above that they double.) |
+| `anthropic`, `claude-code` | xAI (Anthropic-compatible) | `grok-4.5` — $2 / $6 (cached input $0.30) | `grok-4.5` (same) | `grok-4.6` — $2 / $6 (cached $0.50) | Benchmark 2026-09-16 ([`tests/eval/BENCHMARK-xai-2026-09-16.md`](../tests/eval/BENCHMARK-xai-2026-09-16.md)): 4.5 and 4.6 tie at 3 of 5 known defects with no false positives; 4.5 costs the same and takes a quarter of the time; 4.3 found 0 of 5 (it approves without reviewing) and grok-build-0.1 1 of 5 with two runs that never submitted — neither is offered as a tier. (Prices are the <200k-token rates; above that they double.) |
 | `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
-| `openai`, `codex` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
+| `openai`, `codex` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
 | `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
-| `grok` | xAI | `grok-4.6` | `grok-4.3` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget 4–10 min and ~$0.5–0.85 per mid-size PR on 4.6; the 900 s CLI timeout is the ceiling. |
+| `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
 
-Built-in defaults when `model` is empty (unchanged this release): `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.3` (grok), `auto` (cursor).
+Built-in defaults when `model` is empty: `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.5` (grok — v2.3.0+, was `grok-4.3`), `auto` (cursor).
 
 ### Route tiers by risk (recipe)
 
@@ -219,7 +219,7 @@ The Anthropic provider caches both the system prompt and the diff-bearing first 
 |---|---|---|---|---|
 | Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | Byte-identical to previous releases: `x-api-key` auth, `cache_control` on the system prompt. |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/anthropic` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | Flat-rate plan ⇒ ≈ 0 marginal cost per review. Zero-install GLM path; the deepest GLM reviews use `provider: claude-code` with the same base (see below). |
-| xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.3`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
+| xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.5`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
 | Any other host | `https://<gateway>` | gateway key | gateway-defined | Treated as a plain Anthropic-compatible gateway (the run logs a warning naming the host). |
 
 How the profile changes the request:
@@ -245,7 +245,7 @@ GLM models are reachable from three runners. The recommendation, in order:
 
 **Models:** `glm-5.3` is the balanced default for GLM backends; `glm-5.3-flash` is the cheaper smoke tier. Always pin `model` explicitly — on a custom backend `auto` is rejected (it only means something on Anthropic's own endpoint, where it can silently select Opus).
 
-**How the `claude-code` runner talks to Z.ai.** When `api-base` is set the action switches Claude Code to the backend env contract Z.ai documents: `ANTHROPIC_BASE_URL=<api-base>`, `ANTHROPIC_AUTH_TOKEN=<api-key>` (bearer-style; `ANTHROPIC_API_KEY` is deliberately **not** set), `API_TIMEOUT_MS=3000000`, and `ANTHROPIC_DEFAULT_OPUS_MODEL` / `SONNET_MODEL` / `HAIKU_MODEL` all pinned to `model` so Claude Code's internal aliases resolve to the chosen GLM model; `--model` is always passed. A Claude subscription token (`sk-ant-oat…`) is rejected against a non-Anthropic host with an actionable error. xAI's Anthropic-compatible surface (`https://api.x.ai`, e.g. `grok-4.3`) uses the identical contract.
+**How the `claude-code` runner talks to Z.ai.** When `api-base` is set the action switches Claude Code to the backend env contract Z.ai documents: `ANTHROPIC_BASE_URL=<api-base>`, `ANTHROPIC_AUTH_TOKEN=<api-key>` (bearer-style; `ANTHROPIC_API_KEY` is deliberately **not** set), `API_TIMEOUT_MS=3000000`, and `ANTHROPIC_DEFAULT_OPUS_MODEL` / `SONNET_MODEL` / `HAIKU_MODEL` all pinned to `model` so Claude Code's internal aliases resolve to the chosen GLM model; `--model` is always passed. A Claude subscription token (`sk-ant-oat…`) is rejected against a non-Anthropic host with an actionable error. xAI's Anthropic-compatible surface (`https://api.x.ai`, e.g. `grok-4.5`) uses the identical contract.
 
 Copy-paste workflows: [`examples/provider-claude-code-glm.yml`](../examples/provider-claude-code-glm.yml) (recommended) and [`examples/provider-anthropic-zai.yml`](../examples/provider-anthropic-zai.yml) (zero-install).
 
@@ -259,7 +259,7 @@ The in-process OpenAI-compatible runner is the most portable path: zero install,
 |---|---|---|---|---|
 | OpenAI (default) | *(empty)* | OpenAI API key | `gpt-5.6-luna` (default), `gpt-5.4-mini` (smoke) | `max_completion_tokens`; automatic prompt caching. |
 | Azure Foundry (v1) | `https://<resource>.services.ai.azure.com/openai/v1` | Azure key | your **deployment names** (e.g. `gpt-5.4-mini-azure`) | Bearer + `api-key` headers; `max_completion_tokens`. |
-| xAI Grok | `https://api.x.ai/v1` | xAI API key | `grok-4.3`, `grok-4.6` | `max_tokens`; automatic caching. |
+| xAI Grok | `https://api.x.ai/v1` | xAI API key | `grok-4.5`, `grok-4.6` | `max_tokens`; automatic caching. |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/coding/paas/v4` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | `max_tokens`; flat-rate plan. |
 | Self-hosted / other | `https://<gateway>/v1` (or `http://localhost:…` for local dev) | gateway key | gateway-defined | Plain OpenAI-compatible behaviour; the run logs the host. |
 
@@ -409,7 +409,7 @@ image_generation = false
 | Backend | `api-base` | `model` | Notes |
 |---|---|---|---|
 | Azure Foundry (v1) | `https://<resource>.services.ai.azure.com/openai/v1` | your **deployment name** (e.g. `gpt-5.4-mini-azure`) | Image-generation header workaround + `image_generation = false` added automatically. |
-| xAI Grok | `https://api.x.ai/v1` | `grok-4.3` / `grok-4.6` | Responses API. **Rejected by xAI with Codex 0.154** (see verification below) — prefer `provider: openai` or `provider: grok`. |
+| xAI Grok | `https://api.x.ai/v1` | `grok-4.5` / `grok-4.6` | Responses API. **Rejected by xAI with Codex 0.154** (see verification below) — prefer `provider: openai` or `provider: grok`. |
 | Z.ai GLM | `https://api.z.ai/api/v1` | `glm-5.3` / `glm-5.3-flash` | **Responses** base — different from the chat base (`/api/coding/paas/v4`) used by `provider: openai`. Unverified; prefer `claude-code` or `openai` for GLM. |
 
 `model` is **required** on a custom backend (`auto` and empty are rejected with an actionable error): Codex's built-in default only exists on OpenAI. Everything else — the apikey-mode `auth.json`, the `--dangerously-bypass-approvals-and-sandbox` flag, stdin prompt delivery, the MCP caveat — is unchanged. Copy-paste workflow: [`examples/provider-codex-azure.yml`](../examples/provider-codex-azure.yml).
@@ -447,7 +447,7 @@ The official `grok` CLI as an agent-runner, kept inside the action's review cont
 | Prompt delivery | inline `-p` (argv limit) | rubric + contract via `--rules`; diff via a private `--prompt-file` (0600 in a 0700 temp dir, removed after the run) |
 
 - **Auth / billing:** `XAI_API_KEY` from `api-key`, billed as xAI API credits. `api-base` is ignored (the CLI talks to xAI only; use `provider: openai` + `https://api.x.ai/v1` if you want the in-process path).
-- **Models:** `grok-4.3` default (daily tier); `grok-4.6` for a deeper reasoning pass. Never `auto`.
+- **Models:** `grok-4.5` default (v2.3.0+; `balanced` and `economy`); `grok-4.6` for a deeper reasoning pass (`deep`). `grok-4.3` is not offered: it returned 0 of 5 known defects in the 2026-09-16 benchmark. Never `auto`.
 - **Install:** the official installer (`curl -fsSL https://x.ai/cli/install.sh | bash`) drops a static binary in `~/.grok/bin`; `grok-version` pins it (`bash -s <X.Y.Z>`). Same supply-chain consideration as the Cursor installer (see [`SECURITY.md`](SECURITY.md)).
 - **Output format:** the runtime asks for `--output-format json`; the CLI returns one JSON document with `usage` (input/output/cache tokens), `num_turns` and `total_cost_usd` — consumed by the usage telemetry.
 - **MCP:** `mcp-config-file` is not wired for Grok (warned); configure MCP through `grok mcp` or `agent-extra-args`.

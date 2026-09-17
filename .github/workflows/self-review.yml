@@ -182,13 +182,11 @@ jobs:
           # dated defaults matrix (docs/PROVIDERS.md) stays the single source
           # of truth for the concrete model id; Azure deployments have no
           # tier rows, so the deployment name comes from a repo variable.
-          # grok: `balanced` (→ grok-4.6) — measured 2026-09-16: the economy
-          # tier (grok-4.3) found 0 of 4 known defects on the labelled corpus,
-          # 4.6 found 3 of 4 with no false positives (~$0.5–0.85, 4–10 min).
-          # 2026-09-16 (PR #52): back on `economy` (→ grok-4.3) on purpose, as a
-          # live re-test of the cheaper tier on real PRs; the corpus measurement
-          # above stands until this leg shows it finds defects too.
-          [ "$HAS_XAI" = "true" ]         && add grok XAI_API_KEY "self-reviewed:grok" economy
+          # grok: `balanced` (→ grok-4.5) — benchmark 2026-09-16
+          # (tests/eval/BENCHMARK-xai-2026-09-16.md): 4.3 found 0 of 5 known
+          # defects (live re-test on PR #52 confirmed: 42 output tokens, 32 s,
+          # "looks good"); 4.5 tied 4.6 on recall at a quarter of the time.
+          [ "$HAS_XAI" = "true" ]         && add grok XAI_API_KEY "self-reviewed:grok" balanced
           [ "$HAS_ZAI" = "true" ]         && add claude-code ZAI_CODING_API_KEY "self-reviewed:claude-code-glm" economy "https://api.z.ai/api/anthropic"
           [ "$HAS_AZURE" = "true" ] && [ -n "$AZURE_BASE" ] \
                                           && add codex AZURE_OPENAI_API_KEY "self-reviewed:codex-azure" "${AZURE_MODEL:-gpt-5.4-mini-azure}" "$AZURE_BASE"

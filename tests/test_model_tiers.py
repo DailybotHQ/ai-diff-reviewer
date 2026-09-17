@@ -60,6 +60,10 @@ class ResolveModelTests(unittest.TestCase):
     def test_tier_is_case_insensitive_and_trimmed(self) -> None:
         self.assertEqual(reviewer.resolve_model("anthropic", _prof("", "anthropic"), "  Balanced "), "claude-sonnet-5")
         self.assertEqual(reviewer.resolve_model("grok", _prof("", "grok"), "DEEP"), "grok-4.6")
+        # 2026-09-16 benchmark: no cheaper xAI model still reviews, so economy == balanced == grok-4.5.
+        self.assertEqual(reviewer.resolve_model("grok", _prof("", "grok"), "balanced"), "grok-4.5")
+        self.assertEqual(reviewer.resolve_model("grok", _prof("", "grok"), "economy"), "grok-4.5")
+        self.assertEqual(reviewer._XAI_TIERS, {"balanced": "grok-4.5", "economy": "grok-4.5", "deep": "grok-4.6"})
 
     def test_azure_and_custom_tiers_fail_fast_with_guidance(self) -> None:
         for base, pid in (("https://x.services.ai.azure.com/openai/v1", "openai"), ("https://gateway.example/v1", "codex")):

@@ -193,14 +193,16 @@ DEFAULT_MODELS: dict[str, str] = {
     # In-process OpenAI-compatible runner. Same quality/cost reasoning as
     # Codex: `gpt-5.6-luna` is the current-gen budget model that still finds
     # subtle bugs; `gpt-5.4-mini` for smoke passes. On non-OpenAI backends
-    # (`api-base`) consumers pin the backend's own id (e.g. `grok-4.3`,
+    # (`api-base`) consumers pin the backend's own id (e.g. `grok-4.5`,
     # `glm-5.3`, or an Azure deployment name).
     "openai": "gpt-5.6-luna",
-    # xAI Grok CLI. `grok-4.3` is the "daily" tier the maintainer runs
-    # locally: strong enough for real review at the lower price point;
-    # `grok-4.6` is the reasoning tier for deeper passes. Never `auto` for a
-    # metered CLI. (Ids/prices re-verified in the cost-controls task.)
-    "grok": "grok-4.3",
+    # xAI Grok CLI. `grok-4.5` (v2.3.0+; was `grok-4.3`): the 2026-09-16
+    # benchmark (tests/eval/BENCHMARK-xai-2026-09-16.md) measured grok-4.3
+    # at 0 of 5 known defects in ~10 s per review — it approves, it does not
+    # review — while grok-4.5 tied grok-4.6 on recall (3/5, 0 false
+    # positives) at the same cost and a quarter of the wall time.
+    # `grok-4.6` stays the deep tier. Never `auto` for a metered CLI.
+    "grok": "grok-4.5",
 }
 
 # ---------------------------------------------------------------------------
@@ -251,15 +253,16 @@ _OPENAI_TIERS: dict[str, str] = {
     MODEL_TIER_DEEP: "gpt-5.6-terra",
 }
 _XAI_TIERS: dict[str, str] = {
-    # Measured 2026-09-16 on the labelled corpus (tests/eval): through the
-    # Grok CLI, grok-4.3 ($1.25/$2.50 under 200k) reported 0 of 4 known
-    # defects (and once wrote no findings file) at ~$0.07/review, while
-    # grok-4.6 ($2/$6) found 3 of 4 with zero false positives at
-    # $0.47–0.85 and 4–10 min. A "balanced" review that finds nothing is not
-    # balanced, so 4.6 is both the balanced and the deep pick; 4.3 remains
-    # the economy/smoke tier.
-    MODEL_TIER_BALANCED: "grok-4.6",
-    MODEL_TIER_ECONOMY: "grok-4.3",
+    # Benchmark 2026-09-16 (tests/eval/BENCHMARK-xai-2026-09-16.md; 16
+    # in-process runs over the labelled corpus, plus Grok CLI spot checks):
+    #   grok-4.5  3/5 defects, 0 FP, $0.27/PR, 3.1 min  ← balanced AND economy
+    #   grok-4.6  3/5 defects, 0 FP, $0.30/PR, 12.1 min ← deep (one run 22 min)
+    #   grok-4.3  0/5 defects in ~10 s/PR — approves without reviewing
+    #   grok-build-0.1  1/5, two runs never submitted, praise comments
+    # There is no cheaper xAI model that still reviews, so `economy` is the
+    # same model as `balanced` rather than a tier that finds nothing.
+    MODEL_TIER_BALANCED: "grok-4.5",
+    MODEL_TIER_ECONOMY: "grok-4.5",
     MODEL_TIER_DEEP: "grok-4.6",
 }
 _ZAI_TIERS: dict[str, str] = {
@@ -3073,7 +3076,7 @@ class ClaudeCodeProvider(AgentRunnerProvider):
             raise ValueError(
                 "model is required when claude-code runs on a custom "
                 f"api-base ({self.profile.host}): `auto` has no meaning "
-                "there. Examples: `glm-5.3` (Z.ai), `grok-4.3` (xAI)."
+                "there. Examples: `glm-5.3` (Z.ai), `grok-4.5` (xAI)."
             )
         env: dict[str, str] = {
             CLAUDE_CODE_AUTH_TOKEN_ENV: self.api_key,
@@ -3649,7 +3652,7 @@ class CodexProvider(AgentRunnerProvider):
                     raise ValueError(
                         "model is required when codex runs on a custom "
                         f"api-base ({self.profile.host}) — e.g. an Azure "
-                        "deployment name, `grok-4.3` (xAI) or `glm-5.3` "
+                        "deployment name, `grok-4.5` (xAI) or `glm-5.3` "
                         "(Z.ai)."
                     )
                 self._materialize_custom_provider_config(

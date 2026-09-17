@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **xAI defaults follow the benchmark.** `provider: grok` now defaults to
+  `grok-4.5` (was `grok-4.3`), and the xAI tier table resolves `balanced`
+  and `economy` to `grok-4.5` and `deep` to `grok-4.6`. The 2026-09-16
+  benchmark ([`tests/eval/BENCHMARK-xai-2026-09-16.md`](tests/eval/BENCHMARK-xai-2026-09-16.md),
+  16 in-process runs over the labelled corpus plus Grok CLI spot checks)
+  measured grok-4.3 at 0 of 5 known defects in ~10 s per review (it approves
+  without reviewing — confirmed live on this repo's own PR), grok-build-0.1
+  at 1 of 5 with two runs that never submitted, and grok-4.5 tied with
+  grok-4.6 (3 of 5, no false positives) at the same cost and a quarter of the
+  wall time. There is no cheaper xAI model that still reviews, so `economy`
+  is the same model as `balanced` rather than a tier that finds nothing.
+  **Cost impact:** `provider: grok` with an empty `model`, and `model: economy`
+  on any xAI backend, go from ~$0.07 to ~$0.4–0.75 per review through the
+  CLI (≈10×) — and start finding defects. To keep the old smoke behaviour,
+  pin `model: grok-4.3` explicitly.
+- **Dogfood: the Grok leg is back on `balanced`** (now grok-4.5) after the
+  deliberate `economy` re-test in 2.2.0 produced a 32-second, 42-token
+  approval of a diff that grok-4.6 had found a real defect in.
 
 ## [2.2.0] — 2026-09-16
 

@@ -66,7 +66,7 @@ python3 tests/eval/run_eval.py run --repo "$REPO" --pr "$N" --worktree "/tmp/aip
 ```
 
 Any runner works (`--provider anthropic --api-key-env ANTHROPIC_API_KEY` for
-the default backend; `--provider grok --model grok-4.6` for the Grok CLI when
+the default backend; `--provider grok --model grok-4.5` for the Grok CLI when
 it is installed). Use the same runner and model for OLD and NEW.
 
 ### 3. Run with the NEW prompt
