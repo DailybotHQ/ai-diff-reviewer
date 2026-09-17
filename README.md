@@ -216,7 +216,7 @@ Six providers ship. Pick the **vendor** whose models and billing you want; each 
     api-base: https://api.x.ai/v1
     api-key: ${{ secrets.XAI_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
-    model: balanced         # → grok-4.6 (economy → grok-4.3)
+    model: balanced         # → grok-4.5 (deep → grok-4.6; 4.3 measured 0/5 — not offered)
 ```
 
 Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).

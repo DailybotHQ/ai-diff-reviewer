@@ -145,7 +145,7 @@ class GrokInvocationTests(unittest.TestCase):
         p = reviewer.build_provider("grok", api_key="k", model="")
         self.assertIsInstance(p, reviewer.GrokProvider)
         self.assertIsInstance(p, reviewer.AgentRunnerProvider)
-        self.assertEqual(reviewer.DEFAULT_MODELS["grok"], "grok-4.3")
+        self.assertEqual(reviewer.DEFAULT_MODELS["grok"], "grok-4.5")  # v2.3.0: benchmark-driven (was grok-4.3)
         self.assertIn("grok", reviewer.PROVIDERS_WITHOUT_API_BASE)
 
 

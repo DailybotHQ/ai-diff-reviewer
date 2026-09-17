@@ -15,7 +15,7 @@
 #   - findings are structured, gated and de-duplicated across rounds.
 #
 # Auth: XAI_API_KEY (https://console.x.ai/), billed as xAI API credits.
-# Default model `grok-4.3`; pin `grok-4.6` for a deeper reasoning pass.
+# Default model `grok-4.5` (v2.3.0+); pin `grok-4.6` (or `model: deep`) for a deeper reasoning pass.
 # `api-base` is ignored for this provider (the CLI talks to xAI only).
 # SECURITY: agent-runner CLIs run with broad local access — trusted
 # (non-fork) PRs only; keep `persist-credentials: false`.
@@ -49,7 +49,7 @@ jobs:
           provider: grok
           api-key: ${{ secrets.XAI_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # model: grok-4.6              # deeper reasoning pass
+          # model: deep                  # → grok-4.6, deeper reasoning pass
           # agent-max-turns: '12'        # native --max-turns cap
           # grok-version: '1.0.30'       # optional CLI pin
           # agent-extra-args: '--reasoning-effort high'   # any vendor flag; re-enable web search with '--allow web_search' at your own risk

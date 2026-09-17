@@ -52,4 +52,4 @@ jobs:
 # xAI's Anthropic-compatible endpoint works the same way — swap:
 #   api-base: https://api.x.ai
 #   api-key:  ${{ secrets.XAI_API_KEY }}
-#   model:    grok-4.3
+#   model:    grok-4.5

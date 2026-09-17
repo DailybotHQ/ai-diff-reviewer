@@ -14,7 +14,7 @@ tokens and cost.
 
 Usage:
   python3 tests/eval/run_eval.py run --repo owner/repo --pr 46 --worktree /path/at/pr/head \
-      --provider openai --api-base https://api.x.ai/v1 --model grok-4.6 --api-key-env XAI_API_KEY \
+      --provider openai --api-base https://api.x.ai/v1 --model grok-4.5 --api-key-env XAI_API_KEY \
       --prompt prompts/default.md [--extension .review/extension.md] --out results/xai-46.json
   python3 tests/eval/run_eval.py score results/*.json      # table across runs
 

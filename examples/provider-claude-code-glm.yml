@@ -54,4 +54,4 @@ jobs:
 # xAI's Anthropic-compatible surface works the same way:
 #   api-base: https://api.x.ai
 #   api-key:  ${{ secrets.XAI_API_KEY }}
-#   model:    grok-4.3
+#   model:    grok-4.5

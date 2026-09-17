@@ -8,12 +8,12 @@ then scores the result against `corpus.json`.
 # one run (in-process runner; key comes from the named env var, never the CLI)
 python3 tests/eval/run_eval.py run --repo DailybotHQ/ai-diff-reviewer --pr 46 \
   --worktree /path/to/worktree-at-pr-46-head --provider openai \
-  --api-base https://api.x.ai/v1 --model grok-4.6 --api-key-env XAI_API_KEY \
+  --api-base https://api.x.ai/v1 --model grok-4.5 --api-key-env XAI_API_KEY \
   --out results/xai-46.json
 
 # agent-runner (the CLI must be installed locally)
 python3 tests/eval/run_eval.py run --repo DailybotHQ/ai-diff-reviewer --pr 46 \
-  --worktree /path/to/worktree-at-pr-46-head --provider grok --model grok-4.3 \
+  --worktree /path/to/worktree-at-pr-46-head --provider grok --model grok-4.5 \
   --api-key-env XAI_API_KEY --out results/grok-46.json
 
 # table across runs
