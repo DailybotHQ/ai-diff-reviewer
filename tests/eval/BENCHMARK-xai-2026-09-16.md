@@ -44,7 +44,7 @@ Adjudication of the extra findings: grok-4.5 6/6 valid (a silent gate-label rena
 | model | PR | recall | FP | unlabelled | turns | wall | cost |
 |---|---|---|---|---|---|---|---|
 | grok-4.5 (CLI) | #45 | 1/2 | 0 | 2 (valid) | 7 | 194s | $0.75 |
-| grok-4.5 (CLI) | #46 | see addendum | | | | | |
+| grok-4.5 (CLI) | #46 | 0/1 | 0 | 3 (valid: permission lookup not scoped to private repos, `repository.private` signal ignored, no direct tests for the permission helper) | 10 | 447s | $0.42 |
 | grok-4.6 (CLI, Task 8 run, 2026-09-16) | #43/#45/#46/#37 | 4/5 | 0 | — | — | 4–10 min | $0.47–0.85 |
 | grok-4.3 (CLI, Task 8 run, 2026-09-16) | 4 PRs | 0/4 | 0 | 0 (one run wrote no findings file) | — | 1–2 min | ~$0.07 |
 | grok-4.3 (CLI, live on PR #52 `532dd0d`, full review) | — | 0 findings | — | — | 6 | 32s | $0.09 (42 output tokens) |
