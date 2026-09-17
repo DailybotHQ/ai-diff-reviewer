@@ -73,7 +73,7 @@ Every workflow using AI Diff Reviewer sets these two.
   - `codex` — OpenAI Codex CLI, headless. GPT-5.6-luna default.
   - `grok` — xAI Grok CLI, headless, through the full review contract
     (no GitHub token to the agent, web search/subagents off by default,
-    native `--max-turns`). `grok-4.3` default.
+    native `--max-turns`). `grok-4.5` default (v2.3.0+).
 
 ### `model`
 
@@ -86,7 +86,7 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Provider-specific defaults (empty `model`):**
   - `anthropic` → `claude-sonnet-4-6`
   - `openai` → `gpt-5.6-luna` (same reasoning as Codex; on a non-default
-    `api-base` pin the backend's own id — `grok-4.3`, `glm-5.3`, or an
+    `api-base` pin the backend's own id — `grok-4.5`, `glm-5.3`, or an
     Azure deployment name).
   - `claude-code` → `claude-sonnet-4-6` (quality/price sweet spot; NEVER
     `auto`, which can silently be Opus; use `claude-haiku-4-5` for a
@@ -98,10 +98,11 @@ Every workflow using AI Diff Reviewer sets these two.
     `model: economy` for the cheap tier — as of 2026-09-16 `gpt-5.4-mini`
     is no longer cheaper than `gpt-5.6-luna`, so pin it only if you
     specifically want that model).
-  - `grok` → `grok-4.3` (built-in default and `economy`); `model: balanced`
-    or `deep` → `grok-4.6` — measured 2026-09-16: 4.3 found 0 of 4 known
-    defects through the CLI, 4.6 found 3 of 4 with no false positives at
-    ~$0.5–0.85 per review. Never `auto` on a metered CLI.
+  - `grok` → `grok-4.5` (built-in default, `balanced` and `economy`);
+    `deep` → `grok-4.6`. Benchmark 2026-09-16 (`tests/eval/BENCHMARK-xai-2026-09-16.md`):
+    4.5 and 4.6 tie at 3 of 5 known defects with no false positives, 4.5 at
+    a quarter of the wall time; 4.3 found 0 of 5 (approves without
+    reviewing) so it is not offered as a tier. Never `auto` on a metered CLI.
 - **See:** `docs/PROVIDERS.md § "Choosing a cost-efficient model"` in the
   action repo.
 
