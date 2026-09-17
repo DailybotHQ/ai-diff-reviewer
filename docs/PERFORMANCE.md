@@ -149,7 +149,7 @@ The workflow log is a scarce resource — it's what a human debugs a review from
 
 GitHub's `POST /pulls/{n}/reviews` is atomic: if **any** inline comment anchors a line outside the diff, the entire request is rejected with HTTP 422 and the whole review is lost. This is a real failure mode the model can trigger even with `MAX_INLINE_COMMENTS = 10`.
 
-The runtime handles this by **retrying summary-only** on 422 — the review still posts, the count of dropped inline comments is surfaced via the `inline-dropped` output, and the tracking comment tells the human what happened. Preserving this fallback is a non-negotiable invariant: any new submission path MUST retain 422 recovery (`AGENTS.md` DON'T #8).
+The runtime handles this by **retrying once with only the comments whose anchor is provably inside a diff hunk** (v2.3.1), then summary-only as a last resort — the review still posts, dropped anchors are logged by `path:line`, the count is surfaced via the `inline-dropped` output, and the tracking comment tells the human what happened. Preserving this fallback is a non-negotiable invariant: any new submission path MUST retain 422 recovery (`AGENTS.md` DON'T #8).
 
 ## Cost knobs consumers actually pull
 

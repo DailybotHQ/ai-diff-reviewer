@@ -178,7 +178,7 @@ The `post_inline_comment` tool doesn't actually call GitHub — it appends to `R
 
 **Why:** GitHub's per-comment endpoint (`POST /pulls/{n}/comments`) creates one separate review per call. Batching into a single review keeps the PR conversation tab clean (one entry, not 30) and matches the model's mental model of "one review with N comments".
 
-**Trade-off:** if any one comment has an invalid `line` (anchor outside the diff), GitHub rejects the entire review with HTTP 422. The action handles this with a fallback path: catch 422, retry summary-only, log the original error body, surface the dropped count in the tracking comment.
+**Trade-off:** if any one comment has an invalid `line` (anchor outside the diff), GitHub rejects the entire review with HTTP 422. The action handles this with a fallback path: catch 422, retry once with only the comments whose anchor is provably inside a diff hunk (unknown files are kept; a truncated diff is not evidence against them), then summary-only as a last resort, log the dropped anchors by `path:line`, and surface the dropped count in the tracking comment.
 
 ### 4. Conversation pruning in pairs
 
