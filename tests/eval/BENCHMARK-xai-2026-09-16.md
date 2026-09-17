@@ -26,7 +26,6 @@ Adjudication of the extra findings: grok-4.5 6/6 valid (a silent gate-label rena
 | grok-4.3 | #46 | 0/1 | 0 | 0 | 1 | 13s | $0.025 | NO |
 | grok-4.5 | #37 | 0/1 | 0 | 0 | 5 | 113s | $0.138 | yes |
 | grok-4.5 | #43 | 1/1 | 0 | 1 | 8 | 110s | $0.253 | yes |
-| grok-4.5 | #45 | 1/2 | 0 | 2 | 7 | 194s | $0.753 | yes |
 | grok-4.5 | #45 | 2/2 | 0 | 3 | 7 | 221s | $0.5 | yes |
 | grok-4.5 | #46 | 0/1 | 0 | 2 | 11 | 291s | $0.21 | yes |
 | grok-4.6 | #37 | 0/1 | 0 | 0 | 6 | 345s | $0.184 | yes |

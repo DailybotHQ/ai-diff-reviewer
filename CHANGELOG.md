@@ -20,11 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grok-4.6 (3 of 5, no false positives) at the same cost and a quarter of the
   wall time. There is no cheaper xAI model that still reviews, so `economy`
   is the same model as `balanced` rather than a tier that finds nothing.
+  **Cost impact:** `provider: grok` with an empty `model`, and `model: economy`
+  on any xAI backend, go from ~$0.07 to ~$0.4–0.75 per review through the
+  CLI (≈10×) — and start finding defects. To keep the old smoke behaviour,
+  pin `model: grok-4.3` explicitly.
 - **Dogfood: the Grok leg is back on `balanced`** (now grok-4.5) after the
   deliberate `economy` re-test in 2.2.0 produced a 32-second, 42-token
   approval of a diff that grok-4.6 had found a real defect in.
-
-_Nothing yet._
 
 ## [2.2.0] — 2026-09-16
 
