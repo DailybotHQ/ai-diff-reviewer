@@ -495,7 +495,7 @@ thread is already **collapsed** (minimized by `collapse-previous`, or
 outdated) the maintainer-resolves-it path no longer exists, so the runtime
 retires the finding if — and only if — it can corroborate the fix (model
 said `resolved`, the fingerprint was not re-emitted this round, and the
-file changed or is gone). A finding retired this way stops gating the
+file changed since the finding was raised, or is gone). A finding retired this way stops gating the
 check. Corroboration itself is never weakened, and a finding on a live
 thread keeps the strict behaviour. Either way: **do not infer the check
 result from thread state** — read it from the tracking marker (Step 2f).

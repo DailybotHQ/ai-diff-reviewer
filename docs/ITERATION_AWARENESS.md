@@ -814,7 +814,7 @@ Under both policies an edited file and an absent fingerprint are **not** taken a
 
 So when a finding's thread is already **collapsed** — `isMinimized` on its anchoring comment, or `isOutdated` on the thread (`PriorFinding.is_collapsed`) — `advisory` applies the same corroboration test as `verified` and retires the finding:
 
-| Model verdict | Fingerprint re-emitted this round | File changed or gone | Thread collapsed | `advisory` outcome |
+| Model verdict | Fingerprint re-emitted this round | File changed since raised, or gone | Thread collapsed | `advisory` outcome |
 |---|---|---|---|---|
 | `resolved` | no | yes | yes | **retired** — stops gating |
 | `resolved` | no | yes | no | unverified — maintainer still owns it |
@@ -823,6 +823,8 @@ So when a finding's thread is already **collapsed** — `isMinimized` on its anc
 | none / `open` | — | — | — | still open |
 
 Corroboration is not weakened and `verified` is unchanged. New findings never take this path: a fresh `critical` blocks exactly as before.
+
+**"File changed" means changed since the finding was raised.** Each prior finding carries the head SHA of the review that posted it (`PriorFinding.review_sha`, from `pullRequestReview.commit.oid`), and `compute_changed_since_raised()` runs one `git diff --name-only <review_sha> <HEAD>` per distinct review SHA. The last-round delta alone was an accident of round timing: a fix that landed in round 2 was uncorroboratable in round 3, or on a same-head re-run, because that round's delta no longer touched the file — so a PR that was already stuck stayed stuck after upgrading. Findings posted before 2.3.1 have no review SHA and keep the delta-only evidence; a SHA git cannot resolve (shallow clone) is absent from the map, which counts as *no evidence*, never as *changed*.
 
 Because nobody signed off on these retirements, they are reported separately in the summary footer — `resolved 5 · … · 5 auto-retired (fix corroborated; thread already collapsed)` — so a green check is always traceable to why it went green. `verified` retirements are not labelled this way: they carry a reply on the thread instead.
 

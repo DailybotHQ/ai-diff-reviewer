@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -648,6 +649,33 @@ class RealWorldRegression_ApiServices7987(unittest.TestCase):
         self.assertEqual(severity, reviewer.SEVERITY_NONE)
         self.assertFalse(blocked, "v2.3.0 kept this check red with no way to unblock")
 
+    def test_next_run_after_upgrade_passes_clean(self) -> None:
+        """What happens on #7987 the first time 2.3.1 runs: the fix already
+        landed in `66003ff`, so whether the trigger is a same-head re-run
+        (empty delta) or an unrelated push, the last-round delta no longer
+        touches the four files. `changed_since_raised` (review SHA
+        `30f1675` → HEAD, the real compare) is what corroborates them."""
+        priors = [
+            reviewer.PriorFinding(**{**p.__dict__, "review_sha": "30f1675" + "0" * 33})
+            for p in self._priors()
+        ]
+        updates = {fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "") for fp, _, _ in self.FINDINGS}
+        since = {"30f1675" + "0" * 33: self.CHANGED}
+        for label, delta_files in (("same-head re-run", ()), ("unrelated push", ("docs/x.md",))):
+            with self.subTest(label), tempfile.TemporaryDirectory() as td:
+                rec = reviewer.reconcile_prior_findings(
+                    prior_findings=priors, updates=updates, current_fingerprints=set(),
+                    delta=reviewer.IncrementalDelta(
+                        prior_head_sha="66003ff" + "0" * 33, head_sha="66003ff" + "0" * 33,
+                        changed_files=delta_files, delta_ratio=0.0),
+                    workspace=Path(td), policy=reviewer.RESOLUTION_POLICY_ADVISORY,
+                    changed_since_raised=since,
+                )
+                self.assertEqual(len(rec.resolved), 5)
+                severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
+                self.assertEqual(severity, reviewer.SEVERITY_NONE)
+                self.assertFalse(blocked, f"{label}: the stuck PR must go green")
+
     def test_the_critical_alone_still_blocks_and_corrects_the_body(self) -> None:
         """Same PR, but the critical is NOT fixed — must stay red and the
         body must stop saying approve."""
@@ -729,6 +757,139 @@ class RetiredFindingDoesNotFlapBackToRed(unittest.TestCase):
         self.assertIn("prior_findings = filter_retired_prior_findings(", src)
 
 
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=repo, check=True, capture_output=True, text=True,
+        env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+             "GIT_COMMITTER_EMAIL": "t@t", "HOME": str(repo), "PATH": "/usr/bin:/bin:/usr/local/bin"},
+    ).stdout.strip()
+
+
+def _three_round_repo(root: Path) -> tuple[str, str, str]:
+    """A → finding raised on src/auth.py; B → auth.py fixed; C → unrelated
+    docs change. Returns (A, B, C)."""
+    _git(root, "init", "-q", "-b", "main")
+    (root / "src").mkdir()
+    (root / "src" / "auth.py").write_text("token = request.args['t']\n", encoding="utf-8")
+    (root / "README.md").write_text("v1\n", encoding="utf-8")
+    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "A")
+    a = _git(root, "rev-parse", "HEAD")
+    (root / "src" / "auth.py").write_text("token = validate(request.args['t'])\n", encoding="utf-8")
+    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "B: fix")
+    b = _git(root, "rev-parse", "HEAD")
+    (root / "README.md").write_text("v2\n", encoding="utf-8")
+    _git(root, "add", "-A"); _git(root, "commit", "-q", "-m", "C: docs")
+    c = _git(root, "rev-parse", "HEAD")
+    return a, b, c
+
+
+class ChangedSinceRaised_RealGit(unittest.TestCase):
+    """`files_changed_between` / `compute_changed_since_raised` against a
+    real repository — the evidence that survives across rounds."""
+
+    def test_files_changed_between_reports_the_fix(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); a, b, c = _three_round_repo(root)
+            self.assertEqual(
+                reviewer.files_changed_between(from_sha=a, to_sha=c, repo_root=td),
+                {"src/auth.py", "README.md"},
+            )
+            self.assertEqual(
+                reviewer.files_changed_between(from_sha=b, to_sha=c, repo_root=td),
+                {"README.md"},  # the last-round delta alone does NOT include the fix
+            )
+            self.assertEqual(reviewer.files_changed_between(from_sha=c, to_sha=c, repo_root=td), set())
+
+    def test_unknown_sha_is_none_never_a_false_positive(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); _three_round_repo(root)
+            self.assertIsNone(
+                reviewer.files_changed_between(from_sha="0" * 40, to_sha="HEAD", repo_root=td)
+            )
+
+    def test_compute_map_one_diff_per_review_sha_and_skips_unresolvable(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); a, b, c = _three_round_repo(root)
+            priors = [
+                _prior("1" * 16, minimized=True), _prior("2" * 16, minimized=True),
+            ]
+            priors = [
+                reviewer.PriorFinding(**{**p.__dict__, "review_sha": sha})
+                for p, sha in zip(priors, (a, "f" * 40))
+            ]
+            m = reviewer.compute_changed_since_raised(
+                prior_findings=priors, head_sha=c, repo_root=td
+            )
+            self.assertEqual(set(m), {a})
+            self.assertEqual(set(m[a]), {"src/auth.py", "README.md"})
+
+
+class FixFromAnEarlierRoundStillCorroborates(unittest.TestCase):
+    """THE scenario for an already-stuck PR upgrading to 2.3.1: the fix
+    landed in round 2, round 3's delta doesn't touch the file (or is empty
+    on a same-head re-run). It must still retire."""
+
+    def _reconcile(self, delta_files: tuple[str, ...], review_sha: str, since: dict[str, tuple[str, ...]]) -> Any:
+        fp = "a" * 16
+        pf = reviewer.PriorFinding(**{**_prior(fp, minimized=True).__dict__, "review_sha": review_sha})
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); (root / "src").mkdir()
+            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
+            return reviewer.reconcile_prior_findings(
+                prior_findings=[pf], updates=_resolved(fp), current_fingerprints=set(),
+                delta=_delta(files=delta_files), workspace=root,
+                policy=reviewer.RESOLUTION_POLICY_ADVISORY, changed_since_raised=since,
+            )
+
+    def test_unrelated_push_after_the_fix(self) -> None:
+        rec = self._reconcile(("README.md",), "A" * 40, {"A" * 40: ("src/auth.py", "README.md")})
+        self.assertEqual(len(rec.resolved), 1); self.assertEqual(rec.still_open, [])
+
+    def test_same_head_rerun_empty_delta(self) -> None:
+        rec = self._reconcile((), "A" * 40, {"A" * 40: ("src/auth.py",)})
+        self.assertEqual(len(rec.resolved), 1)
+
+    def test_pre_231_finding_without_review_sha_keeps_delta_only_evidence(self) -> None:
+        rec = self._reconcile(("README.md",), "", {})
+        self.assertEqual(rec.resolved, []); self.assertEqual(len(rec.unverified), 1)
+
+    def test_file_untouched_since_raised_is_still_unverified(self) -> None:
+        rec = self._reconcile(("README.md",), "A" * 40, {"A" * 40: ("README.md",)})
+        self.assertEqual(rec.resolved, []); self.assertEqual(len(rec.unverified), 1)
+
+    def test_unresolvable_review_sha_is_conservative(self) -> None:
+        """git couldn't diff it → absent from the map → no evidence → open."""
+        rec = self._reconcile(("README.md",), "A" * 40, {})
+        self.assertEqual(rec.resolved, [])
+
+    def test_end_to_end_with_real_git(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td); a, b, c = _three_round_repo(root)
+            fp = "a" * 16
+            pf = reviewer.PriorFinding(**{**_prior(fp, minimized=True).__dict__, "review_sha": a})
+            since = reviewer.compute_changed_since_raised(prior_findings=[pf], head_sha=c, repo_root=td)
+            delta = reviewer.compute_incremental_delta(prior_head_sha=b, head_sha=c, new_lines_pct=5.0, repo_root=td)
+            assert delta is not None
+            self.assertNotIn("src/auth.py", delta.changed_files)  # round-3 delta misses the fix
+            rec = reviewer.reconcile_prior_findings(
+                prior_findings=[pf], updates=_resolved(fp), current_fingerprints=set(),
+                delta=delta, workspace=root, policy=reviewer.RESOLUTION_POLICY_ADVISORY,
+                changed_since_raised=since,
+            )
+        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
+
+
+class PromptColumnUsesTheSameEvidence(unittest.TestCase):
+    def test_file_changed_since_column_reflects_changed_since_raised(self) -> None:
+        pf = reviewer.PriorFinding(**{**_prior("a" * 16).__dict__, "review_sha": "A" * 40})
+        block = reviewer.render_prior_findings_block(
+            [pf], changed_files=set(), changed_since_raised={"A" * 40: ("src/auth.py",)}
+        )
+        self.assertIn("| yes |", block)
+        block_no = reviewer.render_prior_findings_block([pf], changed_files=set())
+        self.assertIn("| no |", block_no)
+
+
 class PriorFindingCollapsedFlag(unittest.TestCase):
     def test_is_collapsed_covers_minimized_and_outdated(self) -> None:
         self.assertFalse(_prior("1" * 16).is_collapsed)
@@ -739,6 +900,7 @@ class PriorFindingCollapsedFlag(unittest.TestCase):
         """`fetch_prior_findings` cannot populate the flag it never asks for."""
         src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
         self.assertIn("isMinimized body author { login }", src)
+        self.assertIn("pullRequestReview { body commit { oid } }", src)
 
 
 if __name__ == "__main__":

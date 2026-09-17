@@ -596,7 +596,10 @@ rebases, force-pushes and the 30% safety net also force full mode.
   minimized that thread (or the thread went outdated). In that case
   `advisory` applies the **same corroboration test as `verified`** and
   retires the finding, so a fixed `critical` can no longer hold the check red
-  forever. Corroboration is unchanged; a finding on a live thread still
+  forever. "The file changed" is measured since the finding was **raised**
+  (the review's head SHA → HEAD), not only since the last review, so a fix
+  from an earlier round — or a same-head re-run — still corroborates.
+  Corroboration is otherwise unchanged; a finding on a live thread still
   requires the maintainer. New findings are never affected.
 - **Recommendation:** keep `advisory` on public repos and on runners with
   broad local access; use `verified` on trusted repos where the review loop

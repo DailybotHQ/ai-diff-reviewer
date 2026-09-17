@@ -39,6 +39,15 @@ _Nothing yet._
   that went green without human sign-off is still traceable.
   See [`docs/ITERATION_AWARENESS.md` § 14.4.1](docs/ITERATION_AWARENESS.md).
 
+- **An already-stuck PR stayed stuck after upgrading.** Corroboration tested
+  "file changed since the last reviewed head", so a fix that landed in an
+  earlier round could never be corroborated on a later run — the delta no
+  longer touched the file. Each prior finding now carries the head SHA of the
+  review that posted it (`pullRequestReview.commit.oid`), and
+  `compute_changed_since_raised()` diffs that SHA against HEAD (one `git diff`
+  per distinct review SHA). A same-head re-run or an unrelated push after the
+  fix now passes clean. Pre-2.3.1 findings keep delta-only evidence; an
+  unresolvable SHA counts as no evidence, never as changed.
 - **A retired finding could flap the check back to red.** Under `advisory` the
   auto-retired thread stays unresolved on GitHub, so it was re-read as a prior
   finding on the next round — where the delta no longer touched the fixed file,

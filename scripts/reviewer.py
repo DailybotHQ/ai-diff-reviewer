@@ -5807,6 +5807,11 @@ class PriorFinding:
     body_excerpt: str
     is_outdated: bool
     is_minimized: bool = False
+    # The head SHA the review that posted this finding was for (v2.3.1).
+    # Corroboration asks "did the file change since the finding was RAISED?"
+    # — not since the last reviewed head, which is an accident of round
+    # timing and left a fix made in round 2 uncorroboratable in round 3.
+    review_sha: str = ""
 
     @property
     def is_collapsed(self) -> bool:
@@ -5819,6 +5824,59 @@ class PriorFinding:
         decide whether corroboration may retire a finding under `advisory`.
         """
         return self.is_minimized or self.is_outdated
+
+
+def files_changed_between(
+    *, from_sha: str, to_sha: str, repo_root: str | None = None
+) -> set[str] | None:
+    """`git diff --name-only from..to` as a set of repo-relative paths.
+
+    Returns `None` when git cannot answer (unknown SHA, shallow clone,
+    missing binary) so callers fall back to the weaker delta-only evidence
+    instead of treating a failure as "the file changed".
+    """
+    if not from_sha or not to_sha:
+        return None
+    if from_sha == to_sha:
+        return set()
+    try:
+        names: subprocess.CompletedProcess[str] = run_cmd(
+            ["git", "diff", "--name-only", "-z", from_sha, to_sha, "--"],
+            cwd=repo_root,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        log(
+            f"IAR: could not diff {from_sha[:8]}..{to_sha[:8]} ({e}) — files "
+            "treated as unchanged since that finding was raised."
+        )
+        return None
+    return {path for path in names.stdout.split("\0") if path}
+
+
+def compute_changed_since_raised(
+    *,
+    prior_findings: list[PriorFinding] | tuple[PriorFinding, ...],
+    head_sha: str,
+    repo_root: str | None = None,
+) -> dict[str, tuple[str, ...]]:
+    """For each distinct `review_sha` among the prior findings, the files
+    that changed between that SHA and `head_sha` (v2.3.1).
+
+    This is the evidence that lets a finding fixed in an EARLIER round be
+    corroborated now: the last-round delta no longer touches the file, but
+    the file did change after the finding was raised. One `git diff` per
+    distinct review SHA, never per finding. SHAs git cannot resolve are
+    simply absent from the map.
+    """
+    out: dict[str, tuple[str, ...]] = {}
+    for sha in sorted({pf.review_sha for pf in prior_findings if pf.review_sha}):
+        changed: set[str] | None = files_changed_between(
+            from_sha=sha, to_sha=head_sha, repo_root=repo_root
+        )
+        if changed is not None:
+            out[sha] = tuple(sorted(changed))
+    return out
 
 
 def filter_retired_prior_findings(
@@ -5893,7 +5951,7 @@ def fetch_prior_findings(
         "        nodes {"
         "          id isResolved isOutdated path line originalLine"
         "          comments(first:1) {"
-        "            nodes { id databaseId isMinimized body author { login } pullRequestReview { body } }"
+        "            nodes { id databaseId isMinimized body author { login } pullRequestReview { body commit { oid } } }"
         "          }"
         "        }"
         "      }"
@@ -5945,9 +6003,9 @@ def fetch_prior_findings(
         author: str = str((comment.get("author") or {}).get("login") or "")
         if not _bot_login_matches(bot_login, author):
             continue
-        review_body: str = str(
-            (comment.get("pullRequestReview") or {}).get("body") or ""
-        )
+        review_node: dict[str, Any] = comment.get("pullRequestReview") or {}
+        review_body: str = str(review_node.get("body") or "")
+        review_sha: str = str((review_node.get("commit") or {}).get("oid") or "")
         if provider_marker_text and provider_marker_text not in review_body:
             continue
         body: str = str(comment.get("body") or "")
@@ -5973,6 +6031,7 @@ def fetch_prior_findings(
                 body_excerpt=excerpt,
                 is_outdated=bool(thread.get("isOutdated")),
                 is_minimized=comment.get("isMinimized") is True,
+                review_sha=review_sha,
             )
         )
     if skipped_unmarked:
@@ -6125,6 +6184,10 @@ class IARPreLLMContext:
     delta: IncrementalDelta | None = None
     prior_findings: tuple[PriorFinding, ...] = ()
     effective_max_turns: int = 0  # 0 = leave the caller's max_turns as is
+    # review_sha → files changed between that SHA and HEAD (v2.3.1); see
+    # `compute_changed_since_raised`. Both reconciliation call sites and the
+    # prompt's "file changed since?" column read this same map.
+    changed_since_raised: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _resolve_base_sha(*, base_ref: str, repo_root: str | None = None) -> str:
@@ -6359,6 +6422,7 @@ def reconcile_prior_findings(
     delta: IncrementalDelta | None,
     workspace: Path | None = None,
     policy: str = RESOLUTION_POLICY_ADVISORY,
+    changed_since_raised: dict[str, tuple[str, ...]] | None = None,
 ) -> PriorFindingReconciliation:
     """Classify the model's verdicts on prior findings.
 
@@ -6381,8 +6445,15 @@ def reconcile_prior_findings(
     `verified`) AND the thread is already collapsed (`PriorFinding.is_collapsed`).
     Corroboration is never weakened, and a finding whose thread a maintainer
     can still resolve keeps the strict `advisory` behaviour.
+
+    "The file changed" (v2.3.1) means changed since the finding was RAISED:
+    the last-round delta OR `changed_since_raised[pf.review_sha]` (see
+    `compute_changed_since_raised`). A fix that landed in round 2 is still
+    corroborated in round 3 — or on a same-head re-run — instead of being
+    stranded because that round's delta no longer touches the file.
     """
     changed: set[str] = set(delta.changed_files) if delta is not None else set()
+    since_raised: dict[str, tuple[str, ...]] = changed_since_raised or {}
     root: Path = workspace if workspace is not None else Path.cwd()
     out = PriorFindingReconciliation()
     for pf in prior_findings:
@@ -6391,7 +6462,10 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
-            file_changed: bool = pf.path in changed
+            file_changed: bool = pf.path in changed or (
+                bool(pf.review_sha)
+                and pf.path in since_raised.get(pf.review_sha, ())
+            )
             # `pf.path` comes from a GitHub review thread; keep the
             # repo-relative invariant anyway (never join an absolute or
             # `..` path onto the workspace).
@@ -6752,6 +6826,7 @@ def run_iar_pre_llm(
     # ---- Incremental mode selection (v2.1.0+) ----
     prior_findings: list[PriorFinding] = []
     delta: IncrementalDelta | None = None
+    changed_since_raised: dict[str, tuple[str, ...]] = {}
     if prior_state is not None and transition not in (
         GenerationTransition.FIRST_REVIEW,
         GenerationTransition.USER_FORCED_RESET,
@@ -6766,6 +6841,9 @@ def run_iar_pre_llm(
         prior_findings = filter_retired_prior_findings(
             prior_findings=prior_findings,
             resolved_fingerprints=prior_state.resolved_fingerprints,
+        )
+        changed_since_raised = compute_changed_since_raised(
+            prior_findings=prior_findings, head_sha=head_sha
         )
         delta = compute_incremental_delta(
             prior_head_sha=prior_state.head_sha,
@@ -6828,6 +6906,7 @@ def run_iar_pre_llm(
         delta=delta,
         prior_findings=tuple(prior_findings),
         effective_max_turns=effective_max_turns,
+        changed_since_raised=changed_since_raised,
     )
 
 
@@ -6934,6 +7013,7 @@ def run_iar_post_llm(
                 delta=pre_context.delta,
                 workspace=workspace,
                 policy=resolution_policy,
+                changed_since_raised=pre_context.changed_since_raised,
             ).resolved
         }
     if pre_context.prior_findings:
@@ -7311,6 +7391,7 @@ def render_prior_findings_block(
     prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
     *,
     changed_files: set[str],
+    changed_since_raised: dict[str, tuple[str, ...]] | None = None,
 ) -> str:
     """The `## Your prior findings still open` table (criticals first,
     capped at `PRIOR_FINDINGS_MAX_LISTED`)."""
@@ -7324,8 +7405,12 @@ def render_prior_findings_block(
         "| # | fingerprint | severity | location | summary | file changed since? |",
         "|---|---|---|---|---|---|",
     ]
+    since_raised: dict[str, tuple[str, ...]] = changed_since_raised or {}
     for index, pf in enumerate(ordered[:PRIOR_FINDINGS_MAX_LISTED], start=1):
-        changed: str = "yes" if pf.path in changed_files else "no"
+        touched: bool = pf.path in changed_files or (
+            bool(pf.review_sha) and pf.path in since_raised.get(pf.review_sha, ())
+        )
+        changed: str = "yes" if touched else "no"
         summary: str = pf.body_excerpt.replace("|", "\\|")[:120]
         rows.append(
             f"| {index} | `{pf.fingerprint}` | {pf.severity} | "
@@ -7389,7 +7474,13 @@ def render_incremental_sections(
             + "\n".join(unchanged_lines)
             + "\n\n"
         )
-    out.append(render_prior_findings_block(pre.prior_findings, changed_files=changed))
+    out.append(
+        render_prior_findings_block(
+            pre.prior_findings,
+            changed_files=changed,
+            changed_since_raised=pre.changed_since_raised,
+        )
+    )
     return "".join(out)
 
 
@@ -10473,6 +10564,7 @@ def main() -> int:
                 delta=iar_pre_context.delta,
                 workspace=Path.cwd(),
                 policy=resolution_policy,
+                changed_since_raised=iar_pre_context.changed_since_raised,
             )
             # `advisory` (default): model-only resolution never mutates human
             # review threads. `verified`: reply on + resolve the threads the
