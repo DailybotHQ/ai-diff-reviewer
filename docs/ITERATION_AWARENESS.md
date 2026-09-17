@@ -824,6 +824,10 @@ So when a finding's thread is already **collapsed** — `isMinimized` on its anc
 
 Corroboration is not weakened and `verified` is unchanged. New findings never take this path: a fresh `critical` blocks exactly as before.
 
+Because nobody signed off on these retirements, they are reported separately in the summary footer — `resolved 5 · … · 5 auto-retired (fix corroborated; thread already collapsed)` — so a green check is always traceable to why it went green. `verified` retirements are not labelled this way: they carry a reply on the thread instead.
+
+The escape depends on an ordering invariant in `main()`: `gh_collapse_previous_reviews()` runs **before** `run_iar_pre_llm()` reads the threads, and it minimizes each review's inline comments as well as the review body — so by the time `fetch_prior_findings()` runs, a prior round's findings already carry `isMinimized: true`. Reordering those two steps would silently disable the escape; `tests/test_iar_gate_consistency.py` locks it.
+
 #### 14.4.2 One source of truth for the check result
 
 The model writes its `Recommendation:` line before the runtime knows the gate outcome, so the two could disagree. Since v2.3.1 `compute_check_gate()` is the single decision point — the review body, the tracking comment's `**Strictness gate:**` line and the process exit code all derive from one call, evaluated **before** the review is posted. Every review body ends with a runtime-written `> **Check status: ✅ passing | 🚫 failing**` block, and a model `Recommendation: approve` is rewritten to `request-changes` when the gate is failing. A review that recommends approval can no longer ship with a red check.

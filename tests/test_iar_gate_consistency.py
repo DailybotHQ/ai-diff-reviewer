@@ -486,6 +486,85 @@ class GateSeverityNoLongerEscalates(unittest.TestCase):
         self.assertEqual(result.overall_severity, reviewer.SEVERITY_CRITICAL)
 
 
+class CollapseRunsBeforePriorFindingsAreRead(unittest.TestCase):
+    """The escape only works because `collapse-previous` has ALREADY minimized
+    the threads by the time `fetch_prior_findings` reads them.
+
+    If someone reorders `main()` so the IAR pre-context is built before the
+    collapse step, every prior finding would be read with `is_minimized=False`
+    and the escape would silently stop firing — the check would go back to
+    being un-unblockable. Lock the ordering.
+    """
+
+    def test_main_collapses_before_building_the_iar_pre_context(self) -> None:
+        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
+        collapse_call = src.index("            gh_collapse_previous_reviews(")
+        pre_llm_call = src.index("        iar_pre_context = run_iar_pre_llm(")
+        self.assertLess(
+            collapse_call,
+            pre_llm_call,
+            "collapse-previous must run before prior findings are read, or "
+            "PriorFinding.is_minimized is always False",
+        )
+
+    def test_collapse_targets_inline_review_comments(self) -> None:
+        """Minimizing only review bodies would leave inline threads live."""
+        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
+        self.assertIn('for ic in inline:', src)
+        self.assertIn('if not ic.get("isMinimized", False):', src)
+
+
+class AutoRetiredIsVisibleInTheFooter(unittest.TestCase):
+    """A green check nobody signed off on must still be traceable."""
+
+    def test_footer_names_the_auto_retirement(self) -> None:
+        pf = _prior("a" * 16, minimized=True)
+        rec = reviewer.PriorFindingReconciliation(
+            resolved=[pf], still_open=[], regressed=[], unverified=[], auto_retired=[pf]
+        )
+        footer = reviewer.render_incremental_footer(
+            delta=_delta(), reconciliation=rec, new_findings=0
+        )
+        self.assertIn("resolved 1", footer)
+        self.assertIn("1 auto-retired", footer)
+        self.assertIn("thread already collapsed", footer)
+
+    def test_verified_policy_retirement_is_not_labelled_auto(self) -> None:
+        """`verified` replies on and resolves the thread, so it is not the
+        silent path — it must not carry the auto-retired note."""
+        fp = "b" * 16
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
+            rec = reviewer.reconcile_prior_findings(
+                prior_findings=[_prior(fp, minimized=True)],
+                updates=_resolved(fp),
+                current_fingerprints=set(),
+                delta=_delta(),
+                workspace=root,
+                policy=reviewer.RESOLUTION_POLICY_VERIFIED,
+            )
+        self.assertEqual([p.fingerprint for p in rec.resolved], [fp])
+        self.assertEqual(rec.auto_retired, [])
+
+    def test_advisory_retirement_is_labelled_auto(self) -> None:
+        fp = "c" * 16
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "src").mkdir()
+            (root / "src" / "auth.py").write_text("ok\n", encoding="utf-8")
+            rec = reviewer.reconcile_prior_findings(
+                prior_findings=[_prior(fp, minimized=True)],
+                updates=_resolved(fp),
+                current_fingerprints=set(),
+                delta=_delta(),
+                workspace=root,
+                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
+            )
+        self.assertEqual([p.fingerprint for p in rec.auto_retired], [fp])
+
+
 class PriorFindingCollapsedFlag(unittest.TestCase):
     def test_is_collapsed_covers_minimized_and_outdated(self) -> None:
         self.assertFalse(_prior("1" * 16).is_collapsed)

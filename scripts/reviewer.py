@@ -6297,6 +6297,11 @@ class PriorFindingReconciliation:
     still_open: list[PriorFinding] = field(default_factory=list)
     regressed: list[PriorFinding] = field(default_factory=list)
     unverified: list[PriorFinding] = field(default_factory=list)  # claimed resolved, not verified
+    # Subset of `resolved` retired by the v2.3.1 collapsed-thread escape —
+    # corroborated, but with no human confirmation because `collapse-previous`
+    # had already minimized the thread. Surfaced in the footer so a green
+    # check that nobody signed off on is still traceable.
+    auto_retired: list[PriorFinding] = field(default_factory=list)
 
 
 def parse_resolution_policy(raw: str) -> str:
@@ -6367,6 +6372,8 @@ def reconcile_prior_findings(
                 policy == RESOLUTION_POLICY_VERIFIED or pf.is_collapsed
             ):
                 out.resolved.append(pf)
+                if policy != RESOLUTION_POLICY_VERIFIED:
+                    out.auto_retired.append(pf)
                 continue
             out.unverified.append(pf)
         out.still_open.append(pf)
@@ -6464,11 +6471,18 @@ def render_incremental_footer(
     policy_note: str = (
         f" · policy: {policy}" if policy != RESOLUTION_POLICY_ADVISORY else ""
     )
+    auto_note: str = (
+        f" · {len(reconciliation.auto_retired)} auto-retired "
+        "(fix corroborated; thread already collapsed)"
+        if reconciliation.auto_retired
+        else ""
+    )
     return (
         f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
         f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
         f"still open {len(reconciliation.still_open)} · regressed "
-        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}{policy_note}._"
+        f"{len(reconciliation.regressed)} · new {new_findings}"
+        f"{unverified_note}{auto_note}{policy_note}._"
     )
 
 

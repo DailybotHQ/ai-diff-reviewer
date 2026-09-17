@@ -34,6 +34,9 @@ _Nothing yet._
   already collapsed (`isMinimized`, or the thread is outdated). Corroboration
   is unchanged, findings on live threads keep the strict behaviour, and
   `block-on-critical` is not weakened for new findings.
+  Retirements taken this way are counted in the summary footer as
+  `N auto-retired (fix corroborated; thread already collapsed)`, so a check
+  that went green without human sign-off is still traceable.
   See [`docs/ITERATION_AWARENESS.md` § 14.4.1](docs/ITERATION_AWARENESS.md).
 
 ### Changed
