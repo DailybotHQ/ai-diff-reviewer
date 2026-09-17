@@ -565,6 +565,117 @@ class AutoRetiredIsVisibleInTheFooter(unittest.TestCase):
         self.assertEqual([p.fingerprint for p in rec.auto_retired], [fp])
 
 
+class RealWorldRegression_ApiServices7987(unittest.TestCase):
+    """The exact production scenario, replayed from the real PR.
+
+    DailyBot-Inc/api-services#7987, grok, block-on-critical, advisory,
+    collapse-previous: round 1 at `30f1675` posted 5 findings (1 critical);
+    round 2 at `66003ff` reported all 5 resolved with 0 new inline comments.
+
+    Every input below was read off the live PR: the five fingerprints and
+    severities from the inline `ai-pr-reviewer-finding` markers, the thread
+    states from `reviewThreads` (all five `isMinimized: true`), and the
+    changed-file set from `git diff 30f1675...66003ff`. The footer on that
+    review — "5 claimed resolved but unverified" — is reachable only via a
+    `resolved` verdict, which is how we know grok populated all five.
+
+    v2.3.0 produced: resolved 0 · still open 5, severity `critical`, check
+    FAILED, body "Recommendation: approve". Both halves are asserted here.
+    """
+
+    FINDINGS: tuple[tuple[str, str, str], ...] = (
+        ("4b2a3c24aeabae3c", "critical", "docker/local/docker-compose.yaml"),
+        ("035fed8a5d5428e1", "warning", "docker/local/docker-compose.yaml"),
+        ("3b8717af7b89be10", "warning", ".github/workflows/0_pr-review.yml"),
+        ("763e8abf38fc6047", "warning", "docker/local/django/entrypoint.sh"),
+        ("bcf8530e3991aa70", "info", "docker/local/django/Dockerfile"),
+    )
+    CHANGED: tuple[str, ...] = (
+        ".github/workflows/0_pr-review.yml", "AGENTS.md", "docker/local/README.md",
+        "docker/local/django/Dockerfile", "docker/local/django/entrypoint.sh",
+        "docker/local/docker-compose.yaml", "docker/local/herdr-api-ssh-setup.md",
+        "skills-lock.json",
+    )
+
+    def _priors(self) -> list[Any]:
+        return [
+            reviewer.PriorFinding(
+                thread_id=f"T{i}", comment_id=f"C{i}", comment_database_id=i,
+                path=path, line=10, severity=sev, fingerprint=fp,
+                body_excerpt="", is_outdated=True, is_minimized=True,
+            )
+            for i, (fp, sev, path) in enumerate(self.FINDINGS)
+        ]
+
+    def _delta(self) -> Any:
+        return reviewer.IncrementalDelta(
+            prior_head_sha="30f1675" + "0" * 33,
+            head_sha="66003ff" + "0" * 33,
+            changed_files=self.CHANGED,
+            delta_ratio=0.4,
+        )
+
+    def _gate(self, priors: list[Any], retired: set[str]) -> tuple[str, bool]:
+        severity = reviewer.overall_severity(
+            [reviewer.SEVERITY_NONE]
+            + [p.severity for p in priors if p.fingerprint not in retired]
+        )
+        blocked, _ = reviewer.compute_check_gate(
+            severity=severity, strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
+            incomplete=False, cli_name="grok",
+            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
+            description_adequate=True, description_reason="",
+        )
+        return severity, blocked
+
+    def test_all_five_resolved_unblocks_the_check(self) -> None:
+        priors = self._priors()
+        updates = {
+            fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "")
+            for fp, _, _ in self.FINDINGS
+        }
+        with tempfile.TemporaryDirectory() as td:
+            rec = reviewer.reconcile_prior_findings(
+                prior_findings=priors, updates=updates,
+                current_fingerprints=set(),  # 0 new inline findings that round
+                delta=self._delta(), workspace=Path(td),
+                policy=reviewer.RESOLUTION_POLICY_ADVISORY,
+            )
+        self.assertEqual(len(rec.resolved), 5)
+        self.assertEqual(rec.still_open, [])
+        self.assertEqual(len(rec.auto_retired), 5)
+        severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
+        self.assertEqual(severity, reviewer.SEVERITY_NONE)
+        self.assertFalse(blocked, "v2.3.0 kept this check red with no way to unblock")
+
+    def test_the_critical_alone_still_blocks_and_corrects_the_body(self) -> None:
+        """Same PR, but the critical is NOT fixed — must stay red and the
+        body must stop saying approve."""
+        priors = self._priors()
+        updates = {
+            fp: (reviewer.PRIOR_FINDING_STATUS_RESOLVED, "")
+            for fp, _, _ in self.FINDINGS[1:]  # everything except the critical
+        }
+        with tempfile.TemporaryDirectory() as td:
+            rec = reviewer.reconcile_prior_findings(
+                prior_findings=priors, updates=updates,
+                current_fingerprints=set(), delta=self._delta(),
+                workspace=Path(td), policy=reviewer.RESOLUTION_POLICY_ADVISORY,
+            )
+        self.assertEqual(len(rec.resolved), 4)
+        self.assertEqual(
+            [p.fingerprint for p in rec.still_open], ["4b2a3c24aeabae3c"]
+        )
+        severity, blocked = self._gate(priors, {p.fingerprint for p in rec.resolved})
+        self.assertEqual(severity, reviewer.SEVERITY_CRITICAL)
+        self.assertTrue(blocked)
+        body, rewritten = reviewer.reconcile_recommendation_line(
+            "**Recommendation:** approve", blocked=blocked
+        )
+        self.assertTrue(rewritten)
+        self.assertIn("request-changes", body)
+
+
 class PriorFindingCollapsedFlag(unittest.TestCase):
     def test_is_collapsed_covers_minimized_and_outdated(self) -> None:
         self.assertFalse(_prior("1" * 16).is_collapsed)
