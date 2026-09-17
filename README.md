@@ -1,5 +1,9 @@
 <p align="center">
-  <img alt="AI Diff Reviewer" src="https://raw.githubusercontent.com/DailybotHQ/ai-diff-reviewer/main/assets/logo.png" width="480">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/DailybotHQ/ai-diff-reviewer/main/assets/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/DailybotHQ/ai-diff-reviewer/main/assets/logo-light.png">
+    <img alt="AI Diff Reviewer" src="https://raw.githubusercontent.com/DailybotHQ/ai-diff-reviewer/main/assets/logo-light.png" width="440">
+  </picture>
 </p>
 
 # AI Diff Reviewer
