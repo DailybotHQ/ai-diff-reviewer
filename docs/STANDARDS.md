@@ -38,6 +38,26 @@ Allowed types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, `perf`,
 - `docs` — documentation
 - `ci` — workflow or release tooling
 
+### Example commit message
+
+```
+feat(provider): add OpenAI provider
+
+## Summary
+First non-Anthropic provider — translates Anthropic-shape messages and
+tool calls to OpenAI's chat-completions schema at the boundary so the
+rest of the runtime is unchanged.
+
+## Change Log
+- New OpenAIProvider class with tool-call translation in both directions
+- New default model entry: openai → gpt-4o
+- New optional input api-base for self-hosted OpenAI-compatible endpoints
+
+## Risks
+- Translation layer is the only meaningful new surface; covered by smoke
+  test on PR #42 (provider: openai). No change to existing Anthropic path.
+```
+
 ## Branch names
 
 `<type>/<short-kebab-description>`, where `<type>` matches the commit type. Examples:

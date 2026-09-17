@@ -255,25 +255,3 @@ There's a stdlib `unittest` suite in `tests/` (720 tests as of v2.1.0, across 24
 ## When in doubt
 
 Read `scripts/reviewer.py`. It's ~10k LOC (v2.1.0 — past the historical soft ceiling; see `STANDARDS.md § File size`) and follows every rule above. The patterns that exist are the patterns; new code should look like the surrounding code.
-
-## Conventional commit example
-
-Example:
-
-```
-feat(provider): add OpenAI provider
-
-## Summary
-First non-Anthropic provider — translates Anthropic-shape messages and
-tool calls to OpenAI's chat-completions schema at the boundary so the
-rest of the runtime is unchanged.
-
-## Change Log
-- New OpenAIProvider class with tool-call translation in both directions
-- New default model entry: openai → gpt-4o
-- New optional input api-base for self-hosted OpenAI-compatible endpoints
-
-## Risks
-- Translation layer is the only meaningful new surface; covered by smoke
-  test on PR #42 (provider: openai). No change to existing Anthropic path.
-```

@@ -2,7 +2,7 @@
 
 **Purpose:** Single source of truth for every AI coding assistant working on this repository (Claude Code, Cursor, OpenAI Codex, Google Gemini, GitHub Copilot, OpenClaw, and others). Human contributors are also welcome readers — this file is the fastest way to get oriented.
 
-The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised exactly that way). The **git repository slug** is `DailybotHQ/ai-diff-reviewer` — renamed from `DailybotHQ/ai-pr-reviewer` on 2026-07-14 to unblock Marketplace publish (see Rule #9). Old `uses: DailybotHQ/ai-pr-reviewer@v1` pins keep working via GitHub's permanent 301 redirect for renamed repos; new copy-paste examples in the README always use the canonical `DailybotHQ/ai-diff-reviewer` path. The **Marketplace listing slug** is `ai-diff-reviewer`, derived from the `action.yml` `name:` field — matches the repo slug exactly. Vendor attribution is handled by GitHub automatically via the `author:` field (`DailybotHQ`) — the Marketplace tile renders "by DailybotHQ" beneath the title, so we do NOT embed "Dailybot" in the `name:` field. See Rule #9 for the full rename decision log.
+The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised exactly that way). The **git repository slug** is `DailybotHQ/ai-diff-reviewer` — renamed from `DailybotHQ/ai-pr-reviewer` on 2026-07-14 to unblock Marketplace publish (see Rule #9). Old `uses: DailybotHQ/ai-pr-reviewer@v1` pins keep working via GitHub's permanent 301 redirect for renamed repos; new copy-paste examples in the README always use the canonical `DailybotHQ/ai-diff-reviewer` path. The **Marketplace listing slug** is `ai-diff-reviewer`, derived from the `action.yml` `name:` field — matches the repo slug exactly. Vendor attribution is handled by GitHub automatically via the `author:` field (`DailybotHQ`) — the Marketplace tile renders "by DailybotHQ" beneath the title, so we do NOT embed "Dailybot" in the `name:` field. See Rule #9 for the naming rule, and the [Marketplace rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log) for the full chronology.
 
 ---
 
@@ -392,7 +392,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 10. Add a new top-level `action.yml` input "just to support a one-off use case" — every input is a long-lived public contract.
 11. Hardcode anything that should be a constant — magic numbers, paths, severity ranks. The top of `scripts/reviewer.py` is the canonical place for runtime constants.
 12. Edit content in `.claude/...` or `CLAUDE.md` — both are symlinks. Edit the canonical paths under `.agents/...` and `AGENTS.md`.
-13. Spell the action name "AI-Diff-Reviewer" / "AIDR" / "AI/Diff Reviewer" / "AI PR Reviewer" (the old name) in user-facing copy — the canonical user-facing capitalisation is **"AI Diff Reviewer"**. The git repo slug is `ai-diff-reviewer` (renamed 2026-07-14; the old `ai-pr-reviewer` URL still resolves via GitHub's permanent 301 redirect), and the Marketplace listing slug is `ai-diff-reviewer` (derived from `action.yml` `name:`) — they match exactly. Rule #9 has the full rename decision log.
+13. Spell the action name "AI-Diff-Reviewer" / "AIDR" / "AI/Diff Reviewer" / "AI PR Reviewer" (the old name) in user-facing copy — the canonical user-facing capitalisation is **"AI Diff Reviewer"**. The git repo slug is `ai-diff-reviewer` (renamed 2026-07-14; the old `ai-pr-reviewer` URL still resolves via GitHub's permanent 301 redirect), and the Marketplace listing slug is `ai-diff-reviewer` (derived from `action.yml` `name:`) — they match exactly. Rule #9 has the naming rule; the full chronology is in the [Marketplace rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log).
 14. Hand-edit `.agents/skills/ai-diff-reviewer/**` on a feature branch — that's the vendored snapshot of the released version, refreshed automatically by `auto-release.yml` Step 3.5 after each release. Work on the source-of-truth copy at `skills/ai-diff-reviewer/**` instead. Rule #10 has the two-layer dogfooding model.
 15. Build a backend URL outside `resolve_endpoint_profile()` / `EndpointProfile.base_url`, read `AIPRR_API_BASE` directly in a provider, or forward a credential to a CLI under a name it does not need — `docs/SECURITY.md § "Custom endpoints"` is the contract (`.review/extension.md` flags all three as `critical`).
 
@@ -446,7 +446,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 - <risk 1, or "None — content-only change">
 ```
 
-See the [Conventional Commit example](docs/DEVELOPMENT_GUIDELINES.md#conventional-commit-example) for a complete message.
+See the [Conventional Commit example](docs/STANDARDS.md#example-commit-message) in `STANDARDS.md § Commits` for a complete message.
 
 ---
 
