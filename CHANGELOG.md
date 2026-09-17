@@ -9,6 +9,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [2.3.1] — 2026-09-17
+
+### Fixed
+
+- **A review that said `approve` could ship with a red check.** The strictness
+  gate was evaluated *after* the review had been posted, so the model's
+  `Recommendation:` line — written before the runtime knew the outcome — could
+  contradict the check. `compute_check_gate()` is now the single decision
+  point, evaluated before the review is posted: the review body, the tracking
+  comment's `**Strictness gate:**` line and the exit code all derive from one
+  call. Every review body now ends with a runtime-written
+  `> **Check status: ✅ passing | 🚫 failing**` block, and a model
+  `Recommendation: approve` is rewritten to `request-changes` whenever the
+  gate is failing.
+- **Under `advisory`, a fixed finding could hold the check red forever.**
+  `prior-findings-resolution: advisory` retires a prior finding only when a
+  maintainer resolves its thread — but `collapse-previous: true` (the default)
+  minimizes those threads on the next push, removing the only escape. An
+  outstanding `critical` therefore gated every subsequent round even after a
+  real fix. `advisory` now applies the same corroboration test as `verified`
+  (model reported `resolved` **and** the fingerprint was not re-emitted this
+  round **and** the file changed or is gone) when the finding's thread is
+  already collapsed (`isMinimized`; an outdated-but-visible thread does not
+  count, since a maintainer can still resolve it). Corroboration
+  is unchanged, findings on live threads keep the strict behaviour, and
+  `block-on-critical` is not weakened for new findings.
+  Retirements taken this way are counted in the summary footer as
+  `N auto-retired (fix corroborated; thread already collapsed)`, so a check
+  that went green without human sign-off is still traceable.
+  See [`docs/ITERATION_AWARENESS.md` § 14.4.1](docs/ITERATION_AWARENESS.md).
+
+- **An already-stuck PR stayed stuck after upgrading.** Corroboration tested
+  "file changed since the last reviewed head", so a fix that landed in an
+  earlier round could never be corroborated on a later run — the delta no
+  longer touched the file. Each prior finding now carries the head SHA of the
+  review that posted it (`pullRequestReview.commit.oid`), and
+  `compute_changed_since_raised()` diffs that SHA against HEAD (one `git diff`
+  per distinct review SHA). A same-head re-run or an unrelated push after the
+  fix now passes clean. Pre-2.3.1 findings keep delta-only evidence; an
+  unresolvable SHA counts as no evidence, never as changed.
+- **Three bad inline anchors cost every inline comment.** GitHub rejects the
+  whole review with HTTP 422 when any one anchor is outside the diff, and the
+  fallback dropped all of them — on one dogfood run 3 bad anchors lost all 7
+  comments. `gh_submit_review_with_fallback` now parses the PR diff's hunk
+  ranges and retries once with only the provably-anchorable comments (unknown
+  files are kept; a truncated diff is not evidence against them), logging the
+  dropped anchors by `path:line`. Summary-only remains the last resort.
+- **The summary footer could disagree with the gate.** It ran a second
+  reconciliation with different inputs. `run_iar_post_llm` now stores the one
+  it gated on (`ReviewResult.prior_reconciliation`) and the footer reads it
+  back; after a post-LLM crash the footer reports nothing as resolved, matching
+  the escalated gate.
+- **A retired finding could flap the check back to red.** Under `advisory` the
+  auto-retired thread stays unresolved on GitHub, so it was re-read as a prior
+  finding on the next round — where the delta no longer touched the fixed file,
+  so corroboration failed and it re-gated. `filter_retired_prior_findings()`
+  now drops fingerprints already in `resolved_fingerprints` before they reach
+  the gate; a genuine regression still re-surfaces through dedup.
+
+### Changed
+
+- A model `Recommendation: approve` is rewritten on **every** matching line,
+  not just the first.
+- `PriorFinding` carries `is_minimized` (and an `is_collapsed` property that
+  means minimized only);
+  `fetch_prior_findings` now selects `isMinimized` on each thread's anchoring
+  comment.
+- `skills/ai-diff-reviewer/SKILL.md`, `apply-review/SKILL.md` (new **Step 2f**)
+  and `setup/reference.md` state that a body recommending `approve` is not
+  evidence the check passed, and that `apply-review` must read the tracking
+  marker's `Highest severity` / `Strictness gate` / IAR footer before
+  summarizing a review.
+
 ## [2.3.0] — 2026-09-17
 
 ### Changed

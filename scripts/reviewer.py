@@ -862,12 +862,13 @@ PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
 PRIOR_FINDING_STATUS_REGRESSED: str = "regressed"
-# Prior-finding resolution policy (v2.2.0+). `advisory` (default, byte-identical
-# to v2.1.0): the model's `resolved` verdicts are reported but never retire a
-# finding — a maintainer resolves the thread. `verified`: a `resolved` verdict
-# is honoured only when the runtime can corroborate it (fingerprint absent
-# from this round AND the file changed since the last reviewed head or no
-# longer exists); the thread is then replied to and resolved.
+# Prior-finding resolution policy (v2.2.0+). Corroboration = the model said
+# `resolved` AND the fingerprint is absent from this round AND the file changed
+# since the finding was raised (or no longer exists). `verified`: a corroborated
+# verdict retires the finding and the thread is replied to and resolved.
+# `advisory` (default): a maintainer resolves the thread — except when
+# `collapse-previous` already minimized it (v2.3.1), in which case a
+# corroborated verdict retires the finding without touching the thread.
 PRIOR_FINDINGS_RESOLUTION_ENV: str = "AIPRR_PRIOR_FINDINGS_RESOLUTION"
 RESOLUTION_POLICY_ADVISORY: str = "advisory"
 RESOLUTION_POLICY_VERIFIED: str = "verified"
@@ -1532,6 +1533,61 @@ def gh_submit_review(
     )
 
 
+_HUNK_HEADER_RE: re.Pattern[str] = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def parse_diff_hunk_ranges(diff_text: str) -> dict[str, list[tuple[int, int]]]:
+    """RIGHT-side line ranges per file from a unified diff: the lines GitHub
+    will accept as inline-comment anchors (added + context lines).
+
+    `{path: [(first_line, last_line), …]}`; a file present with no ranges is a
+    pure deletion. Files absent from the diff (e.g. cut by truncation) are
+    simply missing — callers must treat "missing" as unknown, not invalid.
+    """
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    current: str | None = None
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++ "):
+            target: str = raw[4:].strip()
+            if target.startswith("b/"):
+                target = target[2:]
+            current = None if target == "/dev/null" else target
+            if current is not None:
+                ranges.setdefault(current, [])
+            continue
+        if current is None:
+            continue
+        m = _HUNK_HEADER_RE.match(raw)
+        if m:
+            start: int = int(m.group(1))
+            count: int = int(m.group(2)) if m.group(2) is not None else 1
+            if count > 0:
+                ranges[current].append((start, start + count - 1))
+    return ranges
+
+
+def inline_comment_anchor_status(
+    comment: dict[str, Any], ranges: dict[str, list[tuple[int, int]]]
+) -> bool | None:
+    """True = provably anchorable, False = provably not, None = unknown file.
+
+    A single- or multi-line anchor is valid when `line` (and `start_line`, if
+    present) fall inside ONE hunk of the file — GitHub rejects ranges that
+    cross a hunk boundary. Only RIGHT-side anchors are validated; LEFT-side
+    ones are left as unknown.
+    """
+    path: str = str(comment.get("path") or "")
+    if path not in ranges:
+        return None
+    if str(comment.get("side") or "RIGHT") != "RIGHT":
+        return None
+    line: int = _as_int(comment.get("line"))
+    start: int = _as_int(comment.get("start_line")) or line
+    if line <= 0 or start <= 0 or start > line:
+        return False
+    return any(lo <= start and line <= hi for lo, hi in ranges[path])
+
+
 def gh_submit_review_with_fallback(
     *,
     token: str,
@@ -1539,8 +1595,18 @@ def gh_submit_review_with_fallback(
     pr_number: int,
     head_sha: str,
     result: "ReviewResult",
+    diff_text: str = "",
 ) -> tuple[dict[str, Any], int]:
-    """Submit the review; on a 422, retry summary-only and report the drop.
+    """Submit the review; on a 422, salvage the anchorable inline comments,
+    then fall back to summary-only.
+
+    v2.3.1: GitHub rejects the WHOLE request when any one anchor is bad, and
+    the old fallback dropped every inline comment with it — on one dogfood
+    run 3 bad anchors cost all 7 comments. When `diff_text` is given, the
+    first retry keeps only the comments whose anchor is provably inside a
+    diff hunk (unknown files are kept — a truncated diff is not evidence
+    against them) and drops the rest by name. Summary-only remains the last
+    resort, so the review is never lost.
 
     Consumes a provider-independent `ReviewResult`. Encodes findings into the
     GitHub Reviews API inline shape at the boundary so agent-runner providers
@@ -1573,10 +1639,41 @@ def gh_submit_review_with_fallback(
         err_body: str = e.read().decode("utf-8", errors="replace")
         log(
             "GitHub rejected the review with HTTP 422 — most likely an inline "
-            f"comment referenced a line outside the diff. Retrying with "
-            f"summary-only ({len(inline_comments)} inline comment(s) will be "
-            f"dropped). Error body: {err_body[:MAX_422_BODY_CHARS]}"
+            f"comment referenced a line outside the diff. Error body: "
+            f"{err_body[:MAX_422_BODY_CHARS]}"
         )
+        if diff_text:
+            ranges: dict[str, list[tuple[int, int]]] = parse_diff_hunk_ranges(diff_text)
+            kept: list[dict[str, Any]] = []
+            rejected: list[str] = []
+            for c in inline_comments:
+                if inline_comment_anchor_status(c, ranges) is False:
+                    rejected.append(f"{c.get('path')}:{c.get('start_line', c.get('line'))}-{c.get('line')}")
+                else:
+                    kept.append(c)
+            if kept and len(kept) < len(inline_comments):
+                log(
+                    f"Retrying with the {len(kept)} anchorable inline comment(s); "
+                    f"dropping {len(rejected)} outside the diff: {', '.join(rejected)}"
+                )
+                try:
+                    review = gh_submit_review(
+                        token=token,
+                        repo=repo,
+                        pr_number=pr_number,
+                        head_sha=head_sha,
+                        body=result.summary,
+                        inline_comments=kept,
+                    )
+                    return review, len(inline_comments) - len(kept)
+                except urllib.error.HTTPError as retry_err:
+                    if retry_err.code != 422:
+                        raise
+                    log(
+                        "The anchorable subset was rejected too — falling back "
+                        "to summary-only."
+                    )
+        log(f"Retrying with summary-only ({len(inline_comments)} inline comment(s) will be dropped).")
         review = gh_submit_review(
             token=token,
             repo=repo,
@@ -4863,6 +4960,10 @@ class ReviewResult:
     usage: UsageTelemetry | None = None
     # Incremental mode: the model's verdict per prior finding fingerprint.
     prior_finding_updates: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # Incremental mode (v2.3.1): the ONE reconciliation the gate was decided
+    # on, stored by `run_iar_post_llm` so the summary footer reports exactly
+    # the retirements that stopped gating — never a second, divergent pass.
+    prior_reconciliation: "PriorFindingReconciliation | None" = None
     # Optional PR-level metadata from chat-completions tools or agent-runner
     # findings.json (see `parse_complexity_level`, `resolve_pr_complexity`).
     complexity: str | None = None
@@ -5806,6 +5907,111 @@ class PriorFinding:
     fingerprint: str
     body_excerpt: str
     is_outdated: bool
+    is_minimized: bool = False
+    # The head SHA the review that posted this finding was for (v2.3.1).
+    # Corroboration asks "did the file change since the finding was RAISED?"
+    # — not since the last reviewed head, which is an accident of round
+    # timing and left a fix made in round 2 uncorroboratable in round 3.
+    review_sha: str = ""
+
+    @property
+    def is_collapsed(self) -> bool:
+        """True when `collapse-previous` has minimized the thread's anchoring
+        comment, hiding it from the Conversation tab — the state in which the
+        documented `advisory` exit ("a maintainer resolves the thread") is no
+        longer discoverable, so corroboration becomes the only escape.
+
+        `is_outdated` is deliberately NOT part of this: an outdated thread on a
+        `collapse-previous: false` repo is still visible and resolvable, and
+        outdated is a "code moved" signal — evidence, not eligibility.
+        """
+        return self.is_minimized
+
+
+def files_changed_between(
+    *, from_sha: str, to_sha: str, repo_root: str | None = None
+) -> set[str] | None:
+    """`git diff --name-only from..to` as a set of repo-relative paths.
+
+    Returns `None` when git cannot answer (unknown SHA, shallow clone,
+    missing binary) so callers fall back to the weaker delta-only evidence
+    instead of treating a failure as "the file changed".
+    """
+    if not from_sha or not to_sha:
+        return None
+    if from_sha == to_sha:
+        return set()
+    try:
+        names: subprocess.CompletedProcess[str] = run_cmd(
+            ["git", "diff", "--name-only", "-z", from_sha, to_sha, "--"],
+            cwd=repo_root,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        log(
+            f"IAR: could not diff {from_sha[:8]}..{to_sha[:8]} ({e}) — files "
+            "treated as unchanged since that finding was raised."
+        )
+        return None
+    return {path for path in names.stdout.split("\0") if path}
+
+
+def compute_changed_since_raised(
+    *,
+    prior_findings: list[PriorFinding] | tuple[PriorFinding, ...],
+    head_sha: str,
+    repo_root: str | None = None,
+) -> dict[str, tuple[str, ...]]:
+    """For each distinct `review_sha` among the prior findings, the files
+    that changed between that SHA and `head_sha` (v2.3.1).
+
+    This is the evidence that lets a finding fixed in an EARLIER round be
+    corroborated now: the last-round delta no longer touches the file, but
+    the file did change after the finding was raised. One `git diff` per
+    distinct review SHA, never per finding. SHAs git cannot resolve are
+    simply absent from the map.
+    """
+    out: dict[str, tuple[str, ...]] = {}
+    for sha in sorted({pf.review_sha for pf in prior_findings if pf.review_sha}):
+        changed: set[str] | None = files_changed_between(
+            from_sha=sha, to_sha=head_sha, repo_root=repo_root
+        )
+        if changed is not None:
+            out[sha] = tuple(sorted(changed))
+    return out
+
+
+def filter_retired_prior_findings(
+    *,
+    prior_findings: list[PriorFinding],
+    resolved_fingerprints: list[str] | tuple[str, ...],
+) -> list[PriorFinding]:
+    """Drop prior findings the runtime already retired in an earlier round.
+
+    Under `advisory` an auto-retired thread is left unresolved on GitHub, so
+    `fetch_prior_findings` keeps returning it round after round. The
+    corroboration test would then fail on the NEXT round — whose delta no
+    longer touches the file that was fixed — and the finding would go back to
+    outstanding, flapping the check from green to red with nothing having
+    changed (v2.3.1).
+
+    Dropping it is safe: if the issue genuinely came back, the model re-emits
+    the fingerprint and `dedupe_findings_against_prior` surfaces it as a
+    regression rather than silencing it.
+    """
+    retired: set[str] = set(resolved_fingerprints or ())
+    if not retired or not prior_findings:
+        return prior_findings
+    kept: list[PriorFinding] = [
+        pf for pf in prior_findings if pf.fingerprint not in retired
+    ]
+    dropped: int = len(prior_findings) - len(kept)
+    if dropped:
+        log(
+            f"IAR: {dropped} prior finding(s) already retired in an earlier "
+            "round — not re-gating (a real regression re-surfaces via dedup)."
+        )
+    return kept
 
 
 def _bot_login_matches(bot_login: str, author_login: str) -> bool:
@@ -5847,7 +6053,7 @@ def fetch_prior_findings(
         "        nodes {"
         "          id isResolved isOutdated path line originalLine"
         "          comments(first:1) {"
-        "            nodes { id databaseId body author { login } pullRequestReview { body } }"
+        "            nodes { id databaseId isMinimized body author { login } pullRequestReview { body commit { oid } } }"
         "          }"
         "        }"
         "      }"
@@ -5899,9 +6105,9 @@ def fetch_prior_findings(
         author: str = str((comment.get("author") or {}).get("login") or "")
         if not _bot_login_matches(bot_login, author):
             continue
-        review_body: str = str(
-            (comment.get("pullRequestReview") or {}).get("body") or ""
-        )
+        review_node: dict[str, Any] = comment.get("pullRequestReview") or {}
+        review_body: str = str(review_node.get("body") or "")
+        review_sha: str = str((review_node.get("commit") or {}).get("oid") or "")
         if provider_marker_text and provider_marker_text not in review_body:
             continue
         body: str = str(comment.get("body") or "")
@@ -5926,6 +6132,8 @@ def fetch_prior_findings(
                 fingerprint=fingerprint,
                 body_excerpt=excerpt,
                 is_outdated=bool(thread.get("isOutdated")),
+                is_minimized=comment.get("isMinimized") is True,
+                review_sha=review_sha,
             )
         )
     if skipped_unmarked:
@@ -6078,6 +6286,10 @@ class IARPreLLMContext:
     delta: IncrementalDelta | None = None
     prior_findings: tuple[PriorFinding, ...] = ()
     effective_max_turns: int = 0  # 0 = leave the caller's max_turns as is
+    # review_sha → files changed between that SHA and HEAD (v2.3.1); see
+    # `compute_changed_since_raised`. Both reconciliation call sites and the
+    # prompt's "file changed since?" column read this same map.
+    changed_since_raised: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _resolve_base_sha(*, base_ref: str, repo_root: str | None = None) -> str:
@@ -6283,6 +6495,11 @@ class PriorFindingReconciliation:
     still_open: list[PriorFinding] = field(default_factory=list)
     regressed: list[PriorFinding] = field(default_factory=list)
     unverified: list[PriorFinding] = field(default_factory=list)  # claimed resolved, not verified
+    # Subset of `resolved` retired by the v2.3.1 collapsed-thread escape —
+    # corroborated, but with no human confirmation because `collapse-previous`
+    # had already minimized the thread. Surfaced in the footer so a green
+    # check that nobody signed off on is still traceable.
+    auto_retired: list[PriorFinding] = field(default_factory=list)
 
 
 def parse_resolution_policy(raw: str) -> str:
@@ -6307,20 +6524,42 @@ def reconcile_prior_findings(
     delta: IncrementalDelta | None,
     workspace: Path | None = None,
     policy: str = RESOLUTION_POLICY_ADVISORY,
+    changed_since_raised: dict[str, tuple[str, ...]] | None = None,
 ) -> PriorFindingReconciliation:
     """Classify the model's verdicts on prior findings.
 
-    `advisory` (default): a `resolved` claim is recorded as *unverified* and
-    the finding stays open — a diff change is not proof that the concrete
-    failure disappeared; a maintainer resolves the thread.
+    Corroboration (both policies): the fingerprint is absent from this round
+    AND the file changed since the finding was raised (or no longer exists).
+    A diff change alone is never proof; the model's `resolved` verdict alone
+    is never proof either.
 
-    `verified`: a `resolved` claim is honoured only when the runtime can
-    corroborate it — the fingerprint is absent from this round AND the file
-    changed since the last reviewed head (or no longer exists). Anything the
-    runtime cannot corroborate stays open and is listed as unverified.
-    `regressed` is model-asserted in both policies; no verdict → still open.
+    `verified`: a corroborated `resolved` claim retires the finding (the
+    caller replies on and resolves the thread).
+
+    `advisory` (default): a `resolved` claim is recorded as *unverified* and
+    the finding stays open for a maintainer to resolve the thread — unless the
+    thread is already collapsed, see below. Anything the runtime cannot
+    corroborate stays open and is listed as unverified under both policies.
+    `regressed` is model-asserted in both; no verdict → still open.
+
+    Deadlock escape (v2.3.1): under `advisory` the documented way to retire a
+    finding is for a maintainer to resolve its thread. When `collapse-previous`
+    has minimized that thread — or the thread went outdated — that path is
+    gone, and an outstanding `critical` would gate the check forever while the
+    review body reports the finding fixed. So `advisory` ALSO retires a prior
+    finding when the runtime can corroborate it (same three-part test as
+    `verified`) AND the thread is already collapsed (`PriorFinding.is_collapsed`).
+    Corroboration is never weakened, and a finding whose thread a maintainer
+    can still resolve keeps the strict `advisory` behaviour.
+
+    "The file changed" (v2.3.1) means changed since the finding was RAISED:
+    the last-round delta OR `changed_since_raised[pf.review_sha]` (see
+    `compute_changed_since_raised`). A fix that landed in round 2 is still
+    corroborated in round 3 — or on a same-head re-run — instead of being
+    stranded because that round's delta no longer touches the file.
     """
     changed: set[str] = set(delta.changed_files) if delta is not None else set()
+    since_raised: dict[str, tuple[str, ...]] = changed_since_raised or {}
     root: Path = workspace if workspace is not None else Path.cwd()
     out = PriorFindingReconciliation()
     for pf in prior_findings:
@@ -6329,19 +6568,26 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
-            if policy == RESOLUTION_POLICY_VERIFIED:
-                file_changed: bool = pf.path in changed
-                # `pf.path` comes from a GitHub review thread; keep the
-                # repo-relative invariant anyway (never join an absolute or
-                # `..` path onto the workspace).
-                rel: Path = Path(pf.path) if pf.path else Path()
-                path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
-                file_gone: bool = path_ok and not (root / rel).exists()
-                if pf.fingerprint not in current_fingerprints and (
-                    file_changed or file_gone
-                ):
-                    out.resolved.append(pf)
-                    continue
+            file_changed: bool = pf.path in changed or (
+                bool(pf.review_sha)
+                and pf.path in since_raised.get(pf.review_sha, ())
+            )
+            # `pf.path` comes from a GitHub review thread; keep the
+            # repo-relative invariant anyway (never join an absolute or
+            # `..` path onto the workspace).
+            rel: Path = Path(pf.path) if pf.path else Path()
+            path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
+            file_gone: bool = path_ok and not (root / rel).exists()
+            corroborated: bool = pf.fingerprint not in current_fingerprints and (
+                file_changed or file_gone
+            )
+            if corroborated and (
+                policy == RESOLUTION_POLICY_VERIFIED or pf.is_collapsed
+            ):
+                out.resolved.append(pf)
+                if policy != RESOLUTION_POLICY_VERIFIED:
+                    out.auto_retired.append(pf)
+                continue
             out.unverified.append(pf)
         out.still_open.append(pf)
     return out
@@ -6438,11 +6684,18 @@ def render_incremental_footer(
     policy_note: str = (
         f" · policy: {policy}" if policy != RESOLUTION_POLICY_ADVISORY else ""
     )
+    auto_note: str = (
+        f" · {len(reconciliation.auto_retired)} auto-retired "
+        "(fix corroborated; thread already collapsed)"
+        if reconciliation.auto_retired
+        else ""
+    )
     return (
         f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
         f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
         f"still open {len(reconciliation.still_open)} · regressed "
-        f"{len(reconciliation.regressed)} · new {new_findings}{unverified_note}{policy_note}._"
+        f"{len(reconciliation.regressed)} · new {new_findings}"
+        f"{unverified_note}{auto_note}{policy_note}._"
     )
 
 
@@ -6679,6 +6932,7 @@ def run_iar_pre_llm(
     # ---- Incremental mode selection (v2.1.0+) ----
     prior_findings: list[PriorFinding] = []
     delta: IncrementalDelta | None = None
+    changed_since_raised: dict[str, tuple[str, ...]] = {}
     if prior_state is not None and transition not in (
         GenerationTransition.FIRST_REVIEW,
         GenerationTransition.USER_FORCED_RESET,
@@ -6689,6 +6943,13 @@ def run_iar_pre_llm(
             pr_number=pr_number,
             bot_login=bot_login,
             provider_marker_text=provider_marker(provider_id) if provider_id else "",
+        )
+        prior_findings = filter_retired_prior_findings(
+            prior_findings=prior_findings,
+            resolved_fingerprints=prior_state.resolved_fingerprints,
+        )
+        changed_since_raised = compute_changed_since_raised(
+            prior_findings=prior_findings, head_sha=head_sha
         )
         delta = compute_incremental_delta(
             prior_head_sha=prior_state.head_sha,
@@ -6751,6 +7012,7 @@ def run_iar_pre_llm(
         delta=delta,
         prior_findings=tuple(prior_findings),
         effective_max_turns=effective_max_turns,
+        changed_since_raised=changed_since_raised,
     )
 
 
@@ -6768,10 +7030,11 @@ def run_iar_post_llm(
     """Apply IAR filtering AFTER the LLM call and return the state to
     embed + the surfacing decision.
 
-    `resolution_policy` (v2.2.0+): under `verified`, prior findings the
-    runtime can corroborate as resolved (see `reconcile_prior_findings`)
-    leave the outstanding set and stop contributing to the gate; under
-    `advisory` (default) every prior finding stays outstanding.
+    `resolution_policy` (v2.2.0+): prior findings the runtime can corroborate
+    as resolved (see `reconcile_prior_findings`) leave the outstanding set and
+    stop contributing to the gate. Under `verified` corroboration alone is
+    enough; under `advisory` (default) the finding's thread must also already
+    be collapsed, i.e. a maintainer can no longer retire it by hand (v2.3.1).
 
     `surface_cap` (v2.1.0+, agent-runner path): the effective inline cap
     is enforced HERE, after fingerprinting, so overflow findings are still
@@ -6827,12 +7090,14 @@ def run_iar_post_llm(
         )
     # The incremental prompt explicitly forbids reposting prior findings.
     # Their absence from this run's new comments must not clear the gate —
-    # except, under the `verified` policy, for findings the runtime can
-    # corroborate as resolved.
+    # except for findings `reconcile_prior_findings` retires.
+    # `verified` corroborates directly; `advisory` additionally requires the
+    # thread to be collapsed (see `reconcile_prior_findings`). Both policies
+    # run the reconciliation so a retired finding stops feeding the gate —
+    # otherwise an approve-shaped body ships with a red check.
     verified_resolved_fps: set[str] = set()
     if (
         pre_context.prior_findings
-        and resolution_policy == RESOLUTION_POLICY_VERIFIED
         and pre_context.mode == IAR_MODE_INCREMENTAL
     ):
         # `Finding.fingerprint` is stamped further down; corroboration needs
@@ -6845,16 +7110,17 @@ def run_iar_post_llm(
             + list(overflow)
             + [sf.finding for sf in policy_result.findings_silenced]
         }
+        result.prior_reconciliation = reconcile_prior_findings(
+            prior_findings=pre_context.prior_findings,
+            updates=result.prior_finding_updates,
+            current_fingerprints=round_fps,
+            delta=pre_context.delta,
+            workspace=workspace,
+            policy=resolution_policy,
+            changed_since_raised=pre_context.changed_since_raised,
+        )
         verified_resolved_fps = {
-            pf.fingerprint
-            for pf in reconcile_prior_findings(
-                prior_findings=pre_context.prior_findings,
-                updates=result.prior_finding_updates,
-                current_fingerprints=round_fps,
-                delta=pre_context.delta,
-                workspace=workspace,
-                policy=resolution_policy,
-            ).resolved
+            pf.fingerprint for pf in result.prior_reconciliation.resolved
         }
     if pre_context.prior_findings:
         result.overall_severity = overall_severity(
@@ -7231,6 +7497,7 @@ def render_prior_findings_block(
     prior_findings: tuple[PriorFinding, ...] | list[PriorFinding],
     *,
     changed_files: set[str],
+    changed_since_raised: dict[str, tuple[str, ...]] | None = None,
 ) -> str:
     """The `## Your prior findings still open` table (criticals first,
     capped at `PRIOR_FINDINGS_MAX_LISTED`)."""
@@ -7244,8 +7511,12 @@ def render_prior_findings_block(
         "| # | fingerprint | severity | location | summary | file changed since? |",
         "|---|---|---|---|---|---|",
     ]
+    since_raised: dict[str, tuple[str, ...]] = changed_since_raised or {}
     for index, pf in enumerate(ordered[:PRIOR_FINDINGS_MAX_LISTED], start=1):
-        changed: str = "yes" if pf.path in changed_files else "no"
+        touched: bool = pf.path in changed_files or (
+            bool(pf.review_sha) and pf.path in since_raised.get(pf.review_sha, ())
+        )
+        changed: str = "yes" if touched else "no"
         summary: str = pf.body_excerpt.replace("|", "\\|")[:120]
         rows.append(
             f"| {index} | `{pf.fingerprint}` | {pf.severity} | "
@@ -7309,7 +7580,13 @@ def render_incremental_sections(
             + "\n".join(unchanged_lines)
             + "\n\n"
         )
-    out.append(render_prior_findings_block(pre.prior_findings, changed_files=changed))
+    out.append(
+        render_prior_findings_block(
+            pre.prior_findings,
+            changed_files=changed,
+            changed_since_raised=pre.changed_since_raised,
+        )
+    )
     return "".join(out)
 
 
@@ -9265,6 +9542,95 @@ def evaluate_strictness(
     return False, "unhandled strictness branch"
 
 
+def compute_check_gate(
+    *,
+    severity: str,
+    strictness: str,
+    incomplete: bool,
+    cli_name: str,
+    pr_desc_mode: str,
+    description_adequate: bool,
+    description_reason: str,
+) -> tuple[bool, str]:
+    """The single place that decides the check conclusion.
+
+    Every surface that reports pass/fail — the review body's status block, the
+    tracking comment's `Strictness gate` line, and the process exit code —
+    derives from ONE call to this function, so they cannot disagree (v2.3.1).
+    Previously the gate was evaluated only after the review had been posted,
+    which let a model-authored `Recommendation: approve` ship alongside a red
+    check.
+    """
+    blocked, block_reason = evaluate_strictness(severity, strictness)
+    if incomplete:
+        # An incomplete agent-runner review must not green the check.
+        incomplete_blocked, incomplete_reason = incomplete_review_gate(
+            strictness, cli_name
+        )
+        if incomplete_blocked or not blocked:
+            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
+    # PR description gate — orthogonal to the strictness gate. When
+    # `pr-description-mode: block`, an inadequate description forces
+    # `blocked=True` regardless of inline-comment severity.
+    if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_adequate:
+        blocked = True
+        block_reason = f"pr-description-mode=block: {description_reason}"
+    return blocked, block_reason
+
+
+# A model-authored verdict token. Only the word is swapped, so whatever
+# markdown the model wrapped the line in survives the rewrite.
+_APPROVE_TOKEN_RE: re.Pattern[str] = re.compile(r"\bapprove\b", re.IGNORECASE)
+
+RECOMMENDATION_OVERRIDE_NOTE: str = (
+    "  _(runtime override: the strictness gate is failing this check — see "
+    "**Check status** below.)_"
+)
+
+
+def reconcile_recommendation_line(summary: str, *, blocked: bool) -> tuple[str, bool]:
+    """Stop a model `Recommendation: approve` from contradicting a red check.
+
+    The model writes its recommendation before the runtime knows the gate
+    outcome, and under IAR the gate can still be held open by prior findings
+    the model believes are fixed. When the check is failing, the word
+    `approve` on the recommendation line becomes `request-changes` plus a
+    pointer to the authoritative status block. Returns `(summary, rewritten)`.
+    """
+    if not blocked or not summary:
+        return summary, False
+    lines: list[str] = summary.splitlines()
+    rewritten: bool = False
+    for i, line in enumerate(lines):
+        if "recommendation" not in line.lower():
+            continue
+        new_line, swapped = _APPROVE_TOKEN_RE.subn("request-changes", line, count=1)
+        if swapped:
+            lines[i] = new_line + RECOMMENDATION_OVERRIDE_NOTE
+            rewritten = True
+    return ("\n".join(lines) if rewritten else summary), rewritten
+
+
+def render_gate_status_block(
+    *, blocked: bool, block_reason: str, severity: str, strictness: str
+) -> str:
+    """The authoritative pass/fail statement appended to every review body.
+
+    Written by the runtime from `compute_check_gate`, never by the model, so a
+    reader of the review always sees the same verdict the check reports.
+    """
+    verdict: str = "🚫 failing" if blocked else "✅ passing"
+    return (
+        "\n\n---\n\n"
+        f"> **Check status: {verdict}** — strictness `{strictness}`, "
+        f"highest severity in effect `{severity}`: {block_reason}.\n"
+        "> \n"
+        "> This line is written by the reviewer runtime after the gate ran and "
+        "matches the check conclusion and the tracking comment. Any "
+        "recommendation above is the model's advisory opinion, not the gate."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Agentic loop
 # ---------------------------------------------------------------------------
@@ -10284,8 +10650,11 @@ def main() -> int:
             )
 
     # ------------------------------------------------------------------
-    # Incremental mode: classify advisory verdicts and append the footer.
-    # Human thread resolution is required to retire an outstanding finding.
+    # Incremental mode: apply the resolution policy and append the footer.
+    # The reconciliation is the ONE `run_iar_post_llm` decided the gate on
+    # (`result.prior_reconciliation`); it is recomputed here only when the
+    # post-LLM step crashed and never produced it — and in that fallback the
+    # gate escalated every prior severity, so nothing is reported resolved.
     # ------------------------------------------------------------------
     if (
         iar_pre_context is not None
@@ -10293,19 +10662,30 @@ def main() -> int:
         and iar_pre_context.delta is not None
     ):
         try:
-            current_fps: set[str] = set(
-                iar_state_final.open_fingerprints_this_gen
-                if iar_state_final is not None
-                else [f.fingerprint for f in result.findings if f.fingerprint]
-            )
-            reconciliation: PriorFindingReconciliation = reconcile_prior_findings(
-                prior_findings=iar_pre_context.prior_findings,
-                updates=result.prior_finding_updates,
-                current_fingerprints=current_fps,
-                delta=iar_pre_context.delta,
-                workspace=Path.cwd(),
-                policy=resolution_policy,
-            )
+            reconciliation: PriorFindingReconciliation
+            if result.prior_reconciliation is not None:
+                reconciliation = result.prior_reconciliation
+            else:
+                reconciliation = reconcile_prior_findings(
+                    prior_findings=iar_pre_context.prior_findings,
+                    updates=result.prior_finding_updates,
+                    current_fingerprints={
+                        f.fingerprint for f in result.findings if f.fingerprint
+                    },
+                    delta=iar_pre_context.delta,
+                    workspace=Path.cwd(),
+                    policy=resolution_policy,
+                    changed_since_raised=iar_pre_context.changed_since_raised,
+                )
+                # Post-LLM crashed: the gate kept every prior finding, so the
+                # footer must not claim retirements the gate never honoured.
+                reconciliation = PriorFindingReconciliation(
+                    resolved=[],
+                    still_open=list(iar_pre_context.prior_findings),
+                    regressed=list(reconciliation.regressed),
+                    unverified=list(reconciliation.unverified) + list(reconciliation.resolved),
+                    auto_retired=[],
+                )
             # `advisory` (default): model-only resolution never mutates human
             # review threads. `verified`: reply on + resolve the threads the
             # runtime corroborated (best-effort).
@@ -10362,6 +10742,51 @@ def main() -> int:
             )
         )
 
+    # ------------------------------------------------------------------
+    # Strictness gate — computed HERE, before the review body is posted, so
+    # the body can state the real check outcome. `compute_check_gate` is the
+    # single source of truth; the tracking comment and the exit code below
+    # reuse this exact `(blocked, block_reason)` pair (v2.3.1).
+    # ------------------------------------------------------------------
+    severity: str = result.overall_severity
+    blocked, block_reason = compute_check_gate(
+        severity=severity,
+        strictness=strictness,
+        incomplete=result.incomplete,
+        cli_name=str(getattr(provider, "CLI_NAME", provider_id)),
+        pr_desc_mode=pr_desc_mode,
+        description_adequate=description_verdict.is_adequate,
+        description_reason=description_verdict.reason,
+    )
+    log(
+        f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
+        f"({block_reason})"
+    )
+    if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_verdict.is_adequate:
+        log(f"PR description gate: blocking — {description_verdict.reason}")
+    elif (
+        pr_desc_mode in (PR_DESC_MODE_WARN, PR_DESC_MODE_BLOCK)
+        and not description_verdict.is_adequate
+    ):
+        log(f"PR description gate: warning — {description_verdict.reason}")
+
+    # A model recommendation that contradicts a failing gate is the bug this
+    # replaces: reviewers read "approve", CI shows red.
+    result.summary, _rec_rewritten = reconcile_recommendation_line(
+        result.summary, blocked=blocked
+    )
+    if _rec_rewritten:
+        log(
+            "Review body recommended `approve` while the gate is failing — "
+            "rewrote it to `request-changes`."
+        )
+    result.summary = (result.summary or "").rstrip() + render_gate_status_block(
+        blocked=blocked,
+        block_reason=block_reason,
+        severity=severity,
+        strictness=strictness,
+    )
+
     # Scrub any registered secret value out of everything that is about to be
     # posted publicly — the summary and each inline-comment body. On the
     # agent-runner path these strings originate from a vendor CLI that holds
@@ -10388,6 +10813,7 @@ def main() -> int:
             pr_number=pr_number,
             head_sha=head_sha,
             result=result,
+            diff_text=pr_ctx.diff,
         )
     except Exception as e:  # noqa: BLE001
         log(f"Failed to post review: {e}")
@@ -10470,41 +10896,11 @@ def main() -> int:
             log(f"Could not apply complexity label (non-fatal): {e}")
 
     # ------------------------------------------------------------------
-    # Strictness gate
+    # Strictness gate — already decided above by `compute_check_gate`, before
+    # the review was posted. `severity`, `blocked` and `block_reason` are
+    # reused verbatim so the tracking comment, the review body's status block
+    # and the exit code can never disagree.
     # ------------------------------------------------------------------
-    severity: str = result.overall_severity
-    blocked, block_reason = evaluate_strictness(severity, strictness)
-    if result.incomplete:
-        # An incomplete agent-runner review must not green the check.
-        incomplete_blocked, incomplete_reason = incomplete_review_gate(
-            strictness, getattr(provider, "CLI_NAME", provider_id)
-        )
-        if incomplete_blocked or not blocked:
-            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
-
-    # PR description gate — orthogonal to the strictness gate. When
-    # `pr-description-mode: block`, an inadequate description forces
-    # `blocked=True` regardless of inline-comment severity.
-    if (
-        pr_desc_mode == PR_DESC_MODE_BLOCK
-        and not description_verdict.is_adequate
-    ):
-        blocked = True
-        block_reason = (
-            f"pr-description-mode=block: {description_verdict.reason}"
-        )
-        log(f"PR description gate: blocking — {description_verdict.reason}")
-    elif (
-        pr_desc_mode in (PR_DESC_MODE_WARN, PR_DESC_MODE_BLOCK)
-        and not description_verdict.is_adequate
-    ):
-        log(f"PR description gate: warning — {description_verdict.reason}")
-
-    log(
-        f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
-        f"({block_reason})"
-    )
-
     attached_inline: int = len(result.findings) - dropped_inline
     tracking_body: str = render_tracking_body_done(
         head_sha=head_sha,

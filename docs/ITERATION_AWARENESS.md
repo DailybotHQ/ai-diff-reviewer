@@ -803,10 +803,38 @@ The model reports `resolved`, `open` or `regressed` for each prior finding throu
 
 | Policy | A `resolved` verdict… | Thread on GitHub | Strictness gate |
 |---|---|---|---|
-| `advisory` (**default**, byte-identical to v2.1.0) | is reported in the summary footer as *claimed resolved but unverified*; the finding stays in the outstanding set | untouched — a maintainer resolves it | the finding keeps counting |
-| `verified` | is honoured only when the runtime can corroborate it: the fingerprint is absent from this round **and** the file changed since the last reviewed head (or no longer exists) | the runtime replies (`✅ Resolved in <sha> — verified by the reviewer…`) and resolves the thread, best-effort | the finding stops counting; `resolved_fingerprints` gains it |
+| `advisory` (**default**) | is reported in the summary footer as *claimed resolved but unverified*; the finding stays in the outstanding set — **unless** its thread is already collapsed by `collapse-previous` and the claim is corroborated (§ 14.4.1, v2.3.1) | untouched — a maintainer resolves it | the finding keeps counting, except for a corroborated collapsed-thread retirement |
+| `verified` | is honoured only when the runtime can corroborate it: the fingerprint is absent from this round **and** the file changed since the finding was raised (or no longer exists) | the runtime replies (`✅ Resolved in <sha> — verified by the reviewer…`) and resolves the thread, best-effort | the finding stops counting; `resolved_fingerprints` gains it |
 
-Under both policies an edited file and an absent fingerprint are **not** taken as proof on their own: under `advisory` nothing is; under `verified` they are the corroboration required *in addition to* the model's verdict, and anything the runtime cannot corroborate stays open and is listed as unverified. `regressed` is model-asserted in both. Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them; an incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+Under both policies an edited file and an absent fingerprint are **not** taken as proof on their own: they are the corroboration required *in addition to* the model's verdict, and anything the runtime cannot corroborate stays open and is listed as unverified. `regressed` is model-asserted in both. Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them; an incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+
+#### 14.4.1 The collapsed-thread escape (v2.3.1)
+
+`advisory` retires a finding only when a maintainer resolves its thread. With `collapse-previous: true` — the default — every prior round's threads are minimized as `OUTDATED` on the next push, so that path disappears: an outstanding `critical` gates the check forever, while the round-2 review body reports the finding fixed. Consumers saw the review say *approve* and CI stay red, with no way to unblock short of switching policy.
+
+So when a finding's thread is already **collapsed** — `isMinimized` on its anchoring comment (`PriorFinding.is_collapsed`) — `advisory` applies the same corroboration test as `verified` and retires the finding. `isOutdated` is deliberately *not* part of the eligibility test: on a `collapse-previous: false` repo an outdated thread is still visible and resolvable, and "outdated" is a code-moved signal — evidence, not eligibility.
+
+| Model verdict | Fingerprint re-emitted this round | File changed since raised, or gone | Thread collapsed | `advisory` outcome |
+|---|---|---|---|---|
+| `resolved` | no | yes | yes | **retired** — stops gating |
+| `resolved` | no | yes | no | unverified — maintainer still owns it |
+| `resolved` | yes | — | — | unverified — the model contradicted itself |
+| `resolved` | no | no | yes | unverified — no corroboration |
+| none / `open` | — | — | — | still open |
+
+Corroboration is not weakened; `verified` keeps its semantics and — like `advisory` — now measures "file changed" since the finding was raised (next paragraph). New findings never take this path: a fresh `critical` blocks exactly as before.
+
+**"File changed" means changed since the finding was raised.** Each prior finding carries the head SHA of the review that posted it (`PriorFinding.review_sha`, from `pullRequestReview.commit.oid`), and `compute_changed_since_raised()` runs one `git diff --name-only <review_sha> <HEAD>` per distinct review SHA. The last-round delta alone was an accident of round timing: a fix that landed in round 2 was uncorroboratable in round 3, or on a same-head re-run, because that round's delta no longer touched the file — so a PR that was already stuck stayed stuck after upgrading. Findings posted before 2.3.1 have no review SHA and keep the delta-only evidence; a SHA git cannot resolve (shallow clone) is absent from the map, which counts as *no evidence*, never as *changed*.
+
+Because nobody signed off on these retirements, they are reported separately in the summary footer — `resolved 5 · … · 5 auto-retired (fix corroborated; thread already collapsed)` — so a green check is always traceable to why it went green. `verified` retirements are not labelled this way: they carry a reply on the thread instead.
+
+The summary footer reports the **same** reconciliation the gate was decided on: `run_iar_post_llm()` stores it on `ReviewResult.prior_reconciliation` and the footer reads it back, so "resolved N" in the footer and "N fewer severities in the gate" can never diverge. If the post-LLM step crashed, the gate escalated every prior severity and the footer reports nothing as resolved.
+
+The escape depends on an ordering invariant in `main()`: `gh_collapse_previous_reviews()` runs **before** `run_iar_pre_llm()` reads the threads, and it minimizes each review's inline comments as well as the review body — so by the time `fetch_prior_findings()` runs, a prior round's findings already carry `isMinimized: true`. Reordering those two steps would silently disable the escape; `tests/test_iar_gate_consistency.py` locks it.
+
+#### 14.4.2 One source of truth for the check result
+
+The model writes its `Recommendation:` line before the runtime knows the gate outcome, so the two could disagree. Since v2.3.1 `compute_check_gate()` is the single decision point — the review body, the tracking comment's `**Strictness gate:**` line and the process exit code all derive from one call, evaluated **before** the review is posted. Every review body ends with a runtime-written `> **Check status: ✅ passing | 🚫 failing**` block, and a model `Recommendation: approve` is rewritten to `request-changes` when the gate is failing. A review that recommends approval can no longer ship with a red check.
 
 The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J` (plus `· policy: verified` when opted in), and the tracking marker annotation carries `mode=incremental`.
 
