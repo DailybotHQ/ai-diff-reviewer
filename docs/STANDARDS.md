@@ -133,3 +133,13 @@ MIT for everything in this repo unless a specific file says otherwise. By contri
 ## Skill frontmatter limits
 
 Every `skills/**/SKILL.md` follows the Open Agent Skills contract: `name` is kebab-case and at most 64 characters; `description` is one dense paragraph of at most **1,024 characters** (hosts such as Pi warn or refuse beyond that). Keep the description to the routing summary and put the full trigger catalogue in the body (`## Activation` / `## When it fires`). `scripts/validate-frontmatter.py` fails CI on either overrun and prints the measured length.
+
+## Marketplace rename decision log
+
+1. **v1.0.0 – v1.2.0:** initial `name: 'AI PR Reviewer'` (slug `ai-pr-reviewer`, repo `DailybotHQ/ai-pr-reviewer`) — assumed free based on Marketplace search.
+2. **v1.2.1:** first publish attempt failed. Misdiagnosed the collision (thought it was against the `ai-pull-request-reviewer` full-form slug owned by `appchoose/ai-pr-review`), set defensive `name: 'Dailybot AI PR Reviewer'` (slug `dailybot-ai-pr-reviewer`) as a vendor-prefix workaround.
+3. **v1.3.0:** re-checked Marketplace listing search — `ai-pr-reviewer` appeared free among Marketplace slugs. Reverted the prefix to `'AI PR Reviewer'` for cleaner OSS-community positioning. Repo still `DailybotHQ/ai-pr-reviewer`.
+4. **v1.5.0 (current, 2026-07-14):** second publish attempt failed with the correct diagnosis this time — GitHub's Marketplace name-uniqueness rule includes `user or organization name`, and the org `github.com/ai-pr-reviewer` (created 2024-01-12, 0 public repos, name-squatting) blocks the slug at the org-namespace level, not the Marketplace-listing level. Two coordinated renames:
+   - **`action.yml` `name:`** — `'AI PR Reviewer'` → `'AI Diff Reviewer'` (slug `ai-diff-reviewer`, verified free at both the Marketplace and org-namespace levels).
+   - **GitHub repo** — `DailybotHQ/ai-pr-reviewer` → `DailybotHQ/ai-diff-reviewer`. So the repo slug now matches the Marketplace slug exactly. GitHub's permanent 301 redirect on renamed repos keeps `uses: DailybotHQ/ai-pr-reviewer@v1` pins working for all existing consumers — no migration required.
+   - Rationale for the specific name: "AI Diff Reviewer" is more accurate than "AI PR Reviewer" — this action reviews the `git diff origin/<base>...HEAD` specifically, not the PR envelope (labels, description, metadata). The vendor prefix stays OFF: attribution is auto-rendered by GitHub via `author: DailybotHQ` in the listing footer, and OSS positioning is stronger without a brand prefix.

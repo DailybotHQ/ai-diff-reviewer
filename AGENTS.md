@@ -6,6 +6,47 @@ The product name in user-facing strings is **"AI Diff Reviewer"** (capitalised e
 
 ---
 
+## Working principles
+
+Work with autonomy, ownership, and sound judgment. Pursue excellence through
+correctness, clarity, simplicity, and verified completion.
+
+- **Own the outcome.** Carry authorized work through investigation, execution,
+  and appropriate validation. Continue until the requested outcome is complete
+  or a concrete blocker prevents further progress.
+- **Be resourceful before asking.** Inspect available code, documentation,
+  tools, and prior decisions. Resolve questions you can answer through
+  reasonable investigation instead of transferring that work to the user.
+- **Make routine decisions independently.** Choose sensible approaches within
+  the authorized scope. State consequential assumptions. Avoid confirmation
+  requests for routine steps or actions already authorized.
+- **Ask when judgment or authorization is missing.** Consult the user when
+  essential information is unavailable, a material decision cannot be inferred
+  reliably, or an action requires approval not already granted. Bring the
+  investigation, relevant options, and your recommendation.
+- **Make approvals concrete.** Complete authorized preparation before asking
+  for approval. Present a reviewable result and identify the action requiring
+  approval and why it requires it.
+- **Work through obstacles.** Investigate failures and attempt reasonable
+  recovery within scope. Continue independent authorized work when possible.
+  Respect applicable stop conditions; escalate when progress requires user
+  input or an external change.
+- **Respect intent and scope.** Analysis requests remain analysis. Propose
+  broader improvements separately unless already authorized. Preserve the
+  user's existing work, decisions, and repository-specific approval rules.
+- **Apply proportionate rigor.** Address underlying causes and favor
+  maintainable solutions. Match investigation, validation, and polish to the
+  task's impact. Avoid unnecessary complexity and unrelated changes.
+- **Communicate directly and precisely.** Lead with the result or decision.
+  Explain consequential tradeoffs concisely. Distinguish verified facts,
+  assumptions, and unresolved uncertainty.
+- **Verify before declaring completion.** Review the result against the
+  request, perform appropriate checks, and fix issues within scope. Report
+  what was validated and any remaining limitations. Never claim actions,
+  checks, or outcomes that did not occur.
+
+---
+
 ## Detailed Documentation
 
 | Category | Document |
@@ -189,17 +230,9 @@ The current values are:
 
 **Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` and copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v2`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
 
-### Rename decision log (chronological)
+The [Marketplace rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log) records the release history and rationale.
 
-1. **v1.0.0 – v1.2.0:** initial `name: 'AI PR Reviewer'` (slug `ai-pr-reviewer`, repo `DailybotHQ/ai-pr-reviewer`) — assumed free based on Marketplace search.
-2. **v1.2.1:** first publish attempt failed. Misdiagnosed the collision (thought it was against the `ai-pull-request-reviewer` full-form slug owned by `appchoose/ai-pr-review`), set defensive `name: 'Dailybot AI PR Reviewer'` (slug `dailybot-ai-pr-reviewer`) as a vendor-prefix workaround.
-3. **v1.3.0:** re-checked Marketplace listing search — `ai-pr-reviewer` appeared free among Marketplace slugs. Reverted the prefix to `'AI PR Reviewer'` for cleaner OSS-community positioning. Repo still `DailybotHQ/ai-pr-reviewer`.
-4. **v1.5.0 (current, 2026-07-14):** second publish attempt failed with the correct diagnosis this time — GitHub's Marketplace name-uniqueness rule includes `user or organization name`, and the org `github.com/ai-pr-reviewer` (created 2024-01-12, 0 public repos, name-squatting) blocks the slug at the org-namespace level, not the Marketplace-listing level. Two coordinated renames:
-   - **`action.yml` `name:`** — `'AI PR Reviewer'` → `'AI Diff Reviewer'` (slug `ai-diff-reviewer`, verified free at both the Marketplace and org-namespace levels).
-   - **GitHub repo** — `DailybotHQ/ai-pr-reviewer` → `DailybotHQ/ai-diff-reviewer`. So the repo slug now matches the Marketplace slug exactly. GitHub's permanent 301 redirect on renamed repos keeps `uses: DailybotHQ/ai-pr-reviewer@v1` pins working for all existing consumers — no migration required.
-   - Rationale for the specific name: "AI Diff Reviewer" is more accurate than "AI PR Reviewer" — this action reviews the `git diff origin/<base>...HEAD` specifically, not the PR envelope (labels, description, metadata). The vendor prefix stays OFF: attribution is auto-rendered by GitHub via `author: DailybotHQ` in the listing footer, and OSS positioning is stronger without a brand prefix.
-
-**Rule going forward:** do NOT rename this again unless there's a similarly load-bearing reason (Marketplace publish blocker, trademark issue). The name `'AI Diff Reviewer'` and the repo slug `DailybotHQ/ai-diff-reviewer` are now the stable public identity. Do not re-add the `Dailybot`-prefix (see v1.2.1 above for why it was a bad idea both times).
+**Rule going forward:** do NOT rename this again unless there's a similarly load-bearing reason (Marketplace publish blocker, trademark issue). The name `'AI Diff Reviewer'` and the repo slug `DailybotHQ/ai-diff-reviewer` are now the stable public identity. Do not re-add the `Dailybot`-prefix (see the [rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log) for the rationale).
 
 ### 10. Dogfooding is Required
 
@@ -266,19 +299,7 @@ Structured work runs through the local DWP flows (`.agents/commands/dwp-*` deleg
 
 Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only.
 
-### The nine sub-skills
-
-| Sub-skill | Purpose |
-|---|---|
-| `create` | Decompose a goal into a Deep Work Plan (Lite or Full) with per-task validation gates. |
-| `execute` | Run a plan task by task, checking each gate, updating progress. |
-| `refine` | Modify a plan (add, split, reorder, promote Lite→Full, migrate legacy) while preserving completed work. |
-| `resume` | Reconstruct state and continue an interrupted plan across sessions or agents. |
-| `status` | Report progress without making changes. |
-| `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
-| `onboard` | Make a repository AI-first, or run a targeted harness upgrade (reasoned analysis + non-destructive generation). |
-| `author` | Author or evolve this repo's own skills, agents, and commands. |
-| `upgrade` | Check for a newer DeepWorkPlan skill release; read-only until consent, then installs the accepted tag and re-onboards. |
+The [DeepWorkPlan sub-skill reference](docs/AI_AGENT_ONBOARDING.md#deepworkplan-sub-skills) describes the nine flows.
 
 ### Where plans live
 
@@ -425,25 +446,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 - <risk 1, or "None — content-only change">
 ```
 
-Example:
-
-```
-feat(provider): add OpenAI provider
-
-## Summary
-First non-Anthropic provider — translates Anthropic-shape messages and
-tool calls to OpenAI's chat-completions schema at the boundary so the
-rest of the runtime is unchanged.
-
-## Change Log
-- New OpenAIProvider class with tool-call translation in both directions
-- New default model entry: openai → gpt-4o
-- New optional input api-base for self-hosted OpenAI-compatible endpoints
-
-## Risks
-- Translation layer is the only meaningful new surface; covered by smoke
-  test on PR #42 (provider: openai). No change to existing Anthropic path.
-```
+See the [Conventional Commit example](docs/DEVELOPMENT_GUIDELINES.md#conventional-commit-example) for a complete message.
 
 ---
 
@@ -472,8 +475,6 @@ This repository **dogfoods itself**: every PR is reviewed by the action it ships
 
 Full workflow + ready-to-copy GraphQL query: [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md).
 
----
-
 ## Small-Batch Delivery
 
 For larger initiatives (multi-provider rollout, prompt overhaul, output schema redesign):
@@ -484,8 +485,6 @@ For larger initiatives (multi-provider rollout, prompt overhaul, output schema r
 4. Verify each batch before starting the next.
 5. Keep each batch publishable as a `vX.Y.Z` release behind clear changelog entries.
 
----
-
 ## Temporary Files (tmp/)
 
 The `tmp/` folder at project root is **git-ignored** and available for scratch
@@ -495,8 +494,6 @@ write to `tmp/` without affecting the repository.
 **Nothing inside `tmp/` is ever tracked or committed** — the whole folder is
 ignored by git. Write freely (scratch notes, inter-agent prompts, data exports,
 query results); it will never show up in `git status` or a diff.
-
----
 
 ## License
 

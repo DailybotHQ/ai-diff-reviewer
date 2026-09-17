@@ -123,3 +123,17 @@ The pattern, when uncertain:
 The runtime is small. You can read `scripts/reviewer.py` in an hour. Do that before reaching for tools or asking; the answer is usually already in the code.
 
 The skill pack (`skills/ai-diff-reviewer/`) is smaller — four `SKILL.md` files + a `reference.md` + a `prompt.md`. Read those to understand the local-companion surface before touching it.
+
+## DeepWorkPlan sub-skills
+
+| Sub-skill | Purpose |
+|---|---|
+| `create` | Decompose a goal into a Deep Work Plan (Lite or Full) with per-task validation gates. |
+| `execute` | Run a plan task by task, checking each gate, updating progress. |
+| `refine` | Modify a plan (add, split, reorder, promote Lite→Full, migrate legacy) while preserving completed work. |
+| `resume` | Reconstruct state and continue an interrupted plan across sessions or agents. |
+| `status` | Report progress without making changes. |
+| `verify` | Emit an objective CONFORMANT / NOT CONFORMANT verdict against the DWP spec's Conformance document. |
+| `onboard` | Make a repository AI-first, or run a targeted harness upgrade (reasoned analysis + non-destructive generation). |
+| `author` | Author or evolve this repo's own skills, agents, and commands. |
+| `upgrade` | Check for a newer DeepWorkPlan skill release; read-only until consent, then installs the accepted tag and re-onboards. |
