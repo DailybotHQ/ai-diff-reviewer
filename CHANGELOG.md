@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet._
 
+## [2.3.1] — 2026-09-17
+
+### Fixed
+
+- **A review that said `approve` could ship with a red check.** The strictness
+  gate was evaluated *after* the review had been posted, so the model's
+  `Recommendation:` line — written before the runtime knew the outcome — could
+  contradict the check. `compute_check_gate()` is now the single decision
+  point, evaluated before the review is posted: the review body, the tracking
+  comment's `**Strictness gate:**` line and the exit code all derive from one
+  call. Every review body now ends with a runtime-written
+  `> **Check status: ✅ passing | 🚫 failing**` block, and a model
+  `Recommendation: approve` is rewritten to `request-changes` whenever the
+  gate is failing.
+- **Under `advisory`, a fixed finding could hold the check red forever.**
+  `prior-findings-resolution: advisory` retires a prior finding only when a
+  maintainer resolves its thread — but `collapse-previous: true` (the default)
+  minimizes those threads on the next push, removing the only escape. An
+  outstanding `critical` therefore gated every subsequent round even after a
+  real fix. `advisory` now applies the same corroboration test as `verified`
+  (model reported `resolved` **and** the fingerprint was not re-emitted this
+  round **and** the file changed or is gone) when the finding's thread is
+  already collapsed (`isMinimized`, or the thread is outdated). Corroboration
+  is unchanged, findings on live threads keep the strict behaviour, and
+  `block-on-critical` is not weakened for new findings.
+  See [`docs/ITERATION_AWARENESS.md` § 14.4.1](docs/ITERATION_AWARENESS.md).
+
+### Changed
+
+- `PriorFinding` carries `is_minimized` (and an `is_collapsed` property);
+  `fetch_prior_findings` now selects `isMinimized` on each thread's anchoring
+  comment.
+- `skills/ai-diff-reviewer/SKILL.md`, `apply-review/SKILL.md` (new **Step 2f**)
+  and `setup/reference.md` state that a body recommending `approve` is not
+  evidence the check passed, and that `apply-review` must read the tracking
+  marker's `Highest severity` / `Strictness gate` / IAR footer before
+  summarizing a review.
+
 ## [2.3.0] — 2026-09-17
 
 ### Changed

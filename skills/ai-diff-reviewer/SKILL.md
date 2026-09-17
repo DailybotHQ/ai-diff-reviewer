@@ -108,7 +108,9 @@ do not apply):
 3. **Incremental follow-up rounds + usage telemetry (v2.1.0+)** — on
    rounds 2+ CI reviews only what changed since its last review plus
    its own still-open findings (resolution claims are advisory; a
-   maintainer resolves the thread), and every CI review ends with a
+   maintainer resolves the thread — or, since v2.3.1, the runtime
+   retires a corroborated fix whose thread `collapse-previous` already
+   minimized), and every CI review ends with a
    `**Usage:**` line (tokens, cache hit rate, turns, cost). A local
    review is a full pass with no usage line. Spec:
    [`docs/ITERATION_AWARENESS.md` § 14](https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/docs/ITERATION_AWARENESS.md).
@@ -464,6 +466,16 @@ post on a PR — this is the parity contract:
 
 **Recommendation:** approve / request-changes / comment-only
 ```
+
+**A recommendation is not a check result.** On CI, the GitHub check is
+decided by the runtime's strictness gate, which can still be failing
+while the model recommends `approve` — under incremental review, prior
+findings the model believes are fixed may still be outstanding. CI
+reviews from v2.3.1+ therefore end with a runtime-written
+`> **Check status: …**` block, and the tracking comment's
+`**Strictness gate:**` line is always authoritative. Never report that
+a review "passed" from the recommendation line alone; `apply-review`
+Step 2f covers how to read the real outcome.
 
 Reproducing this exact shape (verdict → findings table → per-finding
 body → notes → recommendation) is what lets a developer trust the

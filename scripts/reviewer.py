@@ -5806,6 +5806,19 @@ class PriorFinding:
     fingerprint: str
     body_excerpt: str
     is_outdated: bool
+    is_minimized: bool = False
+
+    @property
+    def is_collapsed(self) -> bool:
+        """True when a maintainer can no longer retire this finding by
+        resolving its thread — the comment was minimized (`collapse-previous`
+        marks every prior round OUTDATED) or the thread's hunk is gone.
+
+        This is the condition that makes model-claimed resolution the ONLY
+        remaining escape from the gate; `reconcile_prior_findings` uses it to
+        decide whether corroboration may retire a finding under `advisory`.
+        """
+        return self.is_minimized or self.is_outdated
 
 
 def _bot_login_matches(bot_login: str, author_login: str) -> bool:
@@ -5847,7 +5860,7 @@ def fetch_prior_findings(
         "        nodes {"
         "          id isResolved isOutdated path line originalLine"
         "          comments(first:1) {"
-        "            nodes { id databaseId body author { login } pullRequestReview { body } }"
+        "            nodes { id databaseId isMinimized body author { login } pullRequestReview { body } }"
         "          }"
         "        }"
         "      }"
@@ -5926,6 +5939,7 @@ def fetch_prior_findings(
                 fingerprint=fingerprint,
                 body_excerpt=excerpt,
                 is_outdated=bool(thread.get("isOutdated")),
+                is_minimized=comment.get("isMinimized") is True,
             )
         )
     if skipped_unmarked:
@@ -6319,6 +6333,16 @@ def reconcile_prior_findings(
     changed since the last reviewed head (or no longer exists). Anything the
     runtime cannot corroborate stays open and is listed as unverified.
     `regressed` is model-asserted in both policies; no verdict → still open.
+
+    Deadlock escape (v2.3.1): under `advisory` the documented way to retire a
+    finding is for a maintainer to resolve its thread. When `collapse-previous`
+    has minimized that thread — or the thread went outdated — that path is
+    gone, and an outstanding `critical` would gate the check forever while the
+    review body reports the finding fixed. So `advisory` ALSO retires a prior
+    finding when the runtime can corroborate it (same three-part test as
+    `verified`) AND the thread is already collapsed (`PriorFinding.is_collapsed`).
+    Corroboration is never weakened, and a finding whose thread a maintainer
+    can still resolve keeps the strict `advisory` behaviour.
     """
     changed: set[str] = set(delta.changed_files) if delta is not None else set()
     root: Path = workspace if workspace is not None else Path.cwd()
@@ -6329,19 +6353,21 @@ def reconcile_prior_findings(
             out.regressed.append(pf)
             continue
         if status == PRIOR_FINDING_STATUS_RESOLVED:
-            if policy == RESOLUTION_POLICY_VERIFIED:
-                file_changed: bool = pf.path in changed
-                # `pf.path` comes from a GitHub review thread; keep the
-                # repo-relative invariant anyway (never join an absolute or
-                # `..` path onto the workspace).
-                rel: Path = Path(pf.path) if pf.path else Path()
-                path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
-                file_gone: bool = path_ok and not (root / rel).exists()
-                if pf.fingerprint not in current_fingerprints and (
-                    file_changed or file_gone
-                ):
-                    out.resolved.append(pf)
-                    continue
+            file_changed: bool = pf.path in changed
+            # `pf.path` comes from a GitHub review thread; keep the
+            # repo-relative invariant anyway (never join an absolute or
+            # `..` path onto the workspace).
+            rel: Path = Path(pf.path) if pf.path else Path()
+            path_ok: bool = bool(pf.path) and not rel.is_absolute() and ".." not in rel.parts
+            file_gone: bool = path_ok and not (root / rel).exists()
+            corroborated: bool = pf.fingerprint not in current_fingerprints and (
+                file_changed or file_gone
+            )
+            if corroborated and (
+                policy == RESOLUTION_POLICY_VERIFIED or pf.is_collapsed
+            ):
+                out.resolved.append(pf)
+                continue
             out.unverified.append(pf)
         out.still_open.append(pf)
     return out
@@ -6768,10 +6794,11 @@ def run_iar_post_llm(
     """Apply IAR filtering AFTER the LLM call and return the state to
     embed + the surfacing decision.
 
-    `resolution_policy` (v2.2.0+): under `verified`, prior findings the
-    runtime can corroborate as resolved (see `reconcile_prior_findings`)
-    leave the outstanding set and stop contributing to the gate; under
-    `advisory` (default) every prior finding stays outstanding.
+    `resolution_policy` (v2.2.0+): prior findings the runtime can corroborate
+    as resolved (see `reconcile_prior_findings`) leave the outstanding set and
+    stop contributing to the gate. Under `verified` corroboration alone is
+    enough; under `advisory` (default) the finding's thread must also already
+    be collapsed, i.e. a maintainer can no longer retire it by hand (v2.3.1).
 
     `surface_cap` (v2.1.0+, agent-runner path): the effective inline cap
     is enforced HERE, after fingerprinting, so overflow findings are still
@@ -6827,12 +6854,14 @@ def run_iar_post_llm(
         )
     # The incremental prompt explicitly forbids reposting prior findings.
     # Their absence from this run's new comments must not clear the gate —
-    # except, under the `verified` policy, for findings the runtime can
-    # corroborate as resolved.
+    # except for findings `reconcile_prior_findings` retires.
+    # `verified` corroborates directly; `advisory` additionally requires the
+    # thread to be collapsed (see `reconcile_prior_findings`). Both policies
+    # run the reconciliation so a retired finding stops feeding the gate —
+    # otherwise an approve-shaped body ships with a red check.
     verified_resolved_fps: set[str] = set()
     if (
         pre_context.prior_findings
-        and resolution_policy == RESOLUTION_POLICY_VERIFIED
         and pre_context.mode == IAR_MODE_INCREMENTAL
     ):
         # `Finding.fingerprint` is stamped further down; corroboration needs
@@ -9265,6 +9294,94 @@ def evaluate_strictness(
     return False, "unhandled strictness branch"
 
 
+def compute_check_gate(
+    *,
+    severity: str,
+    strictness: str,
+    incomplete: bool,
+    cli_name: str,
+    pr_desc_mode: str,
+    description_adequate: bool,
+    description_reason: str,
+) -> tuple[bool, str]:
+    """The single place that decides the check conclusion.
+
+    Every surface that reports pass/fail — the review body's status block, the
+    tracking comment's `Strictness gate` line, and the process exit code —
+    derives from ONE call to this function, so they cannot disagree (v2.3.1).
+    Previously the gate was evaluated only after the review had been posted,
+    which let a model-authored `Recommendation: approve` ship alongside a red
+    check.
+    """
+    blocked, block_reason = evaluate_strictness(severity, strictness)
+    if incomplete:
+        # An incomplete agent-runner review must not green the check.
+        incomplete_blocked, incomplete_reason = incomplete_review_gate(
+            strictness, cli_name
+        )
+        if incomplete_blocked or not blocked:
+            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
+    # PR description gate — orthogonal to the strictness gate. When
+    # `pr-description-mode: block`, an inadequate description forces
+    # `blocked=True` regardless of inline-comment severity.
+    if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_adequate:
+        blocked = True
+        block_reason = f"pr-description-mode=block: {description_reason}"
+    return blocked, block_reason
+
+
+# A model-authored verdict token. Only the word is swapped, so whatever
+# markdown the model wrapped the line in survives the rewrite.
+_APPROVE_TOKEN_RE: re.Pattern[str] = re.compile(r"\bapprove\b", re.IGNORECASE)
+
+RECOMMENDATION_OVERRIDE_NOTE: str = (
+    "  _(runtime override: the strictness gate is failing this check — see "
+    "**Check status** below.)_"
+)
+
+
+def reconcile_recommendation_line(summary: str, *, blocked: bool) -> tuple[str, bool]:
+    """Stop a model `Recommendation: approve` from contradicting a red check.
+
+    The model writes its recommendation before the runtime knows the gate
+    outcome, and under IAR the gate can still be held open by prior findings
+    the model believes are fixed. When the check is failing, the word
+    `approve` on the recommendation line becomes `request-changes` plus a
+    pointer to the authoritative status block. Returns `(summary, rewritten)`.
+    """
+    if not blocked or not summary:
+        return summary, False
+    lines: list[str] = summary.splitlines()
+    for i, line in enumerate(lines):
+        if "recommendation" not in line.lower():
+            continue
+        new_line, swapped = _APPROVE_TOKEN_RE.subn("request-changes", line, count=1)
+        if swapped:
+            lines[i] = new_line + RECOMMENDATION_OVERRIDE_NOTE
+            return "\n".join(lines), True
+    return summary, False
+
+
+def render_gate_status_block(
+    *, blocked: bool, block_reason: str, severity: str, strictness: str
+) -> str:
+    """The authoritative pass/fail statement appended to every review body.
+
+    Written by the runtime from `compute_check_gate`, never by the model, so a
+    reader of the review always sees the same verdict the check reports.
+    """
+    verdict: str = "🚫 failing" if blocked else "✅ passing"
+    return (
+        "\n\n---\n\n"
+        f"> **Check status: {verdict}** — strictness `{strictness}`, "
+        f"highest severity in effect `{severity}`: {block_reason}.\n"
+        "> \n"
+        "> This line is written by the reviewer runtime after the gate ran and "
+        "matches the check conclusion and the tracking comment. Any "
+        "recommendation above is the model's advisory opinion, not the gate."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Agentic loop
 # ---------------------------------------------------------------------------
@@ -10362,6 +10479,51 @@ def main() -> int:
             )
         )
 
+    # ------------------------------------------------------------------
+    # Strictness gate — computed HERE, before the review body is posted, so
+    # the body can state the real check outcome. `compute_check_gate` is the
+    # single source of truth; the tracking comment and the exit code below
+    # reuse this exact `(blocked, block_reason)` pair (v2.3.1).
+    # ------------------------------------------------------------------
+    severity: str = result.overall_severity
+    blocked, block_reason = compute_check_gate(
+        severity=severity,
+        strictness=strictness,
+        incomplete=result.incomplete,
+        cli_name=str(getattr(provider, "CLI_NAME", provider_id)),
+        pr_desc_mode=pr_desc_mode,
+        description_adequate=description_verdict.is_adequate,
+        description_reason=description_verdict.reason,
+    )
+    log(
+        f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
+        f"({block_reason})"
+    )
+    if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_verdict.is_adequate:
+        log(f"PR description gate: blocking — {description_verdict.reason}")
+    elif (
+        pr_desc_mode in (PR_DESC_MODE_WARN, PR_DESC_MODE_BLOCK)
+        and not description_verdict.is_adequate
+    ):
+        log(f"PR description gate: warning — {description_verdict.reason}")
+
+    # A model recommendation that contradicts a failing gate is the bug this
+    # replaces: reviewers read "approve", CI shows red.
+    result.summary, _rec_rewritten = reconcile_recommendation_line(
+        result.summary, blocked=blocked
+    )
+    if _rec_rewritten:
+        log(
+            "Review body recommended `approve` while the gate is failing — "
+            "rewrote it to `request-changes`."
+        )
+    result.summary = (result.summary or "").rstrip() + render_gate_status_block(
+        blocked=blocked,
+        block_reason=block_reason,
+        severity=severity,
+        strictness=strictness,
+    )
+
     # Scrub any registered secret value out of everything that is about to be
     # posted publicly — the summary and each inline-comment body. On the
     # agent-runner path these strings originate from a vendor CLI that holds
@@ -10470,41 +10632,11 @@ def main() -> int:
             log(f"Could not apply complexity label (non-fatal): {e}")
 
     # ------------------------------------------------------------------
-    # Strictness gate
+    # Strictness gate — already decided above by `compute_check_gate`, before
+    # the review was posted. `severity`, `blocked` and `block_reason` are
+    # reused verbatim so the tracking comment, the review body's status block
+    # and the exit code can never disagree.
     # ------------------------------------------------------------------
-    severity: str = result.overall_severity
-    blocked, block_reason = evaluate_strictness(severity, strictness)
-    if result.incomplete:
-        # An incomplete agent-runner review must not green the check.
-        incomplete_blocked, incomplete_reason = incomplete_review_gate(
-            strictness, getattr(provider, "CLI_NAME", provider_id)
-        )
-        if incomplete_blocked or not blocked:
-            blocked, block_reason = incomplete_blocked or blocked, incomplete_reason
-
-    # PR description gate — orthogonal to the strictness gate. When
-    # `pr-description-mode: block`, an inadequate description forces
-    # `blocked=True` regardless of inline-comment severity.
-    if (
-        pr_desc_mode == PR_DESC_MODE_BLOCK
-        and not description_verdict.is_adequate
-    ):
-        blocked = True
-        block_reason = (
-            f"pr-description-mode=block: {description_verdict.reason}"
-        )
-        log(f"PR description gate: blocking — {description_verdict.reason}")
-    elif (
-        pr_desc_mode in (PR_DESC_MODE_WARN, PR_DESC_MODE_BLOCK)
-        and not description_verdict.is_adequate
-    ):
-        log(f"PR description gate: warning — {description_verdict.reason}")
-
-    log(
-        f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
-        f"({block_reason})"
-    )
-
     attached_inline: int = len(result.findings) - dropped_inline
     tracking_body: str = render_tracking_body_done(
         head_sha=head_sha,
