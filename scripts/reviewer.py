@@ -5821,6 +5821,39 @@ class PriorFinding:
         return self.is_minimized or self.is_outdated
 
 
+def filter_retired_prior_findings(
+    *,
+    prior_findings: list[PriorFinding],
+    resolved_fingerprints: list[str] | tuple[str, ...],
+) -> list[PriorFinding]:
+    """Drop prior findings the runtime already retired in an earlier round.
+
+    Under `advisory` an auto-retired thread is left unresolved on GitHub, so
+    `fetch_prior_findings` keeps returning it round after round. The
+    corroboration test would then fail on the NEXT round — whose delta no
+    longer touches the file that was fixed — and the finding would go back to
+    outstanding, flapping the check from green to red with nothing having
+    changed (v2.3.1).
+
+    Dropping it is safe: if the issue genuinely came back, the model re-emits
+    the fingerprint and `dedupe_findings_against_prior` surfaces it as a
+    regression rather than silencing it.
+    """
+    retired: set[str] = set(resolved_fingerprints or ())
+    if not retired or not prior_findings:
+        return prior_findings
+    kept: list[PriorFinding] = [
+        pf for pf in prior_findings if pf.fingerprint not in retired
+    ]
+    dropped: int = len(prior_findings) - len(kept)
+    if dropped:
+        log(
+            f"IAR: {dropped} prior finding(s) already retired in an earlier "
+            "round — not re-gating (a real regression re-surfaces via dedup)."
+        )
+    return kept
+
+
 def _bot_login_matches(bot_login: str, author_login: str) -> bool:
     """GraphQL Bot nodes report `github-actions` while REST reports
     `github-actions[bot]`; accept both (same rule as collapse-previous).
@@ -6729,6 +6762,10 @@ def run_iar_pre_llm(
             pr_number=pr_number,
             bot_login=bot_login,
             provider_marker_text=provider_marker(provider_id) if provider_id else "",
+        )
+        prior_findings = filter_retired_prior_findings(
+            prior_findings=prior_findings,
+            resolved_fingerprints=prior_state.resolved_fingerprints,
         )
         delta = compute_incremental_delta(
             prior_head_sha=prior_state.head_sha,

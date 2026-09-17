@@ -676,6 +676,59 @@ class RealWorldRegression_ApiServices7987(unittest.TestCase):
         self.assertIn("request-changes", body)
 
 
+class RetiredFindingDoesNotFlapBackToRed(unittest.TestCase):
+    """A retired finding must not re-gate on a LATER round.
+
+    Under `advisory` the auto-retired thread stays unresolved on GitHub, so
+    `fetch_prior_findings` keeps returning it. On round 3 the delta no longer
+    touches the file that was fixed in round 2, corroboration fails, and the
+    finding would go back to outstanding — flipping the check green → red with
+    nothing having changed.
+    """
+
+    def test_retired_fingerprints_are_dropped_open_ones_kept(self) -> None:
+        retired, live = _prior("a" * 16, minimized=True), _prior("b" * 16, minimized=True)
+        kept = reviewer.filter_retired_prior_findings(
+            prior_findings=[retired, live],
+            resolved_fingerprints=["a" * 16],
+        )
+        self.assertEqual([p.fingerprint for p in kept], ["b" * 16])
+
+    def test_no_resolved_history_is_a_passthrough(self) -> None:
+        priors = [_prior("a" * 16), _prior("b" * 16)]
+        self.assertEqual(
+            reviewer.filter_retired_prior_findings(
+                prior_findings=priors, resolved_fingerprints=[]
+            ),
+            priors,
+        )
+
+    def test_round_three_stays_green_when_the_delta_moved_on(self) -> None:
+        """Round 2 retired the finding; round 3 touches an unrelated file.
+        Without the filter this re-gated and turned the check red again."""
+        fp = "a" * 16
+        priors = [_prior(fp, minimized=True)]  # thread still unresolved on GitHub
+        gating = reviewer.filter_retired_prior_findings(
+            prior_findings=priors, resolved_fingerprints=[fp]
+        )
+        severity = reviewer.overall_severity(
+            [reviewer.SEVERITY_NONE] + [p.severity for p in gating]
+        )
+        blocked, _ = reviewer.compute_check_gate(
+            severity=severity, strictness=reviewer.STRICTNESS_BLOCK_CRITICAL,
+            incomplete=False, cli_name="grok",
+            pr_desc_mode=reviewer.PR_DESC_MODE_OFF,
+            description_adequate=True, description_reason="",
+        )
+        self.assertEqual(gating, [])
+        self.assertEqual(severity, reviewer.SEVERITY_NONE)
+        self.assertFalse(blocked)
+
+    def test_filter_is_wired_into_the_pre_llm_path(self) -> None:
+        src = (_ROOT / "scripts" / "reviewer.py").read_text(encoding="utf-8")
+        self.assertIn("prior_findings = filter_retired_prior_findings(", src)
+
+
 class PriorFindingCollapsedFlag(unittest.TestCase):
     def test_is_collapsed_covers_minimized_and_outdated(self) -> None:
         self.assertFalse(_prior("1" * 16).is_collapsed)

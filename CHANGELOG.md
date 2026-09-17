@@ -39,6 +39,13 @@ _Nothing yet._
   that went green without human sign-off is still traceable.
   See [`docs/ITERATION_AWARENESS.md` § 14.4.1](docs/ITERATION_AWARENESS.md).
 
+- **A retired finding could flap the check back to red.** Under `advisory` the
+  auto-retired thread stays unresolved on GitHub, so it was re-read as a prior
+  finding on the next round — where the delta no longer touched the fixed file,
+  so corroboration failed and it re-gated. `filter_retired_prior_findings()`
+  now drops fingerprints already in `resolved_fingerprints` before they reach
+  the gate; a genuine regression still re-surfaces through dedup.
+
 ### Changed
 
 - `PriorFinding` carries `is_minimized` (and an `is_collapsed` property);
