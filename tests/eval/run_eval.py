@@ -66,6 +66,7 @@ def compose_prompt(prompt_file: Path, extension: Path | None) -> str:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    t_start = time.time()
     r = load_runtime()
     token = gh_token()
     key = os.environ.get(args.api_key_env, "")
@@ -73,6 +74,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sys.exit(f"{args.api_key_env} is not set")
     os.chdir(args.worktree)
     ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
+    # Timing separation (PLAN Task 4 / F8): context fetch + provider build are
+    # "setup"; the provider loop below is timed separately as t0..end.
+    setup_seconds = time.time() - t_start
     api_base = r.validate_api_base(args.api_base or "")
     provider = r.build_provider(args.provider, api_key=key, model=args.model or "", api_base=api_base)
     system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
@@ -110,11 +114,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     payload = {
         "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
         "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
-        "turns": turns, "tool_calls": tool_calls, "seconds": round(time.time() - t0, 1),
+        "turns": turns, "tool_calls": tool_calls,
+        "seconds": round(time.time() - t0, 1),
+        "setup_seconds": round(setup_seconds, 1),
+        "total_seconds": round(time.time() - t_start, 1),
         "usage": {"in": usage.input_tokens, "cache_read": usage.cache_read_tokens, "cache_write": usage.cache_write_tokens, "out": usage.output_tokens, "source": usage.source} if usage else None,
         "cost_usd": cost,
         "changed_files": [f.get("path") for f in ctx.changed_files],
-        "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:400]} for f in result.findings],
+        # Full finding evidence (PLAN Task 4): truncate far beyond the old
+        # 400 chars so scoring/adjudication sees the whole finding body.
+        "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
         "summary": (result.summary or "")[:2000],
     }
     payload["score"] = score_run(payload)

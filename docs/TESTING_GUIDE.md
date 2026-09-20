@@ -16,7 +16,7 @@ The [`.github/workflows/code_check.yml`](../.github/workflows/code_check.yml) wo
 |---|---|---|
 | `compile-check` | `python3 -m py_compile scripts/reviewer.py` | Catches syntax errors and undefined imports before we ship. |
 | `validate-action-yml` | Runs `python3 .github/scripts/validate_action.py`, which asserts the required top-level keys, that every input the runtime reads is declared, and that every declared output matches a runtime writer. | Catches accidental key renames or forgotten `write_action_output()` calls in PRs. |
-| `unit-tests` | `python3 -m unittest discover -s tests` — the full 720-test stdlib suite (24 files, listed below). | Catches regressions in pure logic without any network dependency. |
+| `unit-tests` | `python3 -m unittest discover -s tests` — the full unit-test stdlib suite (29 files, listed below), including the offline Jev evaluation suites (`test_eval_corpus*`, `test_jev_eval*`). | Catches regressions in pure logic without any network dependency. |
 | `cli-install-smoke` (matrix: `claude-code`, `cursor`, `codex`, `grok`) | Runs each agent-runner CLI's install command on a fresh runner (Cursor and Grok through `.github/scripts/verified_install.sh`, plus a dry-run proving the sha256 gate accepts the right hash and refuses a wrong one), verifies `--version`, then imports `scripts/reviewer.py` and asserts `build_provider(PROVIDER_ID)` returns an `AgentRunnerProvider` instance. | Catches upstream CLI-installer breakage before it hits consumers. |
 | `actionlint` | Downloads the official actionlint binary and runs it across `.github/workflows/`. | Catches malformed workflow YAML, unsafe `${{ }}` interpolations in `run:` blocks, and shellcheck issues in inline shell. |
 
@@ -66,6 +66,15 @@ Two guiding rules:
 ## Review-quality evaluation (offline, labelled corpus)
 
 Counting findings is not a quality metric — a prompt that doubles false positives "finds more". `tests/eval/run_eval.py` (stdlib; deliberately outside `unittest discover`) runs the action's own loop against a **merged** PR without posting, and scores the result against `tests/eval/corpus.json`: must-find recall, false positives against known-wrong findings, unlabelled findings, severity match, contract compliance (summary present), suggestion-block rate, coverage, tokens and cost. Works for in-process runners (`drive_review`) and agent-runner CLIs installed locally (`run_review` in a worktree at the PR head). See [`tests/eval/README.md`](../tests/eval/README.md) for usage and how labels are authored (from fix commits, never from a model's output). Measurements for v2.1.0 live in the plan record `analysis_results/REVIEW_QUALITY_EVAL.md`; the harness is what a prompt or tier change must be run through before it ships.
+
+### Jev comparison gates (PLAN_jev_review_acceleration)
+
+| Gate | Command | Notes |
+| --- | --- | --- |
+| CORPUS | `python3 -m json.tool tests/eval/corpus.json` + `python3 -m unittest discover -s tests -p 'test_eval_corpus*.py' -v` | v2 corpus validator + floors; fails on unpinned fixtures, unadjudicated critical labels, secret markers |
+| EVAL | `python3 -m unittest discover -s tests -p 'test_jev_eval*.py' -v` | isolated Jev client + comparison harness; strictly offline |
+| BENCH | `python3 tests/eval/jev_experiment.py validate --manifest <manifest>` / `report --manifest <manifest>` | manifest/split/budget validation; report fails promotion on missing runs or unknown cost |
+
 
 ## What CI does NOT run
 
