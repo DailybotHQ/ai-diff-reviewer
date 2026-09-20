@@ -1,0 +1,7 @@
+{
+  "_note": "synthetic-fixture: rate limit shape",
+  "error": {
+    "code": 429,
+    "message": "rate limit exceeded"
+  }
+}

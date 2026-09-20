@@ -1,0 +1,7 @@
+{
+  "_note": "synthetic-fixture: schema validation failure shape",
+  "error": {
+    "code": 422,
+    "message": "questions.criteria: expected ordered list for score"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "_note": "synthetic-fixture: hand-written OK response used by offline tests; not a live capture",
+  "model": "jev-1.13.0",
+  "answers": {
+    "urgent": {
+      "type": "noul",
+      "noul": 0.95
+    },
+    "department": {
+      "type": "choice",
+      "choice": "billing",
+      "confidence": 1.0,
+      "probabilities": {
+        "billing": 1.0,
+        "technical": 0.0
+      }
+    },
+    "severity": {
+      "type": "score",
+      "score": 1.9,
+      "confidence": 0.9,
+      "probabilities": {
+        "0": 0.02,
+        "1": 0.02,
+        "2": 0.96
+      }
+    }
+  },
+  "usage": {
+    "input_tokens": 415,
+    "output_tokens": 57
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "_note": "synthetic-fixture: overload shape",
+  "error": {
+    "code": 529,
+    "message": "service overloaded"
+  }
+}
