@@ -1,0 +1,55 @@
+{
+  "id": "C065",
+  "title": "Legacy evaluation case: fix(runtime): complexity labels on all providers [skip release] (#45)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G065",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 45,
+    "merge_commit": "35a18e9937bb8241a3eda49842a75fed0f59dd4d",
+    "pr_metadata": {
+      "title": "fix(runtime): complexity labels on all providers [skip release] (#45)",
+      "body": "Historical merged PR carried into the v2 corpus.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "45-label-race",
+      "severity": "warning",
+      "path": "scripts/reviewer.py",
+      "defect": "label race between parallel review legs",
+      "evidence": "Historical: PR #45 shipped complexity labeling; the evaluation recorded a label race between parallel legs (line ~? window 40).",
+      "keywords": [
+        "label",
+        "race",
+        "parallel"
+      ],
+      "window": 40,
+      "introduced_by_change": true
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "45-label-race"
+    ],
+    "must_not_flag": [
+      "substring path markers matched findings on wrong files (must_not_flag trap)"
+    ]
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "v3.1-in-repo-evaluation-2026-09-16",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "Label from the v3.1 in-repo evaluation (corpus.json case 45); includes one must_not_flag trap."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

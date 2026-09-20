@@ -1,0 +1,58 @@
+{
+  "id": "C068",
+  "title": "User-supplied session cookie deserialized with pickle",
+  "stack": "python",
+  "change_class": "injection",
+  "risk_class": "critical_positive",
+  "family_group": "G68",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "web/session.py": "import base64\nimport json\n\ndef load_session(raw: str) -> dict:\n    return json.loads(base64.urlsafe_b64decode(raw))\n"
+    },
+    "head": {
+      "web/session.py": "import base64\nimport pickle\n\ndef load_session(raw: str) -> dict:\n    # pickle supports the richer session objects used by the cart plugin\n    return pickle.loads(base64.urlsafe_b64decode(raw))\n"
+    },
+    "pr_metadata": {
+      "title": "Support cart plugin session objects",
+      "body": "Switch session decoding to pickle for plugin compatibility.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:88421f81742ebdd0ec3c2a8476d9c08a07723ba4b33f87404bd99bfa462ea6ca"
+  },
+  "labels": [
+    {
+      "id": "C068-d1",
+      "severity": "critical",
+      "path": "web/session.py",
+      "defect": "Pickle deserialization of user-controlled input: unauthenticated remote code execution",
+      "evidence": "Reproducible: craft a pickle payload executing os.system and base64url-encode it; load_session unpickles attacker bytes on every request carrying the session cookie, running attacker code as the app user before any authentication check.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "pickle.loads",
+        "base64",
+        "load_session"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C068-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Head unpickles base64url-decoded session-cookie bytes with no signature verification: unauthenticated RCE where base json.loads was inert."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

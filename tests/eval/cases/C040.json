@@ -1,0 +1,40 @@
+{
+  "id": "C040",
+  "title": "Renames the authenticated-user variable for clarity",
+  "stack": "typescript",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G40",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/mw/attach.ts": "export function attach(req, user) {\n  if (!user) return null;\n  req.authUser = user;\n  return user;\n}\n"
+    },
+    "head": {
+      "src/mw/attach.ts": "export function attach(req, user) {\n  if (!user) return null;\n  req.currentUser = user;\n  return user;\n}\n"
+    },
+    "pr_metadata": {
+      "title": "refactor: rename authUser",
+      "body": "Clearer name.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:cef788b498e0d61904a7da56459715b807f849b3953dcfbc2de0a01bf0e4ba75"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "rename",
+      "authUser"
+    ],
+    "reference_review": "Pure rename of an internal property with the single assignment site updated in the same file; no readers of the old name exist in the fixture and behavior is unchanged. Renames are a classic false-positive trigger when no external consumers exist."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

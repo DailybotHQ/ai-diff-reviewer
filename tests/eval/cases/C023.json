@@ -1,0 +1,54 @@
+{
+  "id": "C023",
+  "title": "Webhook payload read into memory without a size cap",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G23",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "ingest/hooks.py": "MAX_BODY = 1 << 20  # 1 MiB\n\ndef read_body(request) -> bytes:\n    raw = request.stream.read(MAX_BODY + 1)\n    if len(raw) > MAX_BODY:\n        raise PayloadTooLarge()\n    return raw\n"
+    },
+    "head": {
+      "ingest/hooks.py": "def read_body(request) -> bytes:\n    # some legit payloads exceeded 1 MiB during the bulk import\n    return request.stream.read()\n"
+    },
+    "pr_metadata": {
+      "title": "Allow large webhook payloads",
+      "body": "Bulk imports send big bodies; remove the cap.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:fc1e8613e30657483bba296db008ed58fb7bf6d62a88abcb88f59536d3bc614b"
+  },
+  "labels": [
+    {
+      "id": "C023-d1",
+      "severity": "warning",
+      "path": "ingest/hooks.py",
+      "defect": "Unbounded stream read: a single request can exhaust worker memory",
+      "evidence": "Reproducible: a 10 GiB streamed body is read fully into RAM per request; a handful of concurrent requests OOM the worker pool. The old cap rejected abuse deterministically.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "read",
+        "stream",
+        "MAX_BODY"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C023-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

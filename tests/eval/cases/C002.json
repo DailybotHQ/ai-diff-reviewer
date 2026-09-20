@@ -1,0 +1,59 @@
+{
+  "id": "C002",
+  "title": "Parameterized order lookup replaced with f-string SQL",
+  "stack": "python",
+  "change_class": "injection",
+  "risk_class": "critical_positive",
+  "family_group": "G02",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "store.py": "import sqlite3\n\ndef get_orders(conn: sqlite3.Connection, email: str) -> list[tuple]:\n    cur = conn.execute(\n        \"SELECT id, total FROM orders WHERE email = ?\", (email,)\n    )\n    return cur.fetchall()\n"
+    },
+    "head": {
+      "store.py": "import sqlite3\n\ndef get_orders(conn: sqlite3.Connection, email: str) -> list[tuple]:\n    # support partial-match search requested by support\n    cur = conn.execute(\n        f\"SELECT id, total FROM orders WHERE email = '{email}'\"\n    )\n    return cur.fetchall()\n"
+    },
+    "pr_metadata": {
+      "title": "Support partial-match order search",
+      "body": "Support needs to paste an email fragment; switched the lookup to string search.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:189501d7cf89b21da7f8404e696628b64cf75a27a50eb8b8504320c740d6c8c6"
+  },
+  "labels": [
+    {
+      "id": "C002-d1",
+      "severity": "critical",
+      "path": "store.py",
+      "defect": "SQL injection: user-controlled email interpolated into the query text",
+      "evidence": "Reproducible: email=\"' OR '1'='1\" returns every customer's orders; a stacked statement payload executes arbitrary SQL.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "f\"",
+        "SELECT",
+        "execute",
+        "email"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C002-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Textbook SQL injection via f-string interpolation of user email."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

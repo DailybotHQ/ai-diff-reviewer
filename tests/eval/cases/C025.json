@@ -1,0 +1,55 @@
+{
+  "id": "C025",
+  "title": "Refund failures silently swallowed",
+  "stack": "python",
+  "change_class": "error_handling",
+  "risk_class": "warning_positive",
+  "family_group": "G25",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "billing/refund.py": "def refund(order_id: str) -> None:\n    try:\n        processor.refund(order_id)\n    except ProcessorError:\n        mark_needs_review(order_id)\n        raise\n"
+    },
+    "head": {
+      "billing/refund.py": "def refund(order_id: str) -> None:\n    try:\n        processor.refund(order_id)\n    except ProcessorError:\n        # retried manually for now; stop failing the checkout flow\n        pass\n"
+    },
+    "pr_metadata": {
+      "title": "Checkout should not fail on refund hiccups",
+      "body": "Support complained about hard failures; swallow for now.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:3ba6551d6721993caba0532c21a68cb61848fc28165153e26f6e52c38da75e0e"
+  },
+  "labels": [
+    {
+      "id": "C025-d1",
+      "severity": "warning",
+      "path": "billing/refund.py",
+      "defect": "ProcessorError swallowed: refunds silently never happen and money state diverges",
+      "evidence": "Reproducible: force processor.refund to raise; the caller sees success, mark_needs_review never runs, and the order shows refunded=false forever with no alert.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "except",
+        "pass",
+        "ProcessorError",
+        "refund"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C025-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

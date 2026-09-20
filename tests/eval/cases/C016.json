@@ -1,0 +1,58 @@
+{
+  "id": "C016",
+  "title": "TLS certificate verification disabled in internal HTTP client",
+  "stack": "go",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G16",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "internal/ledger/client.go": "package ledger\n\nimport \"net/http\"\n\nfunc NewClient() *http.Client {\n\treturn &http.Client{Timeout: 10 * 1e9}\n}\n"
+    },
+    "head": {
+      "internal/ledger/client.go": "package ledger\n\nimport (\n\t\"crypto/tls\"\n\t\"net/http\"\n)\n\nfunc NewClient() *http.Client {\n\t// self-signed cert on the staging ledger; revisit before prod (TICKET-77)\n\treturn &http.Client{\n\t\tTimeout: 10 * 1e9,\n\t\tTransport: &http.Transport{\n\t\t\tTLSClientConfig: &tls.Config{InsecureSkipVerify: true},\n\t\t},\n\t}\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Unblock ledger calls in staging",
+      "body": "Staging ledger uses a self-signed cert; skip verification for now.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:994569d0228ef89361c2ab0bbf5b767897d53c23e977305d8769b9eb69ca6b52"
+  },
+  "labels": [
+    {
+      "id": "C016-d1",
+      "severity": "critical",
+      "path": "internal/ledger/client.go",
+      "defect": "InsecureSkipVerify disables server certificate validation for ledger traffic (MITM exposure)",
+      "evidence": "Reproducible: point the client at any host presenting a self-signed certificate; the handshake succeeds and balance mutations are sent to the attacker. NewClient() has no staging/prod switch, so the setting ships to production.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "InsecureSkipVerify",
+        "tls.Config",
+        "NewClient"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C016-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "InsecureSkipVerify on financial traffic with no environment gating."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

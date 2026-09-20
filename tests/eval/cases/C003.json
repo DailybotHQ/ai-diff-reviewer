@@ -1,0 +1,59 @@
+{
+  "id": "C003",
+  "title": "SMTP password gains hardcoded fallback credential",
+  "stack": "python",
+  "change_class": "secret_handling",
+  "risk_class": "critical_positive",
+  "family_group": "G03",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "mailer.py": "import os\nimport smtplib\n\ndef send(to: str, body: str) -> None:\n    with smtplib.SMTP(\"smtp.internal.example\", 587) as s:\n        s.starttls()\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n        s.sendmail(\"notifications@internal.example\", [to], body)\n"
+    },
+    "head": {
+      "mailer.py": "import os\nimport smtplib\n\ndef send(to: str, body: str) -> None:\n    with smtplib.SMTP(\"smtp.internal.example\", 587) as s:\n        s.starttls()\n        # fallback keeps cron jobs mail-going when the secret is not mounted\n        s.login(\"notifications\", os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"))\n        s.sendmail(\"notifications@internal.example\", [to], body)\n"
+    },
+    "pr_metadata": {
+      "title": "Stop cron mail crashes",
+      "body": "Cron envs without SMTP_PASSWORD crashed at login; added a fallback.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:a8c6a5cd35b7c5b18baa2a6eb615e09a33d92539f80d11fe04c12496025cc7fb"
+  },
+  "labels": [
+    {
+      "id": "C003-d1",
+      "severity": "critical",
+      "path": "mailer.py",
+      "defect": "Hardcoded production SMTP credential committed as the default fallback",
+      "evidence": "Reproducible: any environment lacking SMTP_PASSWORD (or anyone with repo read access) now authenticates to production SMTP with the committed fallback string; the credential is permanent in git history.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "SMTP_PASSWORD",
+        "get",
+        "fallback",
+        "login"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C003-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Committed production-looking SMTP fallback credential; exposed in git history and silently used when the secret is unmounted."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

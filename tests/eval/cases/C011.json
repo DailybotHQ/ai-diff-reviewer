@@ -1,0 +1,58 @@
+{
+  "id": "C011",
+  "title": "Payment processor key added to structured debug logs",
+  "stack": "typescript",
+  "change_class": "secret_handling",
+  "risk_class": "critical_positive",
+  "family_group": "G11",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/payments/charge.ts": "import { createCharge } from \"./processor\";\nimport { log } from \"../observability\";\n\nexport async function charge(order: Order): Promise<string> {\n  const ref = await createCharge(order);\n  log.info(\"charge created\", { orderId: order.id, ref });\n  return ref;\n}\n"
+    },
+    "head": {
+      "src/payments/charge.ts": "import { createCharge } from \"./processor\";\nimport { log } from \"../observability\";\n\nexport async function charge(order: Order): Promise<string> {\n  const ref = await createCharge(order);\n  // include credentials in debug payloads so support can replay failures\n  log.debug(\"charge context\", { orderId: order.id, ref, key: process.env.PROCESSOR_KEY });\n  return ref;\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Debuggability for payment failures",
+      "body": "Support needs the full charge context in debug logs.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:f84a0dd2c1ed7c04805280e7d030691907501d17952192a83cf7391b047b35a5"
+  },
+  "labels": [
+    {
+      "id": "C011-d1",
+      "severity": "critical",
+      "path": "src/payments/charge.ts",
+      "defect": "Payment processor API key logged to structured debug output (shipped to log aggregation)",
+      "evidence": "Reproducible: one debug-level charge writes PROCESSOR_KEY to the log sink; anyone with log-reader access (wider than secret access) obtains a live payment credential, and debug is enabled in staging by default.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "PROCESSOR_KEY",
+        "log.debug",
+        "key"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C011-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Live PROCESSOR_KEY to debug-level log aggregation."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

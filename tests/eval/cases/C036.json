@@ -1,0 +1,54 @@
+{
+  "id": "C036",
+  "title": "Port configuration compared as string against int",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G36",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "serve/__main__.py": "import os\n\nPORT = int(os.environ.get(\"PORT\", \"8080\"))\n\ndef is_default(port: int) -> bool:\n    return port == 8080\n"
+    },
+    "head": {
+      "serve/__main__.py": "import os\n\nPORT = os.environ.get(\"PORT\", 8080)\n\ndef is_default(port: int) -> bool:\n    return port == PORT\n"
+    },
+    "pr_metadata": {
+      "title": "Configurable default port check",
+      "body": "Reuse the PORT setting in is_default.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:6c4dbd789ed2df5be524116255d08af36816e37353f6c11fc5f6587bc59970a3"
+  },
+  "labels": [
+    {
+      "id": "C036-d1",
+      "severity": "warning",
+      "path": "serve/__main__.py",
+      "defect": "Type confusion: PORT is now a str when the env var is set (or int when absent), so is_default('8080') compares str to int",
+      "evidence": "Reproducible: PORT=8080 in the environment → PORT is '8080' (str) and is_default(8080) returns False; the not-a-default banner prints on the default port.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "PORT",
+        "os.environ",
+        "is_default"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C036-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

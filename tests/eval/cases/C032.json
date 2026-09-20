@@ -1,0 +1,54 @@
+{
+  "id": "C032",
+  "title": "Error from WriteFile checked in the wrong scope",
+  "stack": "go",
+  "change_class": "error_handling",
+  "risk_class": "warning_positive",
+  "family_group": "G32",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "export/dump.go": "package export\n\nimport \"os\"\n\nfunc Dump(path string, data []byte) error {\n\tif err := os.WriteFile(path, data, 0o600); err != nil {\n\t\treturn err\n\t}\n\treturn nil\n}\n"
+    },
+    "head": {
+      "export/dump.go": "package export\n\nimport (\n\t\"errors\"\n\t\"os\"\n)\n\nfunc Dump(path string, data []byte) error {\n\terr := os.WriteFile(path, data, 0o600)\n\tif err := errors.Join(err); err != nil {\n\t\treturn err\n\t}\n\treturn nil\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Wrap dump errors",
+      "body": "Use errors.Join for future multi-writer support.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:655eeea5c40c4dc380431e9a2a06ab3044196f00849e434df9af6da9bd1468a1"
+  },
+  "labels": [
+    {
+      "id": "C032-d1",
+      "severity": "warning",
+      "path": "export/dump.go",
+      "defect": "Shadowed err: the outer error from WriteFile is discarded and Join wraps the (nil) inner one",
+      "evidence": "Reproducible: make the target dir read-only — WriteFile fails, but Dump returns nil because the if-statement shadows err with Join(nil) which is nil; exports silently vanish.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "errors.Join",
+        "err :=",
+        "WriteFile"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C032-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "C042",
+  "title": "Patch version bump and changelog line only",
+  "stack": "typescript",
+  "change_class": "dependency",
+  "risk_class": "negative_control",
+  "family_group": "G42",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.4.2\",\n  \"dependencies\": {}\n}\n",
+      "CHANGELOG.md": "## 1.4.2\n- fix: toast timing\n"
+    },
+    "head": {
+      "package.json": "{\n  \"name\": \"app\",\n  \"version\": \"1.4.3\",\n  \"dependencies\": {}\n}\n",
+      "CHANGELOG.md": "## 1.4.3\n- chore: release\n\n## 1.4.2\n- fix: toast timing\n"
+    },
+    "pr_metadata": {
+      "title": "chore(release): 1.4.3",
+      "body": "Version bump.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:8f02025b891b7f376da419fc6963983cc833588fb8ea444c4150d97beabc61f1"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "version"
+    ],
+    "reference_review": "Release bookkeeping: version field and changelog text only. No dependency, code or configuration change; a dependency-changed finding here would be a false positive."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

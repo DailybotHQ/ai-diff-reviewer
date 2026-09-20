@@ -1,0 +1,54 @@
+{
+  "id": "C035",
+  "title": "Toast state set after unmount (stale async closure)",
+  "stack": "typescript",
+  "change_class": "ui",
+  "risk_class": "warning_positive",
+  "family_group": "G35",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/ui/SaveToast.tsx": "import { useEffect, useState } from \"react\";\n\nexport function SaveToast(id: string) {\n  const [saved, setSaved] = useState(false);\n  useEffect(() => {\n    let alive = true;\n    api.save(id).then(() => alive && setSaved(true));\n    return () => {\n      alive = false;\n    };\n  }, [id]);\n  return saved ? \"Saved\" : \"\";\n}\n"
+    },
+    "head": {
+      "src/ui/SaveToast.tsx": "import { useEffect, useState } from \"react\";\n\nexport function SaveToast(id: string) {\n  const [saved, setSaved] = useState(false);\n  useEffect(() => {\n    api.save(id).then(() => setSaved(true));\n  }, [id]);\n  return saved ? \"Saved\" : \"\";\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Simplify SaveToast effect",
+      "body": "alive flag unnecessary after the React 19 changes.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:9357963e6fd45f0ac1af0969e90360ac8d7b67359f20935048b84e217e371263"
+  },
+  "labels": [
+    {
+      "id": "C035-d1",
+      "severity": "warning",
+      "path": "src/ui/SaveToast.tsx",
+      "defect": "setState after unmount: save resolving post-navigation triggers the removed-component update path and console errors",
+      "evidence": "Reproducible: click Save then navigate back within the request window — the promise resolves against the unmounted component; React logs the update warning and StrictMode double-fires the effect, issuing duplicate saves.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "useEffect",
+        "setSaved",
+        "alive"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C035-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,59 @@
+{
+  "id": "C001",
+  "title": "Role-requirement decorator removed from user deletion endpoint",
+  "stack": "python",
+  "change_class": "auth",
+  "risk_class": "critical_positive",
+  "family_group": "G01",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "app.py": "from functools import wraps\nfrom flask import Flask, request, abort\n\napp = Flask(__name__)\nROLES = {\"alice\": \"admin\", \"bob\": \"viewer\"}\nUSERS = [\"alice\", \"bob\"]\n\ndef require_role(role):\n    def deco(fn):\n        @wraps(fn)\n        def wrapper(user, *a, **k):\n            if ROLES.get(user) != role:\n                abort(403)\n            return fn(user, *a, **k)\n        return wrapper\n    return deco\n\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n    USERS.remove(user)\n    return \"\", 204\n"
+    },
+    "head": {
+      "app.py": "from functools import wraps\nfrom flask import Flask, request, abort\n\napp = Flask(__name__)\nROLES = {\"alice\": \"admin\", \"bob\": \"viewer\"}\nUSERS = [\"alice\", \"bob\"]\n\ndef require_role(role):\n    def deco(fn):\n        @wraps(fn)\n        def wrapper(user, *a, **k):\n            if ROLES.get(user) != role:\n                abort(403)\n            return fn(user, *a, **k)\n        return wrapper\n    return deco\n\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n# decorator removed: it blocked cleanup jobs running as the viewer account\ndef delete_user(user):\n    USERS.remove(user)\n    return \"\", 204\n"
+    },
+    "pr_metadata": {
+      "title": "Allow cleanup jobs to delete users",
+      "body": "Cleanup jobs were getting 403s. Drops the decorator that was in the way.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:b91c2f7d5f0495fdeb8b9941e3773874432c233b7e582e35d3720a0290e7f976"
+  },
+  "labels": [
+    {
+      "id": "C001-d1",
+      "severity": "critical",
+      "path": "app.py",
+      "defect": "@require_role(\"admin\") removed from delete_user: any authenticated identity (including viewer role) can delete arbitrary users",
+      "evidence": "Reproducible: as bob (role viewer), DELETE /users/alice now returns 204 instead of 403; ROLES is never consulted on the delete path.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "require_role",
+        "delete_user",
+        "decorator",
+        "403"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C001-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "The only auth check on DELETE /users/<user> was the removed decorator; broken access control."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,70 @@
+{
+  "id": "C063",
+  "title": "Incomplete diff: the changed lockfile is absent from the patch payload",
+  "stack": "typescript",
+  "change_class": "dependency",
+  "risk_class": "warning_positive",
+  "family_group": "G63",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/index.ts": "import { get } from \"./fetcher\";\n\nexport async function main(): Promise<void> {\n  const cfg = await get(\"config\");\n  console.log(cfg.appName);\n}\n",
+      "package-lock.json": "{ \"lockfileVersion\": 3, \"packages\": { \"node_modules/semver-utility\": { \"version\": \"6.3.0\", \"integrity\": \"sha512-Q\" } } }\n"
+    },
+    "head": {
+      "src/index.ts": "import { get } from \"./fetcher\";\n\nexport async function main(): Promise<void> {\n  const cfg = await get(\"config\");\n  console.log(cfg.appName, cfg.env);\n}\n"
+    },
+    "inventory": {
+      "changed_paths": [
+        "src/index.ts",
+        "package-lock.json"
+      ],
+      "missing_from_fixture": [
+        "package-lock.json"
+      ],
+      "note": "the delivery payload truncated the lockfile hunk (its real head version is semver-utility 7.0.1 with a postinstall script; the reviewer cannot see that from the supplied diff)"
+    },
+    "pr_metadata": {
+      "title": "Log config env + dependency refresh",
+      "body": "Small logging change and the usual lockfile bump.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:8672822079d21cafa0d6a5ba75a21a6597279712e9fe46bc35e4c7ae255085af"
+  },
+  "labels": [
+    {
+      "id": "C063-d1",
+      "severity": "warning",
+      "path": "package-lock.json",
+      "defect": "Coverage probe: the supplied diff omits the lockfile change, which upgrades semver-utility to 7.0.1 carrying a new postinstall script",
+      "evidence": "Declared in inventory.missing_from_fixture: the head lockfile (not visible in the payload) pulls semver-utility 7.0.1 whose postinstall executes on install. A reviewer or triage layer that treats the visible diff as the complete change and calls it a small logging change has a coverage hole; the correct outcome is that completeness is unknowable from the supplied diff.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "lock",
+        "package-lock",
+        "dependency"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C063-d1"
+    ],
+    "must_not_flag": [],
+    "coverage_expectation": "any triage/verification decision on this case must be insufficient_evidence, never a clean pass"
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "downgraded_to_warning",
+    "notes": "Coverage probe: real review-completeness gap (omitted changed lockfile with a new postinstall), but a process defect rather than an exploitable one."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

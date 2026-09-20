@@ -1,0 +1,59 @@
+{
+  "id": "C061",
+  "title": "Multi-round IAR: prior finding partially fixed in round 2",
+  "stack": "python",
+  "change_class": "error_handling",
+  "risk_class": "warning_positive",
+  "family_group": "G61",
+  "iar_rounds": 2,
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "jobs/mail.py": "def send_all(messages):\n    sent = 0\n    for m in messages:\n        try:\n            relay.deliver(m)\n            sent += 1\n        except RelayError:\n            pass\n    return sent\n"
+    },
+    "head": {
+      "jobs/mail.py": "def send_all(messages):\n    sent = 0\n    for m in messages:\n        try:\n            relay.deliver(m)\n            sent += 1\n        except RelayError:\n            failures.append(m.id)\n    return sent\n"
+    },
+    "pr_metadata": {
+      "title": "Track relay failures (round 2)",
+      "body": "Round-1 review flagged the silent except; failures are now recorded.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:e2ac85c23ae40ed00c43a26e69bd8e064e649c56bb456c8885c928f60c4ba78d"
+  },
+  "labels": [
+    {
+      "id": "C061-d1",
+      "severity": "warning",
+      "path": "jobs/mail.py",
+      "defect": "Partial fix: failures are appended to a list that is never returned, logged or drained, so they still vanish at the end of the call",
+      "evidence": "Reproducible: relay.deliver raising twice returns the correct sent count but failures is function-local and discarded; round-1's silent-except finding is nominally addressed while the observability gap remains.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "failures",
+        "RelayError",
+        "append"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C061-d1"
+    ],
+    "must_not_flag": []
+  },
+  "prior_round": {
+    "finding": "silent except: pass swallows relay errors",
+    "outcome": "partially_fixed"
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

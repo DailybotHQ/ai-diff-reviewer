@@ -1,0 +1,41 @@
+{
+  "id": "C055",
+  "title": "Subfolder report paths implemented safely",
+  "stack": "python",
+  "change_class": "path_traversal",
+  "risk_class": "negative_control",
+  "family_group": "G04",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "reports.py": "import os\nfrom flask import Flask, request, send_file\n\napp = Flask(__name__)\nREPORTS = \"/srv/reports\"\n\n@app.route(\"/reports/<name>\")\ndef download(name):\n    safe = os.path.basename(name)\n    return send_file(os.path.join(REPORTS, safe))\n"
+    },
+    "head": {
+      "reports.py": "import os\nfrom flask import Flask, request, send_file, abort\n\napp = Flask(__name__)\nREPORTS = \"/srv/reports\"\n\n@app.route(\"/reports/<name>\")\ndef download(name):\n    rel = request.args.get(\"path\", name)\n    full = os.path.realpath(os.path.join(REPORTS, rel))\n    if not full.startswith(os.path.realpath(REPORTS) + os.sep):\n        abort(400)\n    return send_file(full)\n"
+    },
+    "pr_metadata": {
+      "title": "Support subfolder report paths",
+      "body": "Quarterly subfolders, with containment enforced.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:e48cae53af6f16064cb605d842be7ad9beab50b80bb23f857700ac461a3d0698"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "join",
+      "realpath",
+      "startswith"
+    ],
+    "reference_review": "This is the SAFE implementation of the same feature as the dangerous variant in this family: realpath-join plus a containment prefix check rejects ../ escapes and absolute-path replacement before any file is served. Counterpart of the traversal case in this group; correct code must not be flagged."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

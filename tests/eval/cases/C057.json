@@ -1,0 +1,41 @@
+{
+  "id": "C057",
+  "title": "Dot-segment guard replaced with an equivalent containment check",
+  "stack": "go",
+  "change_class": "path_traversal",
+  "risk_class": "negative_control",
+  "family_group": "G17",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "assets/handler.go": "package assets\n\nimport (\n\t\"net/http\"\n\t\"path/filepath\"\n\t\"strings\"\n)\n\nfunc Serve(root string) http.HandlerFunc {\n\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\tname := filepath.Clean(\"/\" + r.URL.Path)\n\t\tif strings.Contains(name, \"..\") {\n\t\t\thttp.Error(w, \"invalid path\", http.StatusBadRequest)\n\t\t\treturn\n\t\t}\n\t\thttp.ServeFile(w, r, filepath.Join(root, name))\n\t}\n}\n"
+    },
+    "head": {
+      "assets/handler.go": "package assets\n\nimport (\n\t\"net/http\"\n\t\"path/filepath\"\n\t\"strings\"\n)\n\nfunc Serve(root string) http.HandlerFunc {\n\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\tname := filepath.Clean(\"/\" + r.URL.Path)\n\t\tfull := filepath.Join(root, name)\n\t\tif !strings.HasPrefix(full, filepath.Clean(root)+string(filepath.Separator)) {\n\t\t\thttp.Error(w, \"invalid path\", http.StatusBadRequest)\n\t\t\treturn\n\t\t}\n\t\thttp.ServeFile(w, r, full)\n\t}\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Strengthen asset path guard",
+      "body": "Containment check on the joined path instead of scanning the input.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:84fef69996a2fac454181915c3a2ec39637fa4252d8e09ea418f8779dc1c932d"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "Clean",
+      "HasPrefix",
+      "ServeFile"
+    ],
+    "reference_review": "Defense-improving change on the counterpart family: the guard moves from an input scan to a containment check on the JOINED, cleaned path — the stronger form. Rejects traversal in the same cases as before and additionally survives symlinked roots. Must not be flagged as weakening."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "C049",
+  "title": "Extracts a pure helper from an inline calculation",
+  "stack": "python",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G49",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "cart/totals.py": "def total(lines):\n    return sum(q * p for q, p in lines) + round(sum(q * p for q, p in lines) * 0.07)\n"
+    },
+    "head": {
+      "cart/totals.py": "def _with_tax(sub):\n    return sub + round(sub * 0.07)\n\ndef total(lines):\n    return _with_tax(sum(q * p for q, p in lines))\n"
+    },
+    "pr_metadata": {
+      "title": "refactor: extract tax helper",
+      "body": "The tax expression appeared twice in spirit.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:70646b1459588661fc301e7cd5131184fa1bb5d4628f99c638a8e42dd3f00f7f"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "extract",
+      "tax"
+    ],
+    "reference_review": "Behavior-preserving extraction: _with_tax computes exactly the previously inlined expression over the same single subtotal (the base computed the same sum twice, now once). Output values are identical for all inputs; reviewers commonly flag extraction diffs as logic changed without tracing the arithmetic."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

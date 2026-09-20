@@ -1,0 +1,53 @@
+{
+  "id": "C066",
+  "title": "Legacy evaluation case: ci(self-review): dogfood complexity labeling [skip release] (#43)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G066",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 43,
+    "merge_commit": "fee5459bea1c861f8bd6e5bcb48f046de4623df3",
+    "pr_metadata": {
+      "title": "ci(self-review): dogfood complexity labeling [skip release] (#43)",
+      "body": "Historical merged PR carried into the v2 corpus.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "43-silent-rename",
+      "severity": "warning",
+      "path": "scripts/reviewer.py",
+      "defect": "silent gate-label rename changed public check semantics",
+      "evidence": "Historical: PR #43 renamed a gate label used by the self-review dogfood leg; the rename was silent in the diff.",
+      "keywords": [
+        "rename",
+        "label",
+        "gate"
+      ],
+      "window": 40,
+      "introduced_by_change": true
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "43-silent-rename"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "v3.1-in-repo-evaluation-2026-09-16",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "Label from the v3.1 in-repo evaluation (corpus.json case 43)."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

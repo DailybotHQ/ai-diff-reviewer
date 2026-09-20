@@ -1,0 +1,59 @@
+{
+  "id": "C010",
+  "title": "Object identifier accepted from request body in admin lookup",
+  "stack": "typescript",
+  "change_class": "auth",
+  "risk_class": "critical_positive",
+  "family_group": "G10",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/routes/account.ts": "import { auth } from \"../auth\";\nimport { db } from \"../db\";\n\nexport async function getAccount(req: Request): Promise<Response> {\n  const caller = await auth(req);\n  const account = await db.accounts.findUnique({ where: { id: caller.accountId } });\n  return Response.json(account);\n}\n"
+    },
+    "head": {
+      "src/routes/account.ts": "import { auth } from \"../auth\";\nimport { db } from \"../db\";\n\nexport async function getAccount(req: Request): Promise<Response> {\n  const caller = await auth(req);\n  // support staff tools pass an explicit account id in the body\n  const body = await req.json().catch(() => ({}));\n  const id: string = body.accountId ?? caller.accountId;\n  const account = await db.accounts.findUnique({ where: { id } });\n  return Response.json(account);\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Staff tools: direct account lookup",
+      "body": "Support tools need to pass the account id explicitly.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:3a5b440b9d84e745c72280806cc4cd0a4c5b6507330a58c12227a7f05547704a"
+  },
+  "labels": [
+    {
+      "id": "C010-d1",
+      "severity": "critical",
+      "path": "src/routes/account.ts",
+      "defect": "IDOR: body-supplied accountId overrides the authenticated caller with no role check",
+      "evidence": "Reproducible: any authenticated user sends {\"accountId\": \"<someone else>\"} and receives that account's full record; the staff-tools role gate exists in auth() but is not consulted for the override.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "accountId",
+        "body",
+        "auth",
+        "findUnique"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C010-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "IDOR: body accountId overrides the caller with no role check."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

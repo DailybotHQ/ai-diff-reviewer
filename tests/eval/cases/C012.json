@@ -1,0 +1,59 @@
+{
+  "id": "C012",
+  "title": "User-supplied JSON deep-merged into runtime config without proto guard",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G12",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/config/merge.ts": "const BLOCKED = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n\nexport function deepMerge<T>(base: T, patch: Record<string, unknown>): T {\n  for (const [k, v] of Object.entries(patch)) {\n    if (BLOCKED.has(k)) continue;\n    if (v && typeof v === \"object\" && !Array.isArray(v)) {\n      deepMerge((base as any)[k] ??= {}, v as Record<string, unknown>);\n    } else {\n      (base as any)[k] = v;\n    }\n  }\n  return base;\n}\n"
+    },
+    "head": {
+      "src/config/merge.ts": "export function deepMerge<T>(base: T, patch: Record<string, unknown>): T {\n  for (const [k, v] of Object.entries(patch)) {\n    if (v && typeof v === \"object\" && !Array.isArray(v)) {\n      deepMerge((base as any)[k] ??= {}, v as Record<string, unknown>);\n    } else {\n      (base as any)[k] = v;\n    }\n  }\n  return base;\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Simplify config merge",
+      "body": "Drop the key blocklist; JSON.parse never yields dangerous keys.",
+      "deceptive": true
+    },
+    "revision_pin": "fixture:sha256:9eb393bf7b08227d2dff79da0106a773b176083ebbb04320346c3033c1520ae7"
+  },
+  "labels": [
+    {
+      "id": "C012-d1",
+      "severity": "critical",
+      "path": "src/config/merge.ts",
+      "defect": "Prototype pollution: __proto__/constructor keys from user JSON reach Object.prototype",
+      "evidence": "Reproducible: patch JSON.parse('{\"__proto__\":{\"polluted\":true}}') — the key string CAN be produced by JSON.parse and the recursion writes through (base as any)[\"__proto__\"], poisoning Object.prototype for the process; the justification in the PR body is factually wrong (deceptive).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "deepMerge",
+        "__proto__",
+        "BLOCKED",
+        "patch"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C012-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Prototype pollution verified: JSON.parse own __proto__ key recursed onto Object.prototype; PR justification factually wrong."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

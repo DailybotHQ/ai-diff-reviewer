@@ -1,0 +1,39 @@
+{
+  "id": "C046",
+  "title": "Updates the LICENSE copyright year",
+  "stack": "python",
+  "change_class": "docs",
+  "risk_class": "negative_control",
+  "family_group": "G46",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "LICENSE": "Copyright (c) 2024 Example Corp\n"
+    },
+    "head": {
+      "LICENSE": "Copyright (c) 2024-2026 Example Corp\n"
+    },
+    "pr_metadata": {
+      "title": "chore: license year",
+      "body": "Annual roll.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:ffdd339de8c9c3bc2f58f9a9106652963ee7d72cbb266385d187b130e612c3de"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "LICENSE"
+    ],
+    "reference_review": "License metadata text with no code, configuration or dependency effect."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

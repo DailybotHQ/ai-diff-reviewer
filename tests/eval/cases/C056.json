@@ -1,0 +1,41 @@
+{
+  "id": "C056",
+  "title": "LIKE search implemented with a parameterized query",
+  "stack": "go",
+  "change_class": "injection",
+  "risk_class": "negative_control",
+  "family_group": "G20",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "ledger/query.go": "package ledger\n\nimport \"database/sql\"\n\nfunc Balance(db *sql.DB, account string) (int, error) {\n\tvar cents int\n\terr := db.QueryRow(\n\t\t\"SELECT balance_cents FROM accounts WHERE number = $1\", account,\n\t).Scan(&cents)\n\treturn cents, err\n}\n"
+    },
+    "head": {
+      "ledger/query.go": "package ledger\n\nimport (\n\t\"database/sql\"\n\t\"strings\"\n)\n\nfunc Balance(db *sql.DB, account string) (int, error) {\n\tvar cents int\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE ?\"\n\tpattern := \"%\" + strings.ReplaceAll(account, \"%\", \"\\%\") + \"%\"\n\terr := db.QueryRow(q, pattern).Scan(&cents)\n\treturn cents, err\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Partial account-number search",
+      "body": "LIKE with a bound parameter; wildcards in user input escaped.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:740831019e62b4d908781ed8ac450459c269b7d765a4460c2cd7f7afddd21a3d"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "LIKE",
+      "QueryRow",
+      "ReplaceAll"
+    ],
+    "reference_review": "Parameterized LIKE: the query text is constant and the pattern is bound as a value, with the driver handling quoting; user % is escaped to prevent wildcard injection (a correctness concern, not SQL injection). Counterpart of the SQLi case in this family; safe as written."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,54 @@
+{
+  "id": "C031",
+  "title": "Public helper signature silently widens an optional contract",
+  "stack": "typescript",
+  "change_class": "public_contract",
+  "risk_class": "warning_positive",
+  "family_group": "G31",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/format/money.ts": "export function formatMoney(cents: number, currency: \"USD\" | \"EUR\"): string {\n  return new Intl.NumberFormat(undefined, { style: \"currency\", currency }).format(cents / 100);\n}\n"
+    },
+    "head": {
+      "src/format/money.ts": "export function formatMoney(cents: number, currency?: string): string {\n  // accept any ISO code now\n  if (!currency) return String(cents);\n  return new Intl.NumberFormat(undefined, { style: \"currency\", currency }).format(cents / 100);\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Accept any currency code",
+      "body": "Widen the parameter type.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:af78412e8555bfed2107aeebe59e1da33b7c65113ada4bf14c3c712458809ac1"
+  },
+  "labels": [
+    {
+      "id": "C031-d1",
+      "severity": "warning",
+      "path": "src/format/money.ts",
+      "defect": "Breaking public-contract change: currency narrowed to optional string, unit-less output path returns raw cents",
+      "evidence": "Reproducible: formatMoney(1990) previously a type error now returns '1990' — callers rendering prices silently lose the $ symbol; the exported type change is semver-major but shipped in a patch.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "currency?",
+        "formatMoney",
+        "string"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C031-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

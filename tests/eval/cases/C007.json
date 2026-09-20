@@ -1,0 +1,59 @@
+{
+  "id": "C007",
+  "title": "Single-use recovery tokens consumed without atomic claim",
+  "stack": "python",
+  "change_class": "concurrency",
+  "risk_class": "warning_positive",
+  "family_group": "G07",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "recovery.py": "import threading\n\n_lock = threading.Lock()\n_used: set[str] = set()\n\ndef claim_token(token: str) -> bool:\n    with _lock:\n        if token in _used:\n            return False\n        _used.add(token)\n    return redeem(token)\n\ndef redeem(token: str) -> bool:\n    return token.startswith(\"RT-\")  # stands in for the vault check\n"
+    },
+    "head": {
+      "recovery.py": "import threading\n\n_used: set[str] = set()\n\ndef claim_token(token: str) -> bool:\n    # lock removed: hot endpoint saw lock contention under load\n    if token in _used:\n        return False\n    ok = redeem(token)\n    if ok:\n        _used.add(token)\n    return ok\n\ndef redeem(token: str) -> bool:\n    return token.startswith(\"RT-\")  # stands in for the vault check\n"
+    },
+    "pr_metadata": {
+      "title": "Reduce lock contention on recovery endpoint",
+      "body": "p99 spiked during incident drills; the global lock was the hotspot.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:56239a69b3775461671baf6e7bb2ce10f24fdcf0f275e7a3f843074c0eeac91b"
+  },
+  "labels": [
+    {
+      "id": "C007-d1",
+      "severity": "warning",
+      "path": "recovery.py",
+      "defect": "TOCTOU race: concurrent requests can redeem one single-use recovery token multiple times",
+      "evidence": "Reproducible: fire 8 concurrent requests with the same valid token; several pass the _used check before any add() lands and each redeems the token, resetting the password repeatedly. The lock existed precisely to make claim-and-mark atomic.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "_used",
+        "lock",
+        "claim_token",
+        "redeem"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C007-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "downgraded_to_warning",
+    "notes": "Real check-then-act race enabling token replay, but exploiting it requires winning a timing race with an already-captured token."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,54 @@
+{
+  "id": "C027",
+  "title": "Invoice period boundary computed with naive UTC timestamps",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G27",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "billing/period.py": "from datetime import datetime, timezone\n\ndef month_key(now: datetime) -> str:\n    local = now.astimezone(BILLING_TZ)\n    return f\"{local.year}-{local.month:02d}\"\n"
+    },
+    "head": {
+      "billing/period.py": "from datetime import datetime\n\ndef month_key(now: datetime) -> str:\n    # timezone import dropped; astimezone was deprecated on naive inputs\n    return f\"{now.year}-{now.month:02d}\"\n"
+    },
+    "pr_metadata": {
+      "title": "Drop deprecated astimezone on naive input",
+      "body": "Simplify month key computation.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:cabacda81431f0de3a1708c37b244451e606659e7a67a496be5af43f968592c3"
+  },
+  "labels": [
+    {
+      "id": "C027-d1",
+      "severity": "warning",
+      "path": "billing/period.py",
+      "defect": "Naive datetime used for the billing month boundary: invoices near month-end land in the wrong month for non-UTC customers",
+      "evidence": "Reproducible: 2026-05-01T00:30+05:30 (still 2026-04-30 local for IST billing) formats as 2026-05 instead of 2026-04; the previous code converted via astimezone(BILLING_TZ).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "month_key",
+        "astimezone",
+        "now.year"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C027-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

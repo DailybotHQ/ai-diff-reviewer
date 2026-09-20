@@ -1,0 +1,43 @@
+{
+  "id": "C017",
+  "title": "Static file handler serves paths outside the documents root",
+  "stack": "go",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G17",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "assets/handler.go": "package assets\n\nimport (\n\t\"net/http\"\n\t\"os\"\n\t\"path/filepath\"\n\t\"strings\"\n)\n\nfunc Serve(root string) http.HandlerFunc {\n\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\tname := filepath.Clean(r.URL.Path)\n\t\tif strings.Contains(name, \"..\") {\n\t\t\thttp.Error(w, \"invalid path\", http.StatusBadRequest)\n\t\t\treturn\n\t\t}\n\t\thttp.ServeFile(w, r, filepath.Join(root, name))\n\t}\n}\n"
+    },
+    "head": {
+      "assets/handler.go": "package assets\n\nimport (\n\t\"net/http\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc Serve(root string) http.HandlerFunc {\n\treturn func(w http.ResponseWriter, r *http.Request) {\n\t\t// Clean() already resolves dot segments; the string check is redundant\n\t\tname := filepath.Clean(r.URL.Path)\n\t\thttp.ServeFile(w, r, filepath.Join(root, name))\n\t}\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Remove redundant path check",
+      "body": "filepath.Clean already resolves dot segments, so the Contains check is dead code.",
+      "deceptive": true
+    },
+    "revision_pin": "fixture:sha256:f49a310b0bde1b373e6ecd3b3cec5d413ae2c52201bef364a39c92ada11cf31d"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "adjudicator: http.ServeFile itself rejects any r.URL.Path containing '..' (containsDotDot in net/http/fs.go); percent-encoded dot-dots decode before the handler runs; filepath.Join cannot be overridden by an absolute second element; symlink exposure identical in base"
+    ],
+    "reference_review": "Adjudicated SAFE by the blinded reviewer: the removed strings.Contains(name, \"..\") check is genuinely redundant on Go's net/http — http.ServeFile rejects dot-dot paths itself and filepath.Join cannot be escaped by an absolute element, so no traversal exists in head (the PR's Clean() rationale is wrong, but wrong reasoning about a safe change is not a defect). A reviewer flagging this diff as a traversal vulnerability is the exact false positive this corpus hunts."
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "rejected_as_defect",
+    "notes": "Claim rejected: no traversal exists; rationale error noted for the deceptive-metadata angle."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

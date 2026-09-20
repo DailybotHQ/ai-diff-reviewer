@@ -1,0 +1,59 @@
+{
+  "id": "C004",
+  "title": "Report download joins user-controlled path without sanitization",
+  "stack": "python",
+  "change_class": "path_traversal",
+  "risk_class": "critical_positive",
+  "family_group": "G04",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "reports.py": "import os\nfrom flask import Flask, request, send_file\n\napp = Flask(__name__)\nREPORTS = \"/srv/reports\"\n\n@app.route(\"/reports/<name>\")\ndef download(name: str):\n    safe = os.path.basename(name)\n    return send_file(os.path.join(REPORTS, safe))\n"
+    },
+    "head": {
+      "reports.py": "import os\nfrom flask import Flask, request, send_file\n\napp = Flask(__name__)\nREPORTS = \"/srv/reports\"\n\n@app.route(\"/reports/<name>\")\ndef download(name: str):\n    # nested report folders (e.g. 2024/q3) need subpaths now\n    return send_file(os.path.join(REPORTS, request.args.get(\"path\", name)))\n"
+    },
+    "pr_metadata": {
+      "title": "Support subfolder report paths",
+      "body": "Reports moved into quarterly subfolders; allow the client to pass the path.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:a678641a1f906bbfbc68ec5c012df34f61305f146d610682c8cc34537bae8cc1"
+  },
+  "labels": [
+    {
+      "id": "C004-d1",
+      "severity": "critical",
+      "path": "reports.py",
+      "defect": "Path traversal: unsanitized user path joined under REPORTS and served",
+      "evidence": "Reproducible: GET /reports/x?path=../../../../etc/passwd escapes REPORTS and returns the password file; os.path.join also discards the base entirely when the user value is absolute (/etc/passwd).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "join",
+        "request.args",
+        "send_file",
+        "path"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C004-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "../ escapes and absolute-path replacement give arbitrary file read; base used basename."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

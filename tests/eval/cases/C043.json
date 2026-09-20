@@ -1,0 +1,39 @@
+{
+  "id": "C043",
+  "title": "Deletes a block of commented-out dead code",
+  "stack": "python",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G43",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "jobs/legacy.py": "def run():\n    # old_path = settings.LEGACY_DIR\n    # os.makedirs(old_path, exist_ok=True)\n    # shutil.rmtree(old_path)\n    return True\n"
+    },
+    "head": {
+      "jobs/legacy.py": "def run():\n    return True\n"
+    },
+    "pr_metadata": {
+      "title": "refactor: remove dead comments",
+      "body": "Three lines of commented-out code nobody remembers.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:2618f32e47efb171f909af05aac5fbe2282aa79503fae88a5df3ab7978d5cb84"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "dead code"
+    ],
+    "reference_review": "Removes commented-out code only; comments have no runtime effect. The deleted lines were inert, so no behavior, test or contract changes."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

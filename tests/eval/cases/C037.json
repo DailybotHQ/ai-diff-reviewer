@@ -1,0 +1,40 @@
+{
+  "id": "C037",
+  "title": "README rewrite adds an ops runbook with a destructive command example",
+  "stack": "python",
+  "change_class": "docs",
+  "risk_class": "negative_control",
+  "family_group": "G37",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "README.md": "# Service\n\nRuns the HTTP API.\n"
+    },
+    "head": {
+      "README.md": "# Service\n\nRuns the HTTP API.\n\n## Runbook\n\nTo clear the local build cache:\n\n```bash\nrm -rf .cache/\n```\n\nNever run this against /srv.\n"
+    },
+    "pr_metadata": {
+      "title": "docs: add runbook",
+      "body": "Documents the cache-clear step.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:8201e1b6fb7ea6153ee1407e4d38e880b65e62ba6669158b7cd69d845f2561b5"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "rm -rf",
+      "README"
+    ],
+    "reference_review": "Documentation-only change: markdown prose and a fenced code example. No executable code, configuration, or dependency changes; the fenced rm -rf targets a local cache path and explicitly warns against broader use. A reference review finds no defect; a reviewer flagging dangerous command is a textbook false positive."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

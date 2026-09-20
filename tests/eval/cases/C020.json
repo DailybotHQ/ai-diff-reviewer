@@ -1,0 +1,59 @@
+{
+  "id": "C020",
+  "title": "Ledger lookup interpolates the account parameter into SQL",
+  "stack": "go",
+  "change_class": "injection",
+  "risk_class": "critical_positive",
+  "family_group": "G20",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "ledger/query.go": "package ledger\n\nimport \"database/sql\"\n\nfunc Balance(db *sql.DB, account string) (int, error) {\n\tvar cents int\n\terr := db.QueryRow(\n\t\t\"SELECT balance_cents FROM accounts WHERE number = $1\", account,\n\t).Scan(&cents)\n\treturn cents, err\n}\n"
+    },
+    "head": {
+      "ledger/query.go": "package ledger\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n)\n\nfunc Balance(db *sql.DB, account string) (int, error) {\n\tvar cents int\n\t// LIKE search for the new partial-number UI\n\tq := fmt.Sprintf(\"SELECT balance_cents FROM accounts WHERE number LIKE '%%%s%%'\", account)\n\terr := db.QueryRow(q).Scan(&cents)\n\treturn cents, err\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Partial account-number search",
+      "body": "UI now accepts partial numbers; switched to LIKE.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:266ca2141141dbf899ad0a6de338762ca7bbac4c5a63323b82ec3a4c6025b9f0"
+  },
+  "labels": [
+    {
+      "id": "C020-d1",
+      "severity": "critical",
+      "path": "ledger/query.go",
+      "defect": "SQL injection: fmt.Sprintf builds the LIKE query from the raw account parameter",
+      "evidence": "Reproducible: account=\"%' OR '1'='1\" returns the first account's balance regardless of ownership; a stacked ;DROP TABLE accounts;-- variant executes as the app role.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "Sprintf",
+        "QueryRow",
+        "LIKE",
+        "account"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C020-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "fmt.Sprintf into SQL on a financial lookup; base used a placeholder."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

