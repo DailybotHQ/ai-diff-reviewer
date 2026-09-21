@@ -54,6 +54,10 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
 | `openai`, `codex` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
 | `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
+| `openai`, `codex` | DeepSeek | `deepseek-chat` — $0.27 / $1.10 | `deepseek-chat` | `deepseek-reasoner` — $0.55 / $2.19 | Independent-family coder; reasoner is the deep pick (~2× cost, reasoning-first). |
+| `openai`, `codex` | Moonshot/Kimi | `kimi-k2-0905-preview` — $0.60 / $2.50 | `kimi-k2-turbo-preview` — $1.15 / $1.15 | `kimi-k2-0905-preview` | Input-heavy reviews favour 0905 on cost; turbo wins on latency. Also speaks Anthropic-compatible (see below). |
+| `openai`, `codex` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
+| `openai`, `codex` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
 | `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
@@ -220,6 +224,8 @@ The Anthropic provider caches both the system prompt and the diff-bearing first 
 | Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | Byte-identical to previous releases: `x-api-key` auth, `cache_control` on the system prompt. |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/anthropic` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | Flat-rate plan ⇒ ≈ 0 marginal cost per review. Zero-install GLM path; the deepest GLM reviews use `provider: claude-code` with the same base (see below). |
 | xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.5`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
+| Moonshot/Kimi | `https://api.moonshot.ai/anthropic` | Moonshot API key | `kimi-k2-0905-preview`, `kimi-k2-turbo-preview` | Kimi for Claude Code: the `claude-code` runner runs K2 through this base. |
+| MiniMax | `https://api.minimax.io/anthropic` | MiniMax API key | `MiniMax-M2`, `MiniMax-Text-01` | M2 documents Claude Code via this Anthropic-compatible endpoint. |
 | Any other host | `https://<gateway>` | gateway key | gateway-defined | Treated as a plain Anthropic-compatible gateway (the run logs a warning naming the host). |
 
 How the profile changes the request:

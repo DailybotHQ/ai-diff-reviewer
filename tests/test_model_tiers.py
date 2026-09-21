@@ -44,13 +44,25 @@ class ResolveModelTests(unittest.TestCase):
 
     def test_tier_table_full_resolution(self) -> None:
         for (pid, kind), row in reviewer.MODEL_TIER_TABLE.items():
-            base = {
+            # Moonshot/MiniMax expose BOTH protocol faces on their hosts, so
+            # the base depends on the runner's protocol, not just the kind.
+            bases = {
                 reviewer.ENDPOINT_KIND_ANTHROPIC: "",
                 reviewer.ENDPOINT_KIND_OPENAI: "",
                 reviewer.ENDPOINT_KIND_XAI: "" if pid == "grok" else ("https://api.x.ai" if pid in ("anthropic", "claude-code") else "https://api.x.ai/v1"),
                 reviewer.ENDPOINT_KIND_ZAI: "https://api.z.ai/api/anthropic" if pid in ("anthropic", "claude-code") else "https://api.z.ai/api/v1",
                 reviewer.ENDPOINT_KIND_CUSTOM: "",
-            }[kind]
+                reviewer.ENDPOINT_KIND_DEEPSEEK: "https://api.deepseek.com",
+                reviewer.ENDPOINT_KIND_QWEN: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            }
+            if kind == reviewer.ENDPOINT_KIND_MOONSHOT:
+                base = ("https://api.moonshot.ai/anthropic" if pid in ("anthropic", "claude-code")
+                        else "https://api.moonshot.ai/v1")
+            elif kind == reviewer.ENDPOINT_KIND_MINIMAX:
+                base = ("https://api.minimax.io/anthropic" if pid in ("anthropic", "claude-code")
+                        else "https://api.minimax.io/v1")
+            else:
+                base = bases[kind]
             prof = _prof(base, pid)
             self.assertEqual(prof.kind, kind, (pid, kind, base))
             for tier in reviewer.MODEL_TIERS:
@@ -88,6 +100,14 @@ class ResolveModelTests(unittest.TestCase):
                     self.assertTrue(model.startswith("grok-"), (pid, tier, model))
                 elif kind == reviewer.ENDPOINT_KIND_ZAI:
                     self.assertTrue(model.startswith("glm-"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_DEEPSEEK:
+                    self.assertTrue(model.startswith("deepseek-"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_MOONSHOT:
+                    self.assertTrue(model.startswith("kimi-"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_QWEN:
+                    self.assertTrue(model.startswith("qwen"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_MINIMAX:
+                    self.assertTrue(model.startswith("MiniMax-"), (pid, tier, model))
 
     def test_every_tier_model_has_an_indicative_price_or_is_flat_rate(self) -> None:
         for (_pid, _kind), row in reviewer.MODEL_TIER_TABLE.items():

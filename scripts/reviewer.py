@@ -227,6 +227,10 @@ MODEL_REQUIRED_HINTS: dict[str, str] = {
     "anthropic": "an Anthropic model id",
     "openai": "an OpenAI model id",
     "custom": "the gateway's model id",
+    "deepseek": "a DeepSeek model id (e.g. `deepseek-chat`)",
+    "moonshot": "a Kimi model id (e.g. `kimi-k2-0905-preview`)",
+    "qwen": "a Qwen model id (e.g. `qwen3-coder-plus`)",
+    "minimax": "a MiniMax model id (e.g. `MiniMax-M2`)",
 }
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
@@ -236,7 +240,7 @@ MODEL_TIERS: tuple[str, ...] = (
 # Verified against the vendors' model/pricing pages on this date. Ids and
 # prices move — re-verify when bumping. Rationale per row lives in
 # docs/PROVIDERS.md § "Cost-efficient defaults matrix".
-MODEL_TIERS_VERIFIED_ON: str = "2026-09-16"
+MODEL_TIERS_VERIFIED_ON: str = "2026-09-21"
 _ANTHROPIC_TIERS: dict[str, str] = {
     # Sonnet 5 ($2/$10) is current and cheaper than the legacy
     # claude-sonnet-4-6 ($3/$15) that DEFAULT_MODELS still names for
@@ -279,6 +283,35 @@ _CURSOR_TIERS: dict[str, str] = {
     MODEL_TIER_ECONOMY: "auto",
     MODEL_TIER_DEEP: "composer-2.5",
 }
+_DEEPSEEK_TIERS: dict[str, str] = {
+    # deepseek-chat (V3.x, ~$0.27/$1.10) is both balanced AND economy:
+    # deepseek-reasoner (R1) is the deep pick (~2x cost, reasoning-first).
+    MODEL_TIER_BALANCED: "deepseek-chat",
+    MODEL_TIER_ECONOMY: "deepseek-chat",
+    MODEL_TIER_DEEP: "deepseek-reasoner",
+}
+_MOONSHOT_TIERS: dict[str, str] = {
+    # kimi-k2-0905-preview (~$0.60/$2.50) balanced and deep; the turbo
+    # variant (~$1.15/$1.15) is the fast smoke pick (input-heavy reviews
+    # favour 0905 on cost; turbo wins on latency).
+    MODEL_TIER_BALANCED: "kimi-k2-0905-preview",
+    MODEL_TIER_ECONOMY: "kimi-k2-turbo-preview",
+    MODEL_TIER_DEEP: "kimi-k2-0905-preview",
+}
+_QWEN_TIERS: dict[str, str] = {
+    # qwen3-coder-plus (~$0.40/$1.60) balanced and deep; qwen-turbo
+    # (~$0.05/$0.40) smoke.
+    MODEL_TIER_BALANCED: "qwen3-coder-plus",
+    MODEL_TIER_ECONOMY: "qwen-turbo",
+    MODEL_TIER_DEEP: "qwen3-coder-plus",
+}
+_MINIMAX_TIERS: dict[str, str] = {
+    # MiniMax-M2 (~$0.30/$1.20) — agentic-coding flagship, documented for
+    # Claude Code via its Anthropic-compatible endpoint; Text-01 economy.
+    MODEL_TIER_BALANCED: "MiniMax-M2",
+    MODEL_TIER_ECONOMY: "MiniMax-Text-01",
+    MODEL_TIER_DEEP: "MiniMax-M2",
+}
 # Keyed by (provider id, endpoint kind). Kind literals match ENDPOINT_KIND_*
 # (defined below with the backend constants; a test asserts the agreement).
 MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
@@ -296,6 +329,18 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("codex", "zai"): _ZAI_TIERS,
     ("grok", "xai"): _XAI_TIERS,
     ("cursor", "custom"): _CURSOR_TIERS,
+    ("openai", "deepseek"): _DEEPSEEK_TIERS,
+    ("codex", "deepseek"): _DEEPSEEK_TIERS,
+    ("openai", "moonshot"): _MOONSHOT_TIERS,
+    ("codex", "moonshot"): _MOONSHOT_TIERS,
+    ("anthropic", "moonshot"): _MOONSHOT_TIERS,
+    ("claude-code", "moonshot"): _MOONSHOT_TIERS,
+    ("openai", "qwen"): _QWEN_TIERS,
+    ("codex", "qwen"): _QWEN_TIERS,
+    ("openai", "minimax"): _MINIMAX_TIERS,
+    ("codex", "minimax"): _MINIMAX_TIERS,
+    ("anthropic", "minimax"): _MINIMAX_TIERS,
+    ("claude-code", "minimax"): _MINIMAX_TIERS,
 }
 # Indicative list prices, USD per 1M tokens (input, output), matched by the
 # longest model-id prefix. Shared by the tier docs and the usage telemetry;
@@ -316,6 +361,14 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "grok-4.3": (1.25, 2.50),
     "glm-5.3-flash": (0.15, 0.50),
     "glm-5.3": (1.40, 4.40),
+    "deepseek-chat": (0.27, 1.10),
+    "deepseek-reasoner": (0.55, 2.19),
+    "kimi-k2-0905-preview": (0.60, 2.50),
+    "kimi-k2-turbo-preview": (1.15, 1.15),
+    "qwen3-coder-plus": (0.40, 1.60),
+    "qwen-turbo": (0.05, 0.40),
+    "MiniMax-M2": (0.30, 1.20),
+    "MiniMax-Text-01": (0.20, 1.20),
 }
 # Legacy defaults that still ship for back-compat but have a cheaper,
 # current successor in the tier table — the run logs a one-line hint.
@@ -370,6 +423,10 @@ ENDPOINT_KIND_AZURE: str = "azure"
 ENDPOINT_KIND_XAI: str = "xai"
 ENDPOINT_KIND_ZAI: str = "zai"
 ENDPOINT_KIND_CUSTOM: str = "custom"
+ENDPOINT_KIND_DEEPSEEK: str = "deepseek"
+ENDPOINT_KIND_MOONSHOT: str = "moonshot"
+ENDPOINT_KIND_QWEN: str = "qwen"
+ENDPOINT_KIND_MINIMAX: str = "minimax"
 ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_ANTHROPIC,
     ENDPOINT_KIND_OPENAI,
@@ -377,6 +434,10 @@ ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_XAI,
     ENDPOINT_KIND_ZAI,
     ENDPOINT_KIND_CUSTOM,
+    ENDPOINT_KIND_DEEPSEEK,
+    ENDPOINT_KIND_MOONSHOT,
+    ENDPOINT_KIND_QWEN,
+    ENDPOINT_KIND_MINIMAX,
 )
 
 # Host → kind classification. A suffix starting with `.` matches any
@@ -389,6 +450,11 @@ ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
     (".cognitiveservices.azure.com", ENDPOINT_KIND_AZURE),
     ("api.x.ai", ENDPOINT_KIND_XAI),
     ("api.z.ai", ENDPOINT_KIND_ZAI),
+    ("api.deepseek.com", ENDPOINT_KIND_DEEPSEEK),
+    ("api.moonshot.ai", ENDPOINT_KIND_MOONSHOT),
+    ("api.minimax.io", ENDPOINT_KIND_MINIMAX),
+    ("api.minimaxi.com", ENDPOINT_KIND_MINIMAX),
+    ("dashscope.aliyuncs.com", ENDPOINT_KIND_QWEN),
 )
 
 # Well-known base URLs (documentation + runner defaults). The Anthropic base
@@ -400,6 +466,12 @@ XAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.x.ai"
 ZAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.z.ai/api/anthropic"
 ZAI_OPENAI_COMPAT_API_BASE: str = "https://api.z.ai/api/coding/paas/v4"
 ZAI_RESPONSES_API_BASE: str = "https://api.z.ai/api/v1"
+DEEPSEEK_OPENAI_COMPAT_API_BASE: str = "https://api.deepseek.com"
+MOONSHOT_OPENAI_COMPAT_API_BASE: str = "https://api.moonshot.ai/v1"
+MOONSHOT_ANTHROPIC_COMPAT_API_BASE: str = "https://api.moonshot.ai/anthropic"
+MINIMAX_OPENAI_COMPAT_API_BASE: str = "https://api.minimax.io/v1"
+MINIMAX_ANTHROPIC_COMPAT_API_BASE: str = "https://api.minimax.io/anthropic"
+QWEN_OPENAI_COMPAT_API_BASE: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # Azure Foundry + Codex quirk: plain text turns fail unless an image-generation
 # deployment header is present and the feature is disabled (see
