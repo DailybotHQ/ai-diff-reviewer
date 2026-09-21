@@ -234,7 +234,7 @@ class ResolveEndpointProfileTests(unittest.TestCase):
             prof.kind = "x"  # type: ignore[misc]
 
     def test_every_kind_constant_is_registered(self) -> None:
-        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 10)
+        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 12)
         for _suffix, kind in reviewer.ENDPOINT_HOST_SUFFIXES:
             self.assertIn(kind, reviewer.ENDPOINT_KINDS)
 

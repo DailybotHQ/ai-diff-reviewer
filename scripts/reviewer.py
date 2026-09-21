@@ -231,6 +231,8 @@ MODEL_REQUIRED_HINTS: dict[str, str] = {
     "moonshot": "a Kimi model id (e.g. `kimi-k2-0905-preview`)",
     "qwen": "a Qwen model id (e.g. `qwen3-coder-plus`)",
     "minimax": "a MiniMax model id (e.g. `MiniMax-M2`)",
+    "gemini": "a Gemini model id (e.g. `gemini-2.5-pro`)",
+    "openrouter": "an OpenRouter model id (e.g. `deepseek/deepseek-chat`)",
 }
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
@@ -312,6 +314,21 @@ _MINIMAX_TIERS: dict[str, str] = {
     MODEL_TIER_ECONOMY: "MiniMax-Text-01",
     MODEL_TIER_DEEP: "MiniMax-M2",
 }
+_GEMINI_TIERS: dict[str, str] = {
+    # gemini-2.5-pro ($1.25/$10) balanced and deep; 2.5-flash ($0.30/$2.50)
+    # smoke. OpenAI-compatible surface of the Gemini API.
+    MODEL_TIER_BALANCED: "gemini-2.5-pro",
+    MODEL_TIER_ECONOMY: "gemini-2.5-flash",
+    MODEL_TIER_DEEP: "gemini-2.5-pro",
+}
+_OPENROUTER_TIERS: dict[str, str] = {
+    # Meta-gateway: model ids are vendor-prefixed (`vendor/model`). Defaults
+    # pinned to measured families; consumers override per taste. Prices are
+    # the underlying vendors' (OpenRouter adds ~5%).
+    MODEL_TIER_BALANCED: "deepseek/deepseek-chat",
+    MODEL_TIER_ECONOMY: "deepseek/deepseek-chat",
+    MODEL_TIER_DEEP: "deepseek/deepseek-reasoner",
+}
 # Keyed by (provider id, endpoint kind). Kind literals match ENDPOINT_KIND_*
 # (defined below with the backend constants; a test asserts the agreement).
 MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
@@ -341,6 +358,10 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("codex", "minimax"): _MINIMAX_TIERS,
     ("anthropic", "minimax"): _MINIMAX_TIERS,
     ("claude-code", "minimax"): _MINIMAX_TIERS,
+    ("openai", "gemini"): _GEMINI_TIERS,
+    ("codex", "gemini"): _GEMINI_TIERS,
+    ("openai", "openrouter"): _OPENROUTER_TIERS,
+    ("codex", "openrouter"): _OPENROUTER_TIERS,
 }
 # Indicative list prices, USD per 1M tokens (input, output), matched by the
 # longest model-id prefix. Shared by the tier docs and the usage telemetry;
@@ -369,6 +390,10 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "qwen-turbo": (0.05, 0.40),
     "MiniMax-M2": (0.30, 1.20),
     "MiniMax-Text-01": (0.20, 1.20),
+    "gemini-2.5-pro": (1.25, 10.0),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "deepseek/deepseek-chat": (0.30, 1.20),
+    "deepseek/deepseek-reasoner": (0.60, 2.40),
 }
 # Legacy defaults that still ship for back-compat but have a cheaper,
 # current successor in the tier table — the run logs a one-line hint.
@@ -427,6 +452,8 @@ ENDPOINT_KIND_DEEPSEEK: str = "deepseek"
 ENDPOINT_KIND_MOONSHOT: str = "moonshot"
 ENDPOINT_KIND_QWEN: str = "qwen"
 ENDPOINT_KIND_MINIMAX: str = "minimax"
+ENDPOINT_KIND_GEMINI: str = "gemini"
+ENDPOINT_KIND_OPENROUTER: str = "openrouter"
 ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_ANTHROPIC,
     ENDPOINT_KIND_OPENAI,
@@ -438,6 +465,8 @@ ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_MOONSHOT,
     ENDPOINT_KIND_QWEN,
     ENDPOINT_KIND_MINIMAX,
+    ENDPOINT_KIND_GEMINI,
+    ENDPOINT_KIND_OPENROUTER,
 )
 
 # Host → kind classification. A suffix starting with `.` matches any
@@ -455,6 +484,8 @@ ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("api.minimax.io", ENDPOINT_KIND_MINIMAX),
     ("api.minimaxi.com", ENDPOINT_KIND_MINIMAX),
     ("dashscope.aliyuncs.com", ENDPOINT_KIND_QWEN),
+    ("generativelanguage.googleapis.com", ENDPOINT_KIND_GEMINI),
+    ("openrouter.ai", ENDPOINT_KIND_OPENROUTER),
 )
 
 # Well-known base URLs (documentation + runner defaults). The Anthropic base
@@ -472,6 +503,8 @@ MOONSHOT_ANTHROPIC_COMPAT_API_BASE: str = "https://api.moonshot.ai/anthropic"
 MINIMAX_OPENAI_COMPAT_API_BASE: str = "https://api.minimax.io/v1"
 MINIMAX_ANTHROPIC_COMPAT_API_BASE: str = "https://api.minimax.io/anthropic"
 QWEN_OPENAI_COMPAT_API_BASE: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+GEMINI_OPENAI_COMPAT_API_BASE: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
 
 # Azure Foundry + Codex quirk: plain text turns fail unless an image-generation
 # deployment header is present and the feature is disabled (see

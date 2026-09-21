@@ -54,6 +54,8 @@ class ResolveModelTests(unittest.TestCase):
                 reviewer.ENDPOINT_KIND_CUSTOM: "",
                 reviewer.ENDPOINT_KIND_DEEPSEEK: "https://api.deepseek.com",
                 reviewer.ENDPOINT_KIND_QWEN: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                reviewer.ENDPOINT_KIND_GEMINI: "https://generativelanguage.googleapis.com/v1beta/openai",
+                reviewer.ENDPOINT_KIND_OPENROUTER: "https://openrouter.ai/api/v1",
             }
             if kind == reviewer.ENDPOINT_KIND_MOONSHOT:
                 base = ("https://api.moonshot.ai/anthropic" if pid in ("anthropic", "claude-code")
@@ -108,6 +110,10 @@ class ResolveModelTests(unittest.TestCase):
                     self.assertTrue(model.startswith("qwen"), (pid, tier, model))
                 elif kind == reviewer.ENDPOINT_KIND_MINIMAX:
                     self.assertTrue(model.startswith("MiniMax-"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_GEMINI:
+                    self.assertTrue(model.startswith("gemini-"), (pid, tier, model))
+                elif kind == reviewer.ENDPOINT_KIND_OPENROUTER:
+                    self.assertIn("/", model, (pid, tier, model))  # vendor-prefixed ids
 
     def test_every_tier_model_has_an_indicative_price_or_is_flat_rate(self) -> None:
         for (_pid, _kind), row in reviewer.MODEL_TIER_TABLE.items():
