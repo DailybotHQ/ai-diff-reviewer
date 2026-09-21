@@ -35,7 +35,11 @@ VETO_REASONS = (
 
 
 def default_policy() -> dict[str, Any]:
-    """The v1 bundle. Thresholds are NAMED values from Task 5/6 calibration."""
+    """Factory defaults (floor 0.70 pre-calibration).
+
+    The CALIBRATED bundle ships as `policy.v1.json` (floor 0.60, Task 6
+    freeze) — they intentionally differ; tests pin both.
+    """
     return {
         "schema": SCHEMA,
         "version": POLICY_VERSION,
@@ -100,7 +104,9 @@ def map_batch(
         if confidence is None:
             decisions[name] = {"decision": "insufficient_evidence", "reason": "missing_confidence"}
             continue
-        if confidence < _floor(policy, f"{name}_confidence_floor" if f"{name}_confidence_floor" in policy["thresholds"] else "risk_confidence_floor"):
+        floor_name = ("security_noul_floor" if name == "touches_security"
+                      else "risk_confidence_floor")
+        if confidence < _floor(policy, floor_name):
             decisions[name] = {"decision": "insufficient_evidence",
                                "reason": "below_floor", "confidence": confidence}
             continue
@@ -189,10 +195,12 @@ def priority_order(
     filter: every item is still reviewed (priorities mode, contract §Mode
     decisions).
     """
-    def key(item: dict[str, Any]) -> tuple[int, float]:
+    def key(item: dict[str, Any]) -> tuple[int, int, float]:
+        # Severity dominates; the security flag breaks ties WITHIN a severity
+        # (a security-flagged warning must not outrank a plain critical).
         sev = SEVERITY_RANK.get(item.get("risk", "insufficient_evidence"), 1)
-        security_bonus = 1 if item.get("touches_security") else 0
-        return (sev + security_bonus, float(item.get("confidence") or 0.0))
+        security = 1 if item.get("touches_security") else 0
+        return (sev, security, float(item.get("confidence") or 0.0))
 
     return sorted(triaged, key=key, reverse=True)
 

@@ -233,7 +233,9 @@ class JevClient:
                 self.config.endpoint, headers, payload, self.config.deadline_seconds
             )
         except JevError as exc:
-            raise JevError(exc.kind, self._scrub(str(exc), key)) from exc
+            # `from None` is deliberate: the original's message may embed the
+            # credential, and __cause__ would leak it through any traceback.
+            raise JevError(exc.kind, self._scrub(str(exc), key)) from None
         elapsed = self._clock() - started
         if elapsed > self.config.deadline_seconds + 0.05:
             raise JevError("timeout", f"deadline exceeded ({elapsed:.2f}s)")

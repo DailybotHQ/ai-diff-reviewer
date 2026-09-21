@@ -74,12 +74,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sys.exit(f"{args.api_key_env} is not set")
     os.chdir(args.worktree)
     ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
-    # Timing separation (PLAN Task 4 / F8): context fetch + provider build are
-    # "setup"; the provider loop below is timed separately as t0..end.
-    setup_seconds = time.time() - t_start
     api_base = r.validate_api_base(args.api_base or "")
     provider = r.build_provider(args.provider, api_key=key, model=args.model or "", api_base=api_base)
     system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
+    # Timing separation (PLAN Task 4 / F8): fetch + provider build + prompt
+    # compose are "setup"; the provider loop below is timed as t0..end.
+    setup_seconds = time.time() - t_start
     t0 = time.time()
     turns = 0
     if isinstance(provider, r.AgentRunnerProvider):

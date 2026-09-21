@@ -43,18 +43,19 @@ ls tests/eval/fixtures/
 
 ## Live use (Task 5+, only with authorized budget)
 
+Run from a shell where `TYPESAFE_API_KEY` is **already exported** (the
+devcontainer exports it; never inline `TYPESAFE_API_KEY=...` on the command
+line — inline env assignments land in shell history and process argv):
+
 ```bash
-TYPESAFE_API_KEY=... python3 - <<'PY'
+python3 - <<'PY'
 import sys; sys.path.insert(0, "tests/eval")
 from jev_probe import JevClient, JevConfig, build_question
-c = JevClient(JevConfig())   # model pinned: jev-1.13.0
+c = JevClient(JevConfig())   # model pinned: jev-1.13.0; key read from env
 r = c.ask({"state": "..."}, {"is_bug": build_question("noul", "...", confidence_floor=0.7)})
 print(r.answers["is_bug"].value, r.usage, r.elapsed_seconds)
 PY
 ```
-
-Never put the key on a command line in real runs; the snippet above reads it
-from the environment.
 
 ## Fixtures (`tests/eval/fixtures/`)
 

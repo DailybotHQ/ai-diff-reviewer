@@ -33,7 +33,7 @@ and any breach of the declared floors.
 
 | Dimension | Floor | Current |
 | --- | --- | --- |
-| Total cases | ≥ 60 | **70** |
+| Total cases | ≥ 60 | **73** |
 | Stack families | ≥ 3 (python, typescript, go) | **3** |
 | Critical-positive cases | ≥ 20 (every label adjudicated, blinded) | **21** |
 | Warning-positive cases | — | 24 |

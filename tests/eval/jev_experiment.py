@@ -323,7 +323,10 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
     cases = _load_cases(Path(manifest.get("cases_dir", args.cases)))
     validate_manifest(manifest, cases)
     phase = args.phase
-    plans, estimate = plan_runs(manifest, cases, phase, seed=hash((manifest["frozen_salt"], phase)) & 0xFFFF)
+    # F9 determinism: str hash() is salted per process - derive the seed from
+    # the frozen salt via sha256 so the interleave order is reproducible.
+    seed = int(hashlib.sha256(f"{manifest['frozen_salt']}:{phase}".encode("utf-8")).hexdigest()[:8], 16)
+    plans, estimate = plan_runs(manifest, cases, phase, seed=seed)
     budget = budget_check(estimate, manifest)
     plan_doc = {
         "schema": SCHEMA + "+dry-run",
@@ -360,8 +363,16 @@ def cmd_run(args: argparse.Namespace) -> int:
               "Record developer approval in the manifest first.", file=sys.stderr)
         return 1
     import os
-    missing = [lane["key_env"] for lane in manifest.get("lanes", {}).values()
-               if not os.environ.get(lane["key_env"])]
+    # Credential presence is scoped to the arms actually selected: the jev arm
+    # needs the Jev key; baseline needs the coding lanes' keys; rules needs none.
+    arms_selected = [args.arm] if args.arm else list(manifest.get("arms", ARMS))
+    keys_needed = set()
+    if "jev" in arms_selected:
+        keys_needed.add(manifest.get("lanes", {}).get("jev", {}).get("key_env", "TYPESAFE_API_KEY"))
+    if "baseline" in arms_selected:
+        keys_needed.update(l["key_env"] for l in manifest.get("lanes", {}).values()
+                           if l.get("kind") == "coding")
+    missing = sorted(k for k in keys_needed if not os.environ.get(k))
     if missing:
         print(f"FAIL: credentials absent by presence check: {missing}", file=sys.stderr)
         return 1
@@ -407,7 +418,11 @@ def cmd_report(args: argparse.Namespace) -> int:
         "promotion_ready": promotion_ready,
         "_note": "unknown cost or missing cells fail promotion (F8/F9); failures are reported, never averaged away",
     }, indent=2))
-    return 0 if promotion_ready or not required else 0
+    # Exit 1 only when declared requirements exist and are unmet: an audit
+    # without declared requirements is informational, not a failure.
+    if required and (missing_cells or any(c["unknown_cost"] for c in by_arm.values())):
+        return 1
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
