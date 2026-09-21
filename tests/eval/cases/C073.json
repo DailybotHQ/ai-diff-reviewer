@@ -1,0 +1,56 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C073",
+  "title": "Legacy expansion: ci(self-review): block merge on skipped required check (merge gate) (#15)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G73",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 15,
+    "merge_commit": "49444a02fc34223f7c1678e2528919d6f662fc8c",
+    "pr_metadata": {
+      "title": "ci(self-review): block merge on skipped required check (merge gate) (#15)",
+      "body": "Historical merged PR added in Amendment 1 expansion.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "C073-d1",
+      "severity": "warning",
+      "path": ".github/workflows/self-review.yml",
+      "defect": "All-or-nothing merge gate wrongly fails when provider legs are legitimately absent: with only a subset of providers configured, the required check stays red and blocks merges that a configured provider already passed",
+      "evidence": "Fix #17: gate rewritten to count successful 'Self-review — <provider>' legs via the jobs API and pass on >=1, plus empty_reason outputs so the error message stops telling an already-labelled maintainer to apply the ready label.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "merge gate",
+        "provider",
+        "skipped",
+        "required"
+      ],
+      "window": 40
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C073-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "C073-d1: PR #15 created the all-or-nothing gate; fix #17 rewrote it to count successful provider legs (pass on >=1) with empty_reason hints."
+  },
+  "rights": {
+    "origin": "in-repo historical PR (repository MIT); labels grounded in post-merge fix commits #26, #36, #17, #55",
+    "egress": "in-repo content only; no secrets, hosts, or user data"
+  },
+  "_grounding": "Label grounded in fix #17 (gate redesign + empty_reason)."
+}

@@ -1,0 +1,56 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C074",
+  "title": "Legacy expansion: feat(iar+action): unconditional IAR + user-forced reset + skip-review-label emergency bypass (#39)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G74",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 39,
+    "merge_commit": "4d83dadcf65c643aa227511a68208d8de185b166",
+    "pr_metadata": {
+      "title": "feat(iar+action): unconditional IAR + user-forced reset + skip-review-label emergency bypass (#39)",
+      "body": "Historical merged PR added in Amendment 1 expansion.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "C074-d1",
+      "severity": "warning",
+      "path": "scripts/reviewer.py",
+      "defect": "IAR could report 'approve' while the check was red, and a fixed finding did not unblock the iteration state",
+      "evidence": "Fix #55 ('never report approve with a red check; let a fixed finding unblock'): 604 changed lines + two new regression suites (test_iar_advisory_escape.py, test_iar_gate_consistency.py) pin the corrected behavior.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "approve",
+        "red check",
+        "IAR",
+        "unblock"
+      ],
+      "window": 40
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C074-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "C074-d1: Fix #55 matches the evidence exactly (604 reviewer.py lines + two regression suites) and records the real approve-with-red-check incident in the IAR subsystem #39 introduced."
+  },
+  "rights": {
+    "origin": "in-repo historical PR (repository MIT); labels grounded in post-merge fix commits #26, #36, #17, #55",
+    "egress": "in-repo content only; no secrets, hosts, or user data"
+  },
+  "_grounding": "Label grounded in fix #55."
+}

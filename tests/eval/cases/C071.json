@@ -1,0 +1,116 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C071",
+  "title": "Legacy expansion: bootstrap .review/extension.md + dogfood vendored skill on every release (#25)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G71",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 25,
+    "merge_commit": "6e4742a50bb09a9c20f1f2fd5112e421bb394fac",
+    "pr_metadata": {
+      "title": "bootstrap .review/extension.md + dogfood vendored skill on every release (#25)",
+      "body": "Historical merged PR added in Amendment 1 expansion.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "C071-d1",
+      "severity": "warning",
+      "path": ".github/workflows/auto-release.yml",
+      "defect": "Step 3.5 empty-diff short-circuit silently no-ops the vendored refresh",
+      "evidence": "Fix #26: a registry propagation lag past the 5s sleep let the smoke test go green without proving the tag installed; hard-pinned @<tag> --force + frontmatter version assertion added.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "empty diff",
+        "skills add",
+        "short-circuit"
+      ],
+      "window": 40
+    },
+    {
+      "id": "C071-d2",
+      "severity": "warning",
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "defect": "Spanish 'mi-repo/' string in source (violates the repo's English-only rule)",
+      "evidence": "Fix #26 warning #2: renamed to my-repo/ in SKILL.md and docs/PROMPTS.md; the extension escalates non-English text to warning.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "mi-repo",
+        "English-only"
+      ],
+      "window": 40
+    },
+    {
+      "id": "C071-d3",
+      "severity": "warning",
+      "path": "CHANGELOG.md",
+      "defect": "[Unreleased] omitted the extension bootstrap and self-review wiring shipped by this PR",
+      "evidence": "Fix #26 warning #3: behaviour changes must land with a matching CHANGELOG entry (repo Rule #7); two bullets added.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "Unreleased",
+        "CHANGELOG"
+      ],
+      "window": 40
+    },
+    {
+      "id": "C071-d4",
+      "severity": "warning",
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "defect": "Duplicate '**Option A**' heading left by copy-paste",
+      "evidence": "Fix #26 info #4: extra heading two lines below the correct one, removed.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "Option A",
+        "duplicate"
+      ],
+      "window": 40
+    },
+    {
+      "id": "C071-d5",
+      "severity": "warning",
+      "path": ".github/workflows/auto-release.yml",
+      "defect": "skills add ran without a non-interactive flag on the subcommand: the agent picker hung the non-TTY runner and the vendored copy never refreshed, breaking the v1.6.1 release after the tag was pushed",
+      "evidence": "Fix #36: both 'npx --yes' AND 'skills add ... -y' are required in Actions; the failure required a manual recovery (PR #35).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "skills add",
+        "-y",
+        "non-interactive"
+      ],
+      "window": 40
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C071-d1",
+      "C071-d2",
+      "C071-d3",
+      "C071-d4",
+      "C071-d5"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "C071-d1: Fix #26 hardened the Step 3.5 that PR #25 added into a tag-pinned fetch plus vendored version assertion, confirming the propagation-lag silent no-op.; C071-d2: English-only violation renamed by fix #26; the root-copy instance predates this PR but #25 shipped new vendored copies carrying it.; C071-d3: Real Rule #7 CHANGELOG gap; fix #26 added exactly the two missing bullets.; C071-d4: PR's own diff introduced the duplicated heading; fix #26 removed it. Mildest end of warning.; C071-d5: Fix #36 documents the real v1.6.1 breakage; the hanging form arrived via #26's hardening of the Step 3.5 mechanism #25 created (attribution one step indirect)."
+  },
+  "rights": {
+    "origin": "in-repo historical PR (repository MIT); labels grounded in post-merge fix commits #26, #36, #17, #55",
+    "egress": "in-repo content only; no secrets, hosts, or user data"
+  },
+  "_grounding": "Labels extracted from fix commits #26 (4 enumerated findings with locations) and #36 (the -y hang that broke v1.6.1)."
+}
