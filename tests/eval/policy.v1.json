@@ -1,0 +1,34 @@
+{
+  "schema": "ai-diff-reviewer/jev-policy/1",
+  "version": "v1",
+  "thresholds": {
+    "risk_confidence_floor": 0.6,
+    "security_noul_floor": 0.7,
+    "verification_confidence_floor": 0.6,
+    "fast_pass_confidence_floor": 0.9
+  },
+  "policy": {
+    "on_below_floor": "abstain",
+    "on_contradiction": "insufficient_evidence",
+    "critical_findings": "never_suppressed_by_verification"
+  },
+  "veto_always_full_review": [
+    "dependency_manifest",
+    "policy_prompt_file",
+    "inventory_incomplete",
+    "prior_unresolved_findings",
+    "exec_bit_change",
+    "binary_change",
+    "forced_full_review"
+  ],
+  "evidence_rules": {
+    "supported": "verification is_real >= floor and severity is not invalid",
+    "contradicted": "verification is_real <= 1-floor and severity is invalid",
+    "insufficient": "everything else: missing answers, low confidence, disagreement without affirmative contradiction"
+  },
+  "calibration": {
+    "calibrated_at": "2026-09-21",
+    "method": "predeclared 3-point floor sweep on calibration-split records; zero-unsafe then max-exact",
+    "evidence": "analysis_results/calibration-tables.json"
+  }
+}
