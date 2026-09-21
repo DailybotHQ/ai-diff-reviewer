@@ -427,11 +427,15 @@ jobs:
           from jev_probe import JevClient, JevConfig, build_question
           pr = os.environ["PR_NUMBER"]
           repo = os.environ["GITHUB_REPOSITORY"]
+          child_env = {"PATH": os.environ.get("PATH", ""),
+                       "HOME": os.environ.get("HOME", ""),
+                       "GH_TOKEN": os.environ["GH_TOKEN"]}
           raw = subprocess.run(
               ["gh", "api", f"repos/{repo}/pulls/{pr}/comments"],
-              capture_output=True, text=True, check=True,
-              env={**os.environ, "GH_TOKEN": os.environ["GH_TOKEN"]}).stdout
-          comments = json.loads(raw)
+              capture_output=True, text=True, check=True, env=child_env).stdout
+          comments = [c for c in json.loads(raw)
+                      if "ai-pr-reviewer-marker" in (c.get("body") or "")
+                      or c["user"]["type"] == "Bot"]
           client = JevClient(JevConfig(deadline_seconds=8.0))
           questions = {
               "is_real": build_question("noul",

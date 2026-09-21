@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Evaluation tooling for the Jev comparison experiments** (offline; no runtime or Action change): a 73-case labelled corpus (`tests/eval/cases/` + strict validator, blinded adjudication enforced), an isolated TypeSafe evaluation client (`tests/eval/jev_probe.py` + synthetic fixtures), and a controlled-comparison driver (`tests/eval/jev_experiment.py`) with `init`/`validate`/`dry-run`/`run`/`report` interfaces, deterministic group-coherent splits, explicit budget caps, zero-call dry-run planning, and a rules-based deterministic comparator arm. `run_eval.py` now records full finding bodies and separates setup vs provider timing. `run_eval.py score` unchanged for existing result files.
+- **Evaluation tooling for the Jev comparison experiments** (offline; no runtime or shipped-Action change; the evaluation branch adds a PR-scoped advisory CI experiment job in `self-review.yml`): a 73-case labelled corpus (`tests/eval/cases/` + strict validator, blinded adjudication enforced), an isolated TypeSafe evaluation client (`tests/eval/jev_probe.py` + synthetic fixtures), and a controlled-comparison driver (`tests/eval/jev_experiment.py`) with `init`/`validate`/`dry-run`/`run`/`report` interfaces, deterministic group-coherent splits, explicit budget caps, zero-call dry-run planning, and a rules-based deterministic comparator arm. `run_eval.py` now records full finding bodies and separates setup vs provider timing. `run_eval.py score` unchanged for existing result files.
 
 ## [2.3.1] — 2026-09-17
 
