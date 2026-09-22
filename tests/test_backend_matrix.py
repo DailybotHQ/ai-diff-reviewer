@@ -62,6 +62,14 @@ class RunnerBackendMatrixTests(unittest.TestCase):
         "https://api.z.ai/api/anthropic": "zai",
         "https://api.x.ai/v1": "xai",
         "https://myres.openai.azure.com/openai/v1": "azure",
+        # v2.4.0 backends — the constructability net must cover every
+        # registered kind, not only the pre-expansion vendors.
+        "https://api.deepseek.com": "deepseek",
+        "https://api.moonshot.ai/v1": "moonshot",
+        "https://api.minimax.io/v1": "minimax",
+        "https://dashscope.aliyuncs.com/compatible-mode/v1": "qwen",
+        "https://generativelanguage.googleapis.com/v1beta/openai": "gemini",
+        "https://openrouter.ai/api/v1": "openrouter",
         "https://gw.example.com/v1": "custom",
     }
 

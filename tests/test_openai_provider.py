@@ -260,14 +260,16 @@ class RequestShapeTests(unittest.TestCase):
         self.assertNotIn("reasoning_effort", body)
 
     def test_text_model_kinds_get_temperature_and_seed(self) -> None:
-        # Every non-reasoning, non-Gemini OpenAI-compatible kind pins the
-        # deterministic pair; none of them takes `reasoning_effort`.
+        # Every vendor-documented OpenAI-compatible text-model kind pins the
+        # deterministic pair; none of them takes `reasoning_effort`. Includes
+        # the previously-live xAI / Z.ai paths so their contract stays locked.
         for base in (
             "https://api.deepseek.com",
             "https://api.moonshot.ai/v1",
             "https://api.minimax.io/v1",
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "https://openrouter.ai/api/v1",
+            "https://api.x.ai/v1",
+            "https://api.z.ai/api/coding/paas/v4",
         ):
             with self.subTest(base=base):
                 prof = reviewer.resolve_endpoint_profile(base, "openai")
@@ -276,6 +278,67 @@ class RequestShapeTests(unittest.TestCase):
                 self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
                 self.assertEqual(body["seed"], reviewer.OPENAI_REVIEW_SEED)
                 self.assertNotIn("reasoning_effort", body)
+
+    def test_openrouter_and_custom_kinds_get_temperature_but_never_seed(self) -> None:
+        # OpenRouter routes to upstream models whose request surface does not
+        # guarantee `seed`; a `custom` host is an unverified gateway. Both get
+        # temperature 0 but never `seed` (same exclusion class as Gemini).
+        for base in ("https://openrouter.ai/api/v1", "https://gw.example.com/v1"):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "openai")
+                prov = reviewer.OpenAIProvider(api_key="k", model="m", profile=prof)
+                body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+                self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+                self.assertNotIn("seed", body)
+                self.assertNotIn("reasoning_effort", body)
+
+    def test_rejected_optional_param_is_dropped_and_retried_once(self) -> None:
+        # A classic (non-reasoning) deployment rejects `reasoning_effort` with
+        # a 400 whose body names the parameter ("Unrecognized request argument
+        # supplied: reasoning_effort"). The provider must retry once without
+        # it instead of failing the whole review.
+        prov = reviewer.OpenAIProvider(api_key="k", model="gpt-4o-deploy")
+        bodies: list[dict[str, Any]] = []
+        calls: list[int] = []
+
+        def fake_urlopen(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            bodies.append(json.loads(request.data))
+            if len(calls) == 1:
+                err = json.dumps(
+                    {
+                        "error": {
+                            "message": "Unrecognized request argument supplied: reasoning_effort",
+                            "type": "invalid_request_error",
+                            "param": None,
+                        }
+                    }
+                ).encode()
+                raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+            return _FakeResponse(json.dumps(_oa(content="ok")).encode())
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
+            r = prov.complete(system_prompt="S", messages=[{"role": "user", "content": "u"}], tools=[])
+        self.assertEqual(r["stop_reason"], "end_turn")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("reasoning_effort", bodies[0])
+        self.assertNotIn("reasoning_effort", bodies[1])
+
+    def test_unrecognized_400_is_not_retried(self) -> None:
+        # A 400 whose body names none of our optional sampling parameters is a
+        # real contract error: no fallback, single call, error surfaced.
+        prov = reviewer.OpenAIProvider(api_key="k", model="gpt-4o-deploy")
+        calls: list[int] = []
+
+        def fake_400(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            err = json.dumps({"error": {"message": "context length exceeded"}}).encode()
+            raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_400):
+            with self.assertRaises(RuntimeError):
+                prov.complete(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(len(calls), 1)
 
     def test_retry_on_503_then_success_and_error_label(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.x.ai/v1", "openai")

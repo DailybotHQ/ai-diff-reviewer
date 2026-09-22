@@ -347,21 +347,20 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("grok", "xai"): _XAI_TIERS,
     ("cursor", "custom"): _CURSOR_TIERS,
     ("openai", "deepseek"): _DEEPSEEK_TIERS,
-    ("codex", "deepseek"): _DEEPSEEK_TIERS,
     ("openai", "moonshot"): _MOONSHOT_TIERS,
-    ("codex", "moonshot"): _MOONSHOT_TIERS,
     ("anthropic", "moonshot"): _MOONSHOT_TIERS,
     ("claude-code", "moonshot"): _MOONSHOT_TIERS,
     ("openai", "qwen"): _QWEN_TIERS,
-    ("codex", "qwen"): _QWEN_TIERS,
     ("openai", "minimax"): _MINIMAX_TIERS,
-    ("codex", "minimax"): _MINIMAX_TIERS,
     ("anthropic", "minimax"): _MINIMAX_TIERS,
     ("claude-code", "minimax"): _MINIMAX_TIERS,
     ("openai", "gemini"): _GEMINI_TIERS,
-    ("codex", "gemini"): _GEMINI_TIERS,
     ("openai", "openrouter"): _OPENROUTER_TIERS,
-    ("codex", "openrouter"): _OPENROUTER_TIERS,
+    # NOTE: deliberately no (codex, ...) rows for the six v2.4.0
+    # chat-completions backends. The Codex CLI speaks the Responses API to
+    # every non-default gateway (`codex_wire_api` is pinned to "responses"),
+    # which none of those vendors implements — the documented xAI
+    # limitation applies to all six. Reach them with `provider: openai`.
 }
 # Indicative list prices, USD per 1M tokens (input, output), matched by the
 # longest model-id prefix. Shared by the tier docs and the usage telemetry;
@@ -647,6 +646,23 @@ OPENAI_REASONING_EFFORT_BY_KIND: dict[str, str] = {
     ENDPOINT_KIND_OPENAI: "none",
     ENDPOINT_KIND_AZURE: "none",
 }
+# Endpoint kinds that must NOT receive `seed`. Gemini's OpenAI-compatible
+# surface rejects the parameter with a 400; OpenRouter routes to upstream
+# models whose request surface does not guarantee `seed` support; a `custom`
+# host is an unverified gateway. The remaining kinds are vendor
+# OpenAI-compatible APIs that document `seed`. As a second net, a 400 whose
+# body names one of the optional sampling parameters triggers one adaptive
+# retry without it (see `_strip_rejected_sampling_params`).
+OPENAI_SEED_EXEMPT_KINDS: frozenset[str] = frozenset(
+    {ENDPOINT_KIND_GEMINI, ENDPOINT_KIND_OPENROUTER, ENDPOINT_KIND_CUSTOM}
+)
+# Optional sampling parameters this provider may attach. Vendors disagree on
+# which of them a given model accepts; a 400 naming one is recoverable.
+OPENAI_OPTIONAL_SAMPLING_PARAMS: tuple[str, ...] = (
+    "reasoning_effort",
+    "seed",
+    "temperature",
+)
 
 # Cap on the seed diff embedded in the first user message (characters). Larger
 # diffs are truncated with a pointer to the read_file tool.
@@ -2540,16 +2556,21 @@ class AnthropicProvider(Provider):
             if self.profile.supports_anthropic_cache_control
             else messages
         )
-        body: bytes = json.dumps(
-            {
-                "model": self.model,
-                "max_tokens": ANTHROPIC_MAX_TOKENS,
-                "temperature": REVIEW_TEMPERATURE,
-                "system": [system_block],
-                "messages": wire_messages,
-                "tools": tools,
-            }
-        ).encode("utf-8")
+        anthropic_body: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "system": [system_block],
+            "messages": wire_messages,
+            "tools": tools,
+        }
+        # Deterministic sampling on the first-party default host only.
+        # Anthropic-compatible gateways (Z.ai, xAI, Moonshot, MiniMax and
+        # custom hosts) keep the exact wire they were verified against —
+        # the same conservative pattern as `cache_control` — because their
+        # tolerance for extra sampling fields is not documented.
+        if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
+            anthropic_body["temperature"] = REVIEW_TEMPERATURE
+        body: bytes = json.dumps(anthropic_body).encode("utf-8")
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "x-api-key": self.api_key,
@@ -2751,6 +2772,29 @@ def openai_response_to_anthropic(resp: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _strip_rejected_sampling_params(
+    payload: dict[str, Any], error_text: str
+) -> dict[str, Any] | None:
+    """Return a copy of `payload` without optional sampling parameters the
+    vendor rejected, or None when the error names none of them.
+
+    Vendors disagree on which optional sampling parameters a given model
+    accepts: Gemini rejects `seed`, classic OpenAI/Azure deployments reject
+    `reasoning_effort` ("Unrecognized request argument supplied: ..."). The
+    400 body names the offending parameter — in its `param` field or in the
+    message — so one adaptive retry without every named parameter recovers
+    the review instead of failing it. The original dict is never mutated.
+    """
+    rejected: list[str] = [
+        name
+        for name in OPENAI_OPTIONAL_SAMPLING_PARAMS
+        if name in payload and name in error_text
+    ]
+    if not rejected:
+        return None
+    return {k: v for k, v in payload.items() if k not in rejected} or None
+
+
 class OpenAIProvider(Provider):
     """OpenAI-compatible chat-completions client (`provider: openai`).
 
@@ -2801,15 +2845,19 @@ class OpenAIProvider(Provider):
         #   `reasoning_effort: none` — required for function tools on
         #   chat-completions since 2026-09-22 (gpt-5.6-luna 400s at the
         #   server-default effort) — and send no temperature/seed, which
-        #   those models do not honour.
-        # - Gemini: `temperature` is honoured; `seed` is rejected (400).
+        #   those models do not honour. A classic (non-reasoning) deployment
+        #   that rejects the effort parameter is recovered by the adaptive
+        #   400 retry in `complete`.
+        # - Gemini / OpenRouter / custom: `temperature` is honoured; `seed`
+        #   is omitted (rejected by Gemini, unguaranteed on OpenRouter
+        #   upstreams and unverified gateways).
         # - Every other OpenAI-compatible kind: temperature 0 + seed 42.
         effort: str | None = OPENAI_REASONING_EFFORT_BY_KIND.get(self.profile.kind)
         if effort is not None:
             payload["reasoning_effort"] = effort
         else:
             payload["temperature"] = REVIEW_TEMPERATURE
-            if self.profile.kind != ENDPOINT_KIND_GEMINI:
+            if self.profile.kind not in OPENAI_SEED_EXEMPT_KINDS:
                 payload["seed"] = OPENAI_REVIEW_SEED
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
@@ -2832,18 +2880,38 @@ class OpenAIProvider(Provider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        body: bytes = json.dumps(
-            self.build_request_body(
-                system_prompt=system_prompt, messages=messages, tools=tools
-            )
-        ).encode("utf-8")
+        payload: dict[str, Any] = self.build_request_body(
+            system_prompt=system_prompt, messages=messages, tools=tools
+        )
+        body: bytes = json.dumps(payload).encode("utf-8")
         url: str = join_endpoint_path(self.profile.base_url, OPENAI_CHAT_COMPLETIONS_PATH)
         api_label: str = (
             f"{self.profile.kind} chat completions API ({self.profile.host})"
         )
-        raw: dict[str, Any] = _post_json_with_retries(
-            url=url, body=body, headers=self.build_headers(), api_label=api_label
-        )
+        headers: dict[str, str] = self.build_headers()
+        try:
+            raw: dict[str, Any] = _post_json_with_retries(
+                url=url, body=body, headers=headers, api_label=api_label
+            )
+        except RuntimeError as exc:
+            # A 400 that names one of the optional sampling parameters we
+            # attached is a request-shape problem, not an auth/contract one:
+            # retry once without the named parameter(s) instead of failing
+            # the whole review (e.g. a classic Azure deployment rejecting
+            # `reasoning_effort`, or a strict gateway rejecting `seed`).
+            fallback: dict[str, Any] | None = _strip_rejected_sampling_params(
+                payload, str(exc)
+            )
+            if fallback is None:
+                raise
+            log(
+                f"{api_label} rejected an optional sampling parameter; "
+                "retrying once without it"
+            )
+            body = json.dumps(fallback).encode("utf-8")
+            raw = _post_json_with_retries(
+                url=url, body=body, headers=headers, api_label=api_label
+            )
         _log_usage(api_label, raw)
         return openai_response_to_anthropic(raw)
 

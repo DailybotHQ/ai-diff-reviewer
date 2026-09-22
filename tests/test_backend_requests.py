@@ -117,6 +117,19 @@ class AnthropicProviderBackendTests(unittest.TestCase):
             },
         )
 
+    def test_anthropic_compatible_gateways_get_no_temperature(self) -> None:
+        # v2.4.0 pins `temperature: 0` on the first-party Anthropic host only.
+        # Compatible gateways (Z.ai, xAI, Moonshot, MiniMax, custom) keep the
+        # exact wire they were verified against — no sampling fields — the
+        # same conservative pattern as `cache_control`.
+        for base in ("https://api.moonshot.ai/anthropic", "https://api.minimax.io/anthropic"):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "anthropic")
+                prov = reviewer.AnthropicProvider(api_key="k", model="m", profile=prof)
+                req = _complete_and_capture(prov)
+                body = json.loads(req.data)
+                self.assertNotIn("temperature", body)
+
     def test_zai_profile_url_auth_and_no_cache_control(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.z.ai/api/anthropic", "anthropic")
         prov = reviewer.AnthropicProvider(api_key="zai-KEY", model="glm-5.3", profile=prof)
