@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import hashlib
 import functools
+import hmac
 import json
 import os
 import re
@@ -87,6 +88,7 @@ import sys
 import threading
 import tempfile
 import time
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -488,6 +490,131 @@ ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("generativelanguage.googleapis.com", ENDPOINT_KIND_GEMINI),
     ("openrouter.ai", ENDPOINT_KIND_OPENROUTER),
 )
+
+# AWS Bedrock (SigV4). The signer is pure — the timestamp is a parameter — so
+# the known-answer test is deterministic. Service is `bedrock`; the region is
+# parsed from the regional endpoint host (Task 1's
+# `_bedrock_region_from_host`).
+BEDROCK_SERVICE: str = "bedrock"
+BEDROCK_ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
+SIGV4_ALGORITHM: str = "AWS4-HMAC-SHA256"
+SIGV4_TERMINATOR: str = "aws4_request"
+
+
+def _sigv4_sign_request(
+    *,
+    method: str,
+    uri_path: str,
+    query: str,
+    body: bytes,
+    host: str,
+    region: str,
+    service: str,
+    access_key: str,
+    secret_key: str,
+    session_token: str | None,
+    now_utc: datetime,
+    content_type: str | None = None,
+) -> dict[str, str]:
+    """Sign one AWS API request with Signature Version 4 (pure).
+
+    Returns the headers to merge into the request: `Authorization`,
+    `x-amz-date`, `x-amz-security-token` (when a session token is given).
+    The payload hash signs the exact bytes sent. `content_type` is signed
+    when provided. Credential material never appears in the output beyond
+    the access-key id inside the `Credential=` element (per the SigV4 spec).
+    """
+    amz_date: str = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    date_stamp: str = now_utc.strftime("%Y%m%d")
+    payload_hash: str = hashlib.sha256(body).hexdigest()
+    headers: dict[str, str] = {"host": host, "x-amz-date": amz_date}
+    if content_type:
+        headers["content-type"] = content_type
+    if session_token:
+        headers["x-amz-security-token"] = session_token
+    signed_names: list[str] = sorted(headers)
+    canonical_headers: str = "".join(
+        f"{name}:{headers[name].strip()}\n" for name in signed_names
+    )
+    signed_headers: str = ";".join(signed_names)
+    canonical_request: str = "\n".join(
+        [
+            method.upper(),
+            uri_path,
+            query,
+            canonical_headers,
+            signed_headers,
+            payload_hash,
+        ]
+    )
+    scope: str = f"{date_stamp}/{region}/{service}/{SIGV4_TERMINATOR}"
+    string_to_sign: str = "\n".join(
+        [
+            SIGV4_ALGORITHM,
+            amz_date,
+            scope,
+            hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+        ]
+    )
+    key_date: bytes = hmac.new(
+        ("AWS4" + secret_key).encode("utf-8"), date_stamp.encode("utf-8"), hashlib.sha256
+    ).digest()
+    key_region: bytes = hmac.new(key_date, region.encode("utf-8"), hashlib.sha256).digest()
+    key_service: bytes = hmac.new(key_region, service.encode("utf-8"), hashlib.sha256).digest()
+    signing_key: bytes = hmac.new(key_service, b"aws4_request", hashlib.sha256).digest()
+    signature: str = hmac.new(
+        signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    authorization: str = (
+        f"{SIGV4_ALGORITHM} Credential={access_key}/{scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+    out: dict[str, str] = {"Authorization": authorization, "x-amz-date": amz_date}
+    if session_token:
+        out["x-amz-security-token"] = session_token
+    return out
+
+
+def _resolve_aws_credentials(api_key: str | None) -> tuple[str, str, str | None]:
+    """Resolve AWS credentials for Bedrock, in order:
+
+    1. The environment (`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, with
+       optional `AWS_SESSION_TOKEN`) — the GitHub OIDC pattern, where
+       `aws-actions/configure-aws-credentials` exports exactly these.
+    2. The packed `api-key` input format `KEY:SECRET[:SESSION_TOKEN]` (AWS
+       access key ids never contain `:`).
+
+    A partially set environment raises rather than silently mixing sources.
+    Errors name what is missing — never any credential value.
+    """
+    env_key: str = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    env_secret: str = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    env_token: str | None = os.environ.get("AWS_SESSION_TOKEN") or None
+    if env_key and env_secret:
+        return env_key, env_secret, env_token
+    if env_key or env_secret:
+        raise ValueError(
+            "AWS credentials incomplete: both AWS_ACCESS_KEY_ID and "
+            "AWS_SECRET_ACCESS_KEY must be set when either is set."
+        )
+    packed: str = (api_key or "").strip()
+    if packed:
+        parts: list[str] = packed.split(":")
+        if len(parts) == 2 and all(parts):
+            return parts[0], parts[1], None
+        if len(parts) == 3 and all(parts):
+            return parts[0], parts[1], parts[2]
+        raise ValueError(
+            "The packed AWS `api-key` format is KEY:SECRET[:SESSION_TOKEN] "
+            "(no other colons) — the provided value does not match."
+        )
+    raise ValueError(
+        "AWS credentials not found: set AWS_ACCESS_KEY_ID and "
+        "AWS_SECRET_ACCESS_KEY in the environment (an AWS_SESSION_TOKEN is "
+        "honoured for temporary credentials), or store the packed "
+        "`api-key` format KEY:SECRET[:SESSION_TOKEN]."
+    )
+
 
 # Well-known base URLs (documentation + runner defaults). The Anthropic base
 # deliberately has no `/v1` — the Messages path is appended by the provider.
