@@ -2807,19 +2807,35 @@ def _strip_rejected_sampling_params(
     Vendors disagree on which optional sampling parameters a given model
     accepts: Gemini rejects `seed`, classic OpenAI/Azure deployments reject
     `reasoning_effort` ("Unrecognized request argument supplied: ..."). The
-    400 body names the offending parameter — in its `param` field or in the
-    message — so one adaptive retry without every named parameter recovers
-    the review instead of failing it. The original dict is never mutated.
+    rejection names the parameter either in the structured `param` field of
+    the error JSON or in the message text, so both signals are checked; one
+    adaptive retry without every named parameter recovers the review instead
+    of failing it. The original dict is never mutated.
     """
     rejected: list[str] = [
-        name
-        for name in OPENAI_OPTIONAL_SAMPLING_PARAMS
-        if name in payload and name in error_text
+        name for name in OPENAI_OPTIONAL_SAMPLING_PARAMS if name in payload
+        and (
+            name in error_text
+            or _error_param_field(error_text) == name
+        )
     ]
     if not rejected:
         return None
     return {k: v for k, v in payload.items() if k not in rejected} or None
 
+
+def _error_param_field(error_text: str) -> str | None:
+    """Extract the structured `param` field from an API error body embedded
+    in `error_text`, when one is present and parseable."""
+    start = error_text.find("{")
+    if start < 0:
+        return None
+    try:
+        parsed = json.loads(error_text[start:])
+    except json.JSONDecodeError:
+        return None
+    param = parsed.get("error", {}).get("param") if isinstance(parsed, dict) else None
+    return param if isinstance(param, str) else None
 
 class OpenAIProvider(Provider):
     """OpenAI-compatible chat-completions client (`provider: openai`).

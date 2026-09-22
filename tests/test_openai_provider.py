@@ -342,6 +342,29 @@ class RequestShapeTests(unittest.TestCase):
         # every 429 attempt was a retry, never the one-shot sampling fallback
         self.assertEqual(len(calls), 1 + len(reviewer.API_RETRY_DELAYS_S))
 
+    def test_structured_param_field_triggers_fallback(self) -> None:
+        # Some servers return a generic message but name the parameter in the
+        # structured error `param` field; that must trigger the fallback too.
+        prof = reviewer.resolve_endpoint_profile("https://api.deepseek.com", "openai")
+        prov = reviewer.OpenAIProvider(api_key="k", model="deepseek-chat", profile=prof)
+        bodies: list[dict[str, Any]] = []
+        calls: list[int] = []
+
+        def fake_urlopen(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            bodies.append(json.loads(request.data))
+            if len(calls) == 1:
+                err = json.dumps(
+                    {"error": {"message": "Invalid request", "param": "seed", "type": "invalid_request_error"}}
+                ).encode()
+                raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+            return _FakeResponse(json.dumps(_oa(content="ok")).encode())
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
+            r = prov.complete(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(r["stop_reason"], "end_turn")
+        self.assertNotIn("seed", bodies[1])
+
     def test_unrecognized_400_is_not_retried(self) -> None:
         # A 400 whose body names none of our optional sampling parameters is a
         # real contract error: no fallback, single call, error surfaced.
