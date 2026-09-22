@@ -6,9 +6,11 @@ Implements the four interfaces the validation register requires:
     python3 tests/eval/jev_experiment.py init     --salt S --out experiment.json
     python3 tests/eval/jev_experiment.py validate --manifest experiment.json
     python3 tests/eval/jev_experiment.py dry-run  --manifest experiment.json [--out plan.json]
-    python3 tests/eval/jev_experiment.py run      --manifest experiment.json --phase calibration
-                                                  [--arm baseline|deterministic] [--lane ID]
-    python3 tests/eval/jev_experiment.py report   --manifest experiment.json
+    python3 tests/eval/jev_experiment.py report   --manifest experiment.json [--runs runs]
+
+`run` is intentionally absent: the Jev transport was removed as NO-GO, so this
+harness plans (zero-call) and scores. Actual reviews are produced per vendor
+by `run_eval.py`; their records are dropped into the `--runs` directory.
 
 Hard properties (experiment contract F1/F2/F8/F9):
 
@@ -141,15 +143,35 @@ def assign_splits(cases: dict[str, dict[str, Any]], salt: str) -> dict[str, str]
     return assignment
 
 
+def build_corpus_digest(cases: dict[str, dict[str, Any]]) -> str:
+    """Stable digest of the corpus the splits were derived from.
+
+    Covers each case's fixture `revision_pin` AND its labels, so a manifest
+    frozen against one corpus fails validation the moment either the fixtures
+    or the labelling changes (F2 split integrity).
+    """
+    material = {
+        cid: {
+            "revision_pin": cases[cid]["fixture"].get("revision_pin", ""),
+            "labels": cases[cid].get("labels", []),
+        }
+        for cid in sorted(cases)
+    }
+    return hashlib.sha256(
+        json.dumps(material, sort_keys=True).encode()
+    ).hexdigest()
+
+
 def build_manifest(salt: str, cases_dir: Path, out: Path, *, reps: int = DEFAULT_REPS,
                    pilot_cap: float = 25.0, campaign_cap: float = 100.0,
                    authorized: bool = False) -> dict[str, Any]:
     cases = _load_cases(cases_dir)
     assignment = assign_splits(cases, salt)
-    corpus_digest = hashlib.sha256(
-        json.dumps({cid: cases[cid]["fixture"].get("revision_pin", "") for cid, cid in
-                    [(c, c) for c in sorted(cases)]}, sort_keys=True).encode()
-    ).hexdigest()
+    corpus_digest = build_corpus_digest(cases)
+    lanes = {
+        "grok": {"model": "grok-4.5", "key_env": "XAI_API_KEY", "kind": "coding"},
+        "glm-claude-code": {"model": "glm-5.3", "key_env": "ZAI_CODING_API_KEY", "kind": "coding"},
+    }
     manifest = {
         "schema": SCHEMA,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -167,11 +189,14 @@ def build_manifest(salt: str, cases_dir: Path, out: Path, *, reps: int = DEFAULT
             "authorized": authorized,
             "authorization_note": "developer approval required before any live run (F8)",
         },
-        "lanes": {
-            "grok": {"model": "grok-4.5", "key_env": "XAI_API_KEY", "kind": "coding"},
-            "glm-claude-code": {"model": "glm-5.3", "key_env": "ZAI_CODING_API_KEY", "kind": "coding"},
-        },
+        "lanes": lanes,
         "runs": [],
+        # Default promotion bar: every arm x lane cell must be present, costed
+        # and completed. Declared at init so an unattended `report` can fail
+        # the process (exit 1) without anyone hand-editing the manifest first.
+        "report_requirements": {
+            "cells": [[arm, lane] for arm in ARMS for lane in sorted(lanes)]
+        },
     }
     out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
@@ -183,6 +208,11 @@ def validate_manifest(manifest: dict[str, Any], cases: dict[str, dict[str, Any]]
         problems.append(f"schema {manifest.get('schema')!r} != {SCHEMA!r}")
     if not manifest.get("frozen_salt"):
         problems.append("frozen_salt missing: splits are not reproducible (F2)")
+    if manifest.get("corpus_digest") != build_corpus_digest(cases):
+        problems.append(
+            "corpus_digest mismatch: the corpus (fixtures or labels) changed "
+            "since init - refreeze the manifest before trusting the splits (F2)"
+        )
     splits = manifest.get("splits") or {}
     missing = sorted(set(cases) - set(splits))
     if missing:
@@ -228,35 +258,30 @@ def plan_runs(manifest: dict[str, Any], cases: dict[str, dict[str, Any]], phase:
     coding_lanes = [l for l in lane_ids if manifest["lanes"][l].get("kind") == "coding"]
     plans: list[RunPlan] = []
     group_of = {cid: c.get("family_group", f"SOLO-{cid}") for cid, c in cases.items()}
-    cells: list[tuple[str, str, str]] = []
+    cells: list[tuple[str, str, str, int]] = []
     for cid, phase_of in sorted(splits.items()):
         if phase_of != phase:
             continue
         for arm in manifest["arms"]:
             for lane in coding_lanes:
                 for rep in range(manifest.get("repetitions", DEFAULT_REPS)):
-                    cells.append((arm, lane, cid))
+                    cells.append((arm, lane, cid, rep))
     rng.shuffle(cells)
-    for arm, lane, cid in cells:
+    for arm, lane, cid, rep in cells:
         size = sum(len(str(part)) for part in (
             cases[cid]["fixture"].get("base", {}), cases[cid]["fixture"].get("head", {})
         ))
-        plans.append(RunPlan(arm, lane, cid, phase, 0, size))
-    # rep index: restore per-cell repetition numbering after shuffle
-    counters: dict[tuple[str, str, str], int] = {}
-    numbered: list[RunPlan] = []
-    for arm, lane, cid, phase_of, _rep, size in [(p.arm, p.lane, p.case_id, p.phase, p.rep, p.est_input_chars) for p in plans]:
-        key = (arm, lane, cid)
-        counters[key] = counters.get(key, 0)
-        numbered.append(RunPlan(arm, lane, cid, phase_of, counters[key], size))
-        counters[key] += 1
+        # `rep` travels with the cell so a plan identifies the intended
+        # repetition regardless of shuffle order - order-dependent numbering
+        # would make per-repetition results irreproducible.
+        plans.append(RunPlan(arm, lane, cid, phase, rep, size))
     estimate = {
-        "method": "chars/4 conservative proxy (labelled; measured-max x1.5 replaces it once Task 5 measures)",
-        "runs": len(numbered),
-        "est_total_input_chars": sum(p.est_input_chars for p in numbered),
-        "est_total_input_tokens_proxy": sum(p.est_input_chars for p in numbered) // 4,
+        "method": "chars/4 conservative proxy (labelled; measured-max x1.5 replaces it once the first live lane measures)",
+        "runs": len(plans),
+        "est_total_input_chars": sum(p.est_input_chars for p in plans),
+        "est_total_input_tokens_proxy": sum(p.est_input_chars for p in plans) // 4,
     }
-    return numbered, estimate
+    return plans, estimate
 
 
 def budget_check(estimate: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
@@ -350,31 +375,6 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    manifest = json.loads(Path(args.manifest).read_text())
-    cases = _load_cases(Path(manifest.get("cases_dir", args.cases)))
-    validate_manifest(manifest, cases)
-    if not manifest["budget"].get("authorized"):
-        print("FAIL: budget.authorized is false - live runs are locked (F8). "
-              "Record developer approval in the manifest first.", file=sys.stderr)
-        return 1
-    import os
-    # Credential presence is scoped to the arms actually selected: baseline
-    # needs the coding lanes' keys; the deterministic/rules arm needs none.
-    arms_selected = [args.arm] if args.arm else list(manifest.get("arms", ARMS))
-    keys_needed = set()
-    if "baseline" in arms_selected:
-        keys_needed.update(l["key_env"] for l in manifest.get("lanes", {}).values()
-                           if l.get("kind") == "coding")
-    missing = sorted(k for k in keys_needed if not os.environ.get(k))
-    if missing:
-        print(f"FAIL: credentials absent by presence check: {missing}", file=sys.stderr)
-        return 1
-    raise ExperimentError(
-        "live execution requires the Task 5 pilot runner wiring; this Task 4 "
-        "build ships plan/validate/report and refuses unlocked runs"
-    )
-
 
 def cmd_report(args: argparse.Namespace) -> int:
     manifest = json.loads(Path(args.manifest).read_text())
@@ -414,9 +414,11 @@ def cmd_report(args: argparse.Namespace) -> int:
         "promotion_ready": promotion_ready,
         "_note": "unknown cost, failed runs, or missing cells fail promotion (F8/F9); failures are reported, never averaged away",
     }, indent=2))
-    # Exit 1 only when declared requirements exist and are unmet: an audit
-    # without declared requirements is informational, not a failure.
-    if required and (missing_cells or any(c["unknown_cost"] for c in by_arm.values())):
+    # The exit code IS the promotion bar: any unmet requirement - missing
+    # declared cells, unknown cost, failed runs - exits 1, so a CI gate keyed
+    # on the exit code can never green-wash a failed campaign. `init` seeds
+    # default report_requirements, so even an unattended report is strict.
+    if not promotion_ready:
         return 1
     return 0
 
@@ -445,14 +447,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--phase", choices=PHASES, default="calibration")
     p.add_argument("--out", default=None)
     p.set_defaults(func=cmd_dry_run)
-
-    p = sub.add_parser("run", help="execute runs (locked until budget authorized + credentials present)")
-    p.add_argument("--manifest", required=True)
-    p.add_argument("--cases", default=str(Path(__file__).parent / "cases"))
-    p.add_argument("--phase", choices=PHASES, default="calibration")
-    p.add_argument("--arm", choices=ARMS, default=None)
-    p.add_argument("--lane", default=None)
-    p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("report", help="aggregate run records; fails promotion on missing/unknown data")
     p.add_argument("--manifest", required=True)

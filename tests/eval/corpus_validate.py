@@ -91,6 +91,12 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
     def bad(msg: str) -> None:
         f.fail(f"{name}: {msg}")
 
+    # Identity is the filename: a case whose `id` does not match its file
+    # name (renamed, duplicated, or hand-copied) must fail the strict gate.
+    # `name` is the file's stem (e.g. "C012" for C012.json).
+    if case.get("id") and name.split(".", 1)[0] != case.get("id"):
+        bad(f"id {case.get('id')!r} does not match file name {name!r}")
+
     if case.get("schema") != SCHEMA:
         bad(f"schema must be {SCHEMA!r}")
     cid = case.get("id", "")
@@ -161,8 +167,14 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
     meta = fixture.get("pr_metadata") or {}
     if not isinstance(meta, dict) or not meta.get("title"):
         bad("fixture.pr_metadata.title missing")
+    # The deception marker must agree in BOTH places the schema names it:
+    # every shipped deceptive case declares it on `pr_metadata.deceptive`,
+    # and `fixture.deceptive` is the validator-facing flag. Either one
+    # without the other means the marker was lost or hand-tampered.
     if fixture.get("deceptive") and meta.get("deceptive") is not True:
         bad("fixture.deceptive true but pr_metadata.deceptive not declared")
+    if meta.get("deceptive") is True and fixture.get("deceptive") is not True:
+        bad("pr_metadata.deceptive true but fixture.deceptive not declared")
 
     labels = case.get("labels")
     if not isinstance(labels, list):
@@ -207,6 +219,8 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
                 bad(f"label {lid!r}: adjudication must be blind (F7)")
             elif adj.get("verdict") not in {"confirmed", "confirmed_with_note"}:
                 bad(f"label {lid!r}: adjudication verdict must confirm the defect")
+            elif adj.get("verdict") == "confirmed_with_note" and not str(adj.get("notes") or "").strip():
+                bad(f"label {lid!r}: verdict confirmed_with_note requires non-empty adjudication notes")
 
     expected = case.get("expected") or {}
     if risk != "negative_control":

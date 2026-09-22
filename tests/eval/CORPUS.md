@@ -15,6 +15,12 @@ human finds?" — nothing else.
 | `corpus_validate.py` | Strict validator: structure, pins, floors, adjudication, secret markers |
 | `corpus.json` | **Legacy** PR-keyed labels used by `run_eval.py score` (v3.1 era); kept untouched for backward compatibility |
 
+Case ids are assigned at authoring time and never reused. `C072` was never
+published, so files run C001–C074 minus C072 (73 cases) — the gap is
+intentional, and ids, not positions, are the identity. The validator pins
+each case's `id` to its file name, so a renamed, duplicated, or hand-copied
+file fails the strict gate.
+
 ## Validate
 
 ```bash
