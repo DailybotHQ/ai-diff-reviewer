@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [2.4.0] — 2026-09-22
+
 ### Added
 
 - **Six new backends behind `api-base`: DeepSeek, Moonshot/Kimi, MiniMax, Qwen (DashScope), Google Gemini and OpenRouter.** Endpoint kinds with host detection (`api.deepseek.com`, `api.moonshot.ai`, `api.minimax.io`/`api.minimaxi.com`, `dashscope.aliyuncs.com`, `generativelanguage.googleapis.com`, `openrouter.ai`), dated tier rows for every new `openai`-runner backend cell, and updated docs end to end. The six are reachable through `provider: openai` only — the Codex CLI speaks the Responses API to every non-default gateway, which none of these chat-completions vendors implements (the documented xAI limitation applies to all six) (README provider table, `docs/PROVIDERS.md` matrix and per-family tables, `action.yml` `api-base` description, `skills/ai-diff-reviewer/setup/reference.md`, `docs/SECURITY.md`, and six new `examples/provider-*.yml` recipes). Moonshot/Kimi and MiniMax are also reachable through their Anthropic-compatible endpoints with the `anthropic` / `claude-code` runners. The dogfood `self-review.yml` matrix gains optional `deepseek`, `kimi`, `minimax` and `gemini` legs, present only when their secret exists.
