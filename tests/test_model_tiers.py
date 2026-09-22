@@ -56,6 +56,7 @@ class ResolveModelTests(unittest.TestCase):
                 reviewer.ENDPOINT_KIND_QWEN: "https://dashscope.aliyuncs.com/compatible-mode/v1",
                 reviewer.ENDPOINT_KIND_GEMINI: "https://generativelanguage.googleapis.com/v1beta/openai",
                 reviewer.ENDPOINT_KIND_OPENROUTER: "https://openrouter.ai/api/v1",
+                reviewer.ENDPOINT_KIND_BEDROCK: "https://bedrock-runtime.us-east-1.amazonaws.com",
             }
             if kind == reviewer.ENDPOINT_KIND_MOONSHOT:
                 base = ("https://api.moonshot.ai/anthropic" if pid in ("anthropic", "claude-code")
@@ -221,3 +222,25 @@ class ModelRequiredOnCustomBackendTests(unittest.TestCase):
             self.assertEqual(reviewer.PROVIDERS_WITHOUT_API_BASE_LANE, ("cursor", "grok"))
             self.assertEqual(reviewer.resolve_model("claude-code", reviewer.resolve_endpoint_profile("https://api.z.ai/api/anthropic", "claude-code"), "balanced"), "glm-5.3")
 
+
+
+class BedrockTierTests(unittest.TestCase):
+    """The (anthropic, bedrock) cell: tier aliases resolve to Bedrock ids."""
+
+    def _resolve(self, raw: str) -> str:
+        prof = reviewer.resolve_endpoint_profile(
+            "https://bedrock-runtime.us-east-1.amazonaws.com", "anthropic"
+        )
+        with mock.patch.object(reviewer, "log"):
+            return reviewer.resolve_model("anthropic", prof, raw)
+
+    def test_tier_aliases_resolve_to_bedrock_ids(self) -> None:
+        self.assertEqual(self._resolve("balanced"), "anthropic.claude-sonnet-5")
+        self.assertEqual(self._resolve("economy"), "anthropic.claude-haiku-4-5")
+        self.assertEqual(self._resolve("deep"), "anthropic.claude-opus-5")
+
+    def test_explicit_bedrock_id_passes_through(self) -> None:
+        self.assertEqual(
+            self._resolve("us.anthropic.claude-sonnet-5"),
+            "us.anthropic.claude-sonnet-5",
+        )

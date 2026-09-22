@@ -235,6 +235,7 @@ MODEL_REQUIRED_HINTS: dict[str, str] = {
     "minimax": "a MiniMax model id (e.g. `MiniMax-M2`)",
     "gemini": "a Gemini model id (e.g. `gemini-2.5-pro`)",
     "openrouter": "an OpenRouter model id (e.g. `deepseek/deepseek-chat`)",
+    "bedrock": "a Bedrock model id or inference profile (e.g. `anthropic.claude-sonnet-5` or `us.anthropic.claude-sonnet-5`)",
 }
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
@@ -323,6 +324,15 @@ _GEMINI_TIERS: dict[str, str] = {
     MODEL_TIER_ECONOMY: "gemini-2.5-flash",
     MODEL_TIER_DEEP: "gemini-2.5-pro",
 }
+_BEDROCK_TIERS: dict[str, str] = {
+    # Bedrock model ids carry the `anthropic.` prefix; consumers pinning a
+    # cross-region inference profile pass the explicit id (e.g.
+    # `us.anthropic.claude-sonnet-5`). AWS bills Bedrock separately — the
+    # indicative prices below mirror first-party list rates as an estimate.
+    MODEL_TIER_BALANCED: "anthropic.claude-sonnet-5",
+    MODEL_TIER_ECONOMY: "anthropic.claude-haiku-4-5",
+    MODEL_TIER_DEEP: "anthropic.claude-opus-5",
+}
 _OPENROUTER_TIERS: dict[str, str] = {
     # Meta-gateway: model ids are vendor-prefixed (`vendor/model`). Defaults
     # pinned to measured families; consumers override per taste. Prices are
@@ -358,6 +368,7 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("claude-code", "minimax"): _MINIMAX_TIERS,
     ("openai", "gemini"): _GEMINI_TIERS,
     ("openai", "openrouter"): _OPENROUTER_TIERS,
+    ("anthropic", "bedrock"): _BEDROCK_TIERS,
     # NOTE: deliberately no (codex, ...) rows for the six v2.4.0
     # chat-completions backends. The Codex CLI speaks the Responses API to
     # every non-default gateway (`codex_wire_api` is pinned to "responses"),
@@ -393,6 +404,11 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "MiniMax-Text-01": (0.20, 1.20),
     "gemini-2.5-pro": (1.25, 10.0),
     "gemini-2.5-flash": (0.30, 2.50),
+    # Bedrock ids: indicative mirror of first-party list rates — AWS bills
+    # Bedrock separately (see docs/PROVIDERS.md § AWS Bedrock).
+    "anthropic.claude-sonnet-5": (2.0, 10.0),
+    "anthropic.claude-haiku-4-5": (1.0, 5.0),
+    "anthropic.claude-opus-5": (5.0, 25.0),
     "deepseek/deepseek-chat": (0.30, 1.20),
     "deepseek/deepseek-reasoner": (0.60, 2.40),
 }
