@@ -7,7 +7,9 @@ in-body `anthropic_version`, auth is SigV4 (no `x-api-key` /
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -156,6 +158,49 @@ class BedrockRunnerGateTests(unittest.TestCase):
             api_base=_BEDROCK_BASE,
         )
         self.assertEqual(prov.profile.kind, reviewer.ENDPOINT_KIND_BEDROCK)
+
+
+class BedrockOidcStartupTests(unittest.TestCase):
+    """The OIDC lane: `api-key` empty + AWS env credentials + a bedrock
+    api-base must pass the startup env checks (round-7 regression: the
+    reorder crashed every leg with NameError before this test existed)."""
+
+    def _env(self, *, with_aws: bool) -> dict[str, str]:
+        env: dict[str, str] = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "AIPRR_PROVIDER": "anthropic",
+            "AIPRR_API_BASE": _BEDROCK_BASE,
+            "AIPRR_GH_TOKEN": "gh-token",
+            "AIPRR_REPO": "fake/repo",
+            "AIPRR_PR_NUMBER": "1",
+            "AIPRR_HEAD_SHA": "a" * 40,
+            "AIPRR_MODEL": "anthropic.claude-sonnet-5",
+        }
+        if with_aws:
+            env["AWS_ACCESS_KEY_ID"] = "AKIDEXAMPLE"
+            env["AWS_SECRET_ACCESS_KEY"] = "aws-synthetic-secret-0123456789abcdef"
+        return env
+
+    def test_bedrock_oidc_lane_gets_past_startup_checks(self) -> None:
+        # The observable startup marker: `Backend: kind=bedrock` is logged by
+        # log_backend_selection only AFTER the env checks, backend selection
+        # and model resolution all pass (the round-7 regression was a
+        # NameError in exactly that window, before any marker printed).
+        env = self._env(with_aws=True)
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), \
+             contextlib.redirect_stdout(buf):
+            reviewer.main()  # the fake-token 401 later in the loop is fine
+        self.assertIn("Backend: kind=bedrock", buf.getvalue())
+
+    def test_bedrock_without_any_credentials_aborts_at_startup(self) -> None:
+        env = self._env(with_aws=False)
+        buf = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), \
+             contextlib.redirect_stdout(buf), \
+             contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(reviewer.main(), 1)
+        self.assertIn("Missing required env", buf.getvalue())
 
 
 if __name__ == "__main__":

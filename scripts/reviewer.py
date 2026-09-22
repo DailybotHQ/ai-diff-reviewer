@@ -10407,6 +10407,7 @@ def main() -> int:
     # text that reaches a public PR comment / review body (see scrub_secrets).
     register_secret(api_key)
     register_secret(gh_token)
+    pr_number: int = int(pr_number_raw)
     review_scope: str = review_scope_id(provider_id, api_base)
     log_backend_selection(backend_profile)
 
