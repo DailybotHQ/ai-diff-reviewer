@@ -22,7 +22,11 @@ Every workflow using AI Diff Reviewer sets these two.
 
 ### `api-key`
 
-- **Required.**
+- **Required** — with one exception: on the AWS Bedrock lane
+  (`provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com`
+  `api-base`) it may stay empty; the runtime signs with the AWS credentials
+  from the environment (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_SESSION_TOKEN`, as exported by the OIDC credential step).
 - **What it is:** API key (or subscription OAuth token) for the chosen
   provider.
 - **Where to get it, by provider:**
@@ -144,8 +148,8 @@ Every workflow using AI Diff Reviewer sets these two.
   - AWS Bedrock (v2.5.0+) → `https://bedrock-runtime.{region}.amazonaws.com`
     with `provider: anthropic`; `model` is a Bedrock model id or inference
     profile (`anthropic.claude-sonnet-5`, `us.anthropic.claude-sonnet-5`).
-    Credentials: the AWS environment (OIDC) or the packed `api-key`
-    `KEY:SECRET[:SESSION]` format.
+    Credentials: the AWS environment (OIDC — `api-key` may stay empty on
+    this lane) or the packed `api-key` `KEY:SECRET[:SESSION]` format.
   - xAI Grok → `https://api.x.ai` (Anthropic-compatible, for
     `anthropic` / `claude-code`) or `https://api.x.ai/v1`
     (OpenAI-compatible, for `codex` / `openai`).

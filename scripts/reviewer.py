@@ -2109,12 +2109,17 @@ def _is_bedrock_runtime_host(h: str) -> bool:
     exactly four labels, first label `bedrock-runtime` / `bedrock-runtime-fips`,
     registrable domain `amazonaws.com`."""
     labels: list[str] = h.split(".")
-    return (
+    if not (
         len(labels) == 4
         and labels[0] in ("bedrock-runtime", "bedrock-runtime-fips")
         and labels[2] == "amazonaws"
         and labels[3] == "com"
-    )
+    ):
+        return False
+    # The second label becomes the SigV4 region — require the AWS region
+    # shape (`geography[-gov]-direction-number`) so a nonsense label cannot
+    # flow into the credential scope.
+    return re.fullmatch(r"[a-z]{2}(-gov)?-[a-z]+-\d{1,2}", labels[1]) is not None
 
 
 def _bedrock_region_from_host(host: str) -> str | None:
@@ -2768,13 +2773,19 @@ class AnthropicProvider(Provider):
         # custom hosts) keep the exact wire they were verified against —
         # the same conservative pattern as `cache_control` — because their
         # tolerance for extra sampling fields is not documented.
-        if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
+        if self.profile.kind in (
+            ENDPOINT_KIND_ANTHROPIC,
+            ENDPOINT_KIND_BEDROCK,
+        ):
             anthropic_body["temperature"] = REVIEW_TEMPERATURE
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             # Bedrock InvokeModel takes the Anthropic Messages body with the
             # version INSIDE the body (there is no `anthropic-version`
-            # header) and no `x-api-key` — auth is SigV4 (below).
+            # header) and no `x-api-key` — auth is SigV4 (below). The model
+            # id is a PATH parameter on InvokeModel: a top-level `model`
+            # field is not part of the AWS request schema and is removed.
             anthropic_body["anthropic_version"] = BEDROCK_ANTHROPIC_VERSION
+            anthropic_body.pop("model", None)
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             url, headers, api_label = self._bedrock_request_parts(body)
@@ -2825,6 +2836,13 @@ class AnthropicProvider(Provider):
         access_key, secret_key, session_token = _resolve_aws_credentials(
             self.api_key
         )
+        # The outbound scrub gate (scrub_secrets) can only redact values it
+        # knows: register the AWS credentials so a leaked/echoed value can
+        # never reach a PR comment or review body.
+        register_secret(access_key)
+        register_secret(secret_key)
+        if session_token:
+            register_secret(session_token)
         signed: dict[str, str] = _sigv4_sign_request(
             method="POST",
             uri_path=urllib.parse.urlsplit(url).path,
@@ -4473,6 +4491,13 @@ def build_provider(
     keeps the runner's default endpoint.
     """
     profile: EndpointProfile = resolve_endpoint_profile(api_base, provider_id)
+    if profile.kind == ENDPOINT_KIND_BEDROCK and provider_id != "anthropic":
+        raise ValueError(
+            f"provider: {provider_id!r} cannot reach bedrock backends — only "
+            "`provider: anthropic` implements the SigV4-signed InvokeModel "
+            "wire. Use `provider: anthropic` with the same `api-base` "
+            "(see docs/PROVIDERS.md § AWS Bedrock)."
+        )
     if api_base and provider_id in PROVIDERS_WITHOUT_API_BASE:
         log(
             f"WARNING: api-base is set but provider {provider_id!r} has no "
@@ -10346,7 +10371,32 @@ def main() -> int:
     )
     action_path: str = os.environ.get("AIPRR_ACTION_PATH", "").strip()
 
-    if not (api_key and gh_token and repo and pr_number_raw and head_sha):
+    # Backend selection must precede the api-key requirement: the AWS
+    # Bedrock lane (v2.5.0) authenticates from the environment (OIDC), so an
+    # empty `api-key` is acceptable exactly there — checked below.
+    try:
+        api_base: str = validate_api_base(os.environ.get(API_BASE_ENV, ""))
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    backend_profile: EndpointProfile = resolve_endpoint_profile(
+        api_base, provider_id
+    )
+    bedrock_env_credentials = False
+    if not api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
+        try:
+            _resolve_aws_credentials(None)
+            bedrock_env_credentials = True
+        except ValueError:
+            bedrock_env_credentials = False
+    if (
+        not (api_key or bedrock_env_credentials)
+        or not gh_token
+        or not repo
+        or not pr_number_raw
+        or not head_sha
+    ):
         log(
             "Missing required env (AIPRR_API_KEY, AIPRR_GH_TOKEN, AIPRR_REPO, "
             "AIPRR_PR_NUMBER, AIPRR_HEAD_SHA). Aborting."
@@ -10357,19 +10407,6 @@ def main() -> int:
     # text that reaches a public PR comment / review body (see scrub_secrets).
     register_secret(api_key)
     register_secret(gh_token)
-    pr_number: int = int(pr_number_raw)
-
-    # Backend selection (v2.1.0+). Validate before anything outward-facing
-    # happens: the credential in `api-key` will be sent to this host.
-    try:
-        api_base: str = validate_api_base(os.environ.get(API_BASE_ENV, ""))
-    except ValueError as e:
-        log(f"CONFIGURATION ERROR: {e} Aborting.")
-        write_all_outputs(skipped=False)
-        return 1
-    backend_profile: EndpointProfile = resolve_endpoint_profile(
-        api_base, provider_id
-    )
     review_scope: str = review_scope_id(provider_id, api_base)
     log_backend_selection(backend_profile)
 

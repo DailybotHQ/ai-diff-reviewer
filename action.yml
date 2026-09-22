@@ -32,7 +32,7 @@ branding:
 inputs:
   api-key:
     description: 'API key for the chosen provider (Anthropic for v1).'
-    required: true
+    required: false
   github-token:
     description: 'Token used to read the PR diff and post the review. Needs `pull-requests: write` and `contents: read`. Pass either the default `secrets.GITHUB_TOKEN` or a PAT/automation token if you want the review attributed to a specific bot account.'
     required: true

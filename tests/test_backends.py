@@ -179,6 +179,7 @@ class ClassifyEndpointHostTests(unittest.TestCase):
             "evil-bedrock-runtime.us-east-1.amazonaws.com",
             "bedrock-runtime.us-east-1.amazonaws.com.evil.com",
             "bedrock-runtime.us-east-1.s3.amazonaws.com",
+            "bedrock-runtime.not-a-region.amazonaws.com",
         ):
             with self.subTest(host=host):
                 self.assertEqual(

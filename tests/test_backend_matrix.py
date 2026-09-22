@@ -70,7 +70,6 @@ class RunnerBackendMatrixTests(unittest.TestCase):
         "https://dashscope.aliyuncs.com/compatible-mode/v1": "qwen",
         "https://generativelanguage.googleapis.com/v1beta/openai": "gemini",
         "https://openrouter.ai/api/v1": "openrouter",
-        "https://bedrock-runtime.us-east-1.amazonaws.com": "bedrock",
         "https://gw.example.com/v1": "custom",
     }
 
@@ -85,6 +84,23 @@ class RunnerBackendMatrixTests(unittest.TestCase):
                     provider = reviewer.build_provider(pid, api_key="sk-test", model="", api_base=base)
                     self.assertEqual(provider.profile.kind, expected, (pid, base))
                     self.assertEqual(provider.PROVIDER_ID, pid)
+
+    def test_bedrock_base_is_anthropic_runner_only(self) -> None:
+        # The SigV4 InvokeModel wire lives on the anthropic runner alone:
+        # every other runner fails fast, and the anthropic cell constructs.
+        base = "https://bedrock-runtime.us-east-1.amazonaws.com"
+        for pid in self.RUNNERS:
+            if pid == "anthropic":
+                with mock.patch.object(reviewer, "log"):
+                    prov = reviewer.build_provider(
+                        pid, api_key="sk-test", model="m", api_base=base
+                    )
+                self.assertEqual(prov.profile.kind, "bedrock")
+            else:
+                with self.assertRaises(ValueError):
+                    reviewer.build_provider(
+                        pid, api_key="sk-test", model="m", api_base=base
+                    )
 
     def test_default_profiles_have_stable_kinds(self) -> None:
         self.assertEqual(

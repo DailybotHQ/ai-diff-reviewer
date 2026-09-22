@@ -60,17 +60,23 @@ def _capture(prov: Any, *, env: dict[str, str] | None = None) -> Any:
 
 class BedrockWireTests(unittest.TestCase):
     def test_request_shape(self) -> None:
-        req = _capture(_bedrock_provider(), env={"AWS_ACCESS_KEY_ID": "AKID",
-                                                 "AWS_SECRET_ACCESS_KEY": "sk"})
+        synthetic_secret = "aws-synthetic-secret-0123456789abcdef"
+        req = _capture(
+            _bedrock_provider(),
+            env={"AWS_ACCESS_KEY_ID": "AKID", "AWS_SECRET_ACCESS_KEY": synthetic_secret},
+        )
         self.assertEqual(
             req.full_url,
             _BEDROCK_BASE + "/model/anthropic.claude-sonnet-5/invoke",
         )
         body = json.loads(req.data)
         self.assertEqual(body["anthropic_version"], "bedrock-2023-05-31")
-        self.assertEqual(body["model"], "anthropic.claude-sonnet-5")
+        # InvokeModel takes the model id from the URL path — the body must
+        # NOT carry a top-level `model` field (AWS rejects it).
+        self.assertNotIn("model", body)
         self.assertIn("max_tokens", body)
-        self.assertNotIn("temperature", body)
+        # Deterministic sampling applies on Bedrock too.
+        self.assertEqual(body["temperature"], 0.0)
         self.assertFalse(
             any("cache_control" in json.dumps(block) for block in body["system"])
         )
@@ -80,6 +86,8 @@ class BedrockWireTests(unittest.TestCase):
         self.assertTrue(headers["authorization"].startswith("AWS4-HMAC-SHA256 "))
         self.assertIn("x-amz-date", headers)
         self.assertNotIn("x-amz-security-token", headers)
+        # The resolved AWS secret is registered for the outbound scrub gate.
+        self.assertIn(synthetic_secret, reviewer._SECRET_VALUES)
 
     def test_session_token_env_is_signed_and_sent(self) -> None:
         req = _capture(
@@ -122,6 +130,32 @@ class BedrockWireTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             prov._bedrock_request_parts(b"{}")
         self.assertIn("bedrock-runtime.{region}.amazonaws.com", str(ctx.exception))
+
+
+class BedrockRunnerGateTests(unittest.TestCase):
+    """Only the `anthropic` runner implements the SigV4 InvokeModel wire —
+    every other runner fails fast on a bedrock api-base."""
+
+    def test_non_anthropic_runners_are_rejected(self) -> None:
+        for pid in ("openai", "claude-code", "cursor", "codex", "grok"):
+            with self.subTest(provider=pid):
+                with self.assertRaises(ValueError) as ctx:
+                    reviewer.build_provider(
+                        pid,
+                        api_key="k",
+                        model="anthropic.claude-sonnet-5",
+                        api_base=_BEDROCK_BASE,
+                    )
+                self.assertIn("provider: anthropic", str(ctx.exception))
+
+    def test_anthropic_runner_constructs(self) -> None:
+        prov = reviewer.build_provider(
+            "anthropic",
+            api_key="k",
+            model="anthropic.claude-sonnet-5",
+            api_base=_BEDROCK_BASE,
+        )
+        self.assertEqual(prov.profile.kind, reviewer.ENDPOINT_KIND_BEDROCK)
 
 
 if __name__ == "__main__":
