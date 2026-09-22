@@ -629,9 +629,24 @@ MAX_SEARCH_RESULTS: int = 200
 # Deterministic review generation: temperature 0 (the API default is 1.0,
 # whose sampling variance drove ±45% cost and 2-defect recall swings between
 # identical runs — see the PLAN_jev_review_acceleration noise-floor finding).
-# The OpenAI-compatible runners additionally pin `seed` where supported.
+# The OpenAI-compatible runners additionally pin `seed` on every endpoint
+# kind except Gemini, whose OpenAI-compatible surface rejects the parameter
+# with a 400. Reasoning-class defaults (OpenAI / Azure hosts) take neither
+# knob: those models do not honour sampling parameters, and since
+# 2026-09-22 they reject function tools at the server-default reasoning
+# effort on chat-completions ("use /v1/responses or set reasoning_effort to
+# 'none'") — so the request pins the effort explicitly instead; the
+# non-reasoning effort is what makes those runs deterministic.
 REVIEW_TEMPERATURE: float = 0.0
 OPENAI_REVIEW_SEED: int = 42
+# Chat-completions `reasoning_effort` pinned per endpoint kind. Only the
+# OpenAI-hosted reasoning-class kinds need it today; the other vendors
+# either have no such parameter or reject unknown fields — do not add a
+# kind here without vendor documentation that the parameter is accepted.
+OPENAI_REASONING_EFFORT_BY_KIND: dict[str, str] = {
+    ENDPOINT_KIND_OPENAI: "none",
+    ENDPOINT_KIND_AZURE: "none",
+}
 
 # Cap on the seed diff embedded in the first user message (characters). Larger
 # diffs are truncated with a pointer to the read_file tool.
@@ -2779,12 +2794,23 @@ class OpenAIProvider(Provider):
             "model": self.model,
             "messages": anthropic_messages_to_openai(system_prompt, messages),
             max_param: OPENAI_MAX_TOKENS,
-            "temperature": REVIEW_TEMPERATURE,
         }
-        # The seed: only for the kinds that support it — the Gemini
-        # OpenAI-compatible endpoint rejects it with a 400.
-        if self.profile.kind != "gemini":
-            payload["seed"] = OPENAI_REVIEW_SEED
+        # Sampling knobs are endpoint-kind-scoped (unit-tested per kind in
+        # tests/test_openai_provider.py::RequestShapeTests):
+        # - Reasoning-class defaults (OpenAI / Azure hosts): pin
+        #   `reasoning_effort: none` — required for function tools on
+        #   chat-completions since 2026-09-22 (gpt-5.6-luna 400s at the
+        #   server-default effort) — and send no temperature/seed, which
+        #   those models do not honour.
+        # - Gemini: `temperature` is honoured; `seed` is rejected (400).
+        # - Every other OpenAI-compatible kind: temperature 0 + seed 42.
+        effort: str | None = OPENAI_REASONING_EFFORT_BY_KIND.get(self.profile.kind)
+        if effort is not None:
+            payload["reasoning_effort"] = effort
+        else:
+            payload["temperature"] = REVIEW_TEMPERATURE
+            if self.profile.kind != ENDPOINT_KIND_GEMINI:
+                payload["seed"] = OPENAI_REVIEW_SEED
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
             payload["tool_choice"] = OPENAI_TOOL_CHOICE_AUTO

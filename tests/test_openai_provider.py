@@ -226,6 +226,57 @@ class RequestShapeTests(unittest.TestCase):
         self.assertNotIn("tools", body)
         self.assertNotIn("tool_choice", body)
 
+    def test_reasoning_kinds_pin_reasoning_effort_and_skip_sampling(self) -> None:
+        # OpenAI / Azure hosts are reasoning-class by default: function tools
+        # need an explicit `reasoning_effort: none` on chat-completions
+        # (2026-09-22 vendor change), and temperature/seed are not honoured.
+        for base, model in (
+            (None, "gpt-5.6-luna"),
+            ("https://myres.services.ai.azure.com/openai/v1", "gpt-5.4-mini-azure"),
+        ):
+            with self.subTest(base=base):
+                prof = (
+                    reviewer.resolve_endpoint_profile(base, "openai") if base else None
+                )
+                prov = reviewer.OpenAIProvider(api_key="k", model=model, profile=prof)
+                body = prov.build_request_body(
+                    system_prompt="S",
+                    messages=[{"role": "user", "content": "u"}],
+                    tools=reviewer.tools_schema(3),
+                )
+                self.assertEqual(body["reasoning_effort"], "none")
+                self.assertNotIn("temperature", body)
+                self.assertNotIn("seed", body)
+
+    def test_gemini_kind_gets_temperature_but_never_seed(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(
+            "https://generativelanguage.googleapis.com/v1beta/openai", "openai"
+        )
+        self.assertEqual(prof.kind, reviewer.ENDPOINT_KIND_GEMINI)
+        prov = reviewer.OpenAIProvider(api_key="k", model="gemini-2.5-pro", profile=prof)
+        body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+        self.assertNotIn("seed", body)
+        self.assertNotIn("reasoning_effort", body)
+
+    def test_text_model_kinds_get_temperature_and_seed(self) -> None:
+        # Every non-reasoning, non-Gemini OpenAI-compatible kind pins the
+        # deterministic pair; none of them takes `reasoning_effort`.
+        for base in (
+            "https://api.deepseek.com",
+            "https://api.moonshot.ai/v1",
+            "https://api.minimax.io/v1",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "https://openrouter.ai/api/v1",
+        ):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "openai")
+                prov = reviewer.OpenAIProvider(api_key="k", model="m", profile=prof)
+                body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+                self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+                self.assertEqual(body["seed"], reviewer.OPENAI_REVIEW_SEED)
+                self.assertNotIn("reasoning_effort", body)
+
     def test_retry_on_503_then_success_and_error_label(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.x.ai/v1", "openai")
         prov = reviewer.OpenAIProvider(api_key="SECRET-xai", model="grok-4.3", profile=prof)
