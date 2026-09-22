@@ -109,6 +109,23 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
     if not case.get("family_group", "").startswith("G"):
         bad("family_group must start with G (grouping before splitting, F2)")
 
+    # Secret-marker sweep across the WHOLE case document — fixture trees,
+    # `pr_metadata`, label evidence, inventory, every string — so a copied
+    # token cannot pass validation by hiding outside the fixture trees.
+    def _walk_for_secrets(node: Any, path: str) -> None:
+        if isinstance(node, str):
+            for marker in SECRET_MARKERS:
+                if marker in node:
+                    bad(f"{path} contains secret marker {marker!r}")
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                _walk_for_secrets(value, f"{path}.{key}")
+        elif isinstance(node, list):
+            for i, value in enumerate(node):
+                _walk_for_secrets(value, f"{path}[{i}]")
+
+    _walk_for_secrets(case, "case")
+
     fixture = case.get("fixture") or {}
     kind = fixture.get("kind", "trees")
     base: dict[str, Any] = {}
@@ -135,9 +152,6 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
             for p, content in tree.items():
                 if not isinstance(content, str):
                     bad(f"fixture.{tree_name}[{p!r}] content must be a string")
-                for marker in SECRET_MARKERS:
-                    if marker in content:
-                        bad(f"fixture.{tree_name}[{p!r}] contains secret marker {marker!r}")
         pin = fixture.get("revision_pin", "")
         expected_pin = f"fixture:sha256:{canonical_hash({'base': base, 'head': head})}"
         if pin != expected_pin:
