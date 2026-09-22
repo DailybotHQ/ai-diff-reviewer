@@ -8,7 +8,7 @@ From a consumer's point of view the action supports **six providers**: Anthropic
 
 Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* — the vendor whose model answers. Empty `api-base` keeps every runner on its own vendor. Since v2.4.0 the default profiles pin deterministic sampling — `temperature: 0` and, where the backend accepts it, a fixed `seed` — so the wire *shape* (URL, headers, auth, caching) is unchanged from earlier releases but the sampling parameters are new (see the [CHANGELOG](../CHANGELOG.md) "Changed" notes).
 
-v2.4.0 adds six further `openai`/`codex` backends behind the same `api-base` input — **DeepSeek, Moonshot/Kimi, MiniMax, Qwen (DashScope), Google Gemini and OpenRouter** — each with its own dated tier row (matrix below). Moonshot/Kimi and MiniMax additionally speak the Anthropic-compatible protocol (rows in the Anthropic-compatible table further down). The per-runner matrix for the five established vendors:
+v2.4.0 adds six further `openai` backends behind the same `api-base` input — **DeepSeek, Moonshot/Kimi, MiniMax, Qwen (DashScope), Google Gemini and OpenRouter** — each with its own dated tier row (matrix below). They are reachable through `provider: openai` only: the Codex CLI speaks the Responses API to every non-default gateway (`codex_wire_api` is pinned to `"responses"`), which none of these chat-completions vendors implements — the same limitation class as xAI. Moonshot/Kimi and MiniMax additionally speak the Anthropic-compatible protocol (rows in the Anthropic-compatible table further down). The per-runner matrix for the five established vendors:
 
 | Runner (`provider`) | Anthropic | OpenAI | Azure Foundry | xAI | Z.ai GLM | Subscription / flat-rate |
 |---|---|---|---|---|---|---|
@@ -47,7 +47,7 @@ Cursor `auto` proved the pattern: a one-word cost profile is what teams actually
 
 ### Cost-efficient defaults matrix (verified 2026-09-21 — ids and prices move, re-check when bumping)
 
-Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free). The runtime's copy of this table is dated by the constant `MODEL_TIERS_VERIFIED_ON` in `scripts/reviewer.py` (currently `2026-09-16`) — the `**Usage:**` line marks estimates as `(indicative)` for that reason; xAI prices are the <200k-token rates and double above that, so long reviews under-report.
+Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free). The runtime's copy of this table is dated by the constant `MODEL_TIERS_VERIFIED_ON` in `scripts/reviewer.py` (currently `2026-09-21`) — the `**Usage:**` line marks estimates as `(indicative)` for that reason; xAI prices are the <200k-token rates and double above that, so long reviews under-report.
 
 | Runner | Backend | `balanced` (default recommendation) | `economy` (smoke) | `deep` (high-risk PRs) | Rationale |
 |---|---|---|---|---|---|
@@ -57,12 +57,12 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `openai`, `codex` | OpenAI | `gpt-5.6-luna` — $0.20 / $1.20 | `gpt-5.6-luna` | `gpt-5.6-terra` — $2 / $12 | Luna is both the balanced **and** the economy pick: `gpt-5.4-mini` ($0.75 / $4.50) is no longer cheaper. Codex-tier `gpt-5.3-codex` is $1.75 / $14. |
 | `openai`, `codex` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | Same xAI reasoning; note Codex 0.154 cannot talk to xAI (see the Codex section) — use `openai` or `grok`. |
 | `openai`, `codex` | Z.ai | `glm-5.3` | `glm-5.3-flash` | `glm-5.3` | Flat-rate plan. |
-| `openai`, `codex` | DeepSeek | `deepseek-chat` — $0.27 / $1.10 | `deepseek-chat` | `deepseek-reasoner` — $0.55 / $2.19 | Independent-family coder; reasoner is the deep pick (~2× cost, reasoning-first). |
-| `openai`, `codex` | Moonshot/Kimi | `kimi-k2-0905-preview` — $0.60 / $2.50 | `kimi-k2-turbo-preview` — $1.15 / $1.15 | `kimi-k2-0905-preview` | Input-heavy reviews favour 0905 on cost; turbo wins on latency. Also speaks Anthropic-compatible (see below). |
-| `openai`, `codex` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
-| `openai`, `codex` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
-| `openai`, `codex` | Google Gemini | `gemini-2.5-pro` — $1.25 / $10 | `gemini-2.5-flash` — $0.30 / $2.50 | `gemini-2.5-pro` | Gemini API's OpenAI-compatible surface; the runtime omits `seed` (the endpoint rejects it) and pins `temperature: 0`. |
-| `openai`, `codex` | OpenRouter (meta-gateway) | `deepseek/deepseek-chat` — $0.27 / $1.10 underlying | `deepseek/deepseek-chat` | `deepseek/deepseek-reasoner` — $0.55 / $2.19 underlying | Model ids are vendor-prefixed (`vendor/model`); prices are the underlying vendors' (OpenRouter adds ~5%). One key, hundreds of models. |
+| `openai` | DeepSeek | `deepseek-chat` — $0.27 / $1.10 | `deepseek-chat` | `deepseek-reasoner` — $0.55 / $2.19 | Independent-family coder; reasoner is the deep pick (~2× cost, reasoning-first). |
+| `openai` | Moonshot/Kimi | `kimi-k2-0905-preview` — $0.60 / $2.50 | `kimi-k2-turbo-preview` — $1.15 / $1.15 | `kimi-k2-0905-preview` | Input-heavy reviews favour 0905 on cost; turbo wins on latency. Also speaks Anthropic-compatible (see below). |
+| `openai` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
+| `openai` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
+| `openai` | Google Gemini | `gemini-2.5-pro` — $1.25 / $10 | `gemini-2.5-flash` — $0.30 / $2.50 | `gemini-2.5-pro` | Gemini API's OpenAI-compatible surface; the runtime omits `seed` (the endpoint rejects it) and pins `temperature: 0`. |
+| `openai` | OpenRouter (meta-gateway) | `deepseek/deepseek-chat` — $0.30 / $1.20 (OpenRouter's listed price) | `deepseek/deepseek-chat` | `deepseek/deepseek-reasoner` — $0.60 / $2.40 (OpenRouter's listed price) | Model ids are vendor-prefixed (`vendor/model`); prices shown are OpenRouter's listed figures (the underlying vendor plus its margin, matching the runtime's `INDICATIVE_PRICES_USD_PER_MTOK`). One key, hundreds of models. |
 | `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
@@ -245,6 +245,7 @@ How the profile changes the request:
 - **URL:** `<api-base>/v1/messages` — a trailing slash on `api-base` is stripped; the default composes to exactly `https://api.anthropic.com/v1/messages`.
 - **Auth headers:** Anthropic gets `x-api-key` only. Other hosts get **both** `x-api-key` and `Authorization: Bearer <key>` (Z.ai documents bearer auth, xAI documents `x-api-key`; sending both is harmless and avoids a per-gateway matrix).
 - **Prompt caching:** the `cache_control` breakpoint is sent **only** to `api.anthropic.com`. Compatible gateways cache server-side automatically and may reject unknown block fields, so the runtime omits it there.
+- **Sampling:** since v2.4.0 the first-party Anthropic host pins `temperature: 0`; compatible gateways receive **no** sampling fields — the same conservative pattern as `cache_control` — because their tolerance for extra fields is not documented.
 - **Errors and logs** name the endpoint kind and host (`zai messages API (api.z.ai) HTTP 401 …`), never the key.
 
 Copy-paste workflow: [`examples/provider-anthropic-zai.yml`](../examples/provider-anthropic-zai.yml). Validation rules for `api-base` (https only, no embedded credentials) and the security note live in the README inputs table and [`SECURITY.md`](SECURITY.md).

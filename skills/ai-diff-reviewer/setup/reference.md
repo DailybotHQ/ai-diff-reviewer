@@ -112,8 +112,10 @@ Every workflow using AI Diff Reviewer sets these two.
 
 ### `api-base`
 
-- **Default:** `''` (empty — the provider's default endpoint; behaviour
-  identical to releases before `api-base` existed).
+- **Default:** `''` (empty — the provider's default endpoint; request shape
+  unchanged from before `api-base` existed, except that since v2.4.0 the
+  default profiles pin deterministic sampling — see the CHANGELOG
+  "Changed" notes).
 - **What it is:** the backend base URL for the chosen provider (runner).
   The `provider` input says *who runs the review loop*; `api-base` says
   *where the model lives*. The host of the URL selects an endpoint
