@@ -2754,28 +2754,78 @@ class AnthropicProvider(Provider):
         # tolerance for extra sampling fields is not documented.
         if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
             anthropic_body["temperature"] = REVIEW_TEMPERATURE
+        if self.profile.kind == ENDPOINT_KIND_BEDROCK:
+            # Bedrock InvokeModel takes the Anthropic Messages body with the
+            # version INSIDE the body (there is no `anthropic-version`
+            # header) and no `x-api-key` — auth is SigV4 (below).
+            anthropic_body["anthropic_version"] = BEDROCK_ANTHROPIC_VERSION
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
-        headers: dict[str, str] = {
-            "Content-Type": "application/json",
-            "x-api-key": self.api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-        }
-        if self.profile.anthropic_auth_style == ANTHROPIC_AUTH_STYLE_BOTH:
-            # Anthropic-compatible gateways (Z.ai documents bearer auth, xAI
-            # documents x-api-key); sending both is harmless and avoids a
-            # per-gateway matrix.
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        url: str = join_endpoint_path(self.profile.base_url, ANTHROPIC_MESSAGES_PATH)
-        api_label: str = (
-            "Anthropic API"
-            if self.profile.is_default
-            else f"{self.profile.kind} messages API ({self.profile.host})"
-        )
+        if self.profile.kind == ENDPOINT_KIND_BEDROCK:
+            url, headers, api_label = self._bedrock_request_parts(body)
+        else:
+            headers: dict[str, str] = {
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": ANTHROPIC_VERSION,
+            }
+            if self.profile.anthropic_auth_style == ANTHROPIC_AUTH_STYLE_BOTH:
+                # Anthropic-compatible gateways (Z.ai documents bearer auth, xAI
+                # documents x-api-key); sending both is harmless and avoids a
+                # per-gateway matrix.
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            url = join_endpoint_path(self.profile.base_url, ANTHROPIC_MESSAGES_PATH)
+            api_label = (
+                "Anthropic API"
+                if self.profile.is_default
+                else f"{self.profile.kind} messages API ({self.profile.host})"
+            )
         resp: dict[str, Any] = _post_json_with_retries(
             url=url, body=body, headers=headers, api_label=api_label
         )
         _log_usage(api_label, resp)
         return resp
+
+    def _bedrock_request_parts(self, body: bytes) -> tuple[str, dict[str, str], str]:
+        """Compose the SigV4-signed InvokeModel request for AWS Bedrock.
+
+        The model id travels in the URL path, the Anthropic API version rides
+        inside the body (added by `complete`), and auth is SigV4 over
+        `content-type;host;x-amz-date[;x-amz-security-token]` — no
+        `x-api-key` / `anthropic-version` headers. Credentials resolve from
+        the environment first (the OIDC pattern) and the packed `api-key`
+        second (Task 2).
+        """
+        region: str | None = _bedrock_region_from_host(self.profile.host)
+        if region is None:
+            raise ValueError(
+                "provider: anthropic on bedrock requires a regional "
+                "bedrock-runtime.{region}.amazonaws.com endpoint — no region "
+                f"found in host {self.profile.host!r}."
+            )
+        model_path: str = urllib.parse.quote(self.model, safe=".:_-")
+        url: str = join_endpoint_path(
+            self.profile.base_url, f"/model/{model_path}/invoke"
+        )
+        access_key, secret_key, session_token = _resolve_aws_credentials(
+            self.api_key
+        )
+        signed: dict[str, str] = _sigv4_sign_request(
+            method="POST",
+            uri_path=urllib.parse.urlsplit(url).path,
+            query="",
+            body=body,
+            host=self.profile.host,
+            region=region,
+            service=BEDROCK_SERVICE,
+            access_key=access_key,
+            secret_key=secret_key,
+            session_token=session_token,
+            now_utc=datetime.now(timezone.utc),
+            content_type="application/json",
+        )
+        headers: dict[str, str] = {"Content-Type": "application/json", **signed}
+        api_label: str = f"bedrock invoke API ({self.profile.host})"
+        return url, headers, api_label
 
 
 # ---------------------------------------------------------------------------
