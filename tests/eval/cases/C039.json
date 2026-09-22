@@ -1,0 +1,39 @@
+{
+  "id": "C039",
+  "title": "gofmt-only reformat of a handler file",
+  "stack": "go",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G39",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "main.go": "package main\n\nfunc main() {\n\tx := 1\n\t_ = x\n}\n"
+    },
+    "head": {
+      "main.go": "package main\n\nfunc main() {\n    x := 1\n    _ = x\n}\n"
+    },
+    "pr_metadata": {
+      "title": "style: gofmt",
+      "body": "Format the handler file.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:614d774513dd6b54ce9f6357525bfc62781ca243f8c4efd699f03b0653aac976"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "gofmt"
+    ],
+    "reference_review": "Whitespace-only reformat of Go source; token stream and semantics unchanged."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

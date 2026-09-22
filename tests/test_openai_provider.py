@@ -226,6 +226,161 @@ class RequestShapeTests(unittest.TestCase):
         self.assertNotIn("tools", body)
         self.assertNotIn("tool_choice", body)
 
+    def test_reasoning_kinds_pin_reasoning_effort_and_skip_sampling(self) -> None:
+        # OpenAI / Azure hosts are reasoning-class by default: function tools
+        # need an explicit `reasoning_effort: none` on chat-completions
+        # (2026-09-22 vendor change), and temperature/seed are not honoured.
+        for base, model in (
+            (None, "gpt-5.6-luna"),
+            ("https://myres.services.ai.azure.com/openai/v1", "gpt-5.4-mini-azure"),
+        ):
+            with self.subTest(base=base):
+                prof = (
+                    reviewer.resolve_endpoint_profile(base, "openai") if base else None
+                )
+                prov = reviewer.OpenAIProvider(api_key="k", model=model, profile=prof)
+                body = prov.build_request_body(
+                    system_prompt="S",
+                    messages=[{"role": "user", "content": "u"}],
+                    tools=reviewer.tools_schema(3),
+                )
+                self.assertEqual(body["reasoning_effort"], "none")
+                self.assertNotIn("temperature", body)
+                self.assertNotIn("seed", body)
+
+    def test_gemini_kind_gets_temperature_but_never_seed(self) -> None:
+        prof = reviewer.resolve_endpoint_profile(
+            "https://generativelanguage.googleapis.com/v1beta/openai", "openai"
+        )
+        self.assertEqual(prof.kind, reviewer.ENDPOINT_KIND_GEMINI)
+        prov = reviewer.OpenAIProvider(api_key="k", model="gemini-2.5-pro", profile=prof)
+        body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+        self.assertNotIn("seed", body)
+        self.assertNotIn("reasoning_effort", body)
+
+    def test_text_model_kinds_get_temperature_and_seed(self) -> None:
+        # Every vendor-documented OpenAI-compatible text-model kind pins the
+        # deterministic pair; none of them takes `reasoning_effort`. Includes
+        # the previously-live xAI / Z.ai paths so their contract stays locked.
+        for base in (
+            "https://api.deepseek.com",
+            "https://api.moonshot.ai/v1",
+            "https://api.minimax.io/v1",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "https://api.x.ai/v1",
+            "https://api.z.ai/api/coding/paas/v4",
+        ):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "openai")
+                prov = reviewer.OpenAIProvider(api_key="k", model="m", profile=prof)
+                body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+                self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+                self.assertEqual(body["seed"], reviewer.OPENAI_REVIEW_SEED)
+                self.assertNotIn("reasoning_effort", body)
+
+    def test_openrouter_and_custom_kinds_get_temperature_but_never_seed(self) -> None:
+        # OpenRouter routes to upstream models whose request surface does not
+        # guarantee `seed`; a `custom` host is an unverified gateway. Both get
+        # temperature 0 but never `seed` (same exclusion class as Gemini).
+        for base in ("https://openrouter.ai/api/v1", "https://gw.example.com/v1"):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "openai")
+                prov = reviewer.OpenAIProvider(api_key="k", model="m", profile=prof)
+                body = prov.build_request_body(system_prompt="S", messages=[], tools=[])
+                self.assertEqual(body["temperature"], reviewer.REVIEW_TEMPERATURE)
+                self.assertNotIn("seed", body)
+                self.assertNotIn("reasoning_effort", body)
+
+    def test_rejected_optional_param_is_dropped_and_retried_once(self) -> None:
+        # A classic (non-reasoning) deployment rejects `reasoning_effort` with
+        # a 400 whose body names the parameter ("Unrecognized request argument
+        # supplied: reasoning_effort"). The provider must retry once without
+        # it instead of failing the whole review.
+        prov = reviewer.OpenAIProvider(api_key="k", model="gpt-4o-deploy")
+        bodies: list[dict[str, Any]] = []
+        calls: list[int] = []
+
+        def fake_urlopen(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            bodies.append(json.loads(request.data))
+            if len(calls) == 1:
+                err = json.dumps(
+                    {
+                        "error": {
+                            "message": "Unrecognized request argument supplied: reasoning_effort",
+                            "type": "invalid_request_error",
+                            "param": None,
+                        }
+                    }
+                ).encode()
+                raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+            return _FakeResponse(json.dumps(_oa(content="ok")).encode())
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
+            r = prov.complete(system_prompt="S", messages=[{"role": "user", "content": "u"}], tools=[])
+        self.assertEqual(r["stop_reason"], "end_turn")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("reasoning_effort", bodies[0])
+        self.assertNotIn("reasoning_effort", bodies[1])
+
+    def test_non_400_runtime_error_never_takes_the_fallback(self) -> None:
+        # An exhausted 429/5xx retry whose body happens to mention a sampling
+        # parameter name must NOT be mistaken for a parameter rejection.
+        prov = reviewer.OpenAIProvider(api_key="k", model="deepseek-chat")
+        calls: list[int] = []
+
+        def fake_429(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            err = json.dumps({"error": {"message": "rate limited; retry seed later"}}).encode()
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", None, io.BytesIO(err))
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_429), \
+             mock.patch.object(reviewer.time, "sleep", lambda s: None):
+            with self.assertRaises(RuntimeError):
+                prov.complete(system_prompt="S", messages=[], tools=[])
+        # every 429 attempt was a retry, never the one-shot sampling fallback
+        self.assertEqual(len(calls), 1 + len(reviewer.API_RETRY_DELAYS_S))
+
+    def test_structured_param_field_triggers_fallback(self) -> None:
+        # Some servers return a generic message but name the parameter in the
+        # structured error `param` field; that must trigger the fallback too.
+        prof = reviewer.resolve_endpoint_profile("https://api.deepseek.com", "openai")
+        prov = reviewer.OpenAIProvider(api_key="k", model="deepseek-chat", profile=prof)
+        bodies: list[dict[str, Any]] = []
+        calls: list[int] = []
+
+        def fake_urlopen(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            bodies.append(json.loads(request.data))
+            if len(calls) == 1:
+                err = json.dumps(
+                    {"error": {"message": "Invalid request", "param": "seed", "type": "invalid_request_error"}}
+                ).encode()
+                raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+            return _FakeResponse(json.dumps(_oa(content="ok")).encode())
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_urlopen):
+            r = prov.complete(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(r["stop_reason"], "end_turn")
+        self.assertNotIn("seed", bodies[1])
+
+    def test_unrecognized_400_is_not_retried(self) -> None:
+        # A 400 whose body names none of our optional sampling parameters is a
+        # real contract error: no fallback, single call, error surfaced.
+        prov = reviewer.OpenAIProvider(api_key="k", model="gpt-4o-deploy")
+        calls: list[int] = []
+
+        def fake_400(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            err = json.dumps({"error": {"message": "context length exceeded"}}).encode()
+            raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", None, io.BytesIO(err))
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_400):
+            with self.assertRaises(RuntimeError):
+                prov.complete(system_prompt="S", messages=[], tools=[])
+        self.assertEqual(len(calls), 1)
+
     def test_retry_on_503_then_success_and_error_label(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.x.ai/v1", "openai")
         prov = reviewer.OpenAIProvider(api_key="SECRET-xai", model="grok-4.3", profile=prof)

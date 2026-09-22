@@ -1,0 +1,58 @@
+{
+  "id": "C014",
+  "title": "CORS reflects any origin together with credentials",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G14",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/middleware/cors.ts": "const ALLOWED = new Set([\"https://app.example.com\"]);\n\nexport function corsHeaders(origin: string | null): Record<string, string> {\n  if (origin && ALLOWED.has(origin)) {\n    return { \"Access-Control-Allow-Origin\": origin, \"Access-Control-Allow-Credentials\": \"true\" };\n  }\n  return {};\n}\n"
+    },
+    "head": {
+      "src/middleware/cors.ts": "export function corsHeaders(origin: string | null): Record<string, string> {\n  // native mobile clients do not send a fixed origin\n  return {\n    \"Access-Control-Allow-Origin\": origin ?? \"*\",\n    \"Access-Control-Allow-Credentials\": \"true\",\n    Vary: \"Origin\",\n  };\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Support mobile clients",
+      "body": "Mobile webviews hit the API from arbitrary origins.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:f57526c759ddb377ac45f43194857d4ca926902433f92ff05420a1baeb739d4e"
+  },
+  "labels": [
+    {
+      "id": "C014-d1",
+      "severity": "critical",
+      "path": "src/middleware/cors.ts",
+      "defect": "CORS reflects arbitrary origins with Allow-Credentials: cross-site reads of authenticated responses",
+      "evidence": "Reproducible: attacker page at https://evil.example fetches https://api.example.com/account with credentials:include; the server reflects Allow-Origin: https://evil.example plus Allow-Credentials: true, so the browser hands the attacker the victim's authenticated response.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "Access-Control-Allow-Origin",
+        "Credentials",
+        "origin"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C014-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Origin reflection with Allow-Credentials: cross-site reads of authenticated responses."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

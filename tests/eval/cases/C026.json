@@ -1,0 +1,54 @@
+{
+  "id": "C026",
+  "title": "Orders endpoint issues one query per order item",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G26",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "shop/orders.py": "def order_rows(user) -> list[dict]:\n    orders = Order.objects.filter(user=user).prefetch_related(\"items\")\n    return [\n        {\"id\": o.id, \"total\": o.total, \"items\": [i.name for i in o.items.all()]}\n        for o in orders\n    ]\n"
+    },
+    "head": {
+      "shop/orders.py": "def order_rows(user) -> list[dict]:\n    orders = Order.objects.filter(user=user)\n    return [\n        {\"id\": o.id, \"total\": o.total, \"items\": [i.name for i in o.items.all()]}\n        for o in orders\n    ]\n"
+    },
+    "pr_metadata": {
+      "title": "Simplify orders query",
+      "body": "prefetch_related not needed after the model refactor.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:d6a226fc22d60ba75d5646b817781b877ca3711c03b78b563f9af36bcc8c72ee"
+  },
+  "labels": [
+    {
+      "id": "C026-d1",
+      "severity": "warning",
+      "path": "shop/orders.py",
+      "defect": "N+1 queries: items.all() runs per order after prefetch_related removal",
+      "evidence": "Reproducible: a user with 200 orders triggers 201 queries (documented by assertNumQueries); page latency grows linearly with order count.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "prefetch_related",
+        "items.all",
+        "orders"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C026-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

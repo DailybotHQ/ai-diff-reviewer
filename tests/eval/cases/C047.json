@@ -1,0 +1,40 @@
+{
+  "id": "C047",
+  "title": "Adds Node 24 to the CI test matrix",
+  "stack": "typescript",
+  "change_class": "config_ci",
+  "risk_class": "negative_control",
+  "family_group": "G47",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      ".github/workflows/test.yml": "name: test\non: [push]\njobs:\n  t:\n    strategy:\n      matrix:\n        node: ['20']\n    steps:\n      - run: npm test\n"
+    },
+    "head": {
+      ".github/workflows/test.yml": "name: test\non: [push]\njobs:\n  t:\n    strategy:\n      matrix:\n        node: ['20', '24']\n    steps:\n      - run: npm test\n"
+    },
+    "pr_metadata": {
+      "title": "ci: test on node 24",
+      "body": "Add the LTS line.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:24c27e82544169a0ef1ce36cc9628fadf264d23bee7980db3efec3497156a878"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "node",
+      "matrix"
+    ],
+    "reference_review": "Adds a matrix entry that only widens test coverage in CI. No workflow step gains new permissions, secrets or third-party actions; workflow files deserve scrutiny, but this diff adds one version string to an existing test job."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

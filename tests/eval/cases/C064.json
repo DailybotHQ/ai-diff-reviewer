@@ -1,0 +1,54 @@
+{
+  "id": "C064",
+  "title": "Legacy evaluation case: fix(runtime): permission-aware author-association gate (#46)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G064",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 46,
+    "merge_commit": "223669850566fc95b06d06b27715a17e538cb3b1",
+    "pr_metadata": {
+      "title": "fix(runtime): permission-aware author-association gate (#46)",
+      "body": "Historical merged PR carried into the v2 corpus.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "46-fail-open-missing-login",
+      "severity": "warning",
+      "path": "scripts/reviewer.py",
+      "defect": "permission lookup skipped when the payload lacks pull_request.user.login, which fail-opens private/internal PRs",
+      "evidence": "Historical: PR #46 introduced a fail-open path on missing user.login; keywords match the shipped fix location (line ~5020 window 40).",
+      "keywords": [
+        "user.login",
+        "permission_lookup_failed",
+        "fail-open",
+        "fail open"
+      ],
+      "window": 40,
+      "introduced_by_change": true
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "46-fail-open-missing-login"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "v3.1-in-repo-evaluation-2026-09-16",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "Label from the v3.1 in-repo evaluation and post-merge fix reading (corpus.json case 46)."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

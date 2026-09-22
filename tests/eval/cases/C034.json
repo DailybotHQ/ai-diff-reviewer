@@ -1,0 +1,55 @@
+{
+  "id": "C034",
+  "title": "Retry loop hammers the payments API without backoff",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G34",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "billing/charge.py": "import time\n\ndef charge_with_retry(payload: dict, attempts: int = 3) -> dict:\n    for i in range(attempts):\n        try:\n            return processor.charge(payload)\n        except ProcessorBusy:\n            time.sleep(2 ** i)\n    raise ProcessorBusy(\"gave up\")\n"
+    },
+    "head": {
+      "billing/charge.py": "def charge_with_retry(payload: dict, attempts: int = 5) -> dict:\n    for i in range(attempts):\n        try:\n            return processor.charge(payload)\n        except ProcessorBusy:\n            continue  # instant retry; sleep made the endpoint feel slow\n    raise ProcessorBusy(\"gave up\")\n"
+    },
+    "pr_metadata": {
+      "title": "Faster charge retries",
+      "body": "Drop the sleeps; five quick attempts.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:804a143ac30ef6e8b2d2d40a3c01572e7ae1067c561a5f41f3dd987f300985fe"
+  },
+  "labels": [
+    {
+      "id": "C034-d1",
+      "severity": "warning",
+      "path": "billing/charge.py",
+      "defect": "Zero-delay retry loop: 5 immediate retries amplify outages and can double-charge on slow-success responses",
+      "evidence": "Reproducible: during a processor brownout each caller issues 5 requests/interval instead of 1; two retried charges that both land after the timeout produce duplicate charges with no idempotency guard in sight.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "retry",
+        "continue",
+        "ProcessorBusy",
+        "sleep"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C034-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

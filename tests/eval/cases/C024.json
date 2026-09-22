@@ -1,0 +1,54 @@
+{
+  "id": "C024",
+  "title": "Rate limiter state cached in a mutable default argument",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G24",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "api/limit.py": "def allow(key: str, seen: dict[str, int] | None = None) -> bool:\n    seen = seen if seen is not None else {}\n    seen[key] = seen.get(key, 0) + 1\n    return seen[key] <= 100\n"
+    },
+    "head": {
+      "api/limit.py": "def allow(key: str, seen: dict[str, int] = {}) -> bool:\n    # default dict avoids allocating per call\n    seen[key] = seen.get(key, 0) + 1\n    return seen[key] <= 100\n"
+    },
+    "pr_metadata": {
+      "title": "Micro-optimize limiter allocations",
+      "body": "Avoid the dict allocation on every call.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:d7c7859c20effd20a42a54ccb4ebe0b3bc3df2837d09590b21f3e7ac63b8fd09"
+  },
+  "labels": [
+    {
+      "id": "C024-d1",
+      "severity": "warning",
+      "path": "api/limit.py",
+      "defect": "Mutable default argument shared across every call: limiter counts never reset and leak keys",
+      "evidence": "Reproducible: allow('u1') called 100 times returns False for ALL keys afterwards (the same dict accumulates); in tests the state also bleeds between cases.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "seen",
+        "default",
+        "allow"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C024-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

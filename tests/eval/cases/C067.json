@@ -1,0 +1,53 @@
+{
+  "id": "C067",
+  "title": "Legacy evaluation case: docs(skill): reframe SKILL.md as Local & CI Companion (#37)",
+  "stack": "python",
+  "change_class": "historical",
+  "risk_class": "warning_positive",
+  "family_group": "G067",
+  "fixture": {
+    "kind": "historical_pr",
+    "repo": "DailybotHQ/ai-diff-reviewer",
+    "pr_number": 37,
+    "merge_commit": "e5b8caae2947dd2fd4e5d6e353758073d90c1ccd",
+    "pr_metadata": {
+      "title": "docs(skill): reframe SKILL.md as Local & CI Companion (#37)",
+      "body": "Historical merged PR carried into the v2 corpus.",
+      "deceptive": false
+    }
+  },
+  "labels": [
+    {
+      "id": "37-stale-prompt-parity",
+      "severity": "warning",
+      "path": "skills/ai-diff-reviewer/prompt.md",
+      "defect": "skill prompt drifts from prompts/default.md after the reframe",
+      "evidence": "Historical: PR #37 rewrote the companion skill docs; parity between skills/ai-diff-reviewer/prompt.md and prompts/default.md is the durable invariant (enforced since by CI).",
+      "keywords": [
+        "prompt",
+        "parity",
+        "skill"
+      ],
+      "window": 40,
+      "introduced_by_change": true
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "37-stale-prompt-parity"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "v3.1-in-repo-evaluation-2026-09-16",
+    "blind": true,
+    "verdict": "confirmed_with_note",
+    "notes": "Label from the v3.1 in-repo evaluation (corpus.json case 37)."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

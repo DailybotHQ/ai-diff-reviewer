@@ -1,0 +1,41 @@
+{
+  "id": "C038",
+  "title": "EditorConfig normalization across tracked files",
+  "stack": "python",
+  "change_class": "docs",
+  "risk_class": "negative_control",
+  "family_group": "G38",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "app.py": "def f(x):\n    return x\n",
+      ".editorconfig": "root = true\n"
+    },
+    "head": {
+      "app.py": "def f(x):\n        return x\n",
+      ".editorconfig": "root = true\n\n[*.py]\nindent_size = 4\n"
+    },
+    "pr_metadata": {
+      "title": "chore: editorconfig",
+      "body": "Normalize indentation.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:76acc010ba148a910d6e1cc988ef419667d2f37362d31971285e18522246d7f3"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "indent"
+    ],
+    "reference_review": "Pure formatting: indentation normalization driven by a new EditorConfig rule. No AST-level change (both versions compile to identical bytecode), no behavior, contract or dependency change."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

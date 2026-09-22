@@ -1,0 +1,59 @@
+{
+  "id": "C018",
+  "title": "Upstream response body never closed on the hot path",
+  "stack": "go",
+  "change_class": "resource_leak",
+  "risk_class": "warning_positive",
+  "family_group": "G18",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "fetch/prices.go": "package fetch\n\nimport (\n\t\"io\"\n\t\"net/http\"\n)\n\nfunc Price(client *http.Client, sym string) (string, error) {\n\tresp, err := client.Get(\"https://markets.internal.example/quote/\" + sym)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\tdefer resp.Body.Close()\n\tb, err := io.ReadAll(resp.Body)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\treturn string(b), nil\n}\n"
+    },
+    "head": {
+      "fetch/prices.go": "package fetch\n\nimport (\n\t\"io\"\n\t\"net/http\"\n)\n\nfunc Price(client *http.Client, sym string) (string, error) {\n\tresp, err := client.Get(\"https://markets.internal.example/quote/\" + sym)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\tb, err := io.ReadAll(resp.Body)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\treturn string(b), nil\n\t// defer removed: linter claimed it was unnecessary after ReadAll\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Quiet the body-close linter",
+      "body": "ReadAll drains the body, so the linter says Close is unnecessary.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:8bf4234d859b35f4dddaeee41a104e4bfb6bc756a8271563ba0465733512dcbb"
+  },
+  "labels": [
+    {
+      "id": "C018-d1",
+      "severity": "warning",
+      "path": "fetch/prices.go",
+      "defect": "Response body never closed: connection/socket exhaustion under load (the comment's claim is wrong — ReadAll does not close)",
+      "evidence": "Reproducible: 500 sequential Price() calls hold 500 open TCP streams until GC finalizers run; with keep-alives the transport exhausts its connection pool and the service stops fetching prices. Error returns before ReadAll also leak.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "resp.Body",
+        "Close",
+        "ReadAll",
+        "defer"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C018-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "downgraded_to_warning",
+    "notes": "io.ReadAll does not close the body: connection leak / transport exhaustion; availability defect rather than security-critical."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

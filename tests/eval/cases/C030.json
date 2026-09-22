@@ -1,0 +1,54 @@
+{
+  "id": "C030",
+  "title": "Request handler logs client IP and email at info level",
+  "stack": "typescript",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G30",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/mw/request_log.ts": "export function logRequest(r: Request, started: number): void {\n  log.info(\"request\", { method: r.method, path: new URL(r.url).pathname, ms: Date.now() - started });\n}\n"
+    },
+    "head": {
+      "src/mw/request_log.ts": "export function logRequest(r: Request, user?: { email: string }): void {\n  log.info(\"request\", {\n    method: r.method,\n    path: new URL(r.url).pathname,\n    ms: Date.now() - started(r),\n    ip: r.headers.get(\"x-forwarded-for\"),\n    email: user?.email,\n  });\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Richer request logs",
+      "body": "Support asked for ip/email on request lines.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:4e5b1613cd36282d9d75eb4dda522bfd6a67b19e2ffae4cff1e08baaae91ec02"
+  },
+  "labels": [
+    {
+      "id": "C030-d1",
+      "severity": "warning",
+      "path": "src/mw/request_log.ts",
+      "defect": "PII (email, IP) written to info-level logs consumed by third-party aggregation",
+      "evidence": "Reproducible: any authenticated request now persists the user's email and IP in the log store; GDPR/DSAR exposure and retention rules for logs differ from the DB. Also references an undefined started(r).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "email",
+        "x-forwarded-for",
+        "log.info"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C030-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

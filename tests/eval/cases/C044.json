@@ -1,0 +1,40 @@
+{
+  "id": "C044",
+  "title": "Type-annotations-only pass over a module",
+  "stack": "typescript",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G44",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/geo/haversine.ts": "export function haversine(a, b) {\n  const R = 6371e3;\n  return R * c(a, b);\n}\nfunction c(a, b) { return Math.acos(x(a, b)); }\nfunction x(a, b) { return 0; }\n"
+    },
+    "head": {
+      "src/geo/haversine.ts": "type LatLon = { lat: number; lon: number };\nexport function haversine(a: LatLon, b: LatLon): number {\n  const R = 6371e3;\n  return R * c(a, b);\n}\nfunction c(a: LatLon, b: LatLon): number { return Math.acos(x(a, b)); }\nfunction x(a: LatLon, b: LatLon): number { return 0; }\n"
+    },
+    "pr_metadata": {
+      "title": "types: annotate geo module",
+      "body": "Annotations only, emit unchanged.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:a6456a85d6877ee0921d5ca905956029463ca8ef21e939851cb07716ca8af6b0"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "type",
+      "annotate"
+    ],
+    "reference_review": "Type-level change only: TypeScript annotations are erased at emit, so the compiled JavaScript is unchanged. New type aliases do not alter runtime behavior or the public JS contract."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

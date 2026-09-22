@@ -120,6 +120,12 @@ jobs:
           # SELF_REVIEW_OPENAI_CHAT=false to opt out.
           HAS_XAI: ${{ secrets.XAI_API_KEY != '' }}
           HAS_ZAI: ${{ secrets.ZAI_CODING_API_KEY != '' }}
+          HAS_DEEPSEEK: ${{ secrets.DEEPSEEK_API_KEY != '' }}
+          HAS_MOONSHOT: ${{ secrets.MOONSHOT_API_KEY != '' }}
+          HAS_MINIMAX: ${{ secrets.MINIMAX_API_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
+          HAS_QWEN: ${{ secrets.DASHSCOPE_API_KEY != '' }}
+          HAS_OPENROUTER: ${{ secrets.OPENROUTER_API_KEY != '' }}
           HAS_AZURE: ${{ secrets.AZURE_OPENAI_API_KEY != '' }}
           AZURE_BASE: ${{ vars.AZURE_OPENAI_BASE_URL }}
           AZURE_MODEL: ${{ vars.AZURE_OPENAI_MODEL_DAILY }}
@@ -192,12 +198,20 @@ jobs:
                                           && add codex AZURE_OPENAI_API_KEY "self-reviewed:codex-azure" "${AZURE_MODEL:-gpt-5.4-mini-azure}" "$AZURE_BASE"
           [ "$HAS_OPENAI" = "true" ] && [ "$OPENAI_CHAT_LEG" != "false" ] \
                                           && add openai OPENAI_API_KEY "self-reviewed:openai" economy
+          # Amendment-4 provider expansion (evaluation branch): OpenAI-
+          # compatible vendor lanes, each gated on its own secret presence.
+          [ "$HAS_DEEPSEEK" = "true" ] && add openai DEEPSEEK_API_KEY "self-reviewed:deepseek" economy "https://api.deepseek.com"
+          [ "$HAS_MOONSHOT" = "true" ] && add openai MOONSHOT_API_KEY "self-reviewed:kimi" economy "https://api.moonshot.ai/v1"
+          [ "$HAS_MINIMAX" = "true" ] && add openai MINIMAX_API_KEY "self-reviewed:minimax" economy "https://api.minimax.io/v1"
+          [ "$HAS_QWEN" = "true" ] && add openai DASHSCOPE_API_KEY "self-reviewed:qwen" economy "https://dashscope.aliyuncs.com/compatible-mode/v1"
+          [ "$HAS_GEMINI" = "true" ] && add openai GEMINI_API_KEY "self-reviewed:gemini" economy "https://generativelanguage.googleapis.com/v1beta/openai"
+          [ "$HAS_OPENROUTER" = "true" ] && add openai OPENROUTER_API_KEY "self-reviewed:openrouter" economy "https://openrouter.ai/api/v1"
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
           # print an accurate hint. Reaching here means `ready` is applied, so an
           # empty matrix means "no provider secret is configured on this repo".
           if [ "$matrix" = "[]" ]; then
-            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, or AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable) as a repo secret so the self-review gate can run."
+            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable), DEEPSEEK_API_KEY, MOONSHOT_API_KEY, MINIMAX_API_KEY, DASHSCOPE_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY as a repo secret so the self-review gate can run."
             echo 'empty_reason=no-provider-secret' >> "$GITHUB_OUTPUT"
           else
             echo 'empty_reason=' >> "$GITHUB_OUTPUT"

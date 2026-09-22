@@ -67,7 +67,9 @@ def _complete_and_capture(provider: object) -> object:
 
 class AnthropicProviderBackendTests(unittest.TestCase):
     """Request shape per endpoint profile — the default profile is a locked
-    snapshot of the pre-`api-base` request (byte-identical contract)."""
+    snapshot of the pre-`api-base` request, plus the intentional deterministic
+    `temperature` (the stabilization change; see the review-acceleration plan's
+    noise-floor finding)."""
 
     def test_default_profile_request_is_byte_identical_to_legacy(self) -> None:
         prov = reviewer.AnthropicProvider(api_key="sk-ant-api-TEST", model="claude-sonnet-4-6")
@@ -89,6 +91,7 @@ class AnthropicProviderBackendTests(unittest.TestCase):
             {
                 "model": "claude-sonnet-4-6",
                 "max_tokens": reviewer.ANTHROPIC_MAX_TOKENS,
+                "temperature": reviewer.REVIEW_TEMPERATURE,
                 "system": [
                     {
                         "type": "text",
@@ -113,6 +116,19 @@ class AnthropicProviderBackendTests(unittest.TestCase):
                 "tools": [],
             },
         )
+
+    def test_anthropic_compatible_gateways_get_no_temperature(self) -> None:
+        # v2.4.0 pins `temperature: 0` on the first-party Anthropic host only.
+        # Compatible gateways (Z.ai, xAI, Moonshot, MiniMax, custom) keep the
+        # exact wire they were verified against — no sampling fields — the
+        # same conservative pattern as `cache_control`.
+        for base in ("https://api.moonshot.ai/anthropic", "https://api.minimax.io/anthropic"):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "anthropic")
+                prov = reviewer.AnthropicProvider(api_key="k", model="m", profile=prof)
+                req = _complete_and_capture(prov)
+                body = json.loads(req.data)
+                self.assertNotIn("temperature", body)
 
     def test_zai_profile_url_auth_and_no_cache_control(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.z.ai/api/anthropic", "anthropic")

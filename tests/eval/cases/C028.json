@@ -1,0 +1,54 @@
+{
+  "id": "C028",
+  "title": "Persist not awaited before the response returns",
+  "stack": "typescript",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G28",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/routes/signup.ts": "export async function signup(req: Request): Promise<Response> {\n  const user = parse(req);\n  await db.users.insert(user);\n  return Response.json({ ok: true });\n}\n"
+    },
+    "head": {
+      "src/routes/signup.ts": "export async function signup(req: Request): Promise<Response> {\n  const user = parse(req);\n  // fire-and-forget: insert was measured at 40ms p95\n  void db.users.insert(user);\n  return Response.json({ ok: true });\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Speed up signup",
+      "body": "Don't block the response on the insert.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:d6c0b4f735e14e799b877f716e309d79b928e68ad67cd2e52c9f3cad87bef35c"
+  },
+  "labels": [
+    {
+      "id": "C028-d1",
+      "severity": "warning",
+      "path": "src/routes/signup.ts",
+      "defect": "Insert fire-and-forget: clients can receive ok=true for signups that failed to persist, and rejections are unhandled",
+      "evidence": "Reproducible: kill the DB mid-request — response already returned ok=true, user row absent, and an unhandled promise rejection crashes some runtimes; signup confirmation email references a nonexistent account.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "void db.users.insert",
+        "await",
+        "ok"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C028-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

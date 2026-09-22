@@ -1,0 +1,40 @@
+{
+  "id": "C048",
+  "title": "Lockfile re-saved with identical resolution",
+  "stack": "typescript",
+  "change_class": "dependency",
+  "risk_class": "negative_control",
+  "family_group": "G48",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "package-lock.json": "{\n  \"name\": \"app\",\n  \"lockfileVersion\": 3,\n  \"packages\": { \"\": {\"name\": \"app\"}, \"node_modules/left-pad\": {\"version\": \"1.3.0\", \"integrity\": \"sha512-X\"} }\n}\n"
+    },
+    "head": {
+      "package-lock.json": "{\n  \"name\": \"app\",\n  \"lockfileVersion\": 3,\n  \"packages\": { \"\": {\"name\": \"app\"}, \"node_modules/left-pad\": {\"version\": \"1.3.0\", \"integrity\": \"sha512-X\", \"resolved\": \"https://registry.example.com/left-pad\"} }\n}\n"
+    },
+    "pr_metadata": {
+      "title": "chore: regenerate lockfile",
+      "body": "npm install with the same package.json; only the resolved URL field normalizes.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:233e02e614d715c6919a0f6e00b033df30f8772c0bc24d442ef72fefeac81a8c"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "lock",
+      "resolved"
+    ],
+    "reference_review": "The dependency SET and every version are unchanged; the diff re-serializes metadata (adds the resolved URL). No new code enters the install graph. Lockfile diffs deserve dependency scrutiny, but version identity makes this one inert."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

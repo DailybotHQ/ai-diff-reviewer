@@ -1,0 +1,40 @@
+{
+  "id": "C054",
+  "title": "Replaces a linear scan with a dict lookup, behavior preserved",
+  "stack": "python",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G54",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "acl/lookup.py": "ROLES = [(\"admin\", 9), (\"editor\", 5), (\"viewer\", 1)]\n\ndef level(name):\n    for role, lvl in ROLES:\n        if role == name:\n            return lvl\n    return 0\n"
+    },
+    "head": {
+      "acl/lookup.py": "ROLES = {\"admin\": 9, \"editor\": 5, \"viewer\": 1}\n\ndef level(name):\n    return ROLES.get(name, 0)\n"
+    },
+    "pr_metadata": {
+      "title": "perf: dict for role levels",
+      "body": "Hot path; O(1) lookup.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:272241b4ad91631d14ea741767c1307feeea3467393afcc5d86a5e8d757cd905"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "dict",
+      "level"
+    ],
+    "reference_review": "Equivalent-behavior optimization: dict.get(name, 0) returns the same values as the scan for every input, including unknown names. No security surface (levels unchanged, default unchanged). Reviewers commonly raise behavior-change on scan-to-dict diffs; the semantics are provably identical here."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,39 @@
+{
+  "id": "C053",
+  "title": "Adds a CHANGELOG entry for an already-merged fix",
+  "stack": "python",
+  "change_class": "docs",
+  "risk_class": "negative_control",
+  "family_group": "G53",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "CHANGELOG.md": "## Unreleased\n"
+    },
+    "head": {
+      "CHANGELOG.md": "## Unreleased\n- fix: rate limiter reset\n"
+    },
+    "pr_metadata": {
+      "title": "docs: changelog",
+      "body": "Backfill entry.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:4e1f19e99f14a8fb3968eb0cb0a4256808910c795cf6e80e755dfd24ada0b2e2"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "changelog"
+    ],
+    "reference_review": "Changelog prose only: an appended bullet in a markdown file with no code, configuration, dependency or behavior surface; the worst possible outcome is a typo."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

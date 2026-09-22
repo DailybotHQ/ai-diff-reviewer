@@ -1,0 +1,59 @@
+{
+  "id": "C008",
+  "title": "Webhook delivery fetches attacker-controlled URLs",
+  "stack": "python",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G08",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "webhooks.py": "import urllib.request\n\nALLOWED_HOSTS = {\"hooks.internal.example\"}\n\ndef deliver(event: dict, url: str) -> int:\n    host = urllib.parse.urlsplit(url).hostname or \"\"\n    if host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n    req = urllib.request.Request(url, data=json_dumps(event), method=\"POST\")\n    with urllib.request.urlopen(req, timeout=5) as r:\n        return r.status\n"
+    },
+    "head": {
+      "webhooks.py": "import urllib.request\n\ndef deliver(event: dict, url: str) -> int:\n    # allow customer-provided endpoints\n    req = urllib.request.Request(url, data=json_dumps(event), method=\"POST\")\n    with urllib.request.urlopen(req, timeout=5) as r:\n        return r.status\n"
+    },
+    "pr_metadata": {
+      "title": "Customer-configured webhook endpoints",
+      "body": "Enterprise customers want events delivered to their own endpoints.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:642163d4c4fe88ecddcb9edbb5caa1372ce376a415c3b9f8fdf8d61fcce56dd0"
+  },
+  "labels": [
+    {
+      "id": "C008-d1",
+      "severity": "critical",
+      "path": "webhooks.py",
+      "defect": "SSRF: server POSTs attacker-chosen URLs, including cloud metadata and internal services",
+      "evidence": "Reproducible: configure endpoint http://169.254.169.254/latest/api/token (cloud metadata) or http://admin.internal.example; the server performs the POST from inside the network and the response status/lean error messages leak reachability. ALLOWED_HOSTS check was deleted.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "urlopen",
+        "url",
+        "ALLOWED_HOSTS",
+        "deliver"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C008-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "SSRF: server POSTs attacker-chosen URLs including cloud metadata; allowlist deleted."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

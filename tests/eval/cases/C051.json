@@ -1,0 +1,39 @@
+{
+  "id": "C051",
+  "title": "Fixes a misspelled user-facing string",
+  "stack": "typescript",
+  "change_class": "ui",
+  "risk_class": "negative_control",
+  "family_group": "G51",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/i18n/en.ts": "export const messages = { saved: \"Prefernces saved\" };\n"
+    },
+    "head": {
+      "src/i18n/en.ts": "export const messages = { saved: \"Preferences saved\" };\n"
+    },
+    "pr_metadata": {
+      "title": "fix(i18n): typo",
+      "body": "Spelling.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:8f12b90427674ab29ec10afa176a62fb792c8c2e6192c519aa5fe5be11e1bd57"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "saved"
+    ],
+    "reference_review": "A one-word spelling correction inside a UI string literal. No key, control flow, or markup changes; string content corrections are not defects."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

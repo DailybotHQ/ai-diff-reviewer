@@ -135,6 +135,13 @@ class ClassifyEndpointHostTests(unittest.TestCase):
             "myres.cognitiveservices.azure.com": reviewer.ENDPOINT_KIND_AZURE,
             "api.x.ai": reviewer.ENDPOINT_KIND_XAI,
             "api.z.ai": reviewer.ENDPOINT_KIND_ZAI,
+            "api.deepseek.com": reviewer.ENDPOINT_KIND_DEEPSEEK,
+            "api.moonshot.ai": reviewer.ENDPOINT_KIND_MOONSHOT,
+            "api.minimax.io": reviewer.ENDPOINT_KIND_MINIMAX,
+            "api.minimaxi.com": reviewer.ENDPOINT_KIND_MINIMAX,
+            "dashscope.aliyuncs.com": reviewer.ENDPOINT_KIND_QWEN,
+            "generativelanguage.googleapis.com": reviewer.ENDPOINT_KIND_GEMINI,
+            "openrouter.ai": reviewer.ENDPOINT_KIND_OPENROUTER,
             "gateway.example.com": reviewer.ENDPOINT_KIND_CUSTOM,
             "localhost": reviewer.ENDPOINT_KIND_CUSTOM,
             "": reviewer.ENDPOINT_KIND_CUSTOM,
@@ -142,6 +149,21 @@ class ClassifyEndpointHostTests(unittest.TestCase):
         for host, kind in cases.items():
             with self.subTest(host=host):
                 self.assertEqual(reviewer.classify_endpoint_host(host), kind)
+
+    def test_v2_4_0_hosts_do_not_match_lookalikes(self) -> None:
+        # The six v2.4.0 vendor hosts are exact matches too — a mistyped or
+        # hostile lookalike must fall through to `custom` (and its warning),
+        # never inherit the vendor's endpoint profile.
+        for host in (
+            "evil-api.deepseek.com",
+            "api.moonshot.ai.evil.com",
+            "openrouter.ai.gw.example.com",
+            "generativelanguage.googleapis.commm",
+        ):
+            with self.subTest(host=host):
+                self.assertEqual(
+                    reviewer.classify_endpoint_host(host), reviewer.ENDPOINT_KIND_CUSTOM
+                )
 
     def test_bare_hosts_do_not_match_lookalike_subdomains(self) -> None:
         # `api.x.ai` is an exact match — `evil-api.x.ai` must not classify
@@ -234,7 +256,7 @@ class ResolveEndpointProfileTests(unittest.TestCase):
             prof.kind = "x"  # type: ignore[misc]
 
     def test_every_kind_constant_is_registered(self) -> None:
-        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 6)
+        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 12)
         for _suffix, kind in reviewer.ENDPOINT_HOST_SUFFIXES:
             self.assertIn(kind, reviewer.ENDPOINT_KINDS)
 

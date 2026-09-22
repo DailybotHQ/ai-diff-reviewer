@@ -1,0 +1,58 @@
+{
+  "id": "C019",
+  "title": "Migration drops the audit column without a data-preserving path",
+  "stack": "python",
+  "change_class": "migration",
+  "risk_class": "critical_positive",
+  "family_group": "G19",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "migrations/0007_add_reason.py": "from django.db import migrations, models\n\n\nclass Migration(migrations.Migration):\n    dependencies = [(\"billing\", \"0006_initial\")]\n\n    operations = [\n        migrations.AddField(\n            model_name=\"invoice\",\n            name=\"void_reason\",\n            field=models.CharField(blank=True, max_length=280),\n        ),\n    ]\n"
+    },
+    "head": {
+      "migrations/0008_drop_reason.py": "from django.db import migrations\n\n\nclass Migration(migrations.Migration):\n    dependencies = [(\"billing\", \"0007_add_reason\")]\n\n    operations = [\n        # void_reason was never surfaced in the UI\n        migrations.RemoveField(model_name=\"invoice\", name=\"void_reason\"),\n    ]\n"
+    },
+    "pr_metadata": {
+      "title": "Drop unused void_reason column",
+      "body": "Field never rendered anywhere; dropping it.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:dff1ca700d6d5efcc06a334f136a920d4e688ade7f14c692901848fed42963d2"
+  },
+  "labels": [
+    {
+      "id": "C019-d1",
+      "severity": "critical",
+      "path": "migrations/0008_drop_reason.py",
+      "defect": "Irreversible destructive migration: audit data (void reasons) destroyed with no backup table or data migration",
+      "evidence": "Reproducible: after migrating, every invoice.void_reason value is gone with no recovery path; finance/audit queries against voided invoices lose their justification trail. reverse_sql is absent so even rollback cannot restore data.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "RemoveField",
+        "void_reason",
+        "migrations"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C019-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Irreversible audit-data destruction with no backup or reverse path."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

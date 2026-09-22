@@ -1,0 +1,54 @@
+{
+  "id": "C033",
+  "title": "Polling loop accumulates timers via time.After",
+  "stack": "go",
+  "change_class": "resource_leak",
+  "risk_class": "warning_positive",
+  "family_group": "G33",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "poll/worker.go": "package poll\n\nimport \"time\"\n\nfunc Run(stop <-chan struct{}, tick func()) {\n\tt := time.NewTicker(30 * time.Second)\n\tdefer t.Stop()\n\tfor {\n\t\tselect {\n\t\tcase <-stop:\n\t\t\treturn\n\t\tcase <-t.C:\n\t\t\ttick()\n\t\t}\n\t}\n}\n"
+    },
+    "head": {
+      "poll/worker.go": "package poll\n\nimport \"time\"\n\nfunc Run(stop <-chan struct{}, tick func()) {\n\tfor {\n\t\tselect {\n\t\tcase <-stop:\n\t\t\treturn\n\t\tcase <-time.After(30 * time.Second):\n\t\t\ttick()\n\t\t}\n\t}\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Simplify poller",
+      "body": "Ticker boilerplate not needed.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:040773316ce49cf3717acfd361eb5baab8d3239a5542e83c1b490f9a6ea1cb7d"
+  },
+  "labels": [
+    {
+      "id": "C033-d1",
+      "severity": "warning",
+      "path": "poll/worker.go",
+      "defect": "time.After in a loop allocates a new timer each iteration that lingers until it fires: unbounded pending timers on fast stop/start cycles",
+      "evidence": "Reproducible: alternate stop/start every second — each Run leaves a 30s timer (and its runtime bucket) alive; long-running daemons accumulate thousands of pending timers (runtime: => heap profile shows time.sendTime entries).",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "time.After",
+        "Ticker",
+        "select"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C033-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

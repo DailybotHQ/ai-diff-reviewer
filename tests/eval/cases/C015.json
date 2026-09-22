@@ -1,0 +1,59 @@
+{
+  "id": "C015",
+  "title": "Goroutine writes to shared session map without synchronization",
+  "stack": "go",
+  "change_class": "concurrency",
+  "risk_class": "warning_positive",
+  "family_group": "G15",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "sessions/store.go": "package sessions\n\nimport \"sync\"\n\ntype Store struct {\n\tmu    sync.RWMutex\n\titems map[string]string\n}\n\nfunc New() *Store { return &Store{items: map[string]string{}} }\n\nfunc (s *Store) Put(k, v string) {\n\ts.mu.Lock()\n\tdefer s.mu.Unlock()\n\ts.items[k] = v\n}\n"
+    },
+    "head": {
+      "sessions/store.go": "package sessions\n\nimport \"sync\"\n\ntype Store struct {\n\tmu    sync.RWMutex\n\titems map[string]string\n}\n\nfunc New() *Store { return &Store{items: map[string]string{}} }\n\nfunc (s *Store) Put(k, v string) {\n\t// locking per-write dominated the profile; writes are tiny and rare\n\tgo func() { s.items[k] = v }()\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Take writes off the hot path",
+      "body": "Write path showed lock contention in the profile.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:2e3559609b38a81222642600cedb3a65c077200d02d82c9c79a47f34675d23a4"
+  },
+  "labels": [
+    {
+      "id": "C015-d1",
+      "severity": "warning",
+      "path": "sessions/store.go",
+      "defect": "Data race: unsynchronized map writes from goroutines (concurrent read/write panics; silent auth-state corruption)",
+      "evidence": "Reproducible: `go test -race` on two concurrent Put calls panics with 'concurrent map writes'; under production traffic the race instead corrupts or drops session entries nondeterministically.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "go func",
+        "items",
+        "mu",
+        "Put"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C015-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "downgraded_to_warning",
+    "notes": "Genuine data race (fatal concurrent-map writes), but dominant impact is crash/dropped writes, not reliable exploitation."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

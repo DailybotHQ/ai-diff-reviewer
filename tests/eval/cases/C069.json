@@ -1,0 +1,59 @@
+{
+  "id": "C069",
+  "title": "Admin routes remounted outside the authorization middleware",
+  "stack": "go",
+  "change_class": "auth",
+  "risk_class": "critical_positive",
+  "family_group": "G69",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "cmd/server/routes.go": "package main\n\nfunc routes(r *mux.Router, a *app) {\n\tauthz := middleware.RequireRole(\"admin\")\n\tr.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n\tr.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n}\n"
+    },
+    "head": {
+      "cmd/server/routes.go": "package main\n\nfunc routes(r *mux.Router, a *app) {\n\t// subrouter cleanup: admin group moved under /api/v2\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tv2.Handle(\"/admin/users\", http.HandlerFunc(a.listUsers)).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", http.HandlerFunc(a.editRoles)).Methods(\"POST\")\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Move admin endpoints under /api/v2",
+      "body": "PathPrefix subrouter cleanup during the API versioning work.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:7418b7965747e21325e9f623c25eac3dfa6106ae983e5e62b7e8f3b8a1ca0c99"
+  },
+  "labels": [
+    {
+      "id": "C069-d1",
+      "severity": "critical",
+      "path": "cmd/server/routes.go",
+      "defect": "Authorization middleware dropped during the subrouter refactor: admin user-list and role-edit endpoints are now unauthenticated",
+      "evidence": "Reproducible: GET /api/v2/admin/users with no session (the authz wrapper is absent from both Handle chains) returns the full user list; RequireRole exists in the file but is no longer referenced.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "authz",
+        "RequireRole",
+        "v2.Handle",
+        "admin"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C069-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "Refactor drops RequireRole(admin) from both admin handlers under /api/v2 with no replacement middleware: authorization bypass absent in base."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

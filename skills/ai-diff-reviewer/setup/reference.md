@@ -65,7 +65,9 @@ Every workflow using AI Diff Reviewer sets these two.
     default model. Best baseline.
   - `openai` — OpenAI-compatible chat-completions API, in-process (zero
     install, bounded turns). With `api-base` the same runner covers Azure
-    Foundry, xAI and Z.ai. `gpt-5.6-luna` default.
+    Foundry, xAI, Z.ai and — since v2.4.0 — DeepSeek, Moonshot/Kimi,
+    MiniMax, Qwen (DashScope), Google Gemini and OpenRouter.
+    `gpt-5.6-luna` default.
   - `claude-code` — Claude Code CLI, headless agent mode. Same Anthropic
     models; accepts subscription token via `api-key` (see above).
   - `cursor` — Cursor Agent CLI, headless. `model: auto` is unlimited on
@@ -86,8 +88,10 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Provider-specific defaults (empty `model`):**
   - `anthropic` → `claude-sonnet-4-6`
   - `openai` → `gpt-5.6-luna` (same reasoning as Codex; on a non-default
-    `api-base` pin the backend's own id — `grok-4.5`, `glm-5.3`, or an
-    Azure deployment name).
+    `api-base` pin the backend's own id — `grok-4.5`, `glm-5.3`, a DeepSeek /
+    Kimi / Gemini / OpenRouter id, or an Azure deployment name — or use a
+    tier alias: DeepSeek, Moonshot/Kimi, MiniMax, Qwen, Gemini and OpenRouter
+    have dated tier rows since v2.4.0).
   - `claude-code` → `claude-sonnet-4-6` (quality/price sweet spot; NEVER
     `auto`, which can silently be Opus; use `claude-haiku-4-5` for a
     cheaper/shallower smoke review).
@@ -108,8 +112,10 @@ Every workflow using AI Diff Reviewer sets these two.
 
 ### `api-base`
 
-- **Default:** `''` (empty — the provider's default endpoint; behaviour
-  identical to releases before `api-base` existed).
+- **Default:** `''` (empty — the provider's default endpoint; request shape
+  unchanged from before `api-base` existed, except that since v2.4.0 the
+  default profiles pin deterministic sampling — see the CHANGELOG
+  "Changed" notes).
 - **What it is:** the backend base URL for the chosen provider (runner).
   The `provider` input says *who runs the review loop*; `api-base` says
   *where the model lives*. The host of the URL selects an endpoint
@@ -118,6 +124,21 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Well-known values:**
   - Z.ai GLM (Anthropic-compatible) → `https://api.z.ai/api/anthropic`
     with `provider: claude-code` (recommended for GLM) or `anthropic`.
+  - DeepSeek (v2.4.0+) → `https://api.deepseek.com` with
+    `provider: openai` (chat-completions only; Codex cannot reach it).
+  - Moonshot/Kimi (v2.4.0+) → `https://api.moonshot.ai/v1`
+    (OpenAI-compatible, for `openai`) or
+    `https://api.moonshot.ai/anthropic` (for `anthropic` / `claude-code`).
+  - MiniMax (v2.4.0+) → `https://api.minimax.io/v1` (OpenAI-compatible,
+    for `openai`)
+    or `https://api.minimax.io/anthropic` (Anthropic-compatible).
+  - Qwen / DashScope (v2.4.0+) →
+    `https://dashscope.aliyuncs.com/compatible-mode/v1`.
+  - Google Gemini (v2.4.0+) →
+    `https://generativelanguage.googleapis.com/v1beta/openai` with
+    `provider: openai`; the runtime omits `seed` (the endpoint rejects it).
+  - OpenRouter (v2.4.0+) → `https://openrouter.ai/api/v1`; model ids are
+    vendor-prefixed (`vendor/model`).
   - xAI Grok → `https://api.x.ai` (Anthropic-compatible, for
     `anthropic` / `claude-code`) or `https://api.x.ai/v1`
     (OpenAI-compatible, for `codex` / `openai`).

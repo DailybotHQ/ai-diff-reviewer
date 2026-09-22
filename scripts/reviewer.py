@@ -227,6 +227,12 @@ MODEL_REQUIRED_HINTS: dict[str, str] = {
     "anthropic": "an Anthropic model id",
     "openai": "an OpenAI model id",
     "custom": "the gateway's model id",
+    "deepseek": "a DeepSeek model id (e.g. `deepseek-chat`)",
+    "moonshot": "a Kimi model id (e.g. `kimi-k2-0905-preview`)",
+    "qwen": "a Qwen model id (e.g. `qwen3-coder-plus`)",
+    "minimax": "a MiniMax model id (e.g. `MiniMax-M2`)",
+    "gemini": "a Gemini model id (e.g. `gemini-2.5-pro`)",
+    "openrouter": "an OpenRouter model id (e.g. `deepseek/deepseek-chat`)",
 }
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
@@ -236,7 +242,7 @@ MODEL_TIERS: tuple[str, ...] = (
 # Verified against the vendors' model/pricing pages on this date. Ids and
 # prices move — re-verify when bumping. Rationale per row lives in
 # docs/PROVIDERS.md § "Cost-efficient defaults matrix".
-MODEL_TIERS_VERIFIED_ON: str = "2026-09-16"
+MODEL_TIERS_VERIFIED_ON: str = "2026-09-21"
 _ANTHROPIC_TIERS: dict[str, str] = {
     # Sonnet 5 ($2/$10) is current and cheaper than the legacy
     # claude-sonnet-4-6 ($3/$15) that DEFAULT_MODELS still names for
@@ -279,6 +285,50 @@ _CURSOR_TIERS: dict[str, str] = {
     MODEL_TIER_ECONOMY: "auto",
     MODEL_TIER_DEEP: "composer-2.5",
 }
+_DEEPSEEK_TIERS: dict[str, str] = {
+    # deepseek-chat (V3.x, ~$0.27/$1.10) is both balanced AND economy:
+    # deepseek-reasoner (R1) is the deep pick (~2x cost, reasoning-first).
+    MODEL_TIER_BALANCED: "deepseek-chat",
+    MODEL_TIER_ECONOMY: "deepseek-chat",
+    MODEL_TIER_DEEP: "deepseek-reasoner",
+}
+_MOONSHOT_TIERS: dict[str, str] = {
+    # kimi-k2-0905-preview (~$0.60/$2.50) balanced and deep; the turbo
+    # variant (~$1.15/$1.15) is the fast smoke pick (input-heavy reviews
+    # favour 0905 on cost; turbo wins on latency).
+    MODEL_TIER_BALANCED: "kimi-k2-0905-preview",
+    MODEL_TIER_ECONOMY: "kimi-k2-turbo-preview",
+    MODEL_TIER_DEEP: "kimi-k2-0905-preview",
+}
+_QWEN_TIERS: dict[str, str] = {
+    # qwen3-coder-plus (~$0.40/$1.60) balanced and deep; qwen-turbo
+    # (~$0.05/$0.40) smoke.
+    MODEL_TIER_BALANCED: "qwen3-coder-plus",
+    MODEL_TIER_ECONOMY: "qwen-turbo",
+    MODEL_TIER_DEEP: "qwen3-coder-plus",
+}
+_MINIMAX_TIERS: dict[str, str] = {
+    # MiniMax-M2 (~$0.30/$1.20) — agentic-coding flagship, documented for
+    # Claude Code via its Anthropic-compatible endpoint; Text-01 economy.
+    MODEL_TIER_BALANCED: "MiniMax-M2",
+    MODEL_TIER_ECONOMY: "MiniMax-Text-01",
+    MODEL_TIER_DEEP: "MiniMax-M2",
+}
+_GEMINI_TIERS: dict[str, str] = {
+    # gemini-2.5-pro ($1.25/$10) balanced and deep; 2.5-flash ($0.30/$2.50)
+    # smoke. OpenAI-compatible surface of the Gemini API.
+    MODEL_TIER_BALANCED: "gemini-2.5-pro",
+    MODEL_TIER_ECONOMY: "gemini-2.5-flash",
+    MODEL_TIER_DEEP: "gemini-2.5-pro",
+}
+_OPENROUTER_TIERS: dict[str, str] = {
+    # Meta-gateway: model ids are vendor-prefixed (`vendor/model`). Defaults
+    # pinned to measured families; consumers override per taste. Prices are
+    # the underlying vendors' (OpenRouter adds ~5%).
+    MODEL_TIER_BALANCED: "deepseek/deepseek-chat",
+    MODEL_TIER_ECONOMY: "deepseek/deepseek-chat",
+    MODEL_TIER_DEEP: "deepseek/deepseek-reasoner",
+}
 # Keyed by (provider id, endpoint kind). Kind literals match ENDPOINT_KIND_*
 # (defined below with the backend constants; a test asserts the agreement).
 MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
@@ -296,6 +346,21 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("codex", "zai"): _ZAI_TIERS,
     ("grok", "xai"): _XAI_TIERS,
     ("cursor", "custom"): _CURSOR_TIERS,
+    ("openai", "deepseek"): _DEEPSEEK_TIERS,
+    ("openai", "moonshot"): _MOONSHOT_TIERS,
+    ("anthropic", "moonshot"): _MOONSHOT_TIERS,
+    ("claude-code", "moonshot"): _MOONSHOT_TIERS,
+    ("openai", "qwen"): _QWEN_TIERS,
+    ("openai", "minimax"): _MINIMAX_TIERS,
+    ("anthropic", "minimax"): _MINIMAX_TIERS,
+    ("claude-code", "minimax"): _MINIMAX_TIERS,
+    ("openai", "gemini"): _GEMINI_TIERS,
+    ("openai", "openrouter"): _OPENROUTER_TIERS,
+    # NOTE: deliberately no (codex, ...) rows for the six v2.4.0
+    # chat-completions backends. The Codex CLI speaks the Responses API to
+    # every non-default gateway (`codex_wire_api` is pinned to "responses"),
+    # which none of those vendors implements — the documented xAI
+    # limitation applies to all six. Reach them with `provider: openai`.
 }
 # Indicative list prices, USD per 1M tokens (input, output), matched by the
 # longest model-id prefix. Shared by the tier docs and the usage telemetry;
@@ -316,6 +381,18 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "grok-4.3": (1.25, 2.50),
     "glm-5.3-flash": (0.15, 0.50),
     "glm-5.3": (1.40, 4.40),
+    "deepseek-chat": (0.27, 1.10),
+    "deepseek-reasoner": (0.55, 2.19),
+    "kimi-k2-0905-preview": (0.60, 2.50),
+    "kimi-k2-turbo-preview": (1.15, 1.15),
+    "qwen3-coder-plus": (0.40, 1.60),
+    "qwen-turbo": (0.05, 0.40),
+    "MiniMax-M2": (0.30, 1.20),
+    "MiniMax-Text-01": (0.20, 1.20),
+    "gemini-2.5-pro": (1.25, 10.0),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "deepseek/deepseek-chat": (0.30, 1.20),
+    "deepseek/deepseek-reasoner": (0.60, 2.40),
 }
 # Legacy defaults that still ship for back-compat but have a cheaper,
 # current successor in the tier table — the run logs a one-line hint.
@@ -370,6 +447,12 @@ ENDPOINT_KIND_AZURE: str = "azure"
 ENDPOINT_KIND_XAI: str = "xai"
 ENDPOINT_KIND_ZAI: str = "zai"
 ENDPOINT_KIND_CUSTOM: str = "custom"
+ENDPOINT_KIND_DEEPSEEK: str = "deepseek"
+ENDPOINT_KIND_MOONSHOT: str = "moonshot"
+ENDPOINT_KIND_QWEN: str = "qwen"
+ENDPOINT_KIND_MINIMAX: str = "minimax"
+ENDPOINT_KIND_GEMINI: str = "gemini"
+ENDPOINT_KIND_OPENROUTER: str = "openrouter"
 ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_ANTHROPIC,
     ENDPOINT_KIND_OPENAI,
@@ -377,6 +460,12 @@ ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_XAI,
     ENDPOINT_KIND_ZAI,
     ENDPOINT_KIND_CUSTOM,
+    ENDPOINT_KIND_DEEPSEEK,
+    ENDPOINT_KIND_MOONSHOT,
+    ENDPOINT_KIND_QWEN,
+    ENDPOINT_KIND_MINIMAX,
+    ENDPOINT_KIND_GEMINI,
+    ENDPOINT_KIND_OPENROUTER,
 )
 
 # Host → kind classification. A suffix starting with `.` matches any
@@ -389,6 +478,13 @@ ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
     (".cognitiveservices.azure.com", ENDPOINT_KIND_AZURE),
     ("api.x.ai", ENDPOINT_KIND_XAI),
     ("api.z.ai", ENDPOINT_KIND_ZAI),
+    ("api.deepseek.com", ENDPOINT_KIND_DEEPSEEK),
+    ("api.moonshot.ai", ENDPOINT_KIND_MOONSHOT),
+    ("api.minimax.io", ENDPOINT_KIND_MINIMAX),
+    ("api.minimaxi.com", ENDPOINT_KIND_MINIMAX),
+    ("dashscope.aliyuncs.com", ENDPOINT_KIND_QWEN),
+    ("generativelanguage.googleapis.com", ENDPOINT_KIND_GEMINI),
+    ("openrouter.ai", ENDPOINT_KIND_OPENROUTER),
 )
 
 # Well-known base URLs (documentation + runner defaults). The Anthropic base
@@ -400,6 +496,14 @@ XAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.x.ai"
 ZAI_ANTHROPIC_COMPAT_API_BASE: str = "https://api.z.ai/api/anthropic"
 ZAI_OPENAI_COMPAT_API_BASE: str = "https://api.z.ai/api/coding/paas/v4"
 ZAI_RESPONSES_API_BASE: str = "https://api.z.ai/api/v1"
+DEEPSEEK_OPENAI_COMPAT_API_BASE: str = "https://api.deepseek.com"
+MOONSHOT_OPENAI_COMPAT_API_BASE: str = "https://api.moonshot.ai/v1"
+MOONSHOT_ANTHROPIC_COMPAT_API_BASE: str = "https://api.moonshot.ai/anthropic"
+MINIMAX_OPENAI_COMPAT_API_BASE: str = "https://api.minimax.io/v1"
+MINIMAX_ANTHROPIC_COMPAT_API_BASE: str = "https://api.minimax.io/anthropic"
+QWEN_OPENAI_COMPAT_API_BASE: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+GEMINI_OPENAI_COMPAT_API_BASE: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
 
 # Azure Foundry + Codex quirk: plain text turns fail unless an image-generation
 # deployment header is present and the feature is disabled (see
@@ -486,6 +590,32 @@ CODEX_MODEL_CATALOG_FILENAME: str = "models.json"
 # `apply_patch` custom tool with HTTP 422. Warned, not blocked — a future
 # CLI or gateway release may lift it.
 CODEX_CUSTOM_TOOL_SENSITIVE_KINDS: tuple[str, ...] = ("xai", "zai", "custom")
+# Backends whose only surface is OpenAI chat-completions. The Codex CLI
+# speaks the Responses API to every non-default gateway (`codex_wire_api`
+# is pinned to "responses"), so these vendors cannot be reached with
+# `provider: codex` at all — blocked, not merely warned, because every
+# request would fail. Reach them with `provider: openai` instead.
+CODEX_UNUSABLE_CHAT_COMPLETIONS_KINDS: frozenset[str] = frozenset(
+    (
+        ENDPOINT_KIND_DEEPSEEK,
+        ENDPOINT_KIND_MOONSHOT,
+        ENDPOINT_KIND_MINIMAX,
+        ENDPOINT_KIND_QWEN,
+        ENDPOINT_KIND_GEMINI,
+        ENDPOINT_KIND_OPENROUTER,
+    )
+)
+
+
+def _assert_codex_backend_supported(kind: str) -> None:
+    """Fail fast when Codex is pointed at a chat-completions-only backend."""
+    if kind in CODEX_UNUSABLE_CHAT_COMPLETIONS_KINDS:
+        raise ValueError(
+            f"provider: codex cannot reach {kind} backends - the Codex CLI "
+            "speaks the Responses API to non-default gateways and this "
+            "vendor exposes chat-completions only. Use `provider: openai` "
+            "with the same `api-base` (see docs/PROVIDERS.md)."
+        )
 # Preferred templates: current-gen, API-supported entries WITHOUT an
 # `upgrade` redirect (an upgrade block would make Codex swap the model).
 CODEX_CATALOG_TEMPLATE_SLUGS: tuple[str, ...] = (
@@ -521,6 +651,45 @@ MAX_TOOL_OUTPUT_BYTES: int = 32_000
 MAX_FILE_READ_LINES: int = 2_000
 # Max matches/paths a single grep/glob call returns before truncation.
 MAX_SEARCH_RESULTS: int = 200
+# Deterministic review generation: temperature 0 (the API default is 1.0,
+# whose sampling variance drove ±45% cost and 2-defect recall swings between
+# identical runs — see the PLAN_jev_review_acceleration noise-floor finding).
+# The OpenAI-compatible runners additionally pin `seed` on every endpoint
+# kind except Gemini, whose OpenAI-compatible surface rejects the parameter
+# with a 400. Reasoning-class defaults (OpenAI / Azure hosts) take neither
+# knob: those models do not honour sampling parameters, and since
+# 2026-09-22 they reject function tools at the server-default reasoning
+# effort on chat-completions ("use /v1/responses or set reasoning_effort to
+# 'none'") — so the request pins the effort explicitly instead; the
+# non-reasoning effort is what makes those runs deterministic.
+REVIEW_TEMPERATURE: float = 0.0
+OPENAI_REVIEW_SEED: int = 42
+# Chat-completions `reasoning_effort` pinned per endpoint kind. Only the
+# OpenAI-hosted reasoning-class kinds need it today; the other vendors
+# either have no such parameter or reject unknown fields — do not add a
+# kind here without vendor documentation that the parameter is accepted.
+OPENAI_REASONING_EFFORT_BY_KIND: dict[str, str] = {
+    ENDPOINT_KIND_OPENAI: "none",
+    ENDPOINT_KIND_AZURE: "none",
+}
+# Endpoint kinds that must NOT receive `seed`. Gemini's OpenAI-compatible
+# surface rejects the parameter with a 400; OpenRouter routes to upstream
+# models whose request surface does not guarantee `seed` support; a `custom`
+# host is an unverified gateway. The remaining kinds are vendor
+# OpenAI-compatible APIs that document `seed`. As a second net, a 400 whose
+# body names one of the optional sampling parameters triggers one adaptive
+# retry without it (see `_strip_rejected_sampling_params`).
+OPENAI_SEED_EXEMPT_KINDS: frozenset[str] = frozenset(
+    {ENDPOINT_KIND_GEMINI, ENDPOINT_KIND_OPENROUTER, ENDPOINT_KIND_CUSTOM}
+)
+# Optional sampling parameters this provider may attach. Vendors disagree on
+# which of them a given model accepts; a 400 naming one is recoverable.
+OPENAI_OPTIONAL_SAMPLING_PARAMS: tuple[str, ...] = (
+    "reasoning_effort",
+    "seed",
+    "temperature",
+)
+
 # Cap on the seed diff embedded in the first user message (characters). Larger
 # diffs are truncated with a pointer to the read_file tool.
 MAX_DIFF_CHARS: int = 200_000
@@ -2413,15 +2582,21 @@ class AnthropicProvider(Provider):
             if self.profile.supports_anthropic_cache_control
             else messages
         )
-        body: bytes = json.dumps(
-            {
-                "model": self.model,
-                "max_tokens": ANTHROPIC_MAX_TOKENS,
-                "system": [system_block],
-                "messages": wire_messages,
-                "tools": tools,
-            }
-        ).encode("utf-8")
+        anthropic_body: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "system": [system_block],
+            "messages": wire_messages,
+            "tools": tools,
+        }
+        # Deterministic sampling on the first-party default host only.
+        # Anthropic-compatible gateways (Z.ai, xAI, Moonshot, MiniMax and
+        # custom hosts) keep the exact wire they were verified against —
+        # the same conservative pattern as `cache_control` — because their
+        # tolerance for extra sampling fields is not documented.
+        if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
+            anthropic_body["temperature"] = REVIEW_TEMPERATURE
+        body: bytes = json.dumps(anthropic_body).encode("utf-8")
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "x-api-key": self.api_key,
@@ -2623,6 +2798,46 @@ def openai_response_to_anthropic(resp: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _strip_rejected_sampling_params(
+    payload: dict[str, Any], error_text: str
+) -> dict[str, Any] | None:
+    """Return a copy of `payload` without optional sampling parameters the
+    vendor rejected, or None when the error names none of them.
+
+    Vendors disagree on which optional sampling parameters a given model
+    accepts: Gemini rejects `seed`, classic OpenAI/Azure deployments reject
+    `reasoning_effort` ("Unrecognized request argument supplied: ..."). The
+    rejection names the parameter either in the structured `param` field of
+    the error JSON or in the message text, so both signals are checked; one
+    adaptive retry without every named parameter recovers the review instead
+    of failing it. The original dict is never mutated.
+    """
+    rejected: list[str] = [
+        name for name in OPENAI_OPTIONAL_SAMPLING_PARAMS if name in payload
+        and (
+            name in error_text
+            or _error_param_field(error_text) == name
+        )
+    ]
+    if not rejected:
+        return None
+    return {k: v for k, v in payload.items() if k not in rejected} or None
+
+
+def _error_param_field(error_text: str) -> str | None:
+    """Extract the structured `param` field from an API error body embedded
+    in `error_text`, when one is present and parseable."""
+    start = error_text.find("{")
+    if start < 0:
+        return None
+    try:
+        parsed = json.loads(error_text[start:])
+    except json.JSONDecodeError:
+        return None
+    error_obj = parsed.get("error") if isinstance(parsed, dict) else None
+    param = error_obj.get("param") if isinstance(error_obj, dict) else None
+    return param if isinstance(param, str) else None
+
 class OpenAIProvider(Provider):
     """OpenAI-compatible chat-completions client (`provider: openai`).
 
@@ -2635,6 +2850,7 @@ class OpenAIProvider(Provider):
     """
 
     PROVIDER_ID: str = "openai"
+
 
     def __init__(
         self,
@@ -2650,6 +2866,9 @@ class OpenAIProvider(Provider):
             if profile is not None
             else resolve_endpoint_profile("", self.PROVIDER_ID)
         )
+        # Optional sampling parameters this vendor already rejected once; they
+        # are proactively omitted on every later turn of the same review.
+        self._suppressed_params: set[str] = set()
 
     def build_request_body(
         self,
@@ -2667,6 +2886,26 @@ class OpenAIProvider(Provider):
             "messages": anthropic_messages_to_openai(system_prompt, messages),
             max_param: OPENAI_MAX_TOKENS,
         }
+        # Sampling knobs are endpoint-kind-scoped (unit-tested per kind in
+        # tests/test_openai_provider.py::RequestShapeTests):
+        # - Reasoning-class defaults (OpenAI / Azure hosts): pin
+        #   `reasoning_effort: none` — required for function tools on
+        #   chat-completions since 2026-09-22 (gpt-5.6-luna 400s at the
+        #   server-default effort) — and send no temperature/seed, which
+        #   those models do not honour. A classic (non-reasoning) deployment
+        #   that rejects the effort parameter is recovered by the adaptive
+        #   400 retry in `complete`.
+        # - Gemini / OpenRouter / custom: `temperature` is honoured; `seed`
+        #   is omitted (rejected by Gemini, unguaranteed on OpenRouter
+        #   upstreams and unverified gateways).
+        # - Every other OpenAI-compatible kind: temperature 0 + seed 42.
+        effort: str | None = OPENAI_REASONING_EFFORT_BY_KIND.get(self.profile.kind)
+        if effort is not None:
+            payload["reasoning_effort"] = effort
+        else:
+            payload["temperature"] = REVIEW_TEMPERATURE
+            if self.profile.kind not in OPENAI_SEED_EXEMPT_KINDS:
+                payload["seed"] = OPENAI_REVIEW_SEED
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
             payload["tool_choice"] = OPENAI_TOOL_CHOICE_AUTO
@@ -2688,18 +2927,48 @@ class OpenAIProvider(Provider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        body: bytes = json.dumps(
-            self.build_request_body(
-                system_prompt=system_prompt, messages=messages, tools=tools
-            )
-        ).encode("utf-8")
+        payload: dict[str, Any] = self.build_request_body(
+            system_prompt=system_prompt, messages=messages, tools=tools
+        )
+        for name in self._suppressed_params:
+            payload.pop(name, None)
+        body: bytes = json.dumps(payload).encode("utf-8")
         url: str = join_endpoint_path(self.profile.base_url, OPENAI_CHAT_COMPLETIONS_PATH)
         api_label: str = (
             f"{self.profile.kind} chat completions API ({self.profile.host})"
         )
-        raw: dict[str, Any] = _post_json_with_retries(
-            url=url, body=body, headers=self.build_headers(), api_label=api_label
-        )
+        headers: dict[str, str] = self.build_headers()
+        try:
+            raw: dict[str, Any] = _post_json_with_retries(
+                url=url, body=body, headers=headers, api_label=api_label
+            )
+        except RuntimeError as exc:
+            # Only a vendor 400 names an optional sampling parameter in its
+            # body; exhausted 429/5xx retries and network failures reuse the
+            # same RuntimeError type but must never take the fallback path.
+            if "HTTP 400:" not in str(exc):
+                raise
+            # A 400 that names one of the optional sampling parameters we
+            # attached is a request-shape problem, not an auth/contract one:
+            # retry once without the named parameter(s) instead of failing
+            # the whole review (e.g. a classic Azure deployment rejecting
+            # `reasoning_effort`, or a strict gateway rejecting `seed`).
+            fallback: dict[str, Any] | None = _strip_rejected_sampling_params(
+                payload, str(exc)
+            )
+            if fallback is None:
+                raise
+            log(
+                f"{api_label} rejected an optional sampling parameter; "
+                "retrying once without it"
+            )
+            body = json.dumps(fallback).encode("utf-8")
+            raw = _post_json_with_retries(
+                url=url, body=body, headers=headers, api_label=api_label
+            )
+            # Remember the rejection for the rest of this review so turns 2..N
+            # do not repeat the doomed request before falling back again.
+            self._suppressed_params.update(set(payload) - set(fallback))
         _log_usage(api_label, raw)
         return openai_response_to_anthropic(raw)
 
@@ -3741,6 +4010,7 @@ class CodexProvider(AgentRunnerProvider):
                 codex_home=codex_home, api_key=self.api_key
             )
             if not self.profile.is_default:
+                _assert_codex_backend_supported(self.profile.kind)
                 # Custom backend (Azure Foundry / xAI / Z.ai / gateway): the
                 # model is the backend's own id or deployment name and must
                 # be explicit — Codex's built-in default only exists on

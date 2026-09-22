@@ -1,0 +1,44 @@
+{
+  "id": "C058",
+  "title": "Intentional major-version dependency upgrade with lockfile and changelog",
+  "stack": "typescript",
+  "change_class": "dependency",
+  "risk_class": "negative_control",
+  "family_group": "G21",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "package.json": "{\n  \"name\": \"app\",\n  \"dependencies\": {\n    \"tar-stream\": \"^2.2.0\"\n  }\n}\n",
+      "package-lock.json": "{ \"lockfileVersion\": 3, \"packages\": { \"node_modules/tar-stream\": { \"version\": \"2.2.0\" } } }\n",
+      "CHANGELOG.md": "## Unreleased\n"
+    },
+    "head": {
+      "package.json": "{\n  \"name\": \"app\",\n  \"dependencies\": {\n    \"tar-stream\": \"^3.1.6\"\n  }\n}\n",
+      "package-lock.json": "{ \"lockfileVersion\": 3, \"packages\": { \"node_modules/tar-stream\": { \"version\": \"3.1.6\" } } }\n",
+      "CHANGELOG.md": "## Unreleased\n- chore: tar-stream 2 to 3 (API migration in scripts/pack.js)\n"
+    },
+    "pr_metadata": {
+      "title": "chore(deps): tar-stream 3",
+      "body": "Major upgrade; call sites migrated; lockfile updated.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:e0835aa67a3696ddc67f91f1ace4929e39c2ed1bd92078ae00efd7a9c039d746"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "tar-stream",
+      "dependencies"
+    ],
+    "reference_review": "Legitimate, traceable dependency upgrade: same canonical package (spelling unchanged), version pinned, lockfile consistent, migration documented. Counterpart of the typosquat case in this family — the dangerous shape is a RENAMED look-alike package plus install hook, which this is not."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

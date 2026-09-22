@@ -1,0 +1,59 @@
+{
+  "id": "C062",
+  "title": "Multi-round IAR: fixed defect reintroduced by a later round",
+  "stack": "typescript",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G62",
+  "iar_rounds": 2,
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/poll/status.ts": "export async function pollOnce(id: string): Promise<Status> {\n  const max = 5;\n  for (let i = 0; i < max; i++) {\n    const s = await probe(id);\n    if (s.ready) return s;\n    await sleep(250 * (i + 1));\n  }\n  throw new Error(\"not ready\");\n}\n"
+    },
+    "head": {
+      "src/poll/status.ts": "export async function pollOnce(id: string): Promise<Status> {\n  const max = 5;\n  for (let i = 0; i < max; i++) {\n    const s = await probe(id);\n    if (s.ready) return s;\n  }\n  throw new Error(\"not ready\");\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Tighten status polling (round 2)",
+      "body": "Removed the sleep the last round added back by mistake.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:e258330c1f8ec4fddeec92ec6e8dbd1d7a466b24ef6e2aa3327c724e94ad91d0"
+  },
+  "labels": [
+    {
+      "id": "C062-d1",
+      "severity": "warning",
+      "path": "src/poll/status.ts",
+      "defect": "Backoff removed again: five zero-delay probes hammer the dependency and the loop finishes in milliseconds",
+      "evidence": "Reproducible: pollOnce against a slow service burns all 5 probes back-to-back then throws not-ready in <100ms; round 1 fixed exactly this (sleep was present in base of this round) and the fix was lost in this change.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "sleep",
+        "probe",
+        "pollOnce"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C062-d1"
+    ],
+    "must_not_flag": []
+  },
+  "prior_round": {
+    "finding": "missing backoff between probes",
+    "outcome": "reintroduced"
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT); legacy labels from the v3.1 in-repo evaluation",
+    "egress": "synthetic or in-repo historical content; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

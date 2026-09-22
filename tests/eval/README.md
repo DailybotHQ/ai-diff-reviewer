@@ -44,3 +44,18 @@ that expose it, estimated otherwise) · wall clock.
 Adding a PR: pick a merged PR with at least one defect that was later fixed,
 label it from the fix commits (not from a model's output), and record the
 date; extend the label set only from evidence.
+
+## Comparison-harness tooling (PLAN_jev_review_acceleration)
+
+Two more modules live here; only the `test_*.py` files under `tests/` join
+`unittest discover`:
+
+| Module | Role | Network |
+| --- | --- | --- |
+| `corpus_validate.py` | strict v2 corpus validator (`cases/`), floors + blinded-adjudication enforcement | none |
+| `jev_experiment.py` | controlled-comparison driver: `init`/`validate`/`dry-run`/`report` over the corpus with deterministic group-coherent splits and budget caps | `dry-run` is zero-call by construction; `report` exits 1 unless promotion criteria hold |
+
+See `CORPUS.md` for the corpus contract; `run_eval.py` is covered at the top
+of this file. `run_eval.py` records full finding bodies (8 KB cap) and
+separates `setup_seconds` from provider `seconds` — scoring behavior for old
+result files is unchanged.

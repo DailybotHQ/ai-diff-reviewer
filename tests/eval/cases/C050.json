@@ -1,0 +1,39 @@
+{
+  "id": "C050",
+  "title": "Adds build artifacts to .gitignore",
+  "stack": "python",
+  "change_class": "config_ci",
+  "risk_class": "negative_control",
+  "family_group": "G50",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      ".gitignore": "__pycache__/\n"
+    },
+    "head": {
+      ".gitignore": "__pycache__/\ndist/\n"
+    },
+    "pr_metadata": {
+      "title": "chore: ignore dist",
+      "body": "Build output kept leaking into git status.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:e64b032d9d3b667f0365773b0f94a615f2425b882d72486fa22f2e429aaa2195"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "gitignore"
+    ],
+    "reference_review": "VCS ignore list only. .gitignore has no runtime effect on built or deployed artifacts."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

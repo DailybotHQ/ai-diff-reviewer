@@ -1,0 +1,58 @@
+{
+  "id": "C013",
+  "title": "Password reset tokens switched to Math.random",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "critical_positive",
+  "family_group": "G13",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "src/auth/reset.ts": "import { randomBytes } from \"crypto\";\n\nexport function newResetToken(): string {\n  return randomBytes(32).toString(\"hex\");\n}\n"
+    },
+    "head": {
+      "src/auth/reset.ts": "export function newResetToken(): string {\n  // randomBytes broke in the edge runtime; Math.random is available everywhere\n  const t = Math.floor(Math.random() * 1e12).toString(36);\n  return t.padStart(9, \"0\");\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Edge-runtime compatible reset tokens",
+      "body": "randomBytes is unavailable on the edge runtime; use Math.random.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:3a455ca1ff06dee306d72361a6a93e1625c30f2d2df7060c55346af9c7fb234d"
+  },
+  "labels": [
+    {
+      "id": "C013-d1",
+      "severity": "critical",
+      "path": "src/auth/reset.ts",
+      "defect": "Password reset tokens generated from Math.random: predictable, ~1e12 space",
+      "evidence": "Reproducible: V8's xorshift128+ state is recoverable from a few observed outputs (all come from the same isolate); an attacker who triggers two tokens can predict the next and reset any account. 1e12 space also falls to brute force against a token oracle.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "Math.random",
+        "randomBytes",
+        "newResetToken"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C013-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "~2^40 Math.random reset tokens with recoverable V8 xorshift128+ state."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "C041",
+  "title": "Adds unit tests for an existing helper without touching production code",
+  "stack": "python",
+  "change_class": "tests",
+  "risk_class": "negative_control",
+  "family_group": "G41",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "utils/slug.py": "def slug(s):\n    return s.strip().lower().replace(\" \", \"-\")\n"
+    },
+    "head": {
+      "utils/slug.py": "def slug(s):\n    return s.strip().lower().replace(\" \", \"-\")\n",
+      "tests/test_slug.py": "from utils.slug import slug\n\ndef test_basic():\n    assert slug(\" Hello World \") == \"hello-world\"\n"
+    },
+    "pr_metadata": {
+      "title": "test: cover slug()",
+      "body": "Adds missing unit tests.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:bb0d0002536dd71545e405ac56adc879c923ee73e445e04451506f5eecf867da"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "test"
+    ],
+    "reference_review": "Test-only change: a new test file exercising existing behavior with assertions that pass against the unchanged helper. No production surface is touched; strengthening tests is never a defect."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

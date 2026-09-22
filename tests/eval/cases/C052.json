@@ -1,0 +1,41 @@
+{
+  "id": "C052",
+  "title": "Adds example.env with obviously fake placeholder values",
+  "stack": "python",
+  "change_class": "config_ci",
+  "risk_class": "negative_control",
+  "family_group": "G52",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "README.md": "# Config\n\nSee .env\n"
+    },
+    "head": {
+      "README.md": "# Config\n\nCopy example.env to .env\n",
+      "example.env": "SMTP_PASSWORD=your-password-here\nAPI_TOKEN=paste-your-token\n"
+    },
+    "pr_metadata": {
+      "title": "docs: add example env",
+      "body": "Onboarding asked for a template.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:7fa83d564d3e7a2fbb51ee75500c5eca2001bed1e0e135d8819d7a3888cb217f"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "example.env",
+      "password"
+    ],
+    "reference_review": "New documentation file with explicit placeholder strings (your-password-here). Placeholder examples are the standard way to document required configuration; committing REAL credentials would be a critical, but placeholders match no credential format and grant nothing."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

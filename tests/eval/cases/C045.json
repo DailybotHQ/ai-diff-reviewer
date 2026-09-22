@@ -1,0 +1,39 @@
+{
+  "id": "C045",
+  "title": "Corrects two docstrings that described removed parameters",
+  "stack": "python",
+  "change_class": "docs",
+  "risk_class": "negative_control",
+  "family_group": "G45",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "core/emit.py": "def emit(events, batch=100):\n    \"\"\"Emit events with optional filter and retries.\n\n    filter: callable applied per event.\n    \"\"\"\n    return events[:batch]\n"
+    },
+    "head": {
+      "core/emit.py": "def emit(events, batch=100):\n    \"\"\"Emit the first `batch` events.\n\n    The filter parameter was removed in 2.0.\n    \"\"\"\n    return events[:batch]\n"
+    },
+    "pr_metadata": {
+      "title": "docs: fix stale docstrings",
+      "body": "Docstrings still described the removed filter arg.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:b28867ae3b0eb1b51348e274e2e0b6d00faa3d83b7fb64aba48c71b404d1b2ca"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "docstring"
+    ],
+    "reference_review": "Docstring text only; the docstring now matches the actual signature and behavior. Documentation corrections can never introduce runtime defects."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

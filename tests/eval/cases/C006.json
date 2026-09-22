@@ -1,0 +1,58 @@
+{
+  "id": "C006",
+  "title": "JWT signature and audience verification disabled",
+  "stack": "python",
+  "change_class": "auth",
+  "risk_class": "critical_positive",
+  "family_group": "G06",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "auth.py": "import jwt\n\nSECRET = b\"signing-key-from-vault\"\n\ndef identity(token: str) -> dict:\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n"
+    },
+    "head": {
+      "auth.py": "import jwt\n\nSECRET = b\"signing-key-from-vault\"\n\ndef identity(token: str) -> dict:\n    # verification off while staging tokens are re-issued (TICKET-412)\n    return jwt.decode(\n        token,\n        options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False},\n    )\n"
+    },
+    "pr_metadata": {
+      "title": "Unblock staging logins",
+      "body": "Staging tokens fail verification after the accounts migration; verify-off until re-issuance lands.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:a8aae51220f453bae6e808f3beca14b26bc8b872b2d294cebcac8f8e4060f483"
+  },
+  "labels": [
+    {
+      "id": "C006-d1",
+      "severity": "critical",
+      "path": "auth.py",
+      "defect": "All JWT verification disabled: forged tokens authenticate with arbitrary claims",
+      "evidence": "Reproducible: hand-build an unsigned token with claims sub=victim, role=admin; identity() accepts it and returns the admin identity. The change ships to every environment, not only staging.",
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "keywords": [
+        "verify_signature",
+        "jwt.decode",
+        "verify_aud"
+      ],
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C006-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "adjudicated",
+    "adjudicator": "independent-reviewer-v1",
+    "blind": true,
+    "verdict": "confirmed",
+    "notes": "All JWT verification disabled ships to every environment: complete auth bypass."
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

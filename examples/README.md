@@ -22,6 +22,12 @@
 | [`provider-codex-azure.yml`](provider-codex-azure.yml) | OpenAI Codex CLI on **Azure Foundry** via `api-base` (per-run `config.toml` in an isolated `CODEX_HOME`, Responses API, Azure header workaround). Commented variants for xAI and Z.ai. `model` = deployment name. |
 | [`provider-claude-code-glm.yml`](provider-claude-code-glm.yml) | **Recommended GLM runner:** Claude Code CLI on Z.ai's Anthropic-compatible endpoint via `api-base` (flat-rate Coding Plan, vendor-tuned agent loop). `model` required. |
 | [`provider-anthropic-zai.yml`](provider-anthropic-zai.yml) | **Bring your own endpoint** (`api-base`, v2.1.0+): the direct Anthropic-compatible loop against Z.ai GLM (zero install, flat-rate Coding Plan). Same shape works for xAI's Anthropic-compatible endpoint. |
+| [`provider-deepseek.yml`](provider-deepseek.yml) | **DeepSeek** (v2.4.0+): `openai` + `api-base: https://api.deepseek.com`; tier aliases resolve to `deepseek-chat` / `deepseek-reasoner`. |
+| [`provider-kimi.yml`](provider-kimi.yml) | **Moonshot Kimi** (v2.4.0+): `openai` + `https://api.moonshot.ai/v1`; commented variant for the Anthropic-compatible `claude-code` route. |
+| [`provider-minimax.yml`](provider-minimax.yml) | **MiniMax** (v2.4.0+): `openai` + `https://api.minimax.io/v1`; commented variant for the Anthropic-compatible `claude-code` route. |
+| [`provider-qwen.yml`](provider-qwen.yml) | **Qwen / DashScope** (v2.4.0+): `openai` + the DashScope compatible-mode endpoint; tier aliases resolve to `qwen3-coder-plus` / `qwen-turbo`. |
+| [`provider-gemini.yml`](provider-gemini.yml) | **Google Gemini** (v2.4.0+): `openai` + Gemini's OpenAI-compatible endpoint; the runtime omits `seed` (the endpoint rejects it). |
+| [`provider-openrouter.yml`](provider-openrouter.yml) | **OpenRouter** (v2.4.0+): meta-gateway — one key, vendor-prefixed ids (`vendor/model`). |
 | [`mcp-passthrough.yml`](mcp-passthrough.yml) | Inject a custom MCP servers config into whichever CLI provider you picked. |
 | [`trigger-always.yml`](trigger-always.yml) | Run on every push (v1.1 behaviour, explicit). |
 | [`trigger-label-once.yml`](trigger-label-once.yml) | Run exactly once per label application; toggle the label off/on to re-run. Recommended for teams that want the AI to review "when ready" and not on every push. |
@@ -36,7 +42,7 @@ Each file is self-contained and ready to drop into `.github/workflows/` in a dow
 ## Convention
 
 - Every example uses `DailybotHQ/ai-diff-reviewer@v2` — pinned to the moving major tag so consumers pick up patch/minor updates automatically. Consumers who want strict pinning replace `@v2` with `@vX.Y.Z`.
-- Every example includes `fetch-depth: 0` on `actions/checkout` (required — the runtime does `git diff origin/<base>...HEAD` and a shallow clone won't have the base ref).
+- Every example includes `fetch-depth: 0` on `actions/checkout` (required — the runtime does `git diff origin/<base>...HEAD` and a shallow clone won't have the base ref) **and `persist-credentials: false`** (see [`../docs/SECURITY.md`](../docs/SECURITY.md) — the default checkout writes `GITHUB_TOKEN` into `.git/config`, readable by anything the workflow runs).
 - Every example sets the minimum permissions (`contents: read`, `pull-requests: write`).
 - Every example includes a workflow-level `timeout-minutes: 15` (the recommended safety net — see [`../docs/PERFORMANCE.md`](../docs/PERFORMANCE.md)).
 

@@ -1,0 +1,41 @@
+{
+  "id": "C060",
+  "title": "Decorator check relocated into the function body, semantics identical",
+  "stack": "python",
+  "change_class": "auth",
+  "risk_class": "negative_control",
+  "family_group": "G01",
+  "fixture": {
+    "kind": "trees",
+    "base": {
+      "app.py": "from functools import wraps\nfrom flask import Flask, abort\n\napp = Flask(__name__)\nROLES = {\"alice\": \"admin\", \"bob\": \"viewer\"}\n\ndef require_role(role):\n    def deco(fn):\n        @wraps(fn)\n        def wrapper(user, *a, **k):\n            if ROLES.get(user) != role:\n                abort(403)\n            return fn(user, *a, **k)\n        return wrapper\n    return deco\n\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n    return \"\", 204\n"
+    },
+    "head": {
+      "app.py": "from functools import wraps\nfrom flask import Flask, abort\n\napp = Flask(__name__)\nROLES = {\"alice\": \"admin\", \"bob\": \"viewer\"}\n\ndef require_role(role):\n    def deco(fn):\n        @wraps(fn)\n        def wrapper(user, *a, **k):\n            if ROLES.get(user) != role:\n                abort(403)\n            return fn(user, *a, **k)\n        return wrapper\n    return deco\n\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\ndef delete_user(user):\n    if ROLES.get(user) != \"admin\":\n        abort(403)\n    return \"\", 204\n"
+    },
+    "pr_metadata": {
+      "title": "refactor: inline the admin gate",
+      "body": "Decorator indirection removed; the check is explicit in the handler.",
+      "deceptive": false
+    },
+    "revision_pin": "fixture:sha256:d66cf733dd5863ef377d13513443124da673c870f311d792097bc89c018bc9b3"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [
+      "require_role",
+      "ROLES",
+      "abort"
+    ],
+    "reference_review": "Counterpart of the bypass case in this family: the SAME role comparison moves from the decorator into the handler body. Every caller still hits the check (the decorator is no longer applied, so there is no double-guard to lose); refusal behavior is identical for viewer identities. Equivalent-code diffs that remove a decorator look alarming to pattern-matching reviewers but are behavior-preserving here."
+  },
+  "adjudication": {
+    "status": "pending"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  },
+  "schema": "ai-diff-reviewer/eval-case/1"
+}

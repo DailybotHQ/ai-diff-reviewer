@@ -414,5 +414,22 @@ class CodexCustomToolWarningTests(unittest.TestCase):
         msgs = self._run("https://myres.services.ai.azure.com/openai/v1")
         self.assertFalse(any("422" in m for m in msgs), msgs)
 
+class CodexBackendGateTests(unittest.TestCase):
+    """The v2.4.0 chat-completions backends are Codex-impossible (wire_api
+    responses vs chat-completions surfaces): fail fast, never half-start."""
+
+    def test_codex_cannot_reach_chat_completions_only_backends(self) -> None:
+        for kind in ("deepseek", "moonshot", "minimax", "qwen", "gemini", "openrouter"):
+            with self.subTest(kind=kind):
+                with self.assertRaises(ValueError) as ctx:
+                    reviewer._assert_codex_backend_supported(kind)
+                self.assertIn("provider: openai", str(ctx.exception))
+
+    def test_responses_capable_kinds_still_allowed(self) -> None:
+        # Azure / Z.ai implement the Responses API; xAI and custom gateways
+        # keep the existing freeform-tool warning path instead.
+        for kind in ("azure", "zai", "xai", "custom"):
+            reviewer._assert_codex_backend_supported(kind)  # must not raise
+
 if __name__ == "__main__":
     unittest.main()
