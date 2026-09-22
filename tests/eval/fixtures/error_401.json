@@ -1,7 +1,0 @@
-{
-  "_note": "synthetic-fixture: authentication failure shape",
-  "error": {
-    "code": 401,
-    "message": "invalid api key"
-  }
-}

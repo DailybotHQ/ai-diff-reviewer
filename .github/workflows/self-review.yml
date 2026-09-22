@@ -120,6 +120,10 @@ jobs:
           # SELF_REVIEW_OPENAI_CHAT=false to opt out.
           HAS_XAI: ${{ secrets.XAI_API_KEY != '' }}
           HAS_ZAI: ${{ secrets.ZAI_CODING_API_KEY != '' }}
+          HAS_DEEPSEEK: ${{ secrets.DEEPSEEK_API_KEY != '' }}
+          HAS_MOONSHOT: ${{ secrets.MOONSHOT_API_KEY != '' }}
+          HAS_MINIMAX: ${{ secrets.MINIMAX_API_KEY != '' }}
+          HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_AZURE: ${{ secrets.AZURE_OPENAI_API_KEY != '' }}
           AZURE_BASE: ${{ vars.AZURE_OPENAI_BASE_URL }}
           AZURE_MODEL: ${{ vars.AZURE_OPENAI_MODEL_DAILY }}
@@ -192,12 +196,18 @@ jobs:
                                           && add codex AZURE_OPENAI_API_KEY "self-reviewed:codex-azure" "${AZURE_MODEL:-gpt-5.4-mini-azure}" "$AZURE_BASE"
           [ "$HAS_OPENAI" = "true" ] && [ "$OPENAI_CHAT_LEG" != "false" ] \
                                           && add openai OPENAI_API_KEY "self-reviewed:openai" economy
+          # Amendment-4 provider expansion (evaluation branch): OpenAI-
+          # compatible vendor lanes, each gated on its own secret presence.
+          [ "$HAS_DEEPSEEK" = "true" ] && add openai DEEPSEEK_API_KEY "self-reviewed:deepseek" deepseek-chat "https://api.deepseek.com"
+          [ "$HAS_MOONSHOT" = "true" ] && add openai MOONSHOT_API_KEY "self-reviewed:kimi" kimi-k2-0905-preview "https://api.moonshot.ai/v1"
+          [ "$HAS_MINIMAX" = "true" ] && add openai MINIMAX_API_KEY "self-reviewed:minimax" MiniMax-M2 "https://api.minimax.io/v1"
+          [ "$HAS_GEMINI" = "true" ] && add openai GEMINI_API_KEY "self-reviewed:gemini" gemini-2.5-pro "https://generativelanguage.googleapis.com/v1beta/openai"
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
           # print an accurate hint. Reaching here means `ready` is applied, so an
           # empty matrix means "no provider secret is configured on this repo".
           if [ "$matrix" = "[]" ]; then
-            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, or AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable) as a repo secret so the self-review gate can run."
+            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable), DEEPSEEK_API_KEY, MOONSHOT_API_KEY, MINIMAX_API_KEY, or GEMINI_API_KEY as a repo secret so the self-review gate can run."
             echo 'empty_reason=no-provider-secret' >> "$GITHUB_OUTPUT"
           else
             echo 'empty_reason=' >> "$GITHUB_OUTPUT"
@@ -394,95 +404,6 @@ jobs:
   # `failure` if ANY leg fails), so we count successful legs from this run's
   # jobs via the API. See docs/TRIGGER_MODES.md § "Recipe: run once when
   # labelled `ready`, block merge until it passes".
-  # Amendment-1 experiment (evaluation branch, PR #57 only): ADVISORY Jev
-  # shadow verification of the posted review findings, using the frozen
-  # policy client (tests/eval/jev_probe.py) with the TYPESAFE_API_KEY
-  # secret. Never gates: continue-on-error and no job depends on it.
-  jev-shadow-verify:
-    name: 'Jev shadow verification (advisory)'
-    needs: [self-review]
-    if: >-
-      ${{
-        always() &&
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.number == 57 &&
-        needs.self-review.result != 'skipped'
-      }}
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - name: Verify the posted review findings with Jev
-        shell: python {0}
-        env:
-          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          import json, os, subprocess, sys
-          from pathlib import Path
-          sys.path.insert(0, "tests/eval")
-          from jev_probe import JevClient, JevConfig, build_question
-          pr = os.environ["PR_NUMBER"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          child_env = {"PATH": os.environ.get("PATH", ""),
-                       "HOME": os.environ.get("HOME", ""),
-                       "GH_TOKEN": os.environ["GH_TOKEN"]}
-          raw = subprocess.run(
-              ["gh", "api", f"repos/{repo}/pulls/{pr}/comments"],
-              capture_output=True, text=True, check=True, env=child_env).stdout
-          comments = [c for c in json.loads(raw)
-                      if "ai-pr-reviewer-marker" in (c.get("body") or "")
-                      or c["user"]["type"] == "Bot"]
-          client = JevClient(JevConfig(deadline_seconds=8.0))
-          questions = {
-              "is_real": build_question("noul",
-                  "Assuming the surrounding code is as shown, does this reported defect describe a real problem in the shown code?",
-                  confidence_floor=0.60),
-              "severity": build_question("choice",
-                  "If real, how severe is it?",
-                  {"critical": "exploitable or destroys data",
-                   "warning": "real but not exploitable",
-                   "invalid": "the report does not describe a real defect"},
-                  confidence_floor=0.60),
-          }
-          verdicts = []
-          for c in comments:
-              try:
-                  r = client.ask({"finding": {"path": c["path"], "line": c.get("line") or 0,
-                                              "severity": "warning", "body": (c["body"] or "")[:4000]}},
-                                 questions)
-                  a = r.answers
-                  verdicts.append({"path": c["path"], "line": c.get("line") or 0,
-                                   "is_real": a["is_real"].value,
-                                   "insufficient": a["is_real"].insufficient_evidence,
-                                   "severity": a["severity"].value,
-                                   "confidence": a["is_real"].confidence})
-              except Exception as exc:  # noqa: BLE001 - advisory stage records failures
-                  verdicts.append({"path": c.get("path", "?"), "error": str(exc)})
-          lines = ["## Jev shadow verification (advisory)", "",
-                   f"Verdicts: {len(verdicts)}", "",
-                   "| path | line | is_real | severity | abstained |",
-                   "|---|---|---|---|---|"]
-          for v in verdicts:
-              if "error" in v:
-                  lines.append(f"| {v['path']} | - | error | - | - |")
-              else:
-                  lines.append(f"| {v['path']} | {v['line']} | {v['is_real']} | {v['severity']} | {str(v['insufficient']).lower()} |")
-          summary = "\n".join(lines)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
-              fh.write(summary + "\n")
-          Path("jev-verdicts.json").write_text(json.dumps(verdicts, indent=2))
-          print(summary)
-      - name: Upload verdicts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jev-shadow-verdicts
-          path: jev-verdicts.json
-
   gate:
     name: 'Self-review gate'
     needs: [scope, self-review]
