@@ -19,7 +19,7 @@
       "body": "Adds missing unit tests.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:be58305378bfbcdf9f30f8f77dcee5505b11d861e4e815323ddb60278ce72163"
+    "revision_pin": "fixture:sha256:bb0d0002536dd71545e405ac56adc879c923ee73e445e04451506f5eecf867da"
   },
   "labels": [],
   "expected": {

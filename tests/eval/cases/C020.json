@@ -18,7 +18,7 @@
       "body": "UI now accepts partial numbers; switched to LIKE.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:266ca2141141dbf899ad0a6de338762ca7bbac4c5a63323b82ec3a4c6025b9f0"
+    "revision_pin": "fixture:sha256:94e49ef28224470f8fca311a882b11b8caa5c4754e234a0ae0f9c1cdb0b1ccb7"
   },
   "labels": [
     {

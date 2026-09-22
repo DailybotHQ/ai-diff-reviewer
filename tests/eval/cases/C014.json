@@ -18,7 +18,7 @@
       "body": "Mobile webviews hit the API from arbitrary origins.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:67b8f9323ac383a857b94ab4740af7bcbea455b731f47cdd6d8e34ab2e30b1a1"
+    "revision_pin": "fixture:sha256:f57526c759ddb377ac45f43194857d4ca926902433f92ff05420a1baeb739d4e"
   },
   "labels": [
     {

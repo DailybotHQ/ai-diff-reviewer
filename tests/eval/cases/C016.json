@@ -18,7 +18,7 @@
       "body": "Staging ledger uses a self-signed cert; skip verification for now.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:994569d0228ef89361c2ab0bbf5b767897d53c23e977305d8769b9eb69ca6b52"
+    "revision_pin": "fixture:sha256:610d75495a0066d55f609c7e88c1728fdd22f5181831ae5759f5ea5f512716da"
   },
   "labels": [
     {

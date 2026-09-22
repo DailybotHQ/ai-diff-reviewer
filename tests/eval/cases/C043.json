@@ -18,7 +18,7 @@
       "body": "Three lines of commented-out code nobody remembers.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:2618f32e47efb171f909af05aac5fbe2282aa79503fae88a5df3ab7978d5cb84"
+    "revision_pin": "fixture:sha256:0ffcf6698f1ccd8058a3fccfa3366cfdf203651d03156070353f0ff12dd3a30b"
   },
   "labels": [],
   "expected": {

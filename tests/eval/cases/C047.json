@@ -18,7 +18,7 @@
       "body": "Add the LTS line.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:ea6161d4068edaf7b9bf24db03164383adc0a12c7e6739fe824434ec103a6862"
+    "revision_pin": "fixture:sha256:24c27e82544169a0ef1ce36cc9628fadf264d23bee7980db3efec3497156a878"
   },
   "labels": [],
   "expected": {

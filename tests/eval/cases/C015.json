@@ -18,7 +18,7 @@
       "body": "Write path showed lock contention in the profile.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:ffed8c7b996df238ca903bc12630ae4423778251876b24075289468a0ce885e1"
+    "revision_pin": "fixture:sha256:2e3559609b38a81222642600cedb3a65c077200d02d82c9c79a47f34675d23a4"
   },
   "labels": [
     {

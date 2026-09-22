@@ -19,7 +19,7 @@
       "body": "filepath.Clean already resolves dot segments, so the Contains check is dead code.",
       "deceptive": true
     },
-    "revision_pin": "fixture:sha256:f49a310b0bde1b373e6ecd3b3cec5d413ae2c52201bef364a39c92ada11cf31d"
+    "revision_pin": "fixture:sha256:0d0d7d84680f671ec82d61f2c1273a665acefc37123dcbd0cd0b48f16b2d39a4"
   },
   "labels": [],
   "expected": {

@@ -18,7 +18,7 @@
       "body": "Comments now render markdown-ish formatting directly.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:53d2297aebc213814c535a1ebe084938b064669c7fa90b1668dadb3a5ac662f7"
+    "revision_pin": "fixture:sha256:5370273560c942d347e68850c35d2162dec52c4b0a624993070923a79225161c"
   },
   "labels": [
     {

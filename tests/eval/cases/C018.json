@@ -18,7 +18,7 @@
       "body": "ReadAll drains the body, so the linter says Close is unnecessary.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:98c56c374f0f25d818e13a32e738773b86f7f270fc4b29f8fd2c5f737f9e1f5f"
+    "revision_pin": "fixture:sha256:8bf4234d859b35f4dddaeee41a104e4bfb6bc756a8271563ba0465733512dcbb"
   },
   "labels": [
     {

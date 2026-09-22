@@ -18,7 +18,7 @@
       "body": "prefetch_related not needed after the model refactor.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:d661b6529af7b7878d24513c9a8c9df591d7e81c27073862eedcb352e5e48224"
+    "revision_pin": "fixture:sha256:d6a226fc22d60ba75d5646b817781b877ca3711c03b78b563f9af36bcc8c72ee"
   },
   "labels": [
     {

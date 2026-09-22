@@ -18,7 +18,7 @@
       "body": "Cron envs without SMTP_PASSWORD crashed at login; added a fallback.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:a8c6a5cd35b7c5b18baa2a6eb615e09a33d92539f80d11fe04c12496025cc7fb"
+    "revision_pin": "fixture:sha256:010053476d2b27c35accfc297c150d5b549a4c4edc4a1544e3227193e49ce48e"
   },
   "labels": [
     {

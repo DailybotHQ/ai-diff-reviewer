@@ -18,7 +18,7 @@
       "body": "Annual roll.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:ffdd339de8c9c3bc2f58f9a9106652963ee7d72cbb266385d187b130e612c3de"
+    "revision_pin": "fixture:sha256:00503e2af6a18024d90d6b19a05dc22ed1f5a21144d77431104d785eddc3647e"
   },
   "labels": [],
   "expected": {

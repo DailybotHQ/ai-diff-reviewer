@@ -22,7 +22,7 @@
       "body": "Major upgrade; call sites migrated; lockfile updated.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:15382a09d782d0e86deb9f3d49823275dfa9b7b6732f04a67955c85793bfca81"
+    "revision_pin": "fixture:sha256:e0835aa67a3696ddc67f91f1ace4929e39c2ed1bd92078ae00efd7a9c039d746"
   },
   "labels": [],
   "expected": {

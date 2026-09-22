@@ -18,7 +18,7 @@
       "body": "Hot path; O(1) lookup.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:e6316e6bef90f6f5414b79aed45a8dc6e5b6310d9b98afedcce6211d1123ea00"
+    "revision_pin": "fixture:sha256:272241b4ad91631d14ea741767c1307feeea3467393afcc5d86a5e8d757cd905"
   },
   "labels": [],
   "expected": {

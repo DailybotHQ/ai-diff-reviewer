@@ -65,9 +65,8 @@ def make_case(case_id: str = "C901", risk: str = "warning_positive") -> dict:
 
 
 def pin(case: dict) -> dict:
-    case["fixture"]["revision_pin"] = "fixture:sha256:" + corpus_validate.canonical_hash(
-        {"base": case["fixture"]["base"], "head": case["fixture"]["head"]}
-    )
+    payload = {k: v for k, v in case["fixture"].items() if k != "revision_pin"}
+    case["fixture"]["revision_pin"] = "fixture:sha256:" + corpus_validate.canonical_hash(payload)
     return case
 
 
@@ -199,3 +198,35 @@ class RealCorpusIntegrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CorpusInventoryAndPinTests(unittest.TestCase):
+    """Round-3 review hardening: the declared inventory is enforced, and a
+    pin computed over base/head only cannot survive metadata tampering."""
+
+    def _real_corpus(self) -> dict:
+        cases, f = corpus_validate.load_cases(Path(__file__).parent / "eval" / "cases")
+        assert f.ok(), f.items
+        return cases
+
+    def test_missing_declared_case_fails_inventory_check(self) -> None:
+        cases = self._real_corpus()
+        dropped = sorted(cases)[0]
+        del cases[dropped]
+        f = corpus_validate.Findings()
+        corpus_validate.corpus_checks(cases, f)
+        self.assertFalse(f.ok())
+        self.assertTrue(any("missing declared cases" in i for i in f.items), f.items)
+
+    def test_metadata_tampering_invalidates_pin(self) -> None:
+        cases = self._real_corpus()
+        cid = sorted(cases)[0]
+        case = json.loads(json.dumps(cases[cid]))
+        case["fixture"]["pr_metadata"]["title"] += " (tampered)"
+        f = corpus_validate.Findings()
+        corpus_validate.validate_case(case, f"{cid}.json", f)
+        self.assertTrue(any("revision_pin mismatch" in i for i in f.items), f.items)
+        # the unmodified sibling must still validate clean
+        f2 = corpus_validate.Findings()
+        corpus_validate.validate_case(cases[cid], f"{cid}.json", f2)
+        self.assertTrue(f2.ok(), f2.items)

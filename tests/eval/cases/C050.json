@@ -18,7 +18,7 @@
       "body": "Build output kept leaking into git status.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:8b7d2f7851e7f605ee637f1ada6f1cfe486481cad16e07e7e6f46e04c4de9fae"
+    "revision_pin": "fixture:sha256:e64b032d9d3b667f0365773b0f94a615f2425b882d72486fa22f2e429aaa2195"
   },
   "labels": [],
   "expected": {

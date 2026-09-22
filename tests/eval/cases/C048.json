@@ -18,7 +18,7 @@
       "body": "npm install with the same package.json; only the resolved URL field normalizes.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:bd6451c2c31c4e29d817daf028fe9c00d9679c6eb80a254807b4a78d4198d9e7"
+    "revision_pin": "fixture:sha256:233e02e614d715c6919a0f6e00b033df30f8772c0bc24d442ef72fefeac81a8c"
   },
   "labels": [],
   "expected": {

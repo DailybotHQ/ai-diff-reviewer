@@ -159,7 +159,13 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
                 if not isinstance(content, str):
                     bad(f"fixture.{tree_name}[{p!r}] content must be a string")
         pin = fixture.get("revision_pin", "")
-        expected_pin = f"fixture:sha256:{canonical_hash({'base': base, 'head': head})}"
+        # The pin covers the ENTIRE immutable fixture payload - trees,
+        # inventory, pr_metadata, the deceptive flag - not just the trees:
+        # metadata fields change evaluation semantics (inventory gaps decide
+        # whether labels are acceptable), so a pin over base/head alone
+        # would let a consumer alter the effective case undetected.
+        pin_payload = {k: v for k, v in fixture.items() if k != "revision_pin"}
+        expected_pin = f"fixture:sha256:{canonical_hash(pin_payload)}"
         if pin != expected_pin:
             bad(f"revision_pin mismatch (want {expected_pin[:40]}...)")
         if missing and not all(isinstance(m, str) for m in missing):
@@ -247,7 +253,23 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
         bad("rights.origin and rights.egress are required (source rights / data egress)")
 
 
+# The published inventory, declared here so an accidentally omitted or
+# replaced case cannot silently pass the aggregate floors. C072 was never
+# published (see CORPUS.md); ids are assigned at authoring time and never
+# reused.
+EXPECTED_CASE_IDS: frozenset[str] = frozenset(
+    f"C{i:03d}" for i in range(1, 75) if i != 72
+)
+
+
 def corpus_checks(cases: dict[str, dict[str, Any]], f: Findings) -> dict[str, Any]:
+    ids = set(cases)
+    missing_ids = sorted(EXPECTED_CASE_IDS - ids)
+    if missing_ids:
+        f.fail(f"corpus is missing declared cases: {missing_ids}")
+    extra_ids = sorted(ids - EXPECTED_CASE_IDS)
+    if extra_ids:
+        f.fail(f"corpus carries undeclared cases: {extra_ids}")
     stacks = {c.get("stack") for c in cases.values()}
     critical = [c for c in cases.values() if c.get("risk_class") == "critical_positive"]
     negative = [c for c in cases.values() if c.get("risk_class") == "negative_control"]

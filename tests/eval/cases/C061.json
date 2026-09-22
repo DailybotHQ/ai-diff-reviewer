@@ -19,7 +19,7 @@
       "body": "Round-1 review flagged the silent except; failures are now recorded.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:e2ac85c23ae40ed00c43a26e69bd8e064e649c56bb456c8885c928f60c4ba78d"
+    "revision_pin": "fixture:sha256:1c8ec421924cfa22c7fac1f8339ee76d26920798a26f1be0c20676bebda0a00d"
   },
   "labels": [
     {

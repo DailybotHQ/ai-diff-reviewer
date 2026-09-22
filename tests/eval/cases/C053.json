@@ -18,7 +18,7 @@
       "body": "Backfill entry.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:1b3a708efc96fa95fb54ec2934bdc865a0b1b4651d4d29142da6ada92e55f58d"
+    "revision_pin": "fixture:sha256:4e1f19e99f14a8fb3968eb0cb0a4256808910c795cf6e80e755dfd24ada0b2e2"
   },
   "labels": [],
   "expected": {

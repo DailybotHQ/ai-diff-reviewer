@@ -18,7 +18,7 @@
       "body": "Quarterly subfolders, with containment enforced.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:e48cae53af6f16064cb605d842be7ad9beab50b80bb23f857700ac461a3d0698"
+    "revision_pin": "fixture:sha256:06cd8f4aeb445246fe76e5b873d21f344290b6e57e08df652cff9ed56c416c96"
   },
   "labels": [],
   "expected": {

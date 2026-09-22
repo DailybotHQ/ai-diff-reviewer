@@ -18,7 +18,7 @@
       "body": "Use errors.Join for future multi-writer support.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:655eeea5c40c4dc380431e9a2a06ab3044196f00849e434df9af6da9bd1468a1"
+    "revision_pin": "fixture:sha256:c747f426d69972360b7eeaf09185ba925f1e46563df9d41afed4af66c9a5faa2"
   },
   "labels": [
     {

@@ -19,7 +19,9 @@ Case ids are assigned at authoring time and never reused. `C072` was never
 published, so files run C001–C074 minus C072 (73 cases) — the gap is
 intentional, and ids, not positions, are the identity. The validator pins
 each case's `id` to its file name, so a renamed, duplicated, or hand-copied
-file fails the strict gate.
+file fails the strict gate, and the declared inventory (C001–C074 minus
+C072) is itself enforced by the validator — an omitted or replaced case
+cannot slip past the aggregate floors.
 
 ## Validate
 
@@ -30,7 +32,7 @@ python3 -m unittest discover -s tests -p 'test_eval_corpus*.py' -v
 ```
 
 The validator is the gate (`CORPUS` in the plan's validation register): it
-rejects duplicate identities, wrong or missing fixture pins (content SHA-256),
+rejects duplicate identities, wrong or missing fixture pins (SHA-256 over the full immutable fixture payload — trees, inventory, pr_metadata, deceptive flag), undeclared or missing case ids,
 unadjudicated critical labels, unblinded adjudication, secret-looking fixture
 content, labels whose path is outside the fixture, negatives that carry labels,
 and any breach of the declared floors.

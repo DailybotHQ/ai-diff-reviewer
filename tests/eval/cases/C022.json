@@ -19,7 +19,7 @@
       "body": "Adds a clarifying HTML comment about workflow reviews.",
       "deceptive": true
     },
-    "revision_pin": "fixture:sha256:3273b17e661994d77b962a888cd88f695346a7c8d213af53190da5d0b5d09058"
+    "revision_pin": "fixture:sha256:477de6018bd47e3b04cfcef2dd6e2e636cc02a0568680101e3170e345e14a7ee"
   },
   "labels": [
     {

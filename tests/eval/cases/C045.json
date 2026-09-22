@@ -18,7 +18,7 @@
       "body": "Docstrings still described the removed filter arg.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:d7148e5aec6cddd109cd09524c344dc94e4f89fe53434af93b68e0c6a11ff913"
+    "revision_pin": "fixture:sha256:b28867ae3b0eb1b51348e274e2e0b6d00faa3d83b7fb64aba48c71b404d1b2ca"
   },
   "labels": [],
   "expected": {

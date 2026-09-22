@@ -18,7 +18,7 @@
       "body": "Documents the cache-clear step.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:8201e1b6fb7ea6153ee1407e4d38e880b65e62ba6669158b7cd69d845f2561b5"
+    "revision_pin": "fixture:sha256:78d96b8ec039c9a3080fa7eaefc5c230414cdd193fc7eaddec8749c51d4d774a"
   },
   "labels": [],
   "expected": {

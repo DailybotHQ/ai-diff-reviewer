@@ -29,7 +29,7 @@
       "body": "Small logging change and the usual lockfile bump.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:8672822079d21cafa0d6a5ba75a21a6597279712e9fe46bc35e4c7ae255085af"
+    "revision_pin": "fixture:sha256:5c6b20b2982f10d2c1488fab1bd5c1e8ee9575efeb05e0792ec39d7fb472976a"
   },
   "labels": [
     {

@@ -18,7 +18,7 @@
       "body": "Spelling.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:b84e93a0aa78c1fcb66f315fdf994c09c30c8b0e3958e98a996963a5ebf13738"
+    "revision_pin": "fixture:sha256:8f12b90427674ab29ec10afa176a62fb792c8c2e6192c519aa5fe5be11e1bd57"
   },
   "labels": [],
   "expected": {

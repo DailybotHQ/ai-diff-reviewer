@@ -18,7 +18,7 @@
       "body": "Decorator indirection removed; the check is explicit in the handler.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:6f9006def67844dbfe3f07b997b60b3fef823f476fcec5517bd5d62d0c3931dc"
+    "revision_pin": "fixture:sha256:d66cf733dd5863ef377d13513443124da673c870f311d792097bc89c018bc9b3"
   },
   "labels": [],
   "expected": {

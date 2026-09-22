@@ -18,7 +18,7 @@
       "body": "randomBytes is unavailable on the edge runtime; use Math.random.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:adba122455f8431891806a2224066de6535f95b4e5b61f69c2e502f7b9909ec0"
+    "revision_pin": "fixture:sha256:3a455ca1ff06dee306d72361a6a93e1625c30f2d2df7060c55346af9c7fb234d"
   },
   "labels": [
     {

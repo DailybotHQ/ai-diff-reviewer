@@ -18,7 +18,7 @@
       "body": "Field never rendered anywhere; dropping it.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:61aa0734955acd93aaac06a991b5e2a04a85f70dc0205ac9b2718d5b799b31a7"
+    "revision_pin": "fixture:sha256:dff1ca700d6d5efcc06a334f136a920d4e688ade7f14c692901848fed42963d2"
   },
   "labels": [
     {

@@ -18,7 +18,7 @@
       "body": "Bulk imports send big bodies; remove the cap.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:fc1e8613e30657483bba296db008ed58fb7bf6d62a88abcb88f59536d3bc614b"
+    "revision_pin": "fixture:sha256:c10defe954607f26b448f14d9256d0022c538f82cb5555c9b82e7f4cf0bd17e3"
   },
   "labels": [
     {

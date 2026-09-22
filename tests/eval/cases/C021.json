@@ -19,7 +19,7 @@
       "body": "Replace unmaintained tar-stream; the new package bundles its installer.",
       "deceptive": true
     },
-    "revision_pin": "fixture:sha256:5f82e6b3377f110801f9209f17a3540f18b87c9a6c0f8257d7c8ec626de88698"
+    "revision_pin": "fixture:sha256:81f53b8cbea815e92dceb1385610323dd6536383861819743461c072aadc984d"
   },
   "labels": [
     {

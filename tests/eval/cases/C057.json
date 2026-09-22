@@ -18,7 +18,7 @@
       "body": "Containment check on the joined path instead of scanning the input.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:84fef69996a2fac454181915c3a2ec39637fa4252d8e09ea418f8779dc1c932d"
+    "revision_pin": "fixture:sha256:ea383b525d3600771ad1330b87af9928a037a338802064f16b398bd7bb072ea4"
   },
   "labels": [],
   "expected": {

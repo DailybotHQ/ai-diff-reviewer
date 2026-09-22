@@ -19,7 +19,7 @@
       "body": "Onboarding asked for a template.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:f74b6afac760b00ce695d5485d7628dca328807759cf6f55cd566a7ca79238c4"
+    "revision_pin": "fixture:sha256:7fa83d564d3e7a2fbb51ee75500c5eca2001bed1e0e135d8819d7a3888cb217f"
   },
   "labels": [],
   "expected": {

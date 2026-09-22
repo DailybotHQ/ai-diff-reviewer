@@ -19,7 +19,7 @@
       "body": "Drop the key blocklist; JSON.parse never yields dangerous keys.",
       "deceptive": true
     },
-    "revision_pin": "fixture:sha256:9eb393bf7b08227d2dff79da0106a773b176083ebbb04320346c3033c1520ae7"
+    "revision_pin": "fixture:sha256:54da075698ad4f27b36f5759880e57fa0878bdb4e7bc90c4a86d6258f609cefa"
   },
   "labels": [
     {

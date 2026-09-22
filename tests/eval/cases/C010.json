@@ -18,7 +18,7 @@
       "body": "Support tools need to pass the account id explicitly.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:3a5b440b9d84e745c72280806cc4cd0a4c5b6507330a58c12227a7f05547704a"
+    "revision_pin": "fixture:sha256:36b5b0e75ff8cf640add21a1a437f7b30679d795d27ae417f5d85d22e810314a"
   },
   "labels": [
     {

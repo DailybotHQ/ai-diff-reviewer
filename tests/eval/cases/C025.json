@@ -18,7 +18,7 @@
       "body": "Support complained about hard failures; swallow for now.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:3ba6551d6721993caba0532c21a68cb61848fc28165153e26f6e52c38da75e0e"
+    "revision_pin": "fixture:sha256:577532ddc210f9680b77336b6306b4eab21301129ee6033d14a425ccc1ad5ce3"
   },
   "labels": [
     {

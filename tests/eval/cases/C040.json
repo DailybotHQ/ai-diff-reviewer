@@ -18,7 +18,7 @@
       "body": "Clearer name.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:cef788b498e0d61904a7da56459715b807f849b3953dcfbc2de0a01bf0e4ba75"
+    "revision_pin": "fixture:sha256:a72027c5f0d8ae3dc743101c097fada0d586d01bfa3dfaa24b860b17109e12f0"
   },
   "labels": [],
   "expected": {

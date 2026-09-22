@@ -18,7 +18,7 @@
       "body": "ImageMagick 7 needs the policy delegate; switch conversion to shell form.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:d4b25597dc0ebaf3db3ccf5555fee0e8a51247d99fe11ba34c6e7a117a82a4b5"
+    "revision_pin": "fixture:sha256:cdecaa8bbb5dd0c19c19aa767e04419ead6e568d3114365db8f2fd51a5da142d"
   },
   "labels": [
     {

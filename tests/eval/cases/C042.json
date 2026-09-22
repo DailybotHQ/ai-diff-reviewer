@@ -20,7 +20,7 @@
       "body": "Version bump.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:8f02025b891b7f376da419fc6963983cc833588fb8ea444c4150d97beabc61f1"
+    "revision_pin": "fixture:sha256:9be72049303819f32fc19c9489d2189f2450ebec92fd95fd21bce70534b37e12"
   },
   "labels": [],
   "expected": {

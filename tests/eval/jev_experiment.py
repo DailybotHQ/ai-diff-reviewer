@@ -383,6 +383,28 @@ def cmd_report(args: argparse.Namespace) -> int:
     if not records:
         print("FAIL: no run records; a report without evidence would be a fabrication", file=sys.stderr)
         return 1
+    # Records must belong to THIS manifest: unknown arms/lanes/cases or a
+    # mismatched corpus digest mean the evidence is stale or fabricated.
+    arms = set(manifest.get("arms", ARMS))
+    lanes = set(manifest.get("lanes", {}))
+    splits = manifest.get("splits", {})
+    digest = manifest.get("corpus_digest", "")
+    rejected: list[str] = []
+    covered: set[tuple[str, str, str]] = set()
+    for r in records:
+        label = r.get("run_id") or "<unnamed record>"
+        if r.get("arm") not in arms:
+            rejected.append(f"{label}: unknown arm {r.get('arm')!r}")
+        if r.get("lane") not in lanes:
+            rejected.append(f"{label}: unknown lane {r.get('lane')!r}")
+        if r.get("case_id") not in splits:
+            rejected.append(f"{label}: case_id {r.get('case_id')!r} not in manifest splits")
+        if digest and r.get("corpus_digest") not in (None, "", digest):
+            rejected.append(f"{label}: corpus_digest mismatch (frozen {digest!r})")
+        covered.add((r.get("arm"), r.get("lane"), r.get("case_id")))
+    if rejected:
+        print("FAIL: run records do not belong to this manifest:\n  - " + "\n  - ".join(rejected[:10]), file=sys.stderr)
+        return 1
     by_arm: dict[str, dict[str, Any]] = {}
     for r in records:
         arm = r.get("arm", "?")
@@ -403,7 +425,15 @@ def cmd_report(args: argparse.Namespace) -> int:
         req for req in required.get("cells", [])
         if tuple(req) not in {(r.get("arm"), r.get("lane")) for r in records}
     ]
-    promotion_ready = not missing_cells and all(
+    # Cell cardinality: a required (arm, lane) cell is only satisfied when
+    # it reviewed EVERY case in the frozen split - a handful of stale but
+    # complete-looking records must not be able to tick a cell.
+    required_cells = [tuple(c) for c in (required.get("cells") or [])]
+    expected_triples = {
+        (arm, lane, cid) for (arm, lane) in required_cells for cid in splits
+    }
+    missing_case_coverage = sorted(expected_triples - covered)
+    promotion_ready = not missing_cells and not missing_case_coverage and all(
         c["unknown_cost"] == 0 and c["failures"] == 0 for c in by_arm.values()
     )
     print(json.dumps({
@@ -411,6 +441,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         "runs_recorded": len(records),
         "per_arm": by_arm,
         "missing_required_cells": missing_cells,
+        "missing_case_coverage_count": len(missing_case_coverage),
+        "missing_case_coverage_sample": missing_case_coverage[:5],
         "promotion_ready": promotion_ready,
         "_note": "unknown cost, failed runs, or missing cells fail promotion (F8/F9); failures are reported, never averaged away",
     }, indent=2))

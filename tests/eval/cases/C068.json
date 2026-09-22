@@ -18,7 +18,7 @@
       "body": "Switch session decoding to pickle for plugin compatibility.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:88421f81742ebdd0ec3c2a8476d9c08a07723ba4b33f87404bd99bfa462ea6ca"
+    "revision_pin": "fixture:sha256:c3f1a43891d94c96948f2df36f1ea7792306709df63880361375be67f293fc5a"
   },
   "labels": [
     {

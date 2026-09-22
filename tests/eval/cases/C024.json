@@ -18,7 +18,7 @@
       "body": "Avoid the dict allocation on every call.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:e6740a4a749193d42485d77b0a411c75639d58b0ee4b63bd3f0cc6743f24a0d4"
+    "revision_pin": "fixture:sha256:d7c7859c20effd20a42a54ccb4ebe0b3bc3df2837d09590b21f3e7ac63b8fd09"
   },
   "labels": [
     {

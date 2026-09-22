@@ -18,7 +18,7 @@
       "body": "Staging tokens fail verification after the accounts migration; verify-off until re-issuance lands.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:e658bbce189d80a014734e3a83d497c374a467e0d01ab83ee5e0a6bdab28cb8d"
+    "revision_pin": "fixture:sha256:a8aae51220f453bae6e808f3beca14b26bc8b872b2d294cebcac8f8e4060f483"
   },
   "labels": [
     {

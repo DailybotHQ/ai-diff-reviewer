@@ -18,7 +18,7 @@
       "body": "PathPrefix subrouter cleanup during the API versioning work.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:c0709860657fb09a9023635167f0525d9f11904c751e4f1fb7d8b6d4b493903e"
+    "revision_pin": "fixture:sha256:7418b7965747e21325e9f623c25eac3dfa6106ae983e5e62b7e8f3b8a1ca0c99"
   },
   "labels": [
     {

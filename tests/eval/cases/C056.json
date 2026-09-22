@@ -18,7 +18,7 @@
       "body": "LIKE with a bound parameter; wildcards in user input escaped.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:740831019e62b4d908781ed8ac450459c269b7d765a4460c2cd7f7afddd21a3d"
+    "revision_pin": "fixture:sha256:cfad23e69d014f4d17a2097f2951c325eff3fc8cda00b247da92dd97d990cbfe"
   },
   "labels": [],
   "expected": {

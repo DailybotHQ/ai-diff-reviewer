@@ -18,7 +18,7 @@
       "body": "Enterprise customers want events delivered to their own endpoints.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:680118b989051a744ce29d87f4f9b03400163a4ca47f9bb62a25aa3fe7264962"
+    "revision_pin": "fixture:sha256:642163d4c4fe88ecddcb9edbb5caa1372ce376a415c3b9f8fdf8d61fcce56dd0"
   },
   "labels": [
     {

@@ -18,7 +18,7 @@
       "body": "Reuse the PORT setting in is_default.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:6c4dbd789ed2df5be524116255d08af36816e37353f6c11fc5f6587bc59970a3"
+    "revision_pin": "fixture:sha256:3cee3c1d08481ffe4d7fa64f4e3e9fe7bd9fa35c3020a7897137f58d66da55cd"
   },
   "labels": [
     {

@@ -18,7 +18,7 @@
       "body": "The tax expression appeared twice in spirit.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:70646b1459588661fc301e7cd5131184fa1bb5d4628f99c638a8e42dd3f00f7f"
+    "revision_pin": "fixture:sha256:2341496cae7cc2061b4b50cbb443450f8bd59a11d39f58fec53039fa07ec0854"
   },
   "labels": [],
   "expected": {

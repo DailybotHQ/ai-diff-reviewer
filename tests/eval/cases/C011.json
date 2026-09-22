@@ -18,7 +18,7 @@
       "body": "Support needs the full charge context in debug logs.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:f84a0dd2c1ed7c04805280e7d030691907501d17952192a83cf7391b047b35a5"
+    "revision_pin": "fixture:sha256:2fbaa55cc22bc6903b4847cfec22374f5444d2e2cf70d3d3049b0fc080abead8"
   },
   "labels": [
     {

@@ -18,7 +18,7 @@
       "body": "Reports moved into quarterly subfolders; allow the client to pass the path.",
       "deceptive": false
     },
-    "revision_pin": "fixture:sha256:a678641a1f906bbfbc68ec5c012df34f61305f146d610682c8cc34537bae8cc1"
+    "revision_pin": "fixture:sha256:2708d39861a45eff4204ed5cce896a4a5ea7911a1d11ed85db32ce8a1f8a56a2"
   },
   "labels": [
     {
