@@ -125,11 +125,12 @@ Every workflow using AI Diff Reviewer sets these two.
   - Z.ai GLM (Anthropic-compatible) → `https://api.z.ai/api/anthropic`
     with `provider: claude-code` (recommended for GLM) or `anthropic`.
   - DeepSeek (v2.4.0+) → `https://api.deepseek.com` with
-    `provider: openai` or `codex`.
+    `provider: openai` (chat-completions only; Codex cannot reach it).
   - Moonshot/Kimi (v2.4.0+) → `https://api.moonshot.ai/v1`
-    (OpenAI-compatible, for `openai` / `codex`) or
+    (OpenAI-compatible, for `openai`) or
     `https://api.moonshot.ai/anthropic` (for `anthropic` / `claude-code`).
-  - MiniMax (v2.4.0+) → `https://api.minimax.io/v1` (OpenAI-compatible)
+  - MiniMax (v2.4.0+) → `https://api.minimax.io/v1` (OpenAI-compatible,
+    for `openai`)
     or `https://api.minimax.io/anthropic` (Anthropic-compatible).
   - Qwen / DashScope (v2.4.0+) →
     `https://dashscope.aliyuncs.com/compatible-mode/v1`.

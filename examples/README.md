@@ -42,7 +42,7 @@ Each file is self-contained and ready to drop into `.github/workflows/` in a dow
 ## Convention
 
 - Every example uses `DailybotHQ/ai-diff-reviewer@v2` — pinned to the moving major tag so consumers pick up patch/minor updates automatically. Consumers who want strict pinning replace `@v2` with `@vX.Y.Z`.
-- Every example includes `fetch-depth: 0` on `actions/checkout` (required — the runtime does `git diff origin/<base>...HEAD` and a shallow clone won't have the base ref).
+- Every example includes `fetch-depth: 0` on `actions/checkout` (required — the runtime does `git diff origin/<base>...HEAD` and a shallow clone won't have the base ref) **and `persist-credentials: false`** (see [`../docs/SECURITY.md`](../docs/SECURITY.md) — the default checkout writes `GITHUB_TOKEN` into `.git/config`, readable by anything the workflow runs).
 - Every example sets the minimum permissions (`contents: read`, `pull-requests: write`).
 - Every example includes a workflow-level `timeout-minutes: 15` (the recommended safety net — see [`../docs/PERFORMANCE.md`](../docs/PERFORMANCE.md)).
 

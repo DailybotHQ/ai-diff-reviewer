@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+          persist-credentials: false   # never leave GITHUB_TOKEN in .git/config
 
       - uses: DailybotHQ/ai-diff-reviewer@v2
         with:
