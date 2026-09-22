@@ -46,6 +46,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import corpus_validate  # noqa: E402
 
+
+def corpus_validate_load_cases_safe():
+    """Loader passthrough for the harness smoke tests (keeps the corpus
+    import surface in one place)."""
+    return corpus_validate.load_cases(Path(__file__).parent / "cases")
+
 SCHEMA = "ai-diff-reviewer/jev-experiment/1"
 ARMS = ("baseline", "deterministic")
 PHASES = ("calibration", "heldout", "confirmation")
@@ -217,6 +223,7 @@ def validate_manifest(manifest: dict[str, Any], cases: dict[str, dict[str, Any]]
             "corpus_digest mismatch: the corpus (fixtures or labels) changed "
             "since init - refreeze the manifest before trusting the splits (F2)"
         )
+    splits = manifest.get("splits") or {}
     unknown_split_ids = sorted(set(splits) - set(cases))
     if unknown_split_ids:
         problems.append(
@@ -226,7 +233,6 @@ def validate_manifest(manifest: dict[str, Any], cases: dict[str, dict[str, Any]]
     invalid_phases = sorted({p for p in splits.values() if p not in PHASES})
     if invalid_phases:
         problems.append(f"splits carry invalid phase values: {invalid_phases}")
-    splits = manifest.get("splits") or {}
     missing = sorted(set(cases) - set(splits))
     if missing:
         problems.append(f"unassigned cases: {missing[:5]}")
@@ -409,6 +415,9 @@ def cmd_report(args: argparse.Namespace) -> int:
             continue
         record.setdefault("run_id", run_path.name)
         records.append(record)
+    if rejected:
+        print("FAIL: run files rejected at intake:\n  - " + "\n  - ".join(rejected[:10]), file=sys.stderr)
+        return 1
     if not records:
         print("FAIL: no run records; a report without evidence would be a fabrication", file=sys.stderr)
         return 1
@@ -430,7 +439,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             binding_failures.append(f"{label}: case_id {r.get('case_id')!r} not in manifest splits")
         if digest and r.get("corpus_digest") not in (None, "", digest):
             binding_failures.append(f"{label}: corpus_digest mismatch (frozen {digest!r})")
-        covered.add((r.get("arm"), r.get("lane"), r.get("case_id")))
+        covered.add((r.get("arm"), r.get("lane"), r.get("case_id"), int(r.get("rep") or 0)))
     if binding_failures:
         print("FAIL: run records do not belong to this manifest:\n  - " + "\n  - ".join(binding_failures[:10]), file=sys.stderr)
         return 1
@@ -445,8 +454,13 @@ def cmd_report(args: argparse.Namespace) -> int:
             cell["failures"] += 1
         if r.get("usage_unknown"):
             cell["unknown_cost"] += 1
-        for key in ("provider_seconds", "setup_seconds"):
-            cell[key] += float(r.get(key) or 0.0)
+        # run_eval.py records carry total `seconds` + `setup_seconds`; the
+        # campaign runner schema carries `provider_seconds` directly.
+        provider_time = r.get("provider_seconds")
+        if provider_time is None and r.get("seconds") is not None:
+            provider_time = float(r["seconds"]) - float(r.get("setup_seconds") or 0.0)
+        cell["provider_seconds"] += float(provider_time or 0.0)
+        cell["setup_seconds"] += float(r.get("setup_seconds") or 0.0)
         cell["must_find_hits"] += int(r.get("must_find_hits") or 0)
         cell["must_find_total"] += int(r.get("must_find_total") or 0)
     required = manifest.get("report_requirements", {})
@@ -458,8 +472,12 @@ def cmd_report(args: argparse.Namespace) -> int:
     # it reviewed EVERY case in the frozen split - a handful of stale but
     # complete-looking records must not be able to tick a cell.
     required_cells = [tuple(c) for c in (required.get("cells") or [])]
+    repetitions = int(manifest.get("repetitions", 1))
     expected_triples = {
-        (arm, lane, cid) for (arm, lane) in required_cells for cid in splits
+        (arm, lane, cid, rep)
+        for (arm, lane) in required_cells
+        for cid in splits
+        for rep in range(repetitions)
     }
     missing_case_coverage = sorted(expected_triples - covered)
     promotion_ready = not missing_cells and not missing_case_coverage and all(

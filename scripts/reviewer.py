@@ -2834,7 +2834,8 @@ def _error_param_field(error_text: str) -> str | None:
         parsed = json.loads(error_text[start:])
     except json.JSONDecodeError:
         return None
-    param = parsed.get("error", {}).get("param") if isinstance(parsed, dict) else None
+    error_obj = parsed.get("error") if isinstance(parsed, dict) else None
+    param = error_obj.get("param") if isinstance(error_obj, dict) else None
     return param if isinstance(param, str) else None
 
 class OpenAIProvider(Provider):
@@ -2850,6 +2851,7 @@ class OpenAIProvider(Provider):
 
     PROVIDER_ID: str = "openai"
 
+
     def __init__(
         self,
         *,
@@ -2864,6 +2866,9 @@ class OpenAIProvider(Provider):
             if profile is not None
             else resolve_endpoint_profile("", self.PROVIDER_ID)
         )
+        # Optional sampling parameters this vendor already rejected once; they
+        # are proactively omitted on every later turn of the same review.
+        self._suppressed_params: set[str] = set()
 
     def build_request_body(
         self,
@@ -2925,6 +2930,8 @@ class OpenAIProvider(Provider):
         payload: dict[str, Any] = self.build_request_body(
             system_prompt=system_prompt, messages=messages, tools=tools
         )
+        for name in self._suppressed_params:
+            payload.pop(name, None)
         body: bytes = json.dumps(payload).encode("utf-8")
         url: str = join_endpoint_path(self.profile.base_url, OPENAI_CHAT_COMPLETIONS_PATH)
         api_label: str = (
@@ -2959,6 +2966,9 @@ class OpenAIProvider(Provider):
             raw = _post_json_with_retries(
                 url=url, body=body, headers=headers, api_label=api_label
             )
+            # Remember the rejection for the rest of this review so turns 2..N
+            # do not repeat the doomed request before falling back again.
+            self._suppressed_params.update(set(payload) - set(fallback))
         _log_usage(api_label, raw)
         return openai_response_to_anthropic(raw)
 

@@ -414,10 +414,6 @@ class CodexCustomToolWarningTests(unittest.TestCase):
         msgs = self._run("https://myres.services.ai.azure.com/openai/v1")
         self.assertFalse(any("422" in m for m in msgs), msgs)
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CodexBackendGateTests(unittest.TestCase):
     """The v2.4.0 chat-completions backends are Codex-impossible (wire_api
     responses vs chat-completions surfaces): fail fast, never half-start."""
@@ -434,3 +430,6 @@ class CodexBackendGateTests(unittest.TestCase):
         # keep the existing freeform-tool warning path instead.
         for kind in ("azure", "zai", "xai", "custom"):
             reviewer._assert_codex_backend_supported(kind)  # must not raise
+
+if __name__ == "__main__":
+    unittest.main()
