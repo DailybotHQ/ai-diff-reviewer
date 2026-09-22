@@ -67,7 +67,9 @@ def _complete_and_capture(provider: object) -> object:
 
 class AnthropicProviderBackendTests(unittest.TestCase):
     """Request shape per endpoint profile — the default profile is a locked
-    snapshot of the pre-`api-base` request (byte-identical contract)."""
+    snapshot of the pre-`api-base` request, plus the intentional deterministic
+    `temperature` (the stabilization change; see the review-acceleration plan's
+    noise-floor finding)."""
 
     def test_default_profile_request_is_byte_identical_to_legacy(self) -> None:
         prov = reviewer.AnthropicProvider(api_key="sk-ant-api-TEST", model="claude-sonnet-4-6")
@@ -89,6 +91,7 @@ class AnthropicProviderBackendTests(unittest.TestCase):
             {
                 "model": "claude-sonnet-4-6",
                 "max_tokens": reviewer.ANTHROPIC_MAX_TOKENS,
+                "temperature": reviewer.REVIEW_TEMPERATURE,
                 "system": [
                     {
                         "type": "text",

@@ -626,6 +626,13 @@ MAX_TOOL_OUTPUT_BYTES: int = 32_000
 MAX_FILE_READ_LINES: int = 2_000
 # Max matches/paths a single grep/glob call returns before truncation.
 MAX_SEARCH_RESULTS: int = 200
+# Deterministic review generation: temperature 0 (the API default is 1.0,
+# whose sampling variance drove ±45% cost and 2-defect recall swings between
+# identical runs — see the PLAN_jev_review_acceleration noise-floor finding).
+# The OpenAI-compatible runners additionally pin `seed` where supported.
+REVIEW_TEMPERATURE: float = 0.0
+OPENAI_REVIEW_SEED: int = 42
+
 # Cap on the seed diff embedded in the first user message (characters). Larger
 # diffs are truncated with a pointer to the read_file tool.
 MAX_DIFF_CHARS: int = 200_000
@@ -2522,6 +2529,7 @@ class AnthropicProvider(Provider):
             {
                 "model": self.model,
                 "max_tokens": ANTHROPIC_MAX_TOKENS,
+                "temperature": REVIEW_TEMPERATURE,
                 "system": [system_block],
                 "messages": wire_messages,
                 "tools": tools,
@@ -2771,6 +2779,8 @@ class OpenAIProvider(Provider):
             "model": self.model,
             "messages": anthropic_messages_to_openai(system_prompt, messages),
             max_param: OPENAI_MAX_TOKENS,
+            "temperature": REVIEW_TEMPERATURE,
+            "seed": OPENAI_REVIEW_SEED,
         }
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
