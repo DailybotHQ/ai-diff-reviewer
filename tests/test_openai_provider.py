@@ -324,6 +324,24 @@ class RequestShapeTests(unittest.TestCase):
         self.assertIn("reasoning_effort", bodies[0])
         self.assertNotIn("reasoning_effort", bodies[1])
 
+    def test_non_400_runtime_error_never_takes_the_fallback(self) -> None:
+        # An exhausted 429/5xx retry whose body happens to mention a sampling
+        # parameter name must NOT be mistaken for a parameter rejection.
+        prov = reviewer.OpenAIProvider(api_key="k", model="deepseek-chat")
+        calls: list[int] = []
+
+        def fake_429(request: Any, timeout: float = 0) -> _FakeResponse:
+            calls.append(1)
+            err = json.dumps({"error": {"message": "rate limited; retry seed later"}}).encode()
+            raise urllib.error.HTTPError(request.full_url, 429, "Too Many Requests", None, io.BytesIO(err))
+
+        with mock.patch.object(reviewer.urllib.request.OpenerDirector, "open", side_effect=fake_429), \
+             mock.patch.object(reviewer.time, "sleep", lambda s: None):
+            with self.assertRaises(RuntimeError):
+                prov.complete(system_prompt="S", messages=[], tools=[])
+        # every 429 attempt was a retry, never the one-shot sampling fallback
+        self.assertEqual(len(calls), 1 + len(reviewer.API_RETRY_DELAYS_S))
+
     def test_unrecognized_400_is_not_retried(self) -> None:
         # A 400 whose body names none of our optional sampling parameters is a
         # real contract error: no fallback, single call, error surfaced.

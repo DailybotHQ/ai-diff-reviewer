@@ -2920,6 +2920,11 @@ class OpenAIProvider(Provider):
                 url=url, body=body, headers=headers, api_label=api_label
             )
         except RuntimeError as exc:
+            # Only a vendor 400 names an optional sampling parameter in its
+            # body; exhausted 429/5xx retries and network failures reuse the
+            # same RuntimeError type but must never take the fallback path.
+            if "HTTP 400:" not in str(exc):
+                raise
             # A 400 that names one of the optional sampling parameters we
             # attached is a request-shape problem, not an auth/contract one:
             # retry once without the named parameter(s) instead of failing
