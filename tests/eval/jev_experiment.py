@@ -53,6 +53,10 @@ SPLIT_SHARES = {"calibration": 0.50, "heldout": 0.30, "confirmation": 0.20}
 MIN_HELDOUT = {"critical_positive": 8, "negative_control": 8}
 MIN_CONFIRMATION = {"critical_positive": 4}
 DEFAULT_REPS = 3
+# Report intake guards: run files are untrusted input (they may be
+# vendor-written), so bound both their size and their count.
+MAX_RUN_FILE_BYTES = 1_000_000
+MAX_RUN_FILES = 1_000
 GATE_COMMAND = "python3 tests/eval/jev_experiment.py"
 
 
@@ -213,6 +217,15 @@ def validate_manifest(manifest: dict[str, Any], cases: dict[str, dict[str, Any]]
             "corpus_digest mismatch: the corpus (fixtures or labels) changed "
             "since init - refreeze the manifest before trusting the splits (F2)"
         )
+    unknown_split_ids = sorted(set(splits) - set(cases))
+    if unknown_split_ids:
+        problems.append(
+            f"splits reference unknown case ids: {unknown_split_ids[:5]} - "
+            "fabricated entries must never count toward the phase minimums (F2)"
+        )
+    invalid_phases = sorted({p for p in splits.values() if p not in PHASES})
+    if invalid_phases:
+        problems.append(f"splits carry invalid phase values: {invalid_phases}")
     splits = manifest.get("splits") or {}
     missing = sorted(set(cases) - set(splits))
     if missing:
@@ -379,7 +392,23 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
 def cmd_report(args: argparse.Namespace) -> int:
     manifest = json.loads(Path(args.manifest).read_text())
     runs_dir = Path(args.runs)
-    records = [json.loads(p.read_text()) for p in sorted(runs_dir.glob("run_*.json"))]
+    run_files = sorted(runs_dir.glob("run_*.json"))
+    if len(run_files) > MAX_RUN_FILES:
+        print(f"FAIL: {len(run_files)} run files exceeds the {MAX_RUN_FILES}-file cap", file=sys.stderr)
+        return 1
+    records: list[dict[str, Any]] = []
+    rejected: list[str] = []
+    for run_path in run_files:
+        if run_path.stat().st_size > MAX_RUN_FILE_BYTES:
+            rejected.append(f"{run_path.name}: file exceeds the {MAX_RUN_FILE_BYTES}-byte cap")
+            continue
+        try:
+            record = json.loads(run_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+            rejected.append(f"{run_path.name}: unreadable ({exc})")
+            continue
+        record.setdefault("run_id", run_path.name)
+        records.append(record)
     if not records:
         print("FAIL: no run records; a report without evidence would be a fabrication", file=sys.stderr)
         return 1
@@ -389,21 +418,21 @@ def cmd_report(args: argparse.Namespace) -> int:
     lanes = set(manifest.get("lanes", {}))
     splits = manifest.get("splits", {})
     digest = manifest.get("corpus_digest", "")
-    rejected: list[str] = []
+    binding_failures: list[str] = []
     covered: set[tuple[str, str, str]] = set()
     for r in records:
         label = r.get("run_id") or "<unnamed record>"
         if r.get("arm") not in arms:
-            rejected.append(f"{label}: unknown arm {r.get('arm')!r}")
+            binding_failures.append(f"{label}: unknown arm {r.get('arm')!r}")
         if r.get("lane") not in lanes:
-            rejected.append(f"{label}: unknown lane {r.get('lane')!r}")
+            binding_failures.append(f"{label}: unknown lane {r.get('lane')!r}")
         if r.get("case_id") not in splits:
-            rejected.append(f"{label}: case_id {r.get('case_id')!r} not in manifest splits")
+            binding_failures.append(f"{label}: case_id {r.get('case_id')!r} not in manifest splits")
         if digest and r.get("corpus_digest") not in (None, "", digest):
-            rejected.append(f"{label}: corpus_digest mismatch (frozen {digest!r})")
+            binding_failures.append(f"{label}: corpus_digest mismatch (frozen {digest!r})")
         covered.add((r.get("arm"), r.get("lane"), r.get("case_id")))
-    if rejected:
-        print("FAIL: run records do not belong to this manifest:\n  - " + "\n  - ".join(rejected[:10]), file=sys.stderr)
+    if binding_failures:
+        print("FAIL: run records do not belong to this manifest:\n  - " + "\n  - ".join(binding_failures[:10]), file=sys.stderr)
         return 1
     by_arm: dict[str, dict[str, Any]] = {}
     for r in records:

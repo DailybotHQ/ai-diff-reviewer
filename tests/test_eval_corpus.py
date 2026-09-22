@@ -80,10 +80,10 @@ class ValidatorMutationTests(unittest.TestCase):
         path.write_text(json.dumps(case, indent=2), encoding="utf-8")
         return path
 
-    def validate_one(self, case: dict) -> list[str]:
+    def validate_one(self, case: dict, name: str = "C901.json") -> list[str]:
         # Write the case EXACTLY as given — tests that need a valid pin call
         # pin() themselves; re-pinning here would hide pin-mutation bugs.
-        self.write(case)
+        self.write(case, name=name)
         f = corpus_validate.Findings()
         cases, f2 = corpus_validate.load_cases(self.tmp)
         f.items.extend(f2.items)
@@ -165,7 +165,8 @@ class ValidatorMutationTests(unittest.TestCase):
             "pr_metadata": {"title": "Permission-aware author gate (#46)"},
         }
         case["labels"][0]["path"] = "scripts/reviewer.py"
-        items = self.validate_one(case)
+        # the loader pins identity to the filename - write under the id
+        items = self.validate_one(case, name=f"{case['id']}.json")
         self.assertEqual(items, [])
 
 

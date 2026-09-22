@@ -83,6 +83,10 @@ def load_cases(cases_dir: Path) -> tuple[dict[str, dict[str, Any]], Findings]:
         case_id = case.get("id", "")
         if case_id in cases:
             f.fail(f"{path.name}: duplicate case id {case_id!r}")
+        # Identity is the filename: enforce it here, where the real Path is
+        # in hand (the dict is keyed by id, so `validate_case` cannot see it).
+        if case_id and case_id != path.stem:
+            f.fail(f"{path.name}: id {case_id!r} does not match file stem {path.stem!r}")
         cases[case_id or path.stem] = case
     return cases, f
 
@@ -297,10 +301,22 @@ def group_map(cases: dict[str, dict[str, Any]]) -> dict[str, str]:
     return {cid: c.get("family_group", "") for cid, c in sorted(cases.items())}
 
 
+def _ensure_cases_dir_within_repo(cases_dir: Path) -> None:
+    """The validator is a gate: it must only ever read this repository's own
+    corpus, never an attacker-selected directory handed to automation."""
+    repo_root = Path(__file__).resolve().parents[2]
+    resolved = cases_dir.resolve()
+    if resolved != repo_root and repo_root not in resolved.parents:
+        raise SystemExit(
+            f"FAIL: --cases-dir must be inside the repository ({repo_root}); got {resolved}"
+        )
+
+
 def main(argv: list[str]) -> int:
     args = [a for a in argv[1:] if not a.startswith("--")]
     as_json = "--json" in argv
     cases_dir = Path(args[0]) if args else Path(__file__).parent / "cases"
+    _ensure_cases_dir_within_repo(cases_dir)
     cases, f = load_cases(cases_dir)
     for cid, case in sorted(cases.items()):
         validate_case(case, cid or "case", f)
