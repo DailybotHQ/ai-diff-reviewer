@@ -244,3 +244,19 @@ class BedrockTierTests(unittest.TestCase):
             self._resolve("us.anthropic.claude-sonnet-5"),
             "us.anthropic.claude-sonnet-5",
         )
+
+
+class BedrockInferenceProfilePriceTests(unittest.TestCase):
+    """Geo-prefixed inference-profile ids keep their indicative price
+    (the lookup normalizes the `us.` / `eu.` / `apac.` prefixes)."""
+
+    def test_geo_prefixed_inference_profiles_resolve_prices(self) -> None:
+        base = reviewer.lookup_indicative_price("anthropic.claude-sonnet-5")
+        self.assertIsNotNone(base)
+        for mid in (
+            "us.anthropic.claude-sonnet-5",
+            "eu.anthropic.claude-sonnet-5",
+            "apac.anthropic.claude-sonnet-5",
+        ):
+            with self.subTest(model=mid):
+                self.assertEqual(reviewer.lookup_indicative_price(mid), base)

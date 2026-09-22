@@ -225,7 +225,13 @@ runtime:
 
 Tier rows exist for the `anthropic` × `bedrock` cell; pass an explicit
 inference-profile id (`us.anthropic.claude-sonnet-5`) when you need a specific
-region routing.
+region routing — the indicative-price lookup normalizes the `us.` / `eu.` /
+`apac.` geo prefixes, so cross-region profiles keep their cost estimate.
+
+**Not supported in v2.5.0:** the China partition
+(`bedrock-runtime.cn-north-1.amazonaws.com.cn` — five-label host, classified
+as `custom`), dual-stack endpoints (`*.api.aws`), streaming
+(`invoke-with-response-stream`), and the Converse API.
 
 ### Self-hosted (vLLM, Ollama, llama.cpp)
 

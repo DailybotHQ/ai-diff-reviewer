@@ -26,7 +26,7 @@ If a leg's API-key secret isn't set on the repo, the leg gracefully skips (emits
 
 ## What the unit suite covers
 
-The suite lives in `tests/` and is composed of 30 files (852 tests; regenerate the counts with `for f in tests/test_*.py; do printf '%s %s\n' "$f" "$(grep -c 'def test_' "$f")"; done`):
+The suite lives in `tests/` and is composed of 30 files (858 tests; regenerate the counts with `for f in tests/test_*.py; do printf '%s %s\n' "$f" "$(grep -c 'def test_' "$f")"; done`):
 
 | File | Focus | Tests |
 |---|---|---|
@@ -39,7 +39,7 @@ The suite lives in `tests/` and is composed of 30 files (852 tests; regenerate t
 | [`tests/test_backend_matrix.py`](../tests/test_backend_matrix.py) | The **runner × backend matrix** (six runners × thirteen backends), endpoint path joining, backend-selection logging. | 9 |
 | [`tests/test_backend_requests.py`](../tests/test_backend_requests.py) | Anthropic runner on compatible gateways — request headers per auth style, cache-control flags, the diff cache breakpoint. | 13 |
 | [`tests/test_backends.py`](../tests/test_backends.py) | `api-base` contract — `validate_api_base` (https, ASCII hosts, IPv6, host tricks), `classify_endpoint_host`, `resolve_endpoint_profile`, `build_provider(api_base=…)`. | 29 |
-| [`tests/test_bedrock_provider.py`](../tests/test_bedrock_provider.py) | `provider: anthropic` on AWS Bedrock — InvokeModel request shape (in-body `anthropic_version`, SigV4 headers, model-in-URL path), credential-resolution errors, non-Bedrock regression. | 4 |
+| [`tests/test_bedrock_provider.py`](../tests/test_bedrock_provider.py) | `provider: anthropic` on AWS Bedrock — InvokeModel request shape (in-body `anthropic_version`, SigV4 headers, model-in-URL path), credential-resolution errors, non-Bedrock regression, OIDC startup lane (with/without AWS env credentials), runner gate. | 8 |
 | [`tests/test_bedrock_sigv4.py`](../tests/test_bedrock_sigv4.py) | SigV4 signing (AWS documentation vector, cross-verified against botocore) + AWS credential resolution (env/OIDC first, packed `api-key` fallback, partial-env hard error). | 9 |
 | [`tests/test_eval_harness.py`](../tests/test_eval_harness.py) | Comparison-harness smoke — manifest build/validate, fabricated-split rejection, repetition assignment, oversized run-file rejection. | 4 |
 | [`tests/test_eval_corpus.py`](../tests/test_eval_corpus.py) | v2 labelled-corpus gates — every `tests/eval/cases/` fixture validates (identity, content SHA-256 pins, floors, blinded critical adjudication, secret markers) purely offline. | 13 |
@@ -60,7 +60,7 @@ The suite lives in `tests/` and is composed of 30 files (852 tests; regenerate t
 | [`tests/test_review_safety_regressions.py`](../tests/test_review_safety_regressions.py) | Local-review regressions for multi-backend and incremental safety — delta context, prior-critical gating, advisory resolution, thread pagination, usage accounting, routing safety, control characters, redirect refusal. | 14 |
 | [`tests/test_reviewer.py`](../tests/test_reviewer.py) | Core runtime — input parsing, log redaction, tool-output truncation, path sandboxing, tool handlers, inline-comment queueing, tracking-comment rendering, `write_action_output()`, severity aggregation, strictness gating, conversation pruning, diff shaping (`ignore-paths`, omitted-files block) and the cache-prefix stability of the first user message. | 192 |
 | [`tests/test_telemetry.py`](../tests/test_telemetry.py) | Usage telemetry — `normalise_usage`, the three CLI stdout parsers (bounded tail), cost estimation, `format_usage_line` variants, tracking-comment usage line, real `iteration-tokens-used`. | 22 |
-| **Total** | | **852** |
+| **Total** | | **858** |
 
 Run one file with `python3 -m unittest tests.test_backends` (module form, from the repo root). Three cross-cutting nets are worth knowing about when you touch providers: the **runner × backend matrix** (`tests/test_backend_matrix.py::RunnerBackendMatrixTests`) locks the endpoint kind and constructability of every `provider` × `api-base` combination across all thirteen registered backends; the **default-profile snapshot table** (`tests/test_agent_runner_grok_and_snapshots.py::DefaultProfileBackCompatSnapshotTests`) compares each CLI runner's argv/env against literals captured from `main` before the multi-backend work, with intentional deltas listed explicitly; and the **hardening regressions** (`tests/test_agent_runner_hardening.py::HardeningRegressionTests`) keep the security fixes from regressing (credential lanes, bounded findings file, glob caps, ReDoS timing). Every module added or grown by v2.1.0 stays under 500 lines (split by concern); the pre-v2.1.0 modules over that size (`test_reviewer.py`, the `test_iar_*` family) are recorded debt in `docs/STANDARDS.md § File size`.
 
@@ -228,7 +228,7 @@ To skip the auto-release for a docs-only or infrastructure-only merge, put `[ski
 
 ## When the bar might rise
 
-We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus thirteen bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 852 tests across 30 files. The remaining triggers for tightening the bar further:
+We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus thirteen bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 858 tests across 30 files. The remaining triggers for tightening the bar further:
 
 1. The runtime file is already past the historical ~4500 LOC soft ceiling (see `docs/STANDARDS.md § "File size"`); the "split into modules" decision is open and should be made deliberately — the next feature that adds significant surface (a Gemini provider, a v2 findings schema) should not land as more lines in the single file.
 2. A class of bug ships repeatedly that `py_compile` + the unit suite + dogfooding doesn't catch.

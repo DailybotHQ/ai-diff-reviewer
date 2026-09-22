@@ -200,7 +200,10 @@ class BedrockOidcStartupTests(unittest.TestCase):
              contextlib.redirect_stdout(buf), \
              contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(reviewer.main(), 1)
-        self.assertIn("Missing required env", buf.getvalue())
+        # the bedrock probe surfaces the actionable credential guidance,
+        # not the generic missing-env abort
+        self.assertIn("CONFIGURATION ERROR", buf.getvalue())
+        self.assertIn("KEY:SECRET[:SESSION_TOKEN]", buf.getvalue())
 
 
 if __name__ == "__main__":

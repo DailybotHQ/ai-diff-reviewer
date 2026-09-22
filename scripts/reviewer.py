@@ -2418,9 +2418,17 @@ def normalise_usage(raw: Any) -> UsageTelemetry | None:
 
 def lookup_indicative_price(model: str) -> tuple[float, float] | None:
     """Longest-prefix match into `INDICATIVE_PRICES_USD_PER_MTOK`."""
+    candidate: str = model or ""
+    # Bedrock cross-region inference profiles prefix a geo segment
+    # (`us.anthropic.claude-…` / `eu.anthropic.claude-…`); strip it so the
+    # documented `anthropic.` price entries keep applying (indicative only).
+    for geo in ("us.", "eu.", "apac."):
+        if candidate.startswith(geo):
+            candidate = candidate[len(geo):]
+            break
     best: str = ""
     for prefix in INDICATIVE_PRICES_USD_PER_MTOK:
-        if model.startswith(prefix) and len(prefix) > len(best):
+        if candidate.startswith(prefix) and len(prefix) > len(best):
             best = prefix
     return INDICATIVE_PRICES_USD_PER_MTOK.get(best) if best else None
 
@@ -10383,13 +10391,19 @@ def main() -> int:
     backend_profile: EndpointProfile = resolve_endpoint_profile(
         api_base, provider_id
     )
-    bedrock_env_credentials = False
+    bedrock_env_credentials: bool = False
     if not api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
         try:
             _resolve_aws_credentials(None)
             bedrock_env_credentials = True
-        except ValueError:
-            bedrock_env_credentials = False
+        except ValueError as exc:
+            log(
+                f"CONFIGURATION ERROR: {exc} Set AWS_ACCESS_KEY_ID and "
+                "AWS_SECRET_ACCESS_KEY in the environment (OIDC), or pass "
+                "the packed `api-key` KEY:SECRET[:SESSION]. Aborting."
+            )
+            write_all_outputs(skipped=False)
+            return 1
     if (
         not (api_key or bedrock_env_credentials)
         or not gh_token
