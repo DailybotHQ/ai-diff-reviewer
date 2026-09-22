@@ -55,7 +55,7 @@ The default `provider: anthropic` path is not subject to (1) or (2): its only to
 
 ### Custom endpoints (`api-base`, v2.1.0+) — where your key goes
 
-`api-base` points a runner at a different backend (Z.ai, xAI, Azure Foundry, a self-hosted gateway). The value is validated **before anything outward-facing happens** (`validate_api_base`): absolute `https://` URL (plain `http://` only for `localhost` / `127.0.0.1` / `[::1]`), a host, **ASCII hostnames only** (internationalised domains must be given in their explicit punycode `xn--` form so a homoglyph can never look like a vendor domain in your logs), no userinfo, no query string, no fragment. A malformed value aborts the run with a `CONFIGURATION ERROR` — the credential is never sent to a guessed host.
+`api-base` points a runner at a different backend (Z.ai, xAI, Azure Foundry, DeepSeek, Moonshot/Kimi, MiniMax, Qwen/DashScope, Google Gemini, OpenRouter, or a self-hosted gateway). Recognised vendor hosts get a named endpoint profile (auth style, caching flags, known quirks such as Gemini rejecting `seed`); every other host is treated as a plain protocol-compatible gateway and warned about by name. The value is validated **before anything outward-facing happens** (`validate_api_base`): absolute `https://` URL (plain `http://` only for `localhost` / `127.0.0.1` / `[::1]`), a host, **ASCII hostnames only** (internationalised domains must be given in their explicit punycode `xn--` form so a homoglyph can never look like a vendor domain in your logs), no userinfo, no query string, no fragment. A malformed value aborts the run with a `CONFIGURATION ERROR` — the credential is never sent to a guessed host.
 
 The host is then classified into an endpoint kind by exact host or registrable-domain suffix (`api.anthropic.com`, `.x.ai`, `.z.ai`, `.openai.com`, `.openai.azure.com` / `.cognitiveservices.azure.com` / `.services.ai.azure.com`). Anything else is `custom`, and the run logs a **WARNING naming the host that will receive `api-key`**:
 
@@ -134,7 +134,7 @@ Each is pinned by major version. The choice to pin major rather than commit-SHA 
 
 | Secret | Where | Why |
 |---|---|---|
-| Provider API key | `inputs.api-key` → `AIPRR_API_KEY` env var | Authentication to the LLM provider or backend. One input, whatever the runner: an Anthropic / OpenAI / xAI / Z.ai / Azure key, a Claude Code OAuth token (`sk-ant-oat…`), or a Cursor key. |
+| Provider API key | `inputs.api-key` → `AIPRR_API_KEY` env var | Authentication to the LLM provider or backend. One input, whatever the runner: an Anthropic / OpenAI / Azure / xAI / Z.ai / DeepSeek / Moonshot / MiniMax / Qwen (DashScope) / Gemini / OpenRouter key, a Claude Code OAuth token (`sk-ant-oat…`), or a Cursor key. |
 | GitHub token | `inputs.github-token` → `AIPRR_GH_TOKEN` env var | Authentication to read the PR and post the review. |
 
 Both are passed into the script as environment variables and never written to stdout or stderr. The **only** on-disk copy is Codex's per-run `auth.json` (0600, private temp `CODEX_HOME`, removed in `finally`) — see "Generated per-run files" above.

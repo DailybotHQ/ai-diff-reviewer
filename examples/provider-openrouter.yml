@@ -1,0 +1,40 @@
+# OpenRouter meta-gateway through the OpenAI-compatible in-process runner (`provider: openai`, v2.4.0+).
+#
+# The action owns the review loop in-process — zero CLI install, bounded
+# turns, predictable cost — pointed at OpenRouter through `api-base`
+# (one key, hundreds of models; ids are vendor-prefixed `vendor/model`).
+#
+# Swap `model` for any vendor-prefixed id on OpenRouter, e.g.
+#   model: qwen/qwen3-coder-plus
+# Prices are the underlying vendors, plus ~5% OpenRouter margin.
+# SECURITY: `api-key` is sent to the `api-base` host.
+
+name: PR review (OpenRouter)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: openai
+          api-base: https://openrouter.ai/api/v1
+          api-key: ${{ secrets.OPENROUTER_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: balanced   # deepseek/deepseek-chat (balanced/economy); deepseek/deepseek-reasoner (deep)

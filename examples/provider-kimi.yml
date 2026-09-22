@@ -1,0 +1,42 @@
+# Moonshot Kimi through the OpenAI-compatible in-process runner (`provider: openai`, v2.4.0+).
+#
+# The action owns the review loop in-process — zero CLI install, bounded
+# turns, predictable cost — pointed at Moonshot/Kimi through `api-base`
+# (`balanced` -> `kimi-k2-0905-preview`, `economy` -> `kimi-k2-turbo-preview`).
+#
+# Kimi also speaks the Anthropic-compatible protocol — for the
+# `claude-code` runner use instead:
+#   provider: claude-code
+#   api-base: https://api.moonshot.ai/anthropic
+#   model: kimi-k2-0905-preview
+# SECURITY: `api-key` is sent to the `api-base` host.
+
+name: PR review (Kimi)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: openai
+          api-base: https://api.moonshot.ai/v1
+          api-key: ${{ secrets.MOONSHOT_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: balanced   # kimi-k2-0905-preview (balanced/deep); kimi-k2-turbo-preview (economy)

@@ -14,7 +14,7 @@ Exact pin when you want a frozen tag: `@v2.1.0` (skill frontmatter `version: "2.
 
 ## v2.1.0 is additive
 
-Nothing to migrate: the new runners (`openai`, `grok`), the `api-base` / `ignore-paths` / `grok-version` inputs, model tier aliases, usage telemetry and incremental follow-up reviews are all opt-in or invisible defaults. An empty `api-base` keeps every existing runner byte-identical to v2.0.x.
+Nothing to migrate: the new runners (`openai`, `grok`), the `api-base` / `ignore-paths` / `grok-version` inputs, model tier aliases, usage telemetry and incremental follow-up reviews are all opt-in or invisible defaults. An empty `api-base` keeps every existing runner byte-identical to v2.0.x. (Historical note: from v2.4.0 on, default profiles intentionally pin deterministic sampling — `temperature: 0` plus a fixed `seed` where the backend accepts it — which is a documented wire-format change in the CHANGELOG, not a migration step.)
 
 ## Platform behaviour (v2)
 

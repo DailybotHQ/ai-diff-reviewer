@@ -6,7 +6,9 @@ From a consumer's point of view the action supports **six providers**: Anthropic
 
 ## Runner × backend matrix (v2.1.0+)
 
-Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* — the vendor whose model answers. Empty `api-base` keeps every runner on its own vendor, byte-identical to earlier releases.
+Two inputs decide a review: **`provider`** picks the *runner* (who drives the tool-use loop) and the optional **`api-base`** picks the *backend* — the vendor whose model answers. Empty `api-base` keeps every runner on its own vendor. Since v2.4.0 the default profiles pin deterministic sampling — `temperature: 0` and, where the backend accepts it, a fixed `seed` — so the wire *shape* (URL, headers, auth, caching) is unchanged from earlier releases but the sampling parameters are new (see the [CHANGELOG](../CHANGELOG.md) "Changed" notes).
+
+v2.4.0 adds six further `openai`/`codex` backends behind the same `api-base` input — **DeepSeek, Moonshot/Kimi, MiniMax, Qwen (DashScope), Google Gemini and OpenRouter** — each with its own dated tier row (matrix below). Moonshot/Kimi and MiniMax additionally speak the Anthropic-compatible protocol (rows in the Anthropic-compatible table further down). The per-runner matrix for the five established vendors:
 
 | Runner (`provider`) | Anthropic | OpenAI | Azure Foundry | xAI | Z.ai GLM | Subscription / flat-rate |
 |---|---|---|---|---|---|---|
@@ -26,6 +28,7 @@ Two inputs decide a review: **`provider`** picks the *runner* (who drives the to
 - **Z.ai GLM:** run it through **`claude-code`** — the CLI's Anthropic-compatible backend contract (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`) is what Z.ai documents and what works best locally; `anthropic` (in-process) is the bounded alternative. Verified offline only in this release (weekly quota exhausted during verification).
 - **xAI Grok:** `provider: grok` (agent, native `--max-turns`, web search and subagents off) or `provider: openai` + `api-base: https://api.x.ai/v1` (bounded). Both verified live.
 - **Azure Foundry:** `codex` (agent) or `openai` (bounded), `model` = deployment name. Both verified live.
+- **Cheapest third-party text models:** DeepSeek or Moonshot/Kimi through `openai` + their `api-base` (tier rows in the matrix below). **Widest catalog:** OpenRouter — vendor-prefixed ids (`vendor/model`) behind one key. **Gemini:** its OpenAI-compatible endpoint through `openai`.
 
 ## Choosing a cost-efficient model
 
@@ -42,7 +45,7 @@ Code review's value is catching **subtle** bugs — logic errors, race condition
 
 Cursor `auto` proved the pattern: a one-word cost profile is what teams actually use day to day. The `model` input now accepts the same idea for every runner × backend — the runtime resolves the tier from the matrix below and logs the concrete id. Empty `model` keeps resolving to the built-in default (unchanged for existing consumers); an explicit id always passes through.
 
-### Cost-efficient defaults matrix (verified 2026-09-16 — ids and prices move, re-check when bumping)
+### Cost-efficient defaults matrix (verified 2026-09-21 — ids and prices move, re-check when bumping)
 
 Indicative list prices in USD per 1M tokens (input / output). Cached input is cheaper on every vendor (Anthropic cache reads are 10 % of input price; OpenAI/xAI cache automatically; Z.ai cache currently free). The runtime's copy of this table is dated by the constant `MODEL_TIERS_VERIFIED_ON` in `scripts/reviewer.py` (currently `2026-09-16`) — the `**Usage:**` line marks estimates as `(indicative)` for that reason; xAI prices are the <200k-token rates and double above that, so long reviews under-report.
 
@@ -58,6 +61,8 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `openai`, `codex` | Moonshot/Kimi | `kimi-k2-0905-preview` — $0.60 / $2.50 | `kimi-k2-turbo-preview` — $1.15 / $1.15 | `kimi-k2-0905-preview` | Input-heavy reviews favour 0905 on cost; turbo wins on latency. Also speaks Anthropic-compatible (see below). |
 | `openai`, `codex` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
 | `openai`, `codex` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
+| `openai`, `codex` | Google Gemini | `gemini-2.5-pro` — $1.25 / $10 | `gemini-2.5-flash` — $0.30 / $2.50 | `gemini-2.5-pro` | Gemini API's OpenAI-compatible surface; the runtime omits `seed` (the endpoint rejects it) and pins `temperature: 0`. |
+| `openai`, `codex` | OpenRouter (meta-gateway) | `deepseek/deepseek-chat` — $0.27 / $1.10 underlying | `deepseek/deepseek-chat` | `deepseek/deepseek-reasoner` — $0.55 / $2.19 underlying | Model ids are vendor-prefixed (`vendor/model`); prices are the underlying vendors' (OpenRouter adds ~5%). One key, hundreds of models. |
 | `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
@@ -184,10 +189,17 @@ Implemented in v2.1.0 (`OpenAIProvider` + `anthropic_tools_to_openai` / `anthrop
 
 See § "OpenAI-compatible backends" below for the consumer-facing matrix.
 
-### Google Gemini
+### Google Gemini — shipped via the OpenAI-compatible surface (v2.4.0+)
 
-- Gemini's tool use uses `functionDeclarations` and the response has `functionCall` parts. The bigger translation: Gemini's `contents` is an array of `{role: "user"|"model", parts: [...]}` rather than message-with-content-blocks. The `model` role replaces `assistant`. Translate at the boundary.
-- Gemini's caching is explicit: you create a cached content object via a separate API call and pass its name on subsequent requests. For a 30-turn loop within one review, that's worth it; the implementation should create the cache on first call and reuse the name.
+Gemini is reachable today through its **OpenAI-compatible endpoint** (`https://generativelanguage.googleapis.com/v1beta/openai`) with `provider: openai` — chat-completions in, so no native `contents`/`functionDeclarations` translation is needed. Two endpoint quirks are handled in the runtime:
+
+- The endpoint **rejects `seed` with a 400** — the runtime omits it and pins `temperature: 0` only (part of the v2.4.0 deterministic-sampling contract).
+- Everything else is the plain OpenAI-compatible behaviour: `max_tokens`, automatic tool translation, bearer auth.
+
+The notes below are kept only in case a first-class native-surface provider is ever added:
+
+- Gemini's native tool use uses `functionDeclarations` and the response has `functionCall` parts; `contents` is an array of `{role: "user"|"model", parts: [...]}` rather than message-with-content-blocks. Translate at the boundary.
+- Native Gemini caching is explicit: you create a cached content object via a separate API call and pass its name on subsequent requests. For a 30-turn loop within one review, that's worth it; the implementation should create the cache on first call and reuse the name.
 
 ### AWS Bedrock
 
@@ -267,9 +279,15 @@ The in-process OpenAI-compatible runner is the most portable path: zero install,
 | Azure Foundry (v1) | `https://<resource>.services.ai.azure.com/openai/v1` | Azure key | your **deployment names** (e.g. `gpt-5.4-mini-azure`) | Bearer + `api-key` headers; `max_completion_tokens`. |
 | xAI Grok | `https://api.x.ai/v1` | xAI API key | `grok-4.5`, `grok-4.6` | `max_tokens`; automatic caching. |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/coding/paas/v4` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | `max_tokens`; flat-rate plan. |
+| DeepSeek (v2.4.0+) | `https://api.deepseek.com` | DeepSeek API key | `deepseek-chat`, `deepseek-reasoner` | `max_tokens`; deterministic `temperature: 0` + `seed` pinned. |
+| Moonshot/Kimi (v2.4.0+) | `https://api.moonshot.ai/v1` | Moonshot API key | `kimi-k2-0905-preview`, `kimi-k2-turbo-preview` | `max_tokens`; also Anthropic-compatible (table above). |
+| MiniMax (v2.4.0+) | `https://api.minimax.io/v1` | MiniMax API key | `MiniMax-M2`, `MiniMax-Text-01` | `max_tokens`; also Anthropic-compatible (table above). |
+| Qwen / DashScope (v2.4.0+) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | DashScope API key | `qwen3-coder-plus`, `qwen-turbo` | Compatible-mode endpoint; `max_tokens`. |
+| Google Gemini (v2.4.0+) | `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini API key | `gemini-2.5-pro`, `gemini-2.5-flash` | `seed` omitted — the endpoint rejects it with a 400. |
+| OpenRouter (v2.4.0+) | `https://openrouter.ai/api/v1` | OpenRouter API key | vendor-prefixed ids (`deepseek/deepseek-chat`, …) | Meta-gateway; prices are the underlying vendors' + ~5%. |
 | Self-hosted / other | `https://<gateway>/v1` (or `http://localhost:…` for local dev) | gateway key | gateway-defined | Plain OpenAI-compatible behaviour; the run logs the host. |
 
-Copy-paste workflow with all four variants: [`examples/provider-openai.yml`](../examples/provider-openai.yml). Errors and logs name the endpoint kind and host, never the key.
+Copy-paste workflows: [`examples/provider-openai.yml`](../examples/provider-openai.yml) (OpenAI/Azure/xAI/Z.ai variants) plus one recipe per v2.4.0 backend — [`provider-deepseek.yml`](../examples/provider-deepseek.yml), [`provider-kimi.yml`](../examples/provider-kimi.yml), [`provider-minimax.yml`](../examples/provider-minimax.yml), [`provider-qwen.yml`](../examples/provider-qwen.yml), [`provider-gemini.yml`](../examples/provider-gemini.yml), [`provider-openrouter.yml`](../examples/provider-openrouter.yml). Errors and logs name the endpoint kind and host, never the key.
 
 **Verified live (2026-09-16):** the `openai` runner completed a tool-enabled request against xAI (`grok-4.3`, `https://api.x.ai/v1`) and Azure Foundry (`gpt-5.4-mini-azure` deployment, v1 endpoint) with the action's real tool schema — both returned `end_turn` with `usage` populated. Z.ai could not be exercised that day (quota exhausted).
 
