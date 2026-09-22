@@ -2780,8 +2780,11 @@ class OpenAIProvider(Provider):
             "messages": anthropic_messages_to_openai(system_prompt, messages),
             max_param: OPENAI_MAX_TOKENS,
             "temperature": REVIEW_TEMPERATURE,
-            "seed": OPENAI_REVIEW_SEED,
         }
+        # The seed: only for the kinds that support it — the Gemini
+        # OpenAI-compatible endpoint rejects it with a 400.
+        if self.profile.kind != "gemini":
+            payload["seed"] = OPENAI_REVIEW_SEED
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
             payload["tool_choice"] = OPENAI_TOOL_CHOICE_AUTO
