@@ -28,6 +28,7 @@ v2.4.0 adds six further `openai` backends behind the same `api-base` input — *
 - **Z.ai GLM:** run it through **`claude-code`** — the CLI's Anthropic-compatible backend contract (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`) is what Z.ai documents and what works best locally; `anthropic` (in-process) is the bounded alternative. Verified offline only in this release (weekly quota exhausted during verification).
 - **xAI Grok:** `provider: grok` (agent, native `--max-turns`, web search and subagents off) or `provider: openai` + `api-base: https://api.x.ai/v1` (bounded). Both verified live.
 - **Azure Foundry:** `codex` (agent) or `openai` (bounded), `model` = deployment name. Both verified live.
+- **AWS enterprise agreements:** AWS Bedrock through `anthropic` + the regional `bedrock-runtime` endpoint (SigV4 in-process; OIDC credentials supported) — the Claude review loop on infrastructure your cloud team already controls.
 - **Cheapest third-party text models:** DeepSeek or Moonshot/Kimi through `openai` + their `api-base` (tier rows in the matrix below). **Widest catalog:** OpenRouter — vendor-prefixed ids (`vendor/model`) behind one key. **Gemini:** its OpenAI-compatible endpoint through `openai`.
 
 ## Choosing a cost-efficient model
@@ -62,6 +63,7 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `openai` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
 | `openai` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
 | `openai` | Google Gemini | `gemini-2.5-pro` — $1.25 / $10 | `gemini-2.5-flash` — $0.30 / $2.50 | `gemini-2.5-pro` | Gemini API's OpenAI-compatible surface; the runtime omits `seed` (the endpoint rejects it) and pins `temperature: 0`. |
+| `anthropic` | AWS Bedrock (v2.5.0+) | `anthropic.claude-sonnet-5` — indicative mirror | `anthropic.claude-haiku-4-5` | `anthropic.claude-opus-5` | SigV4-signed InvokeModel; prices are an indicative mirror of first-party rates — **AWS bills Bedrock separately**. |
 | `openai` | OpenRouter (meta-gateway) | `deepseek/deepseek-chat` — $0.30 / $1.20 (OpenRouter's listed price) | `deepseek/deepseek-chat` | `deepseek/deepseek-reasoner` — $0.60 / $2.40 (OpenRouter's listed price) | Model ids are vendor-prefixed (`vendor/model`); prices shown are OpenRouter's listed figures (the underlying vendor plus its margin, matching the runtime's `INDICATIVE_PRICES_USD_PER_MTOK`). One key, hundreds of models. |
 | `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
@@ -201,9 +203,29 @@ The notes below are kept only in case a first-class native-surface provider is e
 - Gemini's native tool use uses `functionDeclarations` and the response has `functionCall` parts; `contents` is an array of `{role: "user"|"model", parts: [...]}` rather than message-with-content-blocks. Translate at the boundary.
 - Native Gemini caching is explicit: you create a cached content object via a separate API call and pass its name on subsequent requests. For a 30-turn loop within one review, that's worth it; the implementation should create the cache on first call and reuse the name.
 
-### AWS Bedrock
+### AWS Bedrock — shipped on the `anthropic` runner (v2.5.0+)
 
-- Bedrock's Anthropic models use the same Anthropic API shape under `bedrock-runtime` `InvokeModel` / `Converse`. Likely the easiest provider to add; the main work is auth (SigV4) and endpoint routing.
+Bedrock's Claude models speak the Anthropic Messages shape through the regional
+`bedrock-runtime.{region}.amazonaws.com` InvokeModel endpoint, so the
+`anthropic` runner drives them directly with two wire quirks handled in the
+runtime:
+
+- **`anthropic_version` rides inside the body** (`bedrock-2023-05-31`) — there
+  is no `anthropic-version` header, and no `x-api-key`: auth is **SigV4**
+  (`AWS4-HMAC-SHA256`, service `bedrock`, region parsed from the endpoint
+  host), implemented in-process with the standard library.
+- **Credentials** resolve from the environment first
+  (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_SESSION_TOKEN` — the OIDC
+  pattern), then the packed `api-key` format `KEY:SECRET[:SESSION]`.
+- **`cache_control` is omitted in v1** (conservative; prompt caching support
+  on Bedrock is model-dependent) — a documented cost tradeoff with a
+  follow-up to enable per model.
+- **Out of scope for v1:** the `claude-code` runner on Bedrock
+  (`CLAUDE_CODE_USE_BEDROCK`), streaming, and the Converse API.
+
+Tier rows exist for the `anthropic` × `bedrock` cell; pass an explicit
+inference-profile id (`us.anthropic.claude-sonnet-5`) when you need a specific
+region routing.
 
 ### Self-hosted (vLLM, Ollama, llama.cpp)
 

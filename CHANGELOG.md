@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **AWS Bedrock backend for the `anthropic` runner (v2.5.0).** Claude models on Bedrock through the regional `bedrock-runtime.{region}.amazonaws.com` InvokeModel endpoint: Anthropic-Messages body with the in-body `anthropic_version`, **SigV4 signed in-process** (stdlib only — no AWS SDK), region parsed from the endpoint host, and AWS credentials resolved from the environment first (the OIDC pattern) with the packed `api-key` format `KEY:SECRET[:SESSION]` as the fallback. Tier rows for the `anthropic` × `bedrock` cell (`balanced` → `anthropic.claude-sonnet-5`, `economy` → `anthropic.claude-haiku-4-5`, `deep` → `anthropic.claude-opus-5`; prices are an indicative mirror — AWS bills Bedrock separately), the `bedrock` model-required hint, a SigV4 known-answer test cross-verified against botocore, wire-shape tests, `cache_control` omitted on Bedrock in v1 (documented tradeoff), a dogfood `Self-review — bedrock` leg gated on the `AWS_REVIEW_CREDENTIALS` secret, and the full documentation sweep (README provider table + roadmap, `docs/PROVIDERS.md`, `action.yml`, the setup reference, `docs/SECURITY.md`, and `examples/provider-anthropic-bedrock.yml`).
 
 ## [2.4.0] — 2026-09-22
 

@@ -1,0 +1,59 @@
+# AWS Bedrock through the Anthropic-shape in-process runner
+# (`provider: anthropic`, v2.5.0+).
+#
+# The action owns the review loop in-process — zero CLI install, bounded
+# turns — and sends SigV4-signed InvokeModel requests to the regional
+# `bedrock-runtime` endpoint. `model` is a Bedrock model id or inference
+# profile (`anthropic.claude-sonnet-5`, `us.anthropic.claude-sonnet-5`).
+# SECURITY: the AWS credential is used to sign requests to the
+# `api-base` host only.
+#
+# Credential options (pick ONE):
+#   A. OIDC (recommended): an `aws-actions/configure-aws-credentials` step
+#      before the review exports the AWS_* environment variables, and the
+#      runtime picks them up — `api-key` can stay empty. Requires the job
+#      permission `id-token: write` and an OIDC role trust policy.
+#   B. Packed secret: store `ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION]`
+#      as one secret and pass it through `api-key` (variant below).
+
+name: PR review (AWS Bedrock)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write   # variant A only — OIDC federation with AWS
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
+          persist-credentials: false   # never leave GITHUB_TOKEN in .git/config
+
+      # ---- Variant A (recommended): OIDC — no long-lived keys --------------
+      # - uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     role-to-assume: arn:aws:iam::<ACCOUNT>:role/pr-review-bedrock
+      #     aws-region: us-east-1
+
+      # ---- Variant B: packed secret ----------------------------------------
+      # Store AWS_REVIEW_CREDENTIALS = ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION]
+
+      - uses: DailybotHQ/ai-diff-reviewer@v2
+        with:
+          provider: anthropic
+          api-base: https://bedrock-runtime.us-east-1.amazonaws.com
+          api-key: ${{ secrets.AWS_REVIEW_CREDENTIALS }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: balanced   # anthropic.claude-sonnet-5 (deep -> anthropic.claude-opus-5)

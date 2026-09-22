@@ -28,6 +28,7 @@
 | [`provider-qwen.yml`](provider-qwen.yml) | **Qwen / DashScope** (v2.4.0+): `openai` + the DashScope compatible-mode endpoint; tier aliases resolve to `qwen3-coder-plus` / `qwen-turbo`. |
 | [`provider-gemini.yml`](provider-gemini.yml) | **Google Gemini** (v2.4.0+): `openai` + Gemini's OpenAI-compatible endpoint; the runtime omits `seed` (the endpoint rejects it). |
 | [`provider-openrouter.yml`](provider-openrouter.yml) | **OpenRouter** (v2.4.0+): meta-gateway — one key, vendor-prefixed ids (`vendor/model`). |
+| [`provider-anthropic-bedrock.yml`](provider-anthropic-bedrock.yml) | **AWS Bedrock** (v2.5.0+): `anthropic` + the regional `bedrock-runtime` endpoint, SigV4-signed in-process; OIDC and packed-credential variants. |
 | [`mcp-passthrough.yml`](mcp-passthrough.yml) | Inject a custom MCP servers config into whichever CLI provider you picked. |
 | [`trigger-always.yml`](trigger-always.yml) | Run on every push (v1.1 behaviour, explicit). |
 | [`trigger-label-once.yml`](trigger-label-once.yml) | Run exactly once per label application; toggle the label off/on to re-run. Recommended for teams that want the AI to review "when ready" and not on every push. |
