@@ -7,7 +7,7 @@ Implements the four interfaces the validation register requires:
     python3 tests/eval/jev_experiment.py validate --manifest experiment.json
     python3 tests/eval/jev_experiment.py dry-run  --manifest experiment.json [--out plan.json]
     python3 tests/eval/jev_experiment.py run      --manifest experiment.json --phase calibration
-                                                  [--arm baseline|deterministic|jev] [--lane ID]
+                                                  [--arm baseline|deterministic] [--lane ID]
     python3 tests/eval/jev_experiment.py report   --manifest experiment.json
 
 Hard properties (experiment contract F1/F2/F8/F9):
@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import corpus_validate  # noqa: E402
 
 SCHEMA = "ai-diff-reviewer/jev-experiment/1"
-ARMS = ("baseline", "deterministic", "jev")
+ARMS = ("baseline", "deterministic")
 PHASES = ("calibration", "heldout", "confirmation")
 SPLIT_SHARES = {"calibration": 0.50, "heldout": 0.30, "confirmation": 0.20}
 MIN_HELDOUT = {"critical_positive": 8, "negative_control": 8}
@@ -168,7 +168,6 @@ def build_manifest(salt: str, cases_dir: Path, out: Path, *, reps: int = DEFAULT
             "authorization_note": "developer approval required before any live run (F8)",
         },
         "lanes": {
-            "jev": {"model": "jev-1.13.0", "key_env": "TYPESAFE_API_KEY", "kind": "decision"},
             "grok": {"model": "grok-4.5", "key_env": "XAI_API_KEY", "kind": "coding"},
             "glm-claude-code": {"model": "glm-5.3", "key_env": "ZAI_CODING_API_KEY", "kind": "coding"},
         },
@@ -243,7 +242,6 @@ def plan_runs(manifest: dict[str, Any], cases: dict[str, dict[str, Any]], phase:
             cases[cid]["fixture"].get("base", {}), cases[cid]["fixture"].get("head", {})
         ))
         plans.append(RunPlan(arm, lane, cid, phase, 0, size))
-        plans[-1] = RunPlan(arm, lane, cid, phase, rep=0, est_input_chars=size)
     # rep index: restore per-cell repetition numbering after shuffle
     counters: dict[tuple[str, str, str], int] = {}
     numbered: list[RunPlan] = []
@@ -252,11 +250,9 @@ def plan_runs(manifest: dict[str, Any], cases: dict[str, dict[str, Any]], phase:
         counters[key] = counters.get(key, 0)
         numbered.append(RunPlan(arm, lane, cid, phase_of, counters[key], size))
         counters[key] += 1
-    # jev arm adds one decision call per reviewed run (same conservative bound)
     estimate = {
         "method": "chars/4 conservative proxy (labelled; measured-max x1.5 replaces it once Task 5 measures)",
         "runs": len(numbered),
-        "jev_decision_runs": sum(1 for p in numbered if p.arm == "jev"),
         "est_total_input_chars": sum(p.est_input_chars for p in numbered),
         "est_total_input_tokens_proxy": sum(p.est_input_chars for p in numbered) // 4,
     }
@@ -276,7 +272,7 @@ def budget_check(estimate: dict[str, Any], manifest: dict[str, Any]) -> dict[str
 
 
 def deterministic_triage(case: dict[str, Any]) -> dict[str, Any]:
-    """The explicit, cheap rules comparator (contract: not weakened to favor Jev).
+    """The explicit, cheap rules comparator (contract: never weakened to flatter any arm).
 
     Pure function of the case's changed paths: dependency/lockfile and
     policy/prompt-file changes always demand full review; docs-only small
@@ -363,12 +359,10 @@ def cmd_run(args: argparse.Namespace) -> int:
               "Record developer approval in the manifest first.", file=sys.stderr)
         return 1
     import os
-    # Credential presence is scoped to the arms actually selected: the jev arm
-    # needs the Jev key; baseline needs the coding lanes' keys; rules needs none.
+    # Credential presence is scoped to the arms actually selected: baseline
+    # needs the coding lanes' keys; the deterministic/rules arm needs none.
     arms_selected = [args.arm] if args.arm else list(manifest.get("arms", ARMS))
     keys_needed = set()
-    if "jev" in arms_selected:
-        keys_needed.add(manifest.get("lanes", {}).get("jev", {}).get("key_env", "TYPESAFE_API_KEY"))
     if "baseline" in arms_selected:
         keys_needed.update(l["key_env"] for l in manifest.get("lanes", {}).values()
                            if l.get("kind") == "coding")
@@ -393,14 +387,14 @@ def cmd_report(args: argparse.Namespace) -> int:
     for r in records:
         arm = r.get("arm", "?")
         cell = by_arm.setdefault(arm, {"runs": 0, "failures": 0, "unknown_cost": 0,
-                                       "provider_seconds": 0.0, "jev_seconds": 0.0,
+                                       "provider_seconds": 0.0,
                                        "setup_seconds": 0.0, "must_find_hits": 0, "must_find_total": 0})
         cell["runs"] += 1
         if r.get("status") != "completed":
             cell["failures"] += 1
         if r.get("usage_unknown"):
             cell["unknown_cost"] += 1
-        for key in ("provider_seconds", "jev_seconds", "setup_seconds"):
+        for key in ("provider_seconds", "setup_seconds"):
             cell[key] += float(r.get(key) or 0.0)
         cell["must_find_hits"] += int(r.get("must_find_hits") or 0)
         cell["must_find_total"] += int(r.get("must_find_total") or 0)
@@ -409,14 +403,16 @@ def cmd_report(args: argparse.Namespace) -> int:
         req for req in required.get("cells", [])
         if tuple(req) not in {(r.get("arm"), r.get("lane")) for r in records}
     ]
-    promotion_ready = not missing_cells and all(c["unknown_cost"] == 0 for c in by_arm.values())
+    promotion_ready = not missing_cells and all(
+        c["unknown_cost"] == 0 and c["failures"] == 0 for c in by_arm.values()
+    )
     print(json.dumps({
         "schema": SCHEMA + "+report",
         "runs_recorded": len(records),
         "per_arm": by_arm,
         "missing_required_cells": missing_cells,
         "promotion_ready": promotion_ready,
-        "_note": "unknown cost or missing cells fail promotion (F8/F9); failures are reported, never averaged away",
+        "_note": "unknown cost, failed runs, or missing cells fail promotion (F8/F9); failures are reported, never averaged away",
     }, indent=2))
     # Exit 1 only when declared requirements exist and are unmet: an audit
     # without declared requirements is informational, not a failure.

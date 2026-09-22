@@ -36,8 +36,12 @@ and any breach of the declared floors.
 | Total cases | ≥ 60 | **73** |
 | Stack families | ≥ 3 (python, typescript, go) | **3** |
 | Critical-positive cases | ≥ 20 (every label adjudicated, blinded) | **21** |
-| Warning-positive cases | — | 24 |
+| Warning-positive cases | — | **27** |
 | Negative/false-positive controls | ≥ 20, reasoned reference review | **25** |
+
+Warning-positive labels are evidence-grounded but are not required to carry a
+blinded adjudication record (the validator enforces adjudication only for
+critical labels, whose floor they protect).
 
 Adjudication outcome (blinded, `independent-reviewer-v1`): of 23 original
 critical claims, 18 confirmed, 4 downgraded to warning (real defect, overstated
