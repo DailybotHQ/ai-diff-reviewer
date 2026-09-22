@@ -142,6 +142,9 @@ class ClassifyEndpointHostTests(unittest.TestCase):
             "dashscope.aliyuncs.com": reviewer.ENDPOINT_KIND_QWEN,
             "generativelanguage.googleapis.com": reviewer.ENDPOINT_KIND_GEMINI,
             "openrouter.ai": reviewer.ENDPOINT_KIND_OPENROUTER,
+            "bedrock-runtime.us-east-1.amazonaws.com": reviewer.ENDPOINT_KIND_BEDROCK,
+            "bedrock-runtime.eu-west-1.amazonaws.com": reviewer.ENDPOINT_KIND_BEDROCK,
+            "bedrock-runtime-fips.us-east-1.amazonaws.com": reviewer.ENDPOINT_KIND_BEDROCK,
             "gateway.example.com": reviewer.ENDPOINT_KIND_CUSTOM,
             "localhost": reviewer.ENDPOINT_KIND_CUSTOM,
             "": reviewer.ENDPOINT_KIND_CUSTOM,
@@ -149,6 +152,39 @@ class ClassifyEndpointHostTests(unittest.TestCase):
         for host, kind in cases.items():
             with self.subTest(host=host):
                 self.assertEqual(reviewer.classify_endpoint_host(host), kind)
+
+    def test_bedrock_regional_hosts_and_lookalikes(self) -> None:
+        # Bedrock runtime endpoints are regional: the pattern accepts any
+        # region label (and the -fips variant) but nothing else on
+        # amazonaws.com, and a lookalike first label or extra suffix falls
+        # through to `custom`.
+        positives = (
+            "bedrock-runtime.us-east-1.amazonaws.com",
+            "bedrock-runtime.eu-west-1.amazonaws.com",
+            "bedrock-runtime.ap-southeast-2.amazonaws.com",
+            "bedrock-runtime-fips.us-east-1.amazonaws.com",
+        )
+        for host in positives:
+            with self.subTest(host=host):
+                self.assertEqual(
+                    reviewer.classify_endpoint_host(host), reviewer.ENDPOINT_KIND_BEDROCK
+                )
+                self.assertEqual(
+                    reviewer._bedrock_region_from_host(host),
+                    host.split(".")[1],
+                )
+        for host in (
+            "bedrock.amazonaws.com",
+            "s3.amazonaws.com",
+            "evil-bedrock-runtime.us-east-1.amazonaws.com",
+            "bedrock-runtime.us-east-1.amazonaws.com.evil.com",
+            "bedrock-runtime.us-east-1.s3.amazonaws.com",
+        ):
+            with self.subTest(host=host):
+                self.assertEqual(
+                    reviewer.classify_endpoint_host(host), reviewer.ENDPOINT_KIND_CUSTOM
+                )
+        self.assertIsNone(reviewer._bedrock_region_from_host("s3.amazonaws.com"))
 
     def test_v2_4_0_hosts_do_not_match_lookalikes(self) -> None:
         # The six v2.4.0 vendor hosts are exact matches too — a mistyped or
@@ -256,7 +292,7 @@ class ResolveEndpointProfileTests(unittest.TestCase):
             prof.kind = "x"  # type: ignore[misc]
 
     def test_every_kind_constant_is_registered(self) -> None:
-        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 12)
+        self.assertEqual(len(reviewer.ENDPOINT_KINDS), 13)
         for _suffix, kind in reviewer.ENDPOINT_HOST_SUFFIXES:
             self.assertIn(kind, reviewer.ENDPOINT_KINDS)
 

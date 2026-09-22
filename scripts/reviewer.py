@@ -453,6 +453,7 @@ ENDPOINT_KIND_QWEN: str = "qwen"
 ENDPOINT_KIND_MINIMAX: str = "minimax"
 ENDPOINT_KIND_GEMINI: str = "gemini"
 ENDPOINT_KIND_OPENROUTER: str = "openrouter"
+ENDPOINT_KIND_BEDROCK: str = "bedrock"
 ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_ANTHROPIC,
     ENDPOINT_KIND_OPENAI,
@@ -466,6 +467,7 @@ ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_MINIMAX,
     ENDPOINT_KIND_GEMINI,
     ENDPOINT_KIND_OPENROUTER,
+    ENDPOINT_KIND_BEDROCK,
 )
 
 # Host → kind classification. A suffix starting with `.` matches any
@@ -1956,9 +1958,38 @@ def review_scope_id(provider_id: str, api_base: str) -> str:
     return f"{provider_id}:{digest}"
 
 
-def classify_endpoint_host(host: str) -> str:
-    """Map a hostname to an endpoint kind via `ENDPOINT_HOST_SUFFIXES`."""
+def _is_bedrock_runtime_host(h: str) -> bool:
+    """True for the regional Bedrock runtime endpoints
+    (`bedrock-runtime.{region}.amazonaws.com` and the `-fips` variant).
+    Regional hosts cannot be expressed as a suffix-table entry without
+    catching every `amazonaws.com` service, so they get an explicit check:
+    exactly four labels, first label `bedrock-runtime` / `bedrock-runtime-fips`,
+    registrable domain `amazonaws.com`."""
+    labels: list[str] = h.split(".")
+    return (
+        len(labels) == 4
+        and labels[0] in ("bedrock-runtime", "bedrock-runtime-fips")
+        and labels[2] == "amazonaws"
+        and labels[3] == "com"
+    )
+
+
+def _bedrock_region_from_host(host: str) -> str | None:
+    """Return the AWS region embedded in a Bedrock runtime host
+    (`bedrock-runtime.{region}.amazonaws.com` -> `{region}`), else None."""
     h: str = (host or "").lower()
+    if not _is_bedrock_runtime_host(h):
+        return None
+    return h.split(".")[1]
+
+
+def classify_endpoint_host(host: str) -> str:
+    """Map a hostname to an endpoint kind via `ENDPOINT_HOST_SUFFIXES`,
+    with an explicit pattern check for the regional Bedrock runtime hosts
+    (which a suffix entry cannot express without over-matching)."""
+    h: str = (host or "").lower()
+    if _is_bedrock_runtime_host(h):
+        return ENDPOINT_KIND_BEDROCK
     for suffix, kind in ENDPOINT_HOST_SUFFIXES:
         if suffix.startswith("."):
             if h.endswith(suffix):

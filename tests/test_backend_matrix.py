@@ -70,6 +70,7 @@ class RunnerBackendMatrixTests(unittest.TestCase):
         "https://dashscope.aliyuncs.com/compatible-mode/v1": "qwen",
         "https://generativelanguage.googleapis.com/v1beta/openai": "gemini",
         "https://openrouter.ai/api/v1": "openrouter",
+        "https://bedrock-runtime.us-east-1.amazonaws.com": "bedrock",
         "https://gw.example.com/v1": "custom",
     }
 
