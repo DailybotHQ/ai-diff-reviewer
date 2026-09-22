@@ -590,6 +590,32 @@ CODEX_MODEL_CATALOG_FILENAME: str = "models.json"
 # `apply_patch` custom tool with HTTP 422. Warned, not blocked — a future
 # CLI or gateway release may lift it.
 CODEX_CUSTOM_TOOL_SENSITIVE_KINDS: tuple[str, ...] = ("xai", "zai", "custom")
+# Backends whose only surface is OpenAI chat-completions. The Codex CLI
+# speaks the Responses API to every non-default gateway (`codex_wire_api`
+# is pinned to "responses"), so these vendors cannot be reached with
+# `provider: codex` at all — blocked, not merely warned, because every
+# request would fail. Reach them with `provider: openai` instead.
+CODEX_UNUSABLE_CHAT_COMPLETIONS_KINDS: frozenset[str] = frozenset(
+    (
+        ENDPOINT_KIND_DEEPSEEK,
+        ENDPOINT_KIND_MOONSHOT,
+        ENDPOINT_KIND_MINIMAX,
+        ENDPOINT_KIND_QWEN,
+        ENDPOINT_KIND_GEMINI,
+        ENDPOINT_KIND_OPENROUTER,
+    )
+)
+
+
+def _assert_codex_backend_supported(kind: str) -> None:
+    """Fail fast when Codex is pointed at a chat-completions-only backend."""
+    if kind in CODEX_UNUSABLE_CHAT_COMPLETIONS_KINDS:
+        raise ValueError(
+            f"provider: codex cannot reach {kind} backends - the Codex CLI "
+            "speaks the Responses API to non-default gateways and this "
+            "vendor exposes chat-completions only. Use `provider: openai` "
+            "with the same `api-base` (see docs/PROVIDERS.md)."
+        )
 # Preferred templates: current-gen, API-supported entries WITHOUT an
 # `upgrade` redirect (an upgrade block would make Codex swap the model).
 CODEX_CATALOG_TEMPLATE_SLUGS: tuple[str, ...] = (
@@ -3953,6 +3979,7 @@ class CodexProvider(AgentRunnerProvider):
                 codex_home=codex_home, api_key=self.api_key
             )
             if not self.profile.is_default:
+                _assert_codex_backend_supported(self.profile.kind)
                 # Custom backend (Azure Foundry / xAI / Z.ai / gateway): the
                 # model is the backend's own id or deployment name and must
                 # be explicit — Codex's built-in default only exists on
