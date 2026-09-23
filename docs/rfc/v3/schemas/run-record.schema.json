@@ -6,137 +6,506 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version", "run_id", "recorded_at", "runner", "provider", "endpoint_kind", "model",
-    "runtime_sha", "prompt_sha256", "extension_sha256", "sampling", "context", "budget", "outcome",
-    "usage_known", "usage", "cost_usd", "timings", "status"
+    "schema_version",
+    "run_id",
+    "recorded_at",
+    "runner",
+    "provider",
+    "endpoint_kind",
+    "model",
+    "runtime_sha",
+    "prompt_sha256",
+    "extension_sha256",
+    "sampling",
+    "context",
+    "budget",
+    "outcome",
+    "usage_known",
+    "usage",
+    "cost_usd",
+    "timings",
+    "status"
   ],
   "properties": {
-    "schema_version": { "const": "run-record/3.0" },
-    "run_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,63}$", "description": "Stable id; for evaluation runs it encodes campaign, cell and repetition." },
-    "recorded_at": { "type": "string", "format": "date-time" },
-    "runner": { "enum": ["in-process", "cli", "aggregator"] },
-    "provider": { "enum": ["anthropic", "openai", "claude-code", "cursor", "codex", "grok"] },
+    "schema_version": {
+      "const": "run-record/3.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{7,63}$",
+      "description": "Stable id; for evaluation runs it encodes campaign, cell and repetition."
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "runner": {
+      "enum": [
+        "in-process",
+        "cli",
+        "aggregator"
+      ]
+    },
+    "provider": {
+      "enum": [
+        "anthropic",
+        "openai",
+        "claude-code",
+        "cursor",
+        "codex",
+        "grok"
+      ]
+    },
     "endpoint_kind": {
-      "enum": ["anthropic", "openai", "azure", "xai", "zai", "custom", "deepseek", "moonshot", "qwen", "minimax", "gemini", "openrouter", "bedrock"],
+      "enum": [
+        "anthropic",
+        "openai",
+        "azure",
+        "xai",
+        "zai",
+        "custom",
+        "deepseek",
+        "moonshot",
+        "qwen",
+        "minimax",
+        "gemini",
+        "openrouter",
+        "bedrock"
+      ],
       "description": "The value of resolve_endpoint_profile(...).kind. Never the host."
     },
-    "model": { "type": "string", "minLength": 1, "description": "Exact model id sent on the wire (after tier-alias resolution)." },
-    "model_alias": { "type": ["string", "null"], "enum": ["economy", "balanced", "deep", null] },
-    "runtime_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-    "prompt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "extension_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Exact model id sent on the wire (after tier-alias resolution)."
+    },
+    "model_alias": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "economy",
+        "balanced",
+        "deep",
+        null
+      ]
+    },
+    "runtime_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "prompt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "extension_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "sampling": {
-      "type": "object", "additionalProperties": false,
-      "required": ["requested", "sent"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "sent"
+      ],
       "description": "Parameters requested by the runtime and the subset actually sent after any adaptive HTTP-400 fallback stripped some.",
       "properties": {
-        "requested": { "type": "object" },
-        "sent": { "type": "object" },
-        "stripped": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "context": {
-      "type": "object", "additionalProperties": false,
-      "required": ["repo_kind", "head_sha", "base_sha", "changed_files", "omitted_files", "diff_chars", "diff_truncated", "iar_mode", "instruction_files_read"],
-      "properties": {
-        "repo_kind": { "enum": ["pull_request", "fixture_tree", "historical_pr"] },
-        "head_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-        "base_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
-        "corpus_case_id": { "type": ["string", "null"], "pattern": "^C[0-9]{3}$" },
-        "corpus_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
-        "changed_files": { "type": "integer", "minimum": 0 },
-        "omitted_files": { "type": "integer", "minimum": 0 },
-        "diff_chars": { "type": "integer", "minimum": 0 },
-        "diff_truncated": { "type": "boolean" },
-        "iar_mode": { "enum": ["full", "incremental", "none"] },
-        "instruction_files_read": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "budget": {
-      "type": "object", "additionalProperties": false,
-      "required": ["max_turns", "turns_used", "tool_calls", "risk_tier"],
-      "properties": {
-        "max_turns": { "type": "integer", "minimum": 1 },
-        "turns_used": { "type": "integer", "minimum": 0 },
-        "tool_calls": { "type": "integer", "minimum": 0 },
-        "risk_tier": { "enum": ["low", "standard", "elevated", "critical", "unclassified"] },
-        "verifier_runs": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "outcome": {
-      "type": "object", "additionalProperties": false,
-      "required": ["findings_total", "findings_by_severity", "summary_present", "gate"],
-      "properties": {
-        "findings_total": { "type": "integer", "minimum": 0 },
-        "findings_by_severity": {
-          "type": "object", "additionalProperties": false,
-          "required": ["critical", "warning", "info"],
-          "properties": {
-            "critical": { "type": "integer", "minimum": 0 },
-            "warning": { "type": "integer", "minimum": 0 },
-            "info": { "type": "integer", "minimum": 0 }
-          }
+        "requested": {
+          "type": "object"
         },
-        "findings_verified": { "type": "integer", "minimum": 0 },
-        "findings_downgraded": { "type": "integer", "minimum": 0 },
-        "summary_present": { "type": "boolean" },
-        "gate": {
-          "type": "object", "additionalProperties": false,
-          "required": ["strictness", "passed"],
-          "properties": {
-            "strictness": { "enum": ["lenient", "block-on-critical", "block-on-warning", "block-on-any"] },
-            "passed": { "type": "boolean" }
-          }
+        "sent": {
+          "type": "object"
         },
-        "score": {
-          "type": ["object", "null"], "additionalProperties": false,
-          "description": "Present only for evaluation runs against a labelled case.",
-          "required": ["must_find_total", "must_find_hits", "false_positives", "unlabelled"],
-          "properties": {
-            "must_find_total": { "type": "integer", "minimum": 0 },
-            "must_find_hits": { "type": "integer", "minimum": 0 },
-            "false_positives": { "type": "integer", "minimum": 0 },
-            "unlabelled": { "type": "integer", "minimum": 0 },
-            "adjudicated_true": { "type": ["integer", "null"], "minimum": 0 },
-            "adjudicated_false": { "type": ["integer", "null"], "minimum": 0 }
+        "stripped": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         }
       }
     },
-    "usage_known": { "type": "boolean" },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repo_kind",
+        "head_sha",
+        "base_sha",
+        "changed_files",
+        "omitted_files",
+        "diff_chars",
+        "diff_truncated",
+        "iar_mode",
+        "instruction_files_read"
+      ],
+      "properties": {
+        "repo_kind": {
+          "enum": [
+            "pull_request",
+            "fixture_tree",
+            "historical_pr"
+          ]
+        },
+        "head_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "corpus_case_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^C[0-9]{3}$"
+        },
+        "corpus_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "changed_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omitted_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diff_chars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diff_truncated": {
+          "type": "boolean"
+        },
+        "iar_mode": {
+          "enum": [
+            "full",
+            "incremental",
+            "none"
+          ]
+        },
+        "instruction_files_read": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_turns",
+        "turns_used",
+        "tool_calls",
+        "risk_tier"
+      ],
+      "properties": {
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "turns_used": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tool_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "risk_tier": {
+          "enum": [
+            "low",
+            "standard",
+            "elevated",
+            "critical",
+            "unclassified"
+          ]
+        },
+        "verifier_runs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findings_total",
+        "findings_by_severity",
+        "summary_present",
+        "gate"
+      ],
+      "properties": {
+        "findings_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findings_by_severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "critical",
+            "warning",
+            "info"
+          ],
+          "properties": {
+            "critical": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warning": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "info": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "findings_verified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findings_downgraded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findings_refuted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary_present": {
+          "type": "boolean"
+        },
+        "gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strictness",
+            "passed"
+          ],
+          "properties": {
+            "strictness": {
+              "enum": [
+                "lenient",
+                "block-on-critical",
+                "block-on-warning",
+                "block-on-any"
+              ]
+            },
+            "passed": {
+              "type": "boolean"
+            }
+          }
+        },
+        "score": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "description": "Present only for evaluation runs against a labelled case.",
+          "required": [
+            "must_find_total",
+            "must_find_hits",
+            "false_positives",
+            "unlabelled"
+          ],
+          "properties": {
+            "must_find_total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "must_find_hits": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "false_positives": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unlabelled": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "adjudicated_true": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "adjudicated_false": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "usage_known": {
+      "type": "boolean"
+    },
     "usage": {
-      "type": ["object", "null"], "additionalProperties": false,
-      "required": ["input_tokens", "cache_read_tokens", "cache_write_tokens", "output_tokens", "source"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "input_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "output_tokens",
+        "source"
+      ],
       "properties": {
-        "input_tokens": { "type": "integer", "minimum": 0 },
-        "cache_read_tokens": { "type": "integer", "minimum": 0 },
-        "cache_write_tokens": { "type": "integer", "minimum": 0 },
-        "output_tokens": { "type": "integer", "minimum": 0 },
-        "source": { "enum": ["vendor", "cli", "estimated"] }
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "enum": [
+            "vendor",
+            "cli",
+            "estimated"
+          ]
+        }
       }
     },
-    "cost_usd": { "type": ["number", "null"], "minimum": 0, "description": "null when usage is unknown or no dated price exists; never 0 as a stand-in." },
-    "cost_basis": { "enum": ["vendor-reported", "indicative-price-table", "flat-rate-plan", "unknown"] },
+    "cost_usd": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "null when usage is unknown or no dated price exists; never 0 as a stand-in."
+    },
+    "cost_basis": {
+      "enum": [
+        "vendor-reported",
+        "indicative-price-table",
+        "flat-rate-plan",
+        "unknown"
+      ]
+    },
     "timings": {
-      "type": "object", "additionalProperties": false,
-      "required": ["setup_seconds", "provider_seconds", "total_seconds"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "setup_seconds",
+        "provider_seconds",
+        "total_seconds"
+      ],
       "properties": {
-        "setup_seconds": { "type": ["number", "null"], "minimum": 0 },
-        "provider_seconds": { "type": ["number", "null"], "minimum": 0 },
-        "verifier_seconds": { "type": ["number", "null"], "minimum": 0 },
-        "total_seconds": { "type": ["number", "null"], "minimum": 0 }
+        "setup_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "provider_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "verifier_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "total_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     },
-    "status": { "enum": ["completed", "incomplete", "failed", "timeout"] },
-    "failure_class": { "type": ["string", "null"], "enum": ["provider_error", "http_400_rejected_param", "timeout", "no_findings_file", "configuration", null] },
+    "status": {
+      "enum": [
+        "completed",
+        "incomplete",
+        "failed",
+        "timeout"
+      ]
+    },
+    "failure_class": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "provider_error",
+        "http_400_rejected_param",
+        "timeout",
+        "no_findings_file",
+        "configuration",
+        null
+      ]
+    },
     "campaign": {
-      "type": ["object", "null"], "additionalProperties": false,
-      "required": ["id", "cell", "repetition", "arm"],
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cell",
+        "repetition",
+        "arm"
+      ],
       "properties": {
-        "id": { "type": "string" },
-        "cell": { "type": "string" },
-        "repetition": { "type": "integer", "minimum": 0 },
-        "arm": { "type": "string" }
+        "id": {
+          "type": "string"
+        },
+        "cell": {
+          "type": "string"
+        },
+        "repetition": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arm": {
+          "type": "string"
+        }
       }
     }
   }

@@ -132,8 +132,8 @@ the top level) carries:
   the reason this must be recorded);
 - context completeness: `changed_files`, `omitted_files`, `diff_chars`,
   `diff_truncated`, `iar_mode`, `instruction_files_read` (RFC-02/03 hooks);
-- budget and outcome counts, severity histogram, verified/downgraded counts
-  (RFC-03), gate result, optional score;
+- budget and outcome counts, severity histogram, verified/downgraded/refuted
+  counts (RFC-03; `findings_refuted` added by Task 7), gate result, optional score;
 - `usage_known` + nullable `usage`, nullable `cost_usd` + `cost_basis`;
   `timings` split into setup / provider / verifier / total; `status` and
   `failure_class`; optional `campaign` cell/arm/repetition.

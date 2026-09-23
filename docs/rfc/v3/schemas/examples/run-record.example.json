@@ -11,9 +11,16 @@
   "prompt_sha256": "4c8047986cba86d63761ef7b7c4c6a7613c1ba0f7565abc6e7535838c0564c26",
   "extension_sha256": "0f2b8c9d1e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c",
   "sampling": {
-    "requested": { "temperature": 0, "seed": 42 },
-    "sent": { "temperature": 0 },
-    "stripped": ["seed"]
+    "requested": {
+      "temperature": 0,
+      "seed": 42
+    },
+    "sent": {
+      "temperature": 0
+    },
+    "stripped": [
+      "seed"
+    ]
   },
   "context": {
     "repo_kind": "pull_request",
@@ -26,7 +33,10 @@
     "diff_chars": 88412,
     "diff_truncated": false,
     "iar_mode": "full",
-    "instruction_files_read": ["AGENTS.md", ".review/extension.md"]
+    "instruction_files_read": [
+      "AGENTS.md",
+      ".review/extension.md"
+    ]
   },
   "budget": {
     "max_turns": 30,
@@ -37,11 +47,19 @@
   },
   "outcome": {
     "findings_total": 4,
-    "findings_by_severity": { "critical": 1, "warning": 2, "info": 1 },
+    "findings_by_severity": {
+      "critical": 1,
+      "warning": 2,
+      "info": 1
+    },
     "findings_verified": 0,
     "findings_downgraded": 0,
+    "findings_refuted": 0,
     "summary_present": true,
-    "gate": { "strictness": "block-on-critical", "passed": false },
+    "gate": {
+      "strictness": "block-on-critical",
+      "passed": false
+    },
     "score": {
       "must_find_total": 1,
       "must_find_hits": 1,
@@ -69,5 +87,10 @@
   },
   "status": "completed",
   "failure_class": null,
-  "campaign": { "id": "phase0-baseline-2026-10", "cell": "grok|grok-4.5|baseline|46", "repetition": 1, "arm": "baseline" }
+  "campaign": {
+    "id": "phase0-baseline-2026-10",
+    "cell": "grok|grok-4.5|baseline|46",
+    "repetition": 1,
+    "arm": "baseline"
+  }
 }

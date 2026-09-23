@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DailybotHQ/ai-diff-reviewer/docs/rfc/v3/schemas/review-output-v3.schema.json",
+  "title": "AI Diff Reviewer v3 structured review output",
+  "description": "The complete review as one machine-readable document: findings v3 (see finding-v3.schema.json), the generated summary, gate decision, change-inventory completeness, usage (nullable, paired with usage_known), the embedded run record (see run-record.schema.json) and, for aggregated reviews, the legs. Written to the workspace, uploaded as an artifact, and referenced by the structured-output-path / structured-output-sha256 action outputs. No URL or hostname field exists: backends are endpoint kinds. Findings are never truncated silently: `truncated` carries the counts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_id", "generated_at", "role", "run", "change_inventory", "findings", "refuted", "prior_findings", "summary", "gate", "usage_known", "usage", "truncated"],
+  "properties": {
+    "schema_version": { "const": "review-output/3.0" },
+    "document_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,63}$" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "role": { "enum": ["review", "emit", "aggregate"], "description": "The action `mode` that produced this document (RFC-04)." },
+    "run": {
+      "type": "object",
+      "description": "The RFC-01 run record of the producing run (single leg) or of the aggregator run. Validated separately against run-record.schema.json; the gate walk here checks the identity keys only.",
+      "required": ["schema_version", "run_id", "runner", "provider", "endpoint_kind", "model", "runtime_sha", "prompt_sha256", "status"],
+      "properties": {
+        "schema_version": { "const": "run-record/3.0" },
+        "run_id": { "type": "string" },
+        "runner": { "enum": ["in-process", "cli", "aggregator"] },
+        "provider": { "enum": ["anthropic", "openai", "claude-code", "cursor", "codex", "grok"] },
+        "endpoint_kind": { "type": "string" },
+        "model": { "type": "string" },
+        "runtime_sha": { "type": "string" },
+        "prompt_sha256": { "type": "string" },
+        "status": { "enum": ["completed", "incomplete", "failed", "timeout"] }
+      }
+    },
+    "change_inventory": {
+      "type": "object", "additionalProperties": false,
+      "required": ["head_sha", "base_sha", "files", "omitted", "complete"],
+      "properties": {
+        "head_sha": { "type": "string" },
+        "base_sha": { "type": "string" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "status", "additions", "deletions", "omitted", "risk_class"],
+            "properties": {
+              "path": { "type": "string" },
+              "previous_path": { "type": ["string", "null"] },
+              "status": { "enum": ["added", "modified", "removed", "renamed", "copied", "changed", "unchanged"] },
+              "additions": { "type": "integer", "minimum": 0 },
+              "deletions": { "type": "integer", "minimum": 0 },
+              "binary": { "type": "boolean" },
+              "mode_change": { "type": "boolean" },
+              "omitted": { "type": "boolean" },
+              "patch_chars": { "type": ["integer", "null"], "minimum": 0 },
+              "risk_class": { "enum": ["code", "tests", "prompts-policy", "dependencies", "workflows-ci", "docs", "generated", "unknown"] }
+            }
+          }
+        },
+        "omitted": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "boolean" },
+        "risk_tier": { "enum": ["low", "standard", "elevated", "critical", "unclassified"] }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Published findings, finding-v3 shape (validated against finding-v3.schema.json). The walk here checks the keys the aggregator and consumers key on.",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "line", "severity", "category", "title", "body", "evidence", "verification", "origin"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "severity": { "enum": ["critical", "warning", "info"] },
+          "severity_claimed": { "enum": ["critical", "warning", "info"] },
+          "category": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "evidence": { "type": "object" },
+          "verification": { "type": "object", "required": ["status", "reason"], "properties": { "status": { "enum": ["unverified", "verified", "refuted", "downgraded", "skipped"] }, "reason": { "type": "string" } } },
+          "agreement": { "type": ["object", "null"] },
+          "lifecycle": { "type": "object" },
+          "origin": { "type": "object" }
+        }
+      }
+    },
+    "refuted": {
+      "type": "array",
+      "description": "Findings the verifier refuted; never published inline, always listed here (RFC-03).",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "path", "line", "severity_claimed", "title", "reason", "origin"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "severity_claimed": { "enum": ["critical", "warning", "info"] },
+          "title": { "type": "string" },
+          "reason": { "type": "string" },
+          "origin": { "type": "object" }
+        }
+      }
+    },
+    "prior_findings": {
+      "type": "object", "additionalProperties": false,
+      "required": ["retired", "still_open", "regressed", "unverified_claims"],
+      "properties": {
+        "retired": { "type": "array", "items": { "type": "object", "required": ["id", "reason"], "properties": { "id": { "type": "string" }, "reason": { "enum": ["verified_fixed", "maintainer_resolved", "file_removed"] } } } },
+        "still_open": { "type": "array", "items": { "type": "string" } },
+        "regressed": { "type": "array", "items": { "type": "string" } },
+        "unverified_claims": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["counts", "verification_counts", "agreement_histogram", "narrative", "rendered_markdown"],
+      "properties": {
+        "counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["critical", "warning", "info"],
+          "properties": { "critical": { "type": "integer", "minimum": 0 }, "warning": { "type": "integer", "minimum": 0 }, "info": { "type": "integer", "minimum": 0 } }
+        },
+        "verification_counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["verified", "unverified", "downgraded", "refuted", "skipped"],
+          "properties": { "verified": { "type": "integer", "minimum": 0 }, "unverified": { "type": "integer", "minimum": 0 }, "downgraded": { "type": "integer", "minimum": 0 }, "refuted": { "type": "integer", "minimum": 0 }, "skipped": { "type": "integer", "minimum": 0 } }
+        },
+        "agreement_histogram": { "type": "object", "description": "Map of legs_reporting → number of findings; {\"1\": n} on a single-leg review." },
+        "narrative": { "type": "string", "maxLength": 4000, "description": "Model-written, bounded; may not name a path:line absent from findings (runtime-enforced)." },
+        "rendered_markdown": { "type": "string", "description": "The exact review body posted to GitHub, generated from this document." }
+      }
+    },
+    "gate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["strictness", "passed", "reason", "min_agreement"],
+      "properties": {
+        "strictness": { "enum": ["lenient", "block-on-critical", "block-on-warning", "block-on-any"] },
+        "passed": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "min_agreement": { "type": "integer", "minimum": 1 },
+        "require_all_legs": { "type": "boolean" }
+      }
+    },
+    "legs": {
+      "type": ["array", "null"],
+      "description": "Aggregated reviews only: one entry per expected leg.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["leg_id", "delivered", "status"],
+        "properties": {
+          "leg_id": { "type": "string" },
+          "delivered": { "type": "boolean" },
+          "status": { "enum": ["completed", "incomplete", "failed", "timeout", "missing"] },
+          "run_id": { "type": ["string", "null"] },
+          "findings_reported": { "type": ["integer", "null"], "minimum": 0 },
+          "cost_usd": { "type": ["number", "null"], "minimum": 0 },
+          "provider_seconds": { "type": ["number", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "duplicates_removed": { "type": ["integer", "null"], "minimum": 0 },
+    "usage_known": { "type": "boolean" },
+    "usage": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["input_tokens", "cache_read_tokens", "cache_write_tokens", "output_tokens", "source"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "cache_read_tokens": { "type": "integer", "minimum": 0 },
+        "cache_write_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "source": { "enum": ["vendor", "cli", "estimated", "aggregated"] }
+      }
+    },
+    "cost_usd": { "type": ["number", "null"], "minimum": 0 },
+    "truncated": {
+      "type": "object", "additionalProperties": false,
+      "required": ["any", "findings_dropped", "excerpts_trimmed", "narrative_trimmed"],
+      "properties": {
+        "any": { "type": "boolean" },
+        "findings_dropped": { "type": "integer", "minimum": 0 },
+        "excerpts_trimmed": { "type": "integer", "minimum": 0 },
+        "narrative_trimmed": { "type": "boolean" }
+      }
+    },
+    "review_url": { "type": ["string", "null"], "description": "GitHub review URL when published (role review/aggregate); the only URL-typed field, and it is always a github.com PR review path written by the runtime, never by a model." }
+  }
+}

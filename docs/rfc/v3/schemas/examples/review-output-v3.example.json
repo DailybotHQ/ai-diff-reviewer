@@ -1,0 +1,106 @@
+{
+  "schema_version": "review-output/3.0",
+  "document_id": "agg-pr61-e4baca6-2026-10-02",
+  "generated_at": "2026-10-02T14:09:30Z",
+  "role": "aggregate",
+  "run": {
+    "schema_version": "run-record/3.0",
+    "run_id": "p2-aggregate-pr61-e4baca6",
+    "runner": "aggregator",
+    "provider": "grok",
+    "endpoint_kind": "xai",
+    "model": "grok-4.5",
+    "runtime_sha": "7c5be24",
+    "prompt_sha256": "4c8047986cba86d63761ef7b7c4c6a7613c1ba0f7565abc6e7535838c0564c26",
+    "status": "completed"
+  },
+  "change_inventory": {
+    "head_sha": "e4baca6",
+    "base_sha": "38c6144",
+    "files": [
+      { "path": "scripts/reviewer.py", "previous_path": null, "status": "modified", "additions": 212, "deletions": 40, "binary": false, "mode_change": false, "omitted": false, "patch_chars": 18440, "risk_class": "code" },
+      { "path": "tests/test_backends.py", "previous_path": null, "status": "modified", "additions": 31, "deletions": 2, "binary": false, "mode_change": false, "omitted": false, "patch_chars": 2210, "risk_class": "tests" },
+      { "path": "package-lock.json", "previous_path": null, "status": "modified", "additions": 900, "deletions": 880, "binary": false, "mode_change": false, "omitted": true, "patch_chars": null, "risk_class": "dependencies" }
+    ],
+    "omitted": 1,
+    "complete": false,
+    "risk_tier": "elevated"
+  },
+  "findings": [
+    {
+      "id": "f-9c1e7a3b5d2f8e40",
+      "path": "scripts/reviewer.py",
+      "line": 8236,
+      "severity": "critical",
+      "severity_claimed": "critical",
+      "category": "security",
+      "title": "Base ref taken from the PR payload reaches git argv unvalidated",
+      "body": "`base_ref` is interpolated into `git diff origin/<base>...HEAD` without a ref-name check; a leading-dash name is parsed as an option.",
+      "evidence": {
+        "anchor_sha256": "3b9f2c7d1e8a4b60",
+        "excerpt": "diff_proc = run_cmd([\"git\", \"diff\", f\"origin/{base_ref}...HEAD\", \"--no-color\", \"--unified=3\"])",
+        "files_read": ["scripts/reviewer.py"],
+        "checks": [ { "kind": "read_anchor", "target": "scripts/reviewer.py:8226-8244", "result": "supports", "note": null } ]
+      },
+      "verification": { "status": "verified", "reason": "Anchor read confirms unvalidated interpolation; no guard in callers." },
+      "agreement": { "legs_total": 2, "legs_reporting": 2, "reported_by": ["grok|xai|grok-4.5", "claude-code|zai|glm-5.3"] },
+      "lifecycle": { "state": "new", "first_seen_run_id": "p2-aggregate-pr61-e4baca6", "retired_reason": null },
+      "origin": { "run_id": "p2-emit-pr61-grok", "provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5" }
+    },
+    {
+      "id": "f-41d0a9e2c7b3f156",
+      "path": "tests/test_backends.py",
+      "line": 88,
+      "severity": "warning",
+      "severity_claimed": "critical",
+      "category": "test-gap",
+      "title": "New host classification branch has no lookalike-negative test",
+      "body": "Claimed critical; verifier found: a missing negative test is a coverage gap, not a correctness defect. The `-fips` branch accepts the positive host but no test asserts that `evil-bedrock-runtime.…` stays custom.",
+      "evidence": {
+        "anchor_sha256": "7e2c4d9a1f0b3c58",
+        "excerpt": "self.assertEqual(reviewer.classify_endpoint_host(\"bedrock-runtime-fips.us-east-1.amazonaws.com\"), \"bedrock\")",
+        "files_read": ["tests/test_backends.py", "scripts/reviewer.py"],
+        "checks": [ { "kind": "grep_callers", "target": "evil-bedrock-runtime", "result": "supports", "note": "no negative fixture for the fips label" } ]
+      },
+      "verification": { "status": "downgraded", "reason": "Defect stands as a test gap; severity overstated — no production path is affected." },
+      "agreement": { "legs_total": 2, "legs_reporting": 1, "reported_by": ["claude-code|zai|glm-5.3"] },
+      "lifecycle": { "state": "new", "first_seen_run_id": "p2-aggregate-pr61-e4baca6", "retired_reason": null },
+      "origin": { "run_id": "p2-emit-pr61-glm", "provider": "claude-code", "endpoint_kind": "zai", "model": "glm-5.3" }
+    }
+  ],
+  "refuted": [
+    {
+      "id": "f-c0ffee1234567890",
+      "path": "scripts/reviewer.py",
+      "line": 8210,
+      "severity_claimed": "warning",
+      "title": "Pagination loop never terminates on an empty page",
+      "reason": "Anchor read: the loop breaks when `chunk` is empty or not a list on the first statement of the body.",
+      "origin": { "run_id": "p2-emit-pr61-grok", "provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5" }
+    }
+  ],
+  "prior_findings": {
+    "retired": [ { "id": "f-0a1b2c3d4e5f6071", "reason": "verified_fixed" } ],
+    "still_open": [],
+    "regressed": [],
+    "unverified_claims": ["f-1122334455667788"]
+  },
+  "summary": {
+    "counts": { "critical": 1, "warning": 1, "info": 0 },
+    "verification_counts": { "verified": 1, "unverified": 0, "downgraded": 1, "refuted": 1, "skipped": 0 },
+    "agreement_histogram": { "1": 1, "2": 1 },
+    "narrative": "The change wires a new endpoint kind cleanly; the one blocking issue is the unvalidated base ref reaching git argv (scripts/reviewer.py:8236). The fips classification branch lacks a lookalike-negative test.",
+    "rendered_markdown": "### AI review for `e4baca6`\n\n**Gate:** 🚫 block-on-critical — 1 verified critical\n\n| # | Severity | File | Summary | Verification | Agreement |\n|---|---|---|---|---|---|\n| 1 | 🚨 critical | `scripts/reviewer.py:8236` | Base ref taken from the PR payload reaches git argv unvalidated | verified | 2/2 |\n| 2 | ⚠️ warning | `tests/test_backends.py:88` | New host classification branch has no lookalike-negative test | downgraded (claimed critical) | 1/2 |\n\nRefuted by the verifier (not posted inline): 1 — see the structured output.\n\nPrior findings: 1 retired (verified fixed), 1 unverified claim kept open."
+  },
+  "gate": { "strictness": "block-on-critical", "passed": false, "reason": "1 verified critical finding", "min_agreement": 1, "require_all_legs": false },
+  "legs": [
+    { "leg_id": "grok|xai|grok-4.5", "delivered": true, "status": "completed", "run_id": "p2-emit-pr61-grok", "findings_reported": 3, "cost_usd": 0.51, "provider_seconds": 201.3 },
+    { "leg_id": "claude-code|zai|glm-5.3", "delivered": true, "status": "completed", "run_id": "p2-emit-pr61-glm", "findings_reported": 2, "cost_usd": null, "provider_seconds": 318.9 }
+  ],
+  "duplicates_removed": 2,
+  "usage_known": false,
+  "usage": null,
+  "cost_usd": null,
+  "truncated": { "any": false, "findings_dropped": 0, "excerpts_trimmed": 0, "narrative_trimmed": false },
+  "review_url": null
+}
