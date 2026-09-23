@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 10, 2026-09-23). Consumes
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 10, 2026-09-23). Consumes
 RFC-00…07. This is the document the maintainer acts on: every open question
 from the RFC set is a decision-log row with a recommendation and an owner;
 every phase is a named Deep Work Plan that can be created from the record
@@ -91,41 +91,43 @@ structure.
 
 ## Decision log
 
-ADR-style. Owner: maintainer unless stated. Status `open` until recorded
-here as `accepted` / `rejected` with a date. Rows that change the public
+ADR-style. Owner: maintainer unless stated. Every row was **accepted at its
+recommended option on 2026-09-23** by the developer's instruction to
+`PLAN_v3_implementation` ("apliquemos todas las recomendaciones", trust) — D-00
+included. A later change is a new row that supersedes the old one. Rows that change the public
 contract name their `BC-nn`.
 
 | Id | Question | Options | Recommendation | Evidence | BC | Status |
 |---|---|---|---|---|---|---|
-| D-00 | Accept the RFC set as the v3 direction? | accept / revise / reject | **accept**; an RFC moves to *Accepted* only via this row | RFC-00 P-1..P-4 | — | open |
-| D-01 | Where run records and verdicts live (RFC-01 Q-01) | committed under `tests/eval/records/`; records branch; release assets | verdicts committed (small), raw records as artifacts (90 d) + monthly squash to a records branch | X-02 | BC-01 | open |
-| D-02 | Promote `analysis_results/baseline_metrics.py` into `tests/eval/` (RFC-01 Q-05; Task 2 skills entry T2-001) | promote / keep plan-local | **promote** as the determinism computation of the gate | Task 2 | — | open |
-| D-03 | In-process `anthropic`/`openai` lanes: rebuild or retire for code review (RFC-02 Q-10; BC-06) | rebuild on the unified loop / retire, keep as verifier engine | **rebuild**, decide retire after Phase 1 measurement: retire if recall stays > 3 defects below the CLI band across two lanes | E-09, E-10, H-02 | BC-06 | open (decided by measurement) |
-| D-04 | Promotion factor 1.0 × median spread (RFC-01 Q-02) | 1.0 / 1.5 / CI-only | 1.0 now; revisit after the Phase 0 re-measurement; never lower | E-14a | — | open |
-| D-05 | Fixture-tree scoring mode (RFC-01 Q-03) | `run_eval.py --tree` worktree / synthetic PRs | `--tree` | E-18 | — | open |
-| D-06 | Verifier placement on multi-leg runs (RFC-03 Q-11, RFC-02 Q-09) | per leg / once in the aggregator; CLI-side inside the CLI / runtime-side | once in the aggregator; runtime-side with in-process tools for CLI lanes | P-3 | — | open |
-| D-07 | Default verifier alias and warning sample (RFC-03 Q-13, Q-15; RFC-06 Q-30) | economy 30 % / balanced 30 % / economy 100 % | economy, 30 % at `standard`, 4 verifier turns per finding; fallback balanced if H-06 fails | E-05, H-06 | BC-18 | open |
-| D-08 | Phases 3–4 in `v3.0.0` or `v3.1.0`? | include / defer | **defer to `v3.1.0` unless finished before the rc soaks** — the major is justified by Phases 0–2 alone (BC-03/04/07/17) | RFC-07 SemVer | BC-13 | open |
-| D-09 | `v2` maintenance window (RFC-07 Q-31) | 3 / 6 / 12 months | 6 months, security + catalog fixes, `release/v2` | Rule #8 | — | open |
-| D-10 | Ship `v3.0.0-rc.1`? (RFC-07 Q-32) | yes / no | yes, after Phase 2, ≥ 10 dogfood PRs, no moving tag | BC-02 | — | open |
-| D-11 | Transition knobs lifetime (RFC-07 Q-34; RFC-03 Q-12; RFC-06 Q-29) | one minor / whole major | one minor cycle; removal version stated in MIGRATION_v3 | — | BC-18, BC-19 | open |
-| D-12 | Retire BC-06 lane before `v3.0.0` or in `v3.1` (RFC-07 Q-33) | before / after | before `v3.0.0` if D-03 says retire — a major is the only place to do it | Rule #4 | BC-06 | open |
-| D-13 | `MIGRATION_v2.md` forward pointer (RFC-07 Q-35) | add one line / leave | add one line | — | — | open |
-| D-14 | Base-ref file reads: new tool or `ref` argument (RFC-02 Q-06) | new tool / `ref ∈ {base, head}` | `ref` argument | — | — | open |
-| D-15 | `MAX_PATCH_CHARS` (RFC-02 Q-07) and `MAX_REVIEW_OUTPUT_BYTES` (RFC-05 Q-23) | 40 000 / 4 MB | 40 000; 4 MB | E-26 | — | open |
-| D-16 | Inventory delivery to CLI lanes (RFC-02 Q-08) | prompt only / prompt + file | both | — | — | open |
-| D-17 | Dedup thresholds (RFC-04 Q-16, Q-17) | window 3 vs 5; 0.6 ratio / 0.4 Jaccard | 3; 0.6 / 0.4; calibrated on the labelled thread set | E-35 | — | open |
-| D-18 | Aggregate as `mode` input vs separate action (RFC-04 Q-18) | same action / `aggregate/action.yml` | same action, `mode` | Rule #4 | BC-09 | open |
-| D-19 | Forgotten aggregate job behavior (RFC-04 Q-19); per-leg progress comments (Q-20) | tracking note + exit 0 / fail; none / per-leg | tracking note + exit 0; none | P-3 | — | open |
-| D-20 | Refuted findings surface (RFC-03 Q-14) | structured output only / minimized comments | structured output + summary section only | P-3 | — | open |
-| D-21 | Embed vs reference the run record; store `rendered_markdown` (RFC-05 Q-21, Q-22) | embed / reference; store / re-render | embed; store | X-02 | BC-11 | open |
-| D-22 | SARIF export (RFC-05 Q-24) | derived optional artifact / none | derived, behind `export-sarif`, Phase 2+ | — | — | open |
-| D-23 | `apply-review` artifact-first with thread fallback (RFC-05 Q-25) | artifact only / artifact + fallback | artifact + fallback | — | — | open |
-| D-24 | Tier thresholds and `dependencies` tier (RFC-06 Q-26, Q-27) | 300/1 500 lines; dependencies `standard` vs `elevated` | 300 / 1 500; `elevated` | F6 weights | BC-13 | open |
-| D-25 | `deep` alias vs second leg at `critical` tier (RFC-06 Q-28) | deep / balanced + leg | balanced + leg when an ensemble exists; deep single-leg | E-12 | — | open |
-| D-26 | Adjudicator for precision samples (RFC-01 Q-04) | maintainer blinded / external | maintainer, blinded to the arm, per-finding record | E-20 | — | open |
-| D-27 | Promote the plan-local RFC gate (`check_rfc.py`) into the repository? | promote as a docs check / keep plan-local | keep plan-local; the RFCs become *Accepted* records, not living docs — re-evaluate if RFC sets recur | — | — | open |
-| D-28 | Additional provider secrets for measurement | none / `ANTHROPIC_API_KEY` / + AWS / + OpenAI | `ANTHROPIC_API_KEY` first (decides D-03 on the default lane) | Evaluation budget | — | open |
+| D-00 | Accept the RFC set as the v3 direction? | accept / revise / reject | **accept**; an RFC moves to *Accepted* only via this row | RFC-00 P-1..P-4 | — | accepted (recommended) — 2026-09-23 |
+| D-01 | Where run records and verdicts live (RFC-01 Q-01) | committed under `tests/eval/records/`; records branch; release assets | verdicts committed (small), raw records as artifacts (90 d) + monthly squash to a records branch | X-02 | BC-01 | accepted (recommended) — 2026-09-23 |
+| D-02 | Promote `analysis_results/baseline_metrics.py` into `tests/eval/` (RFC-01 Q-05; Task 2 skills entry T2-001) | promote / keep plan-local | **promote** as the determinism computation of the gate | Task 2 | — | accepted (recommended) — 2026-09-23 |
+| D-03 | In-process `anthropic`/`openai` lanes: rebuild or retire for code review (RFC-02 Q-10; BC-06) | rebuild on the unified loop / retire, keep as verifier engine | **rebuild**, decide retire after Phase 1 measurement: retire if recall stays > 3 defects below the CLI band across two lanes | E-09, E-10, H-02 | BC-06 | accepted (recommended: rebuild) — 2026-09-23; retire-or-keep decided by measurement in PLAN_v3_implementation Task 19 |
+| D-04 | Promotion factor 1.0 × median spread (RFC-01 Q-02) | 1.0 / 1.5 / CI-only | 1.0 now; revisit after the Phase 0 re-measurement; never lower | E-14a | — | accepted (recommended) — 2026-09-23 |
+| D-05 | Fixture-tree scoring mode (RFC-01 Q-03) | `run_eval.py --tree` worktree / synthetic PRs | `--tree` | E-18 | — | accepted (recommended) — 2026-09-23 |
+| D-06 | Verifier placement on multi-leg runs (RFC-03 Q-11, RFC-02 Q-09) | per leg / once in the aggregator; CLI-side inside the CLI / runtime-side | once in the aggregator; runtime-side with in-process tools for CLI lanes | P-3 | — | accepted (recommended) — 2026-09-23 |
+| D-07 | Default verifier alias and warning sample (RFC-03 Q-13, Q-15; RFC-06 Q-30) | economy 30 % / balanced 30 % / economy 100 % | economy, 30 % at `standard`, 4 verifier turns per finding; fallback balanced if H-06 fails | E-05, H-06 | BC-18 | accepted (recommended) — 2026-09-23 |
+| D-08 | Phases 3–4 in `v3.0.0` or `v3.1.0`? | include / defer | **defer to `v3.1.0` unless finished before the rc soaks** — the major is justified by Phases 0–2 alone (BC-03/04/07/17) | RFC-07 SemVer | BC-13 | accepted (recommended) — 2026-09-23 |
+| D-09 | `v2` maintenance window (RFC-07 Q-31) | 3 / 6 / 12 months | 6 months, security + catalog fixes, `release/v2` | Rule #8 | — | accepted (recommended) — 2026-09-23 |
+| D-10 | Ship `v3.0.0-rc.1`? (RFC-07 Q-32) | yes / no | yes, after Phase 2, ≥ 10 dogfood PRs, no moving tag | BC-02 | — | accepted (recommended) — 2026-09-23 |
+| D-11 | Transition knobs lifetime (RFC-07 Q-34; RFC-03 Q-12; RFC-06 Q-29) | one minor / whole major | one minor cycle; removal version stated in MIGRATION_v3 | — | BC-18, BC-19 | accepted (recommended) — 2026-09-23 |
+| D-12 | Retire BC-06 lane before `v3.0.0` or in `v3.1` (RFC-07 Q-33) | before / after | before `v3.0.0` if D-03 says retire — a major is the only place to do it | Rule #4 | BC-06 | accepted (recommended) — 2026-09-23 |
+| D-13 | `MIGRATION_v2.md` forward pointer (RFC-07 Q-35) | add one line / leave | add one line | — | — | accepted (recommended) — 2026-09-23 |
+| D-14 | Base-ref file reads: new tool or `ref` argument (RFC-02 Q-06) | new tool / `ref ∈ {base, head}` | `ref` argument | — | — | accepted (recommended) — 2026-09-23 |
+| D-15 | `MAX_PATCH_CHARS` (RFC-02 Q-07) and `MAX_REVIEW_OUTPUT_BYTES` (RFC-05 Q-23) | 40 000 / 4 MB | 40 000; 4 MB | E-26 | — | accepted (recommended) — 2026-09-23 |
+| D-16 | Inventory delivery to CLI lanes (RFC-02 Q-08) | prompt only / prompt + file | both | — | — | accepted (recommended) — 2026-09-23 |
+| D-17 | Dedup thresholds (RFC-04 Q-16, Q-17) | window 3 vs 5; 0.6 ratio / 0.4 Jaccard | 3; 0.6 / 0.4; calibrated on the labelled thread set | E-35 | — | accepted (recommended) — 2026-09-23 |
+| D-18 | Aggregate as `mode` input vs separate action (RFC-04 Q-18) | same action / `aggregate/action.yml` | same action, `mode` | Rule #4 | BC-09 | accepted (recommended) — 2026-09-23 |
+| D-19 | Forgotten aggregate job behavior (RFC-04 Q-19); per-leg progress comments (Q-20) | tracking note + exit 0 / fail; none / per-leg | tracking note + exit 0; none | P-3 | — | accepted (recommended) — 2026-09-23 |
+| D-20 | Refuted findings surface (RFC-03 Q-14) | structured output only / minimized comments | structured output + summary section only | P-3 | — | accepted (recommended) — 2026-09-23 |
+| D-21 | Embed vs reference the run record; store `rendered_markdown` (RFC-05 Q-21, Q-22) | embed / reference; store / re-render | embed; store | X-02 | BC-11 | accepted (recommended) — 2026-09-23 |
+| D-22 | SARIF export (RFC-05 Q-24) | derived optional artifact / none | derived, behind `export-sarif`, Phase 2+ | — | — | accepted (recommended) — 2026-09-23 |
+| D-23 | `apply-review` artifact-first with thread fallback (RFC-05 Q-25) | artifact only / artifact + fallback | artifact + fallback | — | — | accepted (recommended) — 2026-09-23 |
+| D-24 | Tier thresholds and `dependencies` tier (RFC-06 Q-26, Q-27) | 300/1 500 lines; dependencies `standard` vs `elevated` | 300 / 1 500; `elevated` | F6 weights | BC-13 | accepted (recommended) — 2026-09-23 |
+| D-25 | `deep` alias vs second leg at `critical` tier (RFC-06 Q-28) | deep / balanced + leg | balanced + leg when an ensemble exists; deep single-leg | E-12 | — | accepted (recommended) — 2026-09-23 |
+| D-26 | Adjudicator for precision samples (RFC-01 Q-04) | maintainer blinded / external | maintainer, blinded to the arm, per-finding record | E-20 | — | accepted (recommended) — 2026-09-23 |
+| D-27 | Promote the plan-local RFC gate (`check_rfc.py`) into the repository? | promote as a docs check / keep plan-local | keep plan-local; the RFCs become *Accepted* records, not living docs — re-evaluate if RFC sets recur | — | — | accepted (recommended) — 2026-09-23 |
+| D-28 | Additional provider secrets for measurement | none / `ANTHROPIC_API_KEY` / + AWS / + OpenAI | `ANTHROPIC_API_KEY` first (decides D-03 on the default lane) | Evaluation budget | — | accepted (recommended) — 2026-09-23 |
 
 ## Risks
 

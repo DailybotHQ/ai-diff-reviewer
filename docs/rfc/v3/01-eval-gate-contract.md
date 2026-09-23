@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 3, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 3, 2026-09-23). Addresses
 RFC-00 **P-1**, **P-7**, **P-8**. Implemented by the Phase 0 plan named in
 RFC-08. Schema: [`schemas/run-record.schema.json`](schemas/run-record.schema.json)
 (example: [`schemas/examples/run-record.example.json`](schemas/examples/run-record.example.json)).

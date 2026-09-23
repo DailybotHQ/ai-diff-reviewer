@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 4, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 4, 2026-09-23). Addresses
 RFC-00 **P-2**, **P-10**, part of **P-5**. Depends on RFC-01 (the run record
 every lane emits). Consumed by RFC-03 (verifier tools), RFC-04 (leg
 outputs), RFC-06 (budgets), RFC-07 (lane changes are contract changes).

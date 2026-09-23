@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 8, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 8, 2026-09-23). Addresses
 RFC-00 **P-5**, **P-6**, part of **P-2** (budget as an input to the loop).
 Depends on RFC-02 (change inventory, control-loop budget), RFC-03 (verifier
 allowance), RFC-01 (how targets are measured), Task 2 metrics. Consumed by

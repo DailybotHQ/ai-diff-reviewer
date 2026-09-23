@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 9, 2026-09-23). Collects
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 9, 2026-09-23). Collects
 every public-contract change proposed by RFC-01…06 plus the candidates
 recorded at the v2.5.0 release, classifies each, and outlines
 `docs/MIGRATION_v3.md`. Consumed by RFC-08 (release cuts; pending rows

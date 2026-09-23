@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 7, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 7, 2026-09-23). Addresses
 RFC-00 **P-3** (the aggregator's input), **P-7** (provenance travels with
 the review), **P-10** (completeness is a typed field). Depends on RFC-01
 (run record), RFC-02 (change inventory), RFC-03 (finding v3), RFC-04 (roles

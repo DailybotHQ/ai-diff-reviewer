@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 6, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 6, 2026-09-23). Addresses
 RFC-00 **P-3**, **P-11**. Depends on RFC-03 (evidence anchor and agreement
 fields), RFC-02 (leg outputs), RFC-01 (run records per leg). Consumed by
 RFC-05 (the artifact the aggregator reads), RFC-07 (new inputs, workflow

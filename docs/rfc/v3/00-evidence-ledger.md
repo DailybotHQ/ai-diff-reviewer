@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 1, 2026-09-23). This
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 1, 2026-09-23). This
 document is evidence only: it proposes no design. Every quantitative claim
 below carries exactly one epistemic label:
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — discovery record (PLAN_v3_discovery, Task 5, 2026-09-23). Addresses
+Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 5, 2026-09-23). Addresses
 RFC-00 **P-4**, **P-9**, and the PR #37 class (**E-13**, **H-05**). Depends
 on RFC-02 (tools the verifier uses) and RFC-01 (how the verifier is
 measured). Consumed by RFC-04 (dedup key and agreement live on the finding),
