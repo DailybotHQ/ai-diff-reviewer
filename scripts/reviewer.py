@@ -10427,12 +10427,20 @@ def main() -> int:
         api_base, provider_id
     )
     bedrock_env_credentials: bool = False
-    if api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
+    if (
+        api_key
+        and provider_id == "anthropic"
+        and backend_profile.kind == ENDPOINT_KIND_BEDROCK
+    ):
         # packed lane: register the components so partial leaks scrub too
         for part in api_key.split(":"):
             if part:
                 register_secret(part)
-    if not api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
+    if (
+        not api_key
+        and provider_id == "anthropic"
+        and backend_profile.kind == ENDPOINT_KIND_BEDROCK
+    ):
         try:
             # resolve AND register immediately: any public-facing failure
             # text produced before the first InvokeModel call is scrubbed.
