@@ -67,6 +67,25 @@ A review that did not finish is never a clean review. Since v3 every review ends
 
 In both non-completed cases the findings gathered so far are still posted, the summary carries a `Review incomplete: <cause>` (or `Review timed out: …`) footer, and the tracking comment shows `**Review incomplete:** ⚠️ <cause>`. This replaces the v2 behaviour where a capped in-process review could pass silently (RFC-07 BC-04).
 
+## Verified criticals (v3)
+
+Since v3 a `critical` is published as `critical` only when the **verifier** confirmed it (RFC-03). The verifier is a second, short, read-only model call on the same checkout: it re-reads the anchor, greps callers, reads the base version when a regression is claimed and the instruction file for `contradicts-documented-rule`, then records `verified` / `refuted` / `downgraded` / `unverified` with its checks. It runs on every claimed critical and a deterministic 30 % sample of warnings; `info` is never verified.
+
+| Model claimed | Verifier status | Published severity | Visible how |
+|---|---|---|---|
+| critical | verified | **critical** | inline; gates under `block-on-critical` |
+| critical | downgraded | warning | inline; body opens with `Claimed critical; verifier found: …` |
+| critical | unverified / skipped | warning | inline, same annotation; gates only under `block-on-warning` / `block-on-any` |
+| critical | refuted | — | not inline; listed in the structured output's refuted section |
+| warning | verified / unverified / skipped | warning | inline |
+| warning | downgraded | info | inline |
+| warning | refuted | — | refuted section |
+| info | any | info | inline (never verified) |
+
+The strictness gate reads the **published** severity, so `block-on-critical` blocks only on verified criticals (RFC-07 **BC-07**). The verifier fails **open into visibility**: an error, a timeout, `verifier: off`, or a lane with no in-process backend (`cursor`) leaves the claim visible as an annotated warning — never a silent block, never silence. The critical-always-surfaces rail keys on the *claimed* severity, so a downgraded claim is still never dropped by dedup or caps.
+
+Verifier lanes: in-process runners verify on their own backend with the `economy` tier alias (`balanced` where no cheaper tier reviews); CLI lanes verify runtime-side on the in-process runner of the same backend with the same credential — `grok` → xAI's OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible base (Z.ai or default), `codex` → the configured OpenAI base. Inputs: `verifier` (`on` / `off`), `verifier-model` (alias or id), `strict-unverified-criticals` (transition knob: gate on the claim as in v2; removed in v3.1.0).
+
 ## Choosing your mode
 
 A short decision tree:

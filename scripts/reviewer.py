@@ -880,6 +880,64 @@ VERIFICATION_UNVERIFIED: str = "unverified"
 LIFECYCLE_STATES: tuple[str, ...] = ("new", "open", "retired", "regressed")
 RETIRED_REASONS: tuple[str, ...] = ("verified_fixed", "maintainer_resolved", "file_removed")
 ORIGIN_UNKNOWN_RUN_ID: str = "unknown"
+# Verifier (RFC-03 § Verifier; decisions D-06 / D-07). A second, short call
+# with code access re-examines every claimed `critical` and a deterministic
+# sample of warnings; it fails open into visibility (never into a block).
+VERIFIER_ENV: str = "AIPRR_VERIFIER"                       # `on` (default) | `off`
+VERIFIER_MODEL_ENV: str = "AIPRR_VERIFIER_MODEL"           # alias or model id; empty = economy
+STRICT_UNVERIFIED_CRITICALS_ENV: str = "AIPRR_STRICT_UNVERIFIED_CRITICALS"
+VERIFIER_MODE_ON: str = "on"
+VERIFIER_MODE_OFF: str = "off"
+VERIFIER_MAX_TURNS_PER_FINDING: int = 4
+VERIFIER_WARNING_SAMPLE_PCT: int = 30
+VERIFIER_CLAIM_BODY_CHARS: int = 2_000
+VERIFIER_TOOLS: tuple[str, ...] = ("read_file", "get_patch", "grep", "glob", "read_instruction_files")
+VERIFIER_VERDICT_TOOL: str = "record_verdict"
+VERIFIER_VERDICT_STATUSES: tuple[str, ...] = ("verified", "refuted", "downgraded", "unverified")
+# In-process runner used to verify for each CLI lane (runtime-side, D-06):
+# same endpoint kind, same credential. Cursor has no in-process equivalent.
+VERIFIER_RUNNER_FOR_CLI_LANE: dict[str, str] = {"grok": "openai", "claude-code": "anthropic", "codex": "openai"}
+VERIFIER_SYSTEM_PROMPT: str = (
+    "You are a verification pass for one code-review finding. You receive the "
+    "claim (title, category, severity claimed, anchor, body) and read-only tools "
+    "on the same checkout. Re-derive support from the code, never from the "
+    "claim's wording: read the anchor (`read_file`, `get_patch`), grep callers "
+    "or definitions when the claim depends on them, read the base version "
+    "(`read_file` with `ref: base`) when a regression is claimed, and the "
+    "instruction file (`read_instruction_files`) when the category is "
+    "`contradicts-documented-rule`. Then call `record_verdict` exactly once: "
+    "`verified` when a `read_anchor` check supports the claim and nothing "
+    "contradicts it; `refuted` when the code contradicts it (the guard exists, "
+    "the path is unreachable, the rule does not say that); `downgraded` when the "
+    "defect is real but the claimed severity is too high; `unverified` when you "
+    "could not decide. Record every check you made with its result. Keep the "
+    "reason to one or two sentences. Do not modify files."
+)
+VERIFIER_VERDICT_SCHEMA: dict[str, Any] = {
+    "name": VERIFIER_VERDICT_TOOL,
+    "description": "Record the verification verdict for the finding under review (call exactly once, last).",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "status": {"type": "string", "enum": list(VERIFIER_VERDICT_STATUSES)},
+            "reason": {"type": "string", "description": "One or two sentences grounded in what you read."},
+            "checks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string", "enum": list(EVIDENCE_CHECK_KINDS)},
+                        "target": {"type": "string"},
+                        "result": {"type": "string", "enum": list(EVIDENCE_CHECK_RESULTS)},
+                        "note": {"type": "string"},
+                    },
+                    "required": ["kind", "result"],
+                },
+            },
+        },
+        "required": ["status", "reason", "checks"],
+    },
+}
 # Deterministic review generation: temperature 0 (the API default is 1.0,
 # whose sampling variance drove ±45% cost and 2-defect recall swings between
 # identical runs — see the PLAN_jev_review_acceleration noise-floor finding).
@@ -1139,9 +1197,21 @@ def _sort_findings_criticals_first(findings: list["Finding"]) -> list["Finding"]
     """
     return sorted(
         findings,
-        key=lambda f: SEVERITY_RANK.get(f.severity, SEVERITY_RANK[SEVERITY_INFO]),
+        key=lambda f: max(
+            SEVERITY_RANK.get(f.severity, SEVERITY_RANK[SEVERITY_INFO]),
+            SEVERITY_RANK.get(getattr(f, "severity_claimed", None) or "", 0),
+        ),
         reverse=True,
     )
+
+
+def is_critical_claim(finding: "Finding") -> bool:
+    """The critical-always-surfaces rail (docs/ITERATION_AWARENESS.md § 7.1)
+    applies to the CLAIMED severity (RFC-03 § Severity policy): a claimed
+    critical that the verifier downgraded to an annotated warning is still
+    never silenced by dedup or caps — the policy changes the label, not the
+    visibility."""
+    return finding.severity == SEVERITY_CRITICAL or getattr(finding, "severity_claimed", None) == SEVERITY_CRITICAL
 
 
 # Marker embedded in the tracking comment so downstream automation can find
@@ -1522,6 +1592,12 @@ class RunRecord:
     usage: UsageTelemetry | None = None
     setup_seconds: float | None = None
     provider_seconds: float | None = None
+    # Verifier (RFC-03): separate budget and outcome counts.
+    verifier_runs: int = 0
+    verifier_seconds: float | None = None
+    findings_verified: int = 0
+    findings_downgraded: int = 0
+    findings_refuted: int = 0
     status: str | None = None
     failure_class: str | None = None
     run_started: bool = False
@@ -1643,14 +1719,14 @@ class RunRecord:
                 "turns_used": int(self.turns_used),
                 "tool_calls": int(self.tool_calls),
                 "risk_tier": "unclassified",
-                "verifier_runs": 0,
+                "verifier_runs": int(self.verifier_runs),
             },
             "outcome": {
                 "findings_total": int(self.findings_total),
                 "findings_by_severity": dict(self.findings_by_severity),
-                "findings_verified": 0,
-                "findings_downgraded": 0,
-                "findings_refuted": 0,
+                "findings_verified": int(self.findings_verified),
+                "findings_downgraded": int(self.findings_downgraded),
+                "findings_refuted": int(self.findings_refuted),
                 "summary_present": bool(self.summary_present),
                 "gate": {"strictness": self.strictness, "passed": bool(self.gate_passed)},
                 "score": None,
@@ -1662,7 +1738,7 @@ class RunRecord:
             "timings": {
                 "setup_seconds": self.setup_seconds,
                 "provider_seconds": self.provider_seconds,
-                "verifier_seconds": None,
+                "verifier_seconds": self.verifier_seconds,
                 "total_seconds": total_seconds,
             },
             "status": status,
@@ -6107,6 +6183,9 @@ class ReviewResult:
     status: str = "completed"
     # One sentence for humans: why the review is not `completed`.
     status_note: str = ""
+    # Findings the verifier refuted (RFC-03): never posted inline, listed in
+    # the structured output so nothing is dropped silently.
+    refuted: list[Finding] = field(default_factory=list)
     # Constructor-only compatibility flag (`ReviewResult(incomplete=True)`):
     # folded into `status` by `__post_init__`; reads go through the derived
     # property below, so `status` stays the single source of truth.
@@ -6350,7 +6429,7 @@ def dedupe_findings_against_prior(
         # docs/ITERATION_AWARENESS.md § 7.1 pins this behavior. Every
         # convergence policy in Tasks 6/7 relies on this branch being
         # here and being unconditional.
-        if finding.severity == SEVERITY_CRITICAL:
+        if is_critical_claim(finding):
             surfaced.append(finding)
             continue
         # <<< end critical safety rail.
@@ -6617,7 +6696,7 @@ def apply_round_capped_policy(
         )
     if max_rounds > 0 and current_round > max_rounds:
         critical_only: list[Finding] = [
-            f for f in findings if f.severity == SEVERITY_CRITICAL
+            f for f in findings if is_critical_claim(f)
         ]
         silenced: list[SilencedFinding] = [
             SilencedFinding(
@@ -6628,7 +6707,7 @@ def apply_round_capped_policy(
                 ),
             )
             for f in findings
-            if f.severity != SEVERITY_CRITICAL
+            if not is_critical_claim(f)
         ]
         return PolicyResult(
             findings_to_surface=critical_only,
@@ -7611,6 +7690,310 @@ def complete_finding_evidence(
             log(f"finding v3 completion skipped for {finding.path}:{finding.line}: {type(exc).__name__}: {exc}")
 
 
+@dataclass
+class VerifierPolicy:
+    """Verifier configuration for one run (inputs `verifier`, `verifier-model`,
+    `strict-unverified-criticals`)."""
+
+    enabled: bool = True
+    model: str = ""                       # alias (`economy` default) or explicit model id
+    warning_sample_pct: int = VERIFIER_WARNING_SAMPLE_PCT
+    max_turns_per_finding: int = VERIFIER_MAX_TURNS_PER_FINDING
+    strict_unverified_criticals: bool = False
+
+
+@dataclass
+class VerifierReport:
+    """What the verifier did on this run (run record + tracking line)."""
+
+    runs: int = 0
+    seconds: float = 0.0
+    verified: int = 0
+    refuted: int = 0
+    downgraded: int = 0
+    unverified: int = 0
+    skipped: int = 0
+    model: str = ""
+    alias: str = ""
+    endpoint_kind: str = ""
+    reason: str = ""                      # why the verifier could not run at all (empty = it ran)
+    usage: UsageTelemetry = field(default_factory=UsageTelemetry)
+
+
+def resolve_verifier_model(runner_id: str, profile: "EndpointProfile", requested: str) -> tuple[str, str]:
+    """`(model_id, alias)` for the verifier: an explicit id passes through
+    (alias ""); an alias (default `economy`) resolves per `(runner, kind)`
+    with `balanced` as the fallback; kinds without tier rows (Azure, custom)
+    return ("", "") so the caller reuses the review model."""
+    value: str = (requested or "").strip().lower()
+    if value and value not in (MODEL_TIER_BALANCED, MODEL_TIER_ECONOMY, MODEL_TIER_DEEP):
+        return requested.strip(), ""
+    alias: str = value or MODEL_TIER_ECONOMY
+    rows: dict[str, str] | None = MODEL_TIER_TABLE.get((runner_id, profile.kind))
+    if not rows:
+        return "", ""
+    model: str = rows.get(alias) or rows.get(MODEL_TIER_BALANCED) or ""
+    return model, (alias if rows.get(alias) else MODEL_TIER_BALANCED)
+
+
+def build_verifier_provider(
+    *,
+    provider_id: str,
+    api_key: str,
+    api_base: str,
+    requested_model: str,
+    review_model: str,
+) -> tuple["Provider | None", str, str, str, str]:
+    """`(provider, model, alias, endpoint_kind, reason)` — the in-process
+    provider the verifier uses for this lane. In-process lanes verify on
+    their own runner and backend; CLI lanes verify runtime-side on the
+    in-process runner of the same kind with the same credential (D-06):
+    grok → `openai` on xAI's OpenAI-compatible base, claude-code → `anthropic`
+    on the configured base (Z.ai or default), codex → `openai`. Cursor has no
+    in-process equivalent → `(None, …, reason)`."""
+    runner: str = provider_id
+    base: str = api_base
+    if provider_id not in ("anthropic", "openai"):
+        runner = VERIFIER_RUNNER_FOR_CLI_LANE.get(provider_id, "")
+        if not runner:
+            return None, "", "", "", f"no in-process backend to verify on for provider {provider_id!r}"
+        if provider_id == "grok":
+            base = XAI_OPENAI_COMPAT_API_BASE
+    try:
+        vprofile: EndpointProfile = resolve_endpoint_profile(base, runner)
+        model, alias = resolve_verifier_model(runner, vprofile, requested_model)
+        if not model:
+            model = review_model
+        provider: Provider | AgentRunnerProvider = build_provider(runner, api_key=api_key, model=model, api_base=base)
+    except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
+        return None, "", "", "", f"verifier provider unavailable: {type(exc).__name__}: {exc}"
+    if not isinstance(provider, Provider):
+        return None, "", "", "", f"verifier runner {runner!r} is not in-process"
+    return provider, model, alias, vprofile.kind, ""
+
+
+def _verifier_sample_key(finding: "Finding") -> int:
+    key: str = finding.fingerprint or f"{finding.path}|{finding.line}|{finding.body[:IAR_FINGERPRINT_BODY_PREFIX_CHARS]}"
+    return int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16) % 100
+
+
+def select_findings_for_verification(findings: list["Finding"], policy: VerifierPolicy) -> list["Finding"]:
+    """Every claimed critical; warnings sampled deterministically by
+    fingerprint hash at `policy.warning_sample_pct`; `info` never."""
+    selected: list[Finding] = []
+    for f in findings:
+        claimed: str = f.severity_claimed or f.severity
+        if claimed == SEVERITY_CRITICAL:
+            selected.append(f)
+        elif claimed == SEVERITY_WARNING and _verifier_sample_key(f) < int(policy.warning_sample_pct):
+            selected.append(f)
+    return selected
+
+
+def _verifier_tools(max_inline: int = 0) -> list[dict[str, Any]]:
+    return [t for t in tools_schema(max_inline) if t["name"] in VERIFIER_TOOLS] + [VERIFIER_VERDICT_SCHEMA]
+
+
+def _render_claim(finding: "Finding") -> str:
+    rule: dict[str, Any] | None = finding.evidence.documented_rule
+    lines: list[str] = [
+        "# Finding under verification",
+        "",
+        f"**Title:** {finding.effective_title()}",
+        f"**Category:** {finding.category or FINDING_CATEGORY_DEFAULT}",
+        f"**Severity claimed:** {finding.severity_claimed or finding.severity}",
+        f"**Anchor:** `{finding.path}:{finding.line}`" + (f" (from line {finding.start_line})" if finding.start_line else "") + f", side {finding.side or 'RIGHT'}",
+        "",
+        "## Claim (the reviewing model's words — verify, do not trust)",
+        "",
+        (finding.body or "")[:VERIFIER_CLAIM_BODY_CHARS],
+        "",
+    ]
+    if rule:
+        lines += [f"**Documented rule cited:** `{rule.get('file')}` — \"{str(rule.get('quote', ''))[:MAX_DOCUMENTED_RULE_QUOTE_CHARS]}\"", ""]
+    lines += [
+        "Read the anchor first. Use `get_patch` for the change itself, `grep` for callers, "
+        "`read_file` with `ref: base` for the pre-change code when a regression is claimed. "
+        "Then call `record_verdict` once.",
+    ]
+    return "\n".join(lines)
+
+
+def _parse_verdict(args: dict[str, Any]) -> FindingVerification:
+    status: str = str(args.get("status") or "").strip().lower()
+    if status not in VERIFIER_VERDICT_STATUSES:
+        status = VERIFICATION_UNVERIFIED
+    checks: list[dict[str, Any]] = []
+    try:
+        checks = (_parse_finding_v3_optional({"evidence": {"checks": args.get("checks") or []}}, 0).get("evidence") or {}).get("checks") or []
+    except ValueError as exc:
+        return FindingVerification(status=VERIFICATION_UNVERIFIED, reason=f"verifier returned invalid checks: {exc}"[:500])
+    reason: str = str(args.get("reason") or "").strip()[:500]
+    supports_anchor: bool = any(c["kind"] == "read_anchor" and c["result"] == "supports" for c in checks)
+    contradicts: bool = any(c["result"] == "contradicts" for c in checks)
+    if status == "verified" and (not supports_anchor or contradicts):
+        # RFC-03: `verified` needs a supporting anchor read and no contradiction.
+        status = VERIFICATION_UNVERIFIED
+        reason = (reason + " (verdict `verified` not backed by a supporting read_anchor check without contradiction)").strip()[:500]
+    return FindingVerification(status=status, reason=reason or status, checks=checks)
+
+
+def verify_finding(
+    provider: "Provider",
+    finding: "Finding",
+    *,
+    inventory: "ChangeInventory | None",
+    max_turns: int = VERIFIER_MAX_TURNS_PER_FINDING,
+    usage: UsageTelemetry | None = None,
+) -> FindingVerification:
+    """One short read-only conversation per finding (≤ `max_turns` turns).
+    Errors and budget exhaustion yield `unverified` with the reason."""
+    vstate: ReviewState = ReviewState(max_inline_comments=0, inventory=inventory)
+    messages: list[dict[str, Any]] = [{"role": "user", "content": _render_claim(finding)}]
+    tools: list[dict[str, Any]] = _verifier_tools()
+    try:
+        for turn in range(1, max_turns + 1):
+            resp: dict[str, Any] = provider.complete(system_prompt=VERIFIER_SYSTEM_PROMPT, messages=messages, tools=tools)
+            turn_usage: UsageTelemetry | None = normalise_usage(resp.get("usage"))
+            if turn_usage is not None and usage is not None:
+                usage.add(turn_usage)
+            blocks: list[dict[str, Any]] = resp.get("content", [])
+            messages.append({"role": "assistant", "content": blocks})
+            uses: list[dict[str, Any]] = [b for b in blocks if b.get("type") == "tool_use"]
+            if not uses:
+                break
+            results: list[dict[str, Any]] = []
+            for use in uses:
+                name: str = str(use.get("name", ""))
+                args: dict[str, Any] = use.get("input") or {}
+                if name == VERIFIER_VERDICT_TOOL:
+                    return _parse_verdict(args)
+                if name not in VERIFIER_TOOLS:
+                    text: str = f"Error: tool `{name}` is not available to the verifier"
+                else:
+                    text = execute_tool(name, args, vstate)
+                results.append({"type": "tool_result", "tool_use_id": use.get("id"), "content": text})
+            messages.append({"role": "user", "content": results})
+        return FindingVerification(status=VERIFICATION_UNVERIFIED, reason=f"verifier ended without a verdict within {max_turns} turns")
+    except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
+        return FindingVerification(status=VERIFICATION_UNVERIFIED, reason=f"verifier error: {type(exc).__name__}: {str(exc)[:200]}"[:500])
+
+
+def run_verifier(
+    result: "ReviewResult",
+    *,
+    policy: VerifierPolicy,
+    provider: "Provider | None",
+    model: str,
+    alias: str,
+    endpoint_kind: str,
+    unavailable_reason: str,
+    inventory: "ChangeInventory | None",
+) -> VerifierReport:
+    """Verify the selected findings (single-leg placement) and write
+    `finding.verification`. With the verifier off or unavailable every
+    finding is `skipped` / `unverified` with the reason — the severity
+    policy then keeps claimed criticals visible as annotated warnings."""
+    report: VerifierReport = VerifierReport(model=model, alias=alias, endpoint_kind=endpoint_kind, reason=unavailable_reason)
+    started: float = time.monotonic()
+    selected: list[Finding] = select_findings_for_verification(result.findings, policy) if policy.enabled else []
+    selected_ids: set[int] = {id(f) for f in selected}
+    stamp: str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for f in result.findings:
+        if id(f) not in selected_ids:
+            claimed: str = f.severity_claimed or f.severity
+            if claimed == SEVERITY_INFO:
+                continue  # never verified; stays `unverified` by design
+            f.verification = FindingVerification(
+                status="skipped",
+                reason="verifier off" if not policy.enabled else "not sampled",
+            )
+            report.skipped += 1
+            continue
+        if provider is None:
+            f.verification = FindingVerification(status=VERIFICATION_UNVERIFIED, reason=unavailable_reason or "verifier unavailable")
+            report.unverified += 1
+            continue
+        verdict: FindingVerification = verify_finding(provider, f, inventory=inventory, max_turns=policy.max_turns_per_finding, usage=report.usage)
+        verdict.verifier_model_alias = alias or None
+        verdict.verifier_endpoint_kind = endpoint_kind or None
+        verdict.verified_at = stamp
+        f.verification = verdict
+        report.runs += 1
+        if verdict.status == "verified":
+            report.verified += 1
+        elif verdict.status == "refuted":
+            report.refuted += 1
+        elif verdict.status == "downgraded":
+            report.downgraded += 1
+        else:
+            report.unverified += 1
+        log(f"verifier: {f.path}:{f.line} claimed={f.severity_claimed or f.severity} → {verdict.status} ({verdict.reason[:120]})")
+    report.seconds = round(time.monotonic() - started, 3)
+    return report
+
+
+DOWNGRADE_PREFIX: str = "**Claimed critical; verifier found:** "
+
+
+def format_verifier_line(report: "VerifierReport", *, enabled: bool) -> str:
+    """`**Verifier:** …` line for the tracking comment."""
+    if not enabled:
+        return "**Verifier:** off — claimed criticals published as annotated warnings"
+    if report.reason and report.runs == 0:
+        return f"**Verifier:** unavailable ({report.reason}) — claimed criticals published as annotated warnings"
+    label: str = report.model + (f" ({report.alias})" if report.alias else "")
+    return (
+        f"**Verifier:** {report.runs} checked · {report.verified} verified · "
+        f"{report.downgraded} downgraded · {report.refuted} refuted · "
+        f"{report.unverified} unverified · {report.skipped} skipped — {label or 'n/a'}, {report.seconds:.0f}s"
+    )
+
+
+def apply_severity_policy(result: "ReviewResult", *, strict_unverified_criticals: bool = False) -> dict[str, int]:
+    """Publish severities per RFC-03 § Severity policy and recompute
+    `overall_severity`. Refuted findings move to `result.refuted` (never
+    inline). `strict_unverified_criticals` restores v2 gating: a claimed
+    critical publishes as `critical` even when not verified (still
+    annotated). Returns the counts applied."""
+    counts: dict[str, int] = {"verified": 0, "downgraded": 0, "refuted": 0, "annotated": 0}
+    kept: list[Finding] = []
+    for f in result.findings:
+        claimed: str = f.severity_claimed or f.severity
+        f.severity_claimed = claimed
+        status: str = f.verification.status
+        if status == "refuted" and claimed in (SEVERITY_CRITICAL, SEVERITY_WARNING):
+            result.refuted.append(f)
+            counts["refuted"] += 1
+            continue
+        if claimed == SEVERITY_CRITICAL:
+            if status == "verified":
+                f.severity = SEVERITY_CRITICAL
+                counts["verified"] += 1
+            else:
+                note: str = f.verification.reason or status
+                if not f.body.startswith(DOWNGRADE_PREFIX):
+                    f.body = f"{DOWNGRADE_PREFIX}{note}\n\n{f.body}"
+                counts["annotated"] += 1
+                if status == "downgraded":
+                    counts["downgraded"] += 1
+                f.severity = SEVERITY_CRITICAL if strict_unverified_criticals else SEVERITY_WARNING
+        elif claimed == SEVERITY_WARNING:
+            if status == "downgraded":
+                f.severity = SEVERITY_INFO
+                counts["downgraded"] += 1
+            else:
+                f.severity = SEVERITY_WARNING
+                if status == "verified":
+                    counts["verified"] += 1
+        else:
+            f.severity = SEVERITY_INFO
+        kept.append(f)
+    result.findings = kept
+    result.overall_severity = overall_severity([f.severity for f in kept])
+    return counts
+
+
 def _estimate_cost_vs_baseline(
     *,
     effective_cap: int,
@@ -7963,7 +8346,7 @@ def _render_iar_marker_annotation(
     silenced: int = len(policy_result.findings_silenced)
     critical_silenced: int = sum(
         1 for sf in policy_result.findings_silenced
-        if sf.finding.severity == SEVERITY_CRITICAL
+        if is_critical_claim(sf.finding)
     )
     # This should always be 0 — the safety rail guarantees it. Log if
     # not, and expose the count as a visible red flag in the marker.
@@ -11959,13 +12342,17 @@ def render_tracking_body_done(
     usage_line: str = "",
     review_status: str = "completed",
     status_note: str = "",
+    verifier_line: str = "",
 ) -> str:
     """The terminal 'done' tracking-comment body. `usage_line` (v2.1.0+) is
     the pre-formatted `**Usage:** …` line from `format_usage_line`;
     `review_status` / `status_note` (v3) say when the review did not
-    complete (`Review incomplete: <reason>`)."""
+    complete (`Review incomplete: <reason>`); `verifier_line` (v3) is the
+    pre-formatted verifier summary from `format_verifier_line`."""
     status_emoji: str = "✅" if not blocked else "🚫"
     status_line: str = ""
+    if verifier_line:
+        status_line += f"\n\n{verifier_line}"
     if review_status in (REVIEW_STATUS_INCOMPLETE, REVIEW_STATUS_TIMEOUT):
         label: str = "timed out" if review_status == REVIEW_STATUS_TIMEOUT else "incomplete"
         status_line = f"\n\n**Review {label}:** ⚠️ {status_note or review_status}"
@@ -12299,6 +12686,13 @@ def _main_impl(record: RunRecord) -> int:
     complexity_labels_enabled: bool = parse_bool(
         os.environ.get("AIPRR_COMPLEXITY_LABELS_ENABLED", "false"),
         default=False,
+    )
+    verifier_policy: VerifierPolicy = VerifierPolicy(
+        enabled=os.environ.get(VERIFIER_ENV, VERIFIER_MODE_ON).strip().lower() != VERIFIER_MODE_OFF,
+        model=os.environ.get(VERIFIER_MODEL_ENV, "").strip(),
+        strict_unverified_criticals=parse_bool(
+            os.environ.get(STRICT_UNVERIFIED_CRITICALS_ENV, "false"), default=False
+        ),
     )
     complexity_label_prefix: str = (
         os.environ.get(
@@ -13084,6 +13478,39 @@ def _main_impl(record: RunRecord) -> int:
         endpoint_kind=record.endpoint_kind,
         model=model,
     )
+    # Verifier (RFC-03): every claimed critical and a warning sample get a
+    # second, code-grounded look; then the severity policy publishes. Both
+    # fail open into visibility — a verifier problem never blocks or hides.
+    verifier_report: VerifierReport = VerifierReport(reason="verifier not run")
+    try:
+        v_provider, v_model, v_alias, v_kind, v_reason = (None, "", "", "", "verifier off")
+        if verifier_policy.enabled:
+            v_provider, v_model, v_alias, v_kind, v_reason = build_verifier_provider(
+                provider_id=provider_id, api_key=api_key, api_base=api_base,
+                requested_model=verifier_policy.model, review_model=model,
+            )
+            if v_reason:
+                log(f"verifier: {v_reason}")
+        verifier_report = run_verifier(
+            result, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
+            endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
+        )
+    except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
+        log(f"verifier crashed: {type(exc).__name__}: {exc} — publishing claimed criticals as annotated warnings")
+        verifier_report = VerifierReport(reason=f"verifier crashed: {type(exc).__name__}")
+    policy_counts: dict[str, int] = apply_severity_policy(
+        result, strict_unverified_criticals=verifier_policy.strict_unverified_criticals
+    )
+    record.verifier_runs = verifier_report.runs
+    record.verifier_seconds = verifier_report.seconds if verifier_report.runs else None
+    record.findings_verified = policy_counts["verified"]
+    record.findings_downgraded = policy_counts["downgraded"]
+    record.findings_refuted = policy_counts["refuted"]
+    log(
+        f"severity policy: {policy_counts['verified']} verified, {policy_counts['downgraded']} downgraded, "
+        f"{policy_counts['refuted']} refuted, {policy_counts['annotated']} claimed-critical annotated"
+        + (" (strict-unverified-criticals: gating on the claim)" if verifier_policy.strict_unverified_criticals else "")
+    )
     severity: str = result.overall_severity
     blocked, block_reason = compute_check_gate(
         severity=severity,
@@ -13259,6 +13686,7 @@ def _main_impl(record: RunRecord) -> int:
         ),
         review_status=result.status,
         status_note=result.status_note,
+        verifier_line=format_verifier_line(verifier_report, enabled=verifier_policy.enabled),
     )
     # For `label-once` mode, embed the label-toggle generation so the
     # next run can detect "already reviewed this label application".

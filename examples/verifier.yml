@@ -1,0 +1,67 @@
+# Verified criticals (v3) — the verifier and its three inputs at their
+# shipped defaults, so you can see what to change.
+#
+# Since v3 a finding the model claims `critical` is published as `critical`
+# only after a second, short, code-grounded check by a separate model call
+# (the verifier: it re-reads the anchor, greps callers, reads the base
+# version when a regression is claimed, and the instruction file when a
+# documented rule is cited). Otherwise the claim stays visible as an
+# annotated warning ("Claimed critical; verifier found: …"). Refuted
+# findings are never posted inline — they are listed in the structured
+# output. The verifier fails OPEN: an error, a timeout or a lane without an
+# in-process backend never blocks and never hides a finding.
+#
+# Cost: ≈ $0.02–0.05 per verified finding on the economy tier; every
+# claimed critical plus a deterministic 30 % sample of warnings is checked.
+# See docs/STRICTNESS.md § "Verified criticals (v3)".
+
+name: PR review (verified criticals)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: DailybotHQ/ai-diff-reviewer@v3
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          strictness: block-on-critical   # fires only on VERIFIED criticals (BC-07)
+
+          # --- the verifier (defaults shown) -------------------------------
+          verifier: 'on'                  # 'off' skips the second call; claimed
+                                          # criticals then publish as annotated warnings
+          verifier-model: ''              # '' = the `economy` tier of this lane's backend
+                                          # (falls back to `balanced` where no cheaper
+                                          # tier reviews reliably, e.g. xAI);
+                                          # a tier alias or an explicit model id works too
+          strict-unverified-criticals: 'false'
+                                          # 'true' = v2 gating: a claimed critical blocks
+                                          # even when not verified (transition knob,
+                                          # removed in v3.1.0)
+
+      # CLI lanes verify runtime-side on the in-process runner of the SAME
+      # backend with the same credential, so nothing else to configure:
+      #   provider: grok          → verifier on xAI's OpenAI-compatible API
+      #   provider: claude-code + api-base: https://api.z.ai/api/anthropic
+      #                           → verifier on Z.ai (glm-5.3-flash)
+      #   provider: codex         → verifier on the configured OpenAI base
+      #   provider: cursor        → no in-process equivalent: claimed criticals
+      #                             publish as annotated warnings

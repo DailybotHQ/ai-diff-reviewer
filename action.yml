@@ -139,6 +139,18 @@ inputs:
     description: 'Prefix for the applied complexity label. Default `complexity:` produces `complexity:low` / `complexity:medium` / `complexity:high`. Any prior label matching the prefix is removed before the current one is applied.'
     required: false
     default: 'complexity:'
+  verifier:
+    description: 'v3 verifier (RFC-03). `on` (default): every finding the model claims `critical` — plus a 30 % sample of warnings — gets a second, short, code-grounded check by a separate model call; a critical publishes as `critical` only when verified, otherwise as an annotated warning that stays visible; refuted findings are listed, never posted inline. `off`: no second call — claimed criticals publish as annotated warnings (set `strict-unverified-criticals: true` to gate on the claim instead).'
+    required: false
+    default: 'on'
+  verifier-model:
+    description: 'Model for the verifier call. Empty (default) resolves the `economy` tier alias of the lane''s backend (falls back to `balanced` where no cheaper tier reviews reliably); a tier alias or an explicit model id is accepted. CLI lanes verify runtime-side on the in-process runner of the same backend with the same credential (`grok` → xAI OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible base, `codex` → the configured OpenAI base); `cursor` has no in-process equivalent and publishes claimed criticals as annotated warnings.'
+    required: false
+    default: ''
+  strict-unverified-criticals:
+    description: 'When `true`, a claimed `critical` gates the check even when the verifier did not verify it (v2 behaviour; the annotation is still added). Transition knob — removed in v3.1.0 (RFC-07 BC-18).'
+    required: false
+    default: 'false'
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -392,6 +404,9 @@ runs:
         AIPRR_PR_DESCRIPTION_MIN_LENGTH: ${{ inputs.pr-description-min-length }}
         AIPRR_COMPLEXITY_LABELS_ENABLED: ${{ inputs.complexity-labels-enabled }}
         AIPRR_COMPLEXITY_LABEL_PREFIX: ${{ inputs.complexity-label-prefix }}
+        AIPRR_VERIFIER: ${{ inputs.verifier }}
+        AIPRR_VERIFIER_MODEL: ${{ inputs.verifier-model }}
+        AIPRR_STRICT_UNVERIFIED_CRITICALS: ${{ inputs.strict-unverified-criticals }}
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
         # `claude-code`, `cursor`, `codex`, and `grok` provider branches.

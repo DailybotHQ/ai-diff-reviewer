@@ -415,6 +415,46 @@ Every workflow using AI Diff Reviewer sets these two.
 - **Common values:** `50` (default), `100` (stricter), `200` (much
   stricter — usually paired with a template).
 
+### `verifier`
+
+- **Default:** `on`
+- **What it is:** v3 verification pass (RFC-03). Every finding the model
+  claims `critical` — plus a deterministic 30 % sample of warnings — gets a
+  second, short, read-only check by a separate model call on the same
+  checkout (anchor read, callers, base version, instruction file). A
+  critical publishes as `critical` only when the verifier confirms it;
+  otherwise it stays visible as an annotated warning (`Claimed critical;
+  verifier found: …`). Refuted findings are never posted inline; they are
+  listed in the structured output. The verifier fails open: an error, a
+  timeout or a missing backend never blocks and never hides.
+- **When to change:** set `off` to skip the second call (claimed criticals
+  then publish as annotated warnings — pair with
+  `strict-unverified-criticals: true` if you want v2 gating).
+
+### `verifier-model`
+
+- **Default:** `''` (empty = the `economy` tier alias of the lane's backend;
+  `balanced` where no cheaper tier reviews reliably, e.g. xAI)
+- **What it is:** the model used by the verifier. A tier alias or an
+  explicit model id. CLI lanes verify runtime-side on the in-process
+  runner of the same backend with the same credential: `grok` → the xAI
+  OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible
+  base (Z.ai or default), `codex` → the configured OpenAI base. `cursor` has
+  no in-process equivalent, so its claimed criticals publish as annotated
+  warnings.
+- **When to change:** you want a stronger verifier on a high-risk repo
+  (`balanced` / `deep`) or a specific deployment id on Azure / custom.
+
+### `strict-unverified-criticals`
+
+- **Default:** `false`
+- **What it is:** transition knob (RFC-07 BC-18, removed in v3.1.0). When
+  `true`, a claimed `critical` gates the check under `block-on-critical`
+  even when the verifier did not verify it — the v2 behaviour. The
+  annotation is still added.
+- **When to enable:** you migrate from v2 and want the gate unchanged while
+  you evaluate the verifier.
+
 ### `complexity-labels-enabled`
 
 - **Default:** `false`

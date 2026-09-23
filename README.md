@@ -277,6 +277,9 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `pr-description-min-length` | | `50` | Char threshold below which the PR body is treated as vague. |
 | `complexity-labels-enabled` | | `false` | When `true`, the reviewer applies a `complexity:low/medium/high` label to the PR. |
 | `complexity-label-prefix` | | `complexity:` | Prefix for the complexity label (change to match your labeling conventions). |
+| `verifier` | | `on` | v3: a second, code-grounded check of every claimed `critical` (and a 30 % sample of warnings). A critical publishes as `critical` only when verified; otherwise it stays visible as an annotated warning. Refuted findings are listed, never posted inline. `off` skips the call. See [docs/STRICTNESS.md](docs/STRICTNESS.md#verified-criticals-v3). |
+| `verifier-model` | | `''` | Verifier model: empty = the `economy` tier of the lane's backend (`balanced` fallback); a tier alias or explicit id is accepted. CLI lanes verify on the in-process runner of the same backend (`grok` → xAI API, `claude-code` → the configured Anthropic-compatible base, `codex` → the OpenAI base); `cursor` cannot verify. |
+| `strict-unverified-criticals` | | `false` | Transition knob (removed in v3.1.0): gate on the *claimed* critical even when the verifier did not verify it (v2 behaviour). |
 | `max-turns` | | `30` | Hard cap on the agentic-loop iterations (chat-completions providers only). |
 | `agent-max-turns` | | `''` | Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns`); Claude Code / Codex / Cursor expose no stable turn flag, so the run logs a per-provider warning with the equivalent knob (`--max-budget-usd` via `agent-extra-args` for Claude Code) and the 900 s timeout bounds the run. Ignored for chat-completions providers. |
 | `agent-extra-args` | | `''` | Raw string appended to the CLI invocation. Parsed with `shlex.split` (never `shell=True`). Escape hatch for provider-specific flags. |

@@ -317,6 +317,8 @@ Two safety rails apply to **every** policy, unconditionally. They are non-negoti
 
 **Hardcoded rule.** Not a knob. Not a policy variant. Not conditional.
 
+**v3 (RFC-03):** the rail keys on the *claimed* severity (`is_critical_claim`: `severity == critical` **or** `severity_claimed == critical`). The verifier's severity policy may publish a claimed critical as an annotated `warning`; that changes the label, never the visibility — dedup, the round cap and the criticals-first sort still treat it as critical.
+
 In `scripts/reviewer.py`, the dedup engine (`dedupe_findings_against_prior`) contains the following early-return:
 
 ```python
