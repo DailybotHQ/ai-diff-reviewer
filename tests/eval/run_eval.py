@@ -205,9 +205,9 @@ def run_case(
             else:
                 state = r.ReviewState(max_inline_comments=10, inventory=ctx.inventory)
                 messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
-                r.drive_review(provider=provider, system_prompt=system_prompt, messages=messages,
-                               tools=r.tools_schema(10), state=state, max_turns=max_turns)
-                result = r.state_to_review_result(state)
+                stop_reason = r.drive_review(provider=provider, system_prompt=system_prompt, messages=messages,
+                                             tools=r.tools_schema(10), state=state, max_turns=max_turns)
+                result = r.state_to_review_result(state, stop_reason=stop_reason, max_turns=max_turns)
                 usage = state.usage
                 turns = usage.turns
                 tool_calls = state.tool_call_count
@@ -338,8 +338,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     turns += 1
                     return self.inner.complete(**kw)
 
-            r.drive_review(provider=Counting(provider), system_prompt=system_prompt, messages=messages, tools=tools, state=state, max_turns=args.max_turns)
-            result = r.state_to_review_result(state)
+            stop_reason = r.drive_review(provider=Counting(provider), system_prompt=system_prompt, messages=messages, tools=tools, state=state, max_turns=args.max_turns)
+            result = r.state_to_review_result(state, stop_reason=stop_reason, max_turns=args.max_turns)
             usage = state.usage
             cost = r.estimate_cost_usd(args.model or "", usage) if usage else None
             tool_calls = sum(1 for m in messages if m["role"] == "assistant" for b in (m["content"] if isinstance(m["content"], list) else []) if isinstance(b, dict) and b.get("type") == "tool_use")

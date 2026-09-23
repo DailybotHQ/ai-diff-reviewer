@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking (v3)
+
+- **BC-03 — in-process request shape.** `provider: anthropic` / `openai` no longer receive one embedded diff of up to 200 000 characters plus five tools. The first message now carries the **change inventory** (SHA-bound table with rename / binary / mode / omitted flags and a `complete` verdict), the patches that fit `FIRST_MESSAGE_PATCH_BYTES` (120 000 bytes, whole files in inventory order) and a `## Not embedded — fetch on demand` list; the base tool set is eight (`get_change_inventory`, `get_patch`, `read_instruction_files`, `read_file` with `ref: base|head`, plus the classic five). The v2 "byte-identical request" promise for in-process runners ends here. `MAX_DIFF_CHARS` is now the same 120 000 ceiling.
+- **BC-04 — review status.** Every review ends in `status ∈ {completed, incomplete, timeout, failed}` (`ReviewResult.status`, also the run-record status). An in-process review that hits `max-turns` without `submit_review`, or ends its turn without a summary, is `incomplete`; a CLI killed at the timeout with a findings file is `timeout`. Both post the partial findings with a `Review incomplete / timed out: <cause>` footer, show it in the tracking comment, and are **red under every blocking strictness** (`lenient` stays green without stamping the label). Previously a capped in-process review could pass silently. `ReviewResult.incomplete` remains as a derived view of `status`.
+
 ### Changed
 
 - **Releases are gated on a current, non-blocking eval verdict (BC-02).** `auto-release.yml` Step 1.5 runs `tests/eval/release_gate.py` before the version bump: when no verdict matches the candidate's runtime + prompt content, the newest match is older than 30 days, or it lists blocking findings, the release is **skipped** (never half-published) with the reason in the log; recovery in `docs/RELEASE_RECOVERY.md`. Verdicts carry `candidate_content_sha256` so docs-only commits after the measured commit still release.

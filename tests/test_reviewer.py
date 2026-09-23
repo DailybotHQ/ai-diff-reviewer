@@ -2532,10 +2532,11 @@ class OmittedFilesPromptTests(unittest.TestCase):
             text = reviewer.render_user_prompt(ctx, for_agent_runner=agent)
             self.assertIn(reviewer.OMITTED_FILES_HEADING, text)
             self.assertIn("`package-lock.json` (6 diff lines)", text)
-            self.assertIn("- package-lock.json (modified) +1/-1 — omitted from the diff below", text)
-            self.assertIn("- src/app.py (modified) +1/-0\n", text)
-            # the block sits between the diff and the closing instructions
-            self.assertLess(text.index("## Full Diff"), text.index(reviewer.OMITTED_FILES_HEADING))
+            # v3 (Task 11): the changed-files list became the inventory table
+            self.assertIn("| `package-lock.json` | modified | +1/-1 | omitted (generated / lock file) |", text)
+            self.assertIn("| `src/app.py` | modified | +1/-0 | — |", text)
+            # the block sits between the patches and the closing instructions
+            self.assertLess(text.index(reviewer.PATCHES_HEADING), text.index(reviewer.OMITTED_FILES_HEADING))
             self.assertLess(text.index(reviewer.OMITTED_FILES_HEADING), text.index("---\n\nReview this PR"))
 
 

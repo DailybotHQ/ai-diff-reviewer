@@ -785,7 +785,7 @@ There is no input to enable it; the `iteration-escape-label` is the per-PR off s
 
 ### 14.2 What the model receives
 
-The `## Full Diff` section is replaced by:
+The `## Patches` section (v3; `## Full Diff` before v3) is replaced by:
 
 1. `## Changes since your last review (<prior> → <head>)` — the actual two-tree delta between those heads, respecting file omissions before applying its own size limit;
 2. `## Other files changed in this PR (unchanged since your last review)` — one line per remaining file;

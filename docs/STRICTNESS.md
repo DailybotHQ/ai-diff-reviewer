@@ -55,6 +55,18 @@ The check fails if the reviewer posted **any** inline comment, including `info`.
 
 **Escape hatches:** treat `block-on-any` the same way you would treat "must pass linter" — if the reviewer is wrong, the fix is to tighten the prompt (downgrade a whole class of `info` to "don't post it in the first place") rather than override the gate on a per-PR basis.
 
+## Incomplete and timed-out reviews (v3)
+
+A review that did not finish is never a clean review. Since v3 every review ends in one of four statuses (`completed`, `incomplete`, `timeout`, `failed`; also written to the run record):
+
+| Status | When | Under `block-on-*` | Under `lenient` |
+|---|---|---|---|
+| `incomplete` | the in-process loop hit `max-turns` without `submit_review`, or the model ended its turn with no summary; a CLI exited without writing its findings file | **red** — reason `incomplete review — <cause>; re-run the review` | green, reviewed label **not** stamped |
+| `timeout` | a CLI was killed at `CLI_INVOCATION_TIMEOUT` but had already written a findings file | **red** — reason `timed-out review — …` | green, label not stamped |
+| `failed` | no review was produced (provider / CLI error) | red (the run fails) | red |
+
+In both non-completed cases the findings gathered so far are still posted, the summary carries a `Review incomplete: <cause>` (or `Review timed out: …`) footer, and the tracking comment shows `**Review incomplete:** ⚠️ <cause>`. This replaces the v2 behaviour where a capped in-process review could pass silently (RFC-07 BC-04).
+
 ## Choosing your mode
 
 A short decision tree:

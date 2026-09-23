@@ -45,7 +45,7 @@ Agent-runner providers don't hit this section — they own their own loop intern
 **Worst-case cost per review** (in Anthropic API terms, using the defaults):
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
-- Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed diff (capped at `MAX_DIFF_CHARS = 200 000` chars — see below).
+- Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed message (patches budgeted at `FIRST_MESSAGE_PATCH_BYTES = 120 000` bytes — see below; anything beyond is fetched on demand with `get_patch`).
 - Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, and both the inline cap and `max-turns` scale with the delta (floors: 3 comments, 6 turns). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14`.
 - Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
@@ -89,8 +89,11 @@ Every tool the model can call has a hard cap so a bad `read_file(path, limit=999
 | [`MAX_TOOL_OUTPUT_BYTES`](../scripts/reviewer.py) | `32_000` | Any tool result larger than this is truncated with a pointer telling the model to narrow the call. |
 | [`MAX_FILE_READ_LINES`](../scripts/reviewer.py) | `2_000` | Hard ceiling on `read_file` line count per call. |
 | [`MAX_SEARCH_RESULTS`](../scripts/reviewer.py) | `200` | Hard ceiling on `grep` / `glob` result counts. |
-| [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `200_000` | Cap on the seed diff embedded in the first user message. Larger diffs are truncated with a pointer to `read_file`. |
-| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the `MAX_DIFF_CHARS` cap and reported to the model as omitted. Extended by `ignore-paths`. |
+| [`FIRST_MESSAGE_PATCH_BYTES`](../scripts/reviewer.py) | `120_000` | v3: byte budget for the patches embedded in the first user message. Files are embedded **whole, in inventory order, while they fit** (greedy); the rest are listed under `## Not embedded — fetch on demand` and fetched with `get_patch` (in-process) or `git diff <base>...<head> -- <path>` (CLI lanes). Lowered from the old 200 000-char single blob. RFC-06 tiers override it (60 k / 120 k / 200 k). |
+| [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `= FIRST_MESSAGE_PATCH_BYTES` | Ceiling on the diff kept on `PRContext`; a section cut by the ceiling is never embedded half-way. The embedding rule is per file (above), not this constant. |
+| [`MAX_PATCH_CHARS`](../scripts/reviewer.py) | `40_000` | Per-call cap of `get_patch`; a truncated answer lists the remaining hunk indices. |
+| [`MAX_TOOL_TRACE_ENTRIES`](../scripts/reviewer.py) | `500` | Bound on `ReviewState.tool_trace` (name, redacted args, result hash per tool call). |
+| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the byte budget applies and reported to the model as omitted (inventory flag + `## Omitted` block). Extended by `ignore-paths`. |
 
 These caps mean the model **cannot** flood its own context. A huge file or an over-broad grep degrades gracefully into a truncation message — the review continues, the offending call retries with a narrower scope.
 
