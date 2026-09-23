@@ -1,0 +1,86 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "run-grok-xai-chore-bootst-1790194070",
+  "recorded_at": "2026-09-23T20:07:50Z",
+  "runner": "cli",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "model_alias": null,
+  "runtime_sha": "426aa0eb574dafd17b99ae087d400b367a05b0ea",
+  "prompt_sha256": "ecd63c769299564f3fb0a1b245c677fde7e1af51815d914d44b9b38838678b66",
+  "extension_sha256": null,
+  "sampling": {
+    "requested": {},
+    "sent": {},
+    "stripped": []
+  },
+  "context": {
+    "repo_kind": "pull_request",
+    "head_sha": "chore/bootstrap-review-extension",
+    "base_sha": "",
+    "corpus_case_id": null,
+    "corpus_sha256": null,
+    "changed_files": 12,
+    "omitted_files": 0,
+    "diff_chars": 104300,
+    "diff_truncated": false,
+    "iar_mode": "none",
+    "instruction_files_read": []
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 9,
+    "tool_calls": 0,
+    "risk_tier": "unclassified",
+    "verifier_runs": 0
+  },
+  "outcome": {
+    "findings_total": 6,
+    "findings_by_severity": {
+      "critical": 0,
+      "warning": 4,
+      "info": 2
+    },
+    "findings_verified": 0,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "lenient",
+      "passed": true
+    },
+    "score": {
+      "must_find_total": 0,
+      "must_find_hits": 0,
+      "false_positives": 0,
+      "unlabelled": 6,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 97808,
+    "cache_read_tokens": 748800,
+    "cache_write_tokens": 0,
+    "output_tokens": 10384,
+    "source": "cli"
+  },
+  "cost_usd": 0.48256,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 1.933,
+    "provider_seconds": 213.431,
+    "verifier_seconds": null,
+    "total_seconds": 215.332
+  },
+  "status": "completed",
+  "failure_class": null,
+  "campaign": {
+    "id": "phase0-floor",
+    "cell": "grok|baseline|pr25",
+    "repetition": 1,
+    "arm": "baseline"
+  }
+}

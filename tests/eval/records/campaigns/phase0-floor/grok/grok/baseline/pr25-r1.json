@@ -1,0 +1,89 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 213.4,
+  "setup_seconds": 1.9,
+  "total_seconds": 215.4,
+  "usage": {
+    "in": 97808,
+    "cache_read": 748800,
+    "cache_write": 0,
+    "out": 10384,
+    "source": "cli"
+  },
+  "cost_usd": 0.48256,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "warning",
+      "body": "`npx skills update` does not prove the just-pushed tag installed. If GitHub's tag surface still lags past the 5s sleep (or the fetch quietly resolves to the previously vendored content), the working tree is unchanged, `git diff --quiet` succeeds, and the step exits 0 with \"already at ${NEW_VERSION}\" \u2014 a green smoke test that never touched the new tag. That undercuts purpose (1) in the step comment.\n\nPin the install to the tag you just cut, force-refresh, and assert the vendored frontmatter matches before treating an empty diff as success:\n\n```suggestion\n          # Pin to the exact tag we just cut. `update` can no-op on a\n          # stale tree when the new tag is not visible yet; a pinned\n          # add fails loudly instead \u2014 that is the smoke test.\n          VERSION_NO_V=\"${NEW_VERSION#v}\"\n          echo \"::group::npx skills add DailybotHQ/ai-diff-reviewer@${NEW_VERSION} --skill ai-diff-reviewer --force\"\n          npx --yes skills add \"DailybotHQ/ai-diff-reviewer@${NEW_VERSION}\" \\\n            --skill ai-diff-reviewer --force\n          echo \"::endgroup::\"\n\n          VENDORED_VERSION=$(\n            sed -nE 's/^version:[[:space:]]*\"([^\"]+)\".*/\\1/p' \\\n              .agents/skills/ai-diff-reviewer/SKILL.md | head -n1\n          )\n          if [ \"${VENDORED_VERSION}\" != \"${VERSION_NO_V}\" ]; then\n            echo \"::error::Vendored SKILL.md version is '${VENDORED_VERSION}', expected '${VERSION_NO_V}'\"\n            exit 1\n          fi\n```\n\nAlso plan for a non-interactive flag on the `skills` subcommand itself (`-y`) \u2014 `npx --yes` only covers npm's install prompt, not the CLI's agent-target picker."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 175,
+      "severity": "warning",
+      "body": "Step 3.5 sits **before** Step 4 (notes) and Step 5 (`softprops/action-gh-release`). On GitHub Actions, a failed step skips later steps by default. Step 3 already pushed `vX.Y.Z` and force-moved the major alias, so a transient `npx`/`skills` failure leaves consumers on a published tag with **no GitHub Release** and no auto-generated notes \u2014 worse than the PR Risks section's \"tag is already published\" mitigation implies.\n\nMove this dogfood step to **after** Step 5 (release is the user-facing artefact; dogfood is the follow-up smoke), or give Steps 4\u20135 a condition that still runs when 3.5 fails (e.g. `if: always() && steps.version.outputs.skip == 'false'`) while keeping 3.5 itself strict. Prefer reordering so a red dogfood does not orphan the Release."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity": "warning",
+      "body": "Tree example uses Spanish `mi-repo/` as the root label. Rule #1 (English-only) and this PR's own `.review/extension.md` escalate non-English text in skill docs to `warning` \u2014 the same file that self-review will layer on this PR.\n\n```suggestion\nmy-repo/\n```\n\nPrefer fixing the source-of-truth copy at `skills/ai-diff-reviewer/SKILL.md` (same string today) and letting Step 3.5 refresh the vendored tree on the next release, rather than only patching `.agents/` (DON'T #14)."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 59,
+      "severity": "warning",
+      "body": "`[Unreleased] \u2192 Added` documents Step 3.5 and the first-time vendor, but this PR also introduces `.review/extension.md` (~17 severity overrides) and wires `prompt-extension-file: .review/extension.md` into `self-review.yml` for every provider leg. Rule #7 / the extension's own docs-sync warning expect behaviour changes to land with matching changelog entries \u2014 self-review consumers reading only the Unreleased section will miss half of the dogfooding story.\n\nAdd two bullets at the top of `### Added`: (1) the extension bootstrap and what it encodes; (2) the self-review `prompt-extension-file` wiring across the matrix."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity": "info",
+      "body": "Copy-paste leftover: `**Option A \u2014 .review/extension.md** (recommended):` is emitted twice back-to-back before the fenced tree. Drop the duplicate heading.\n\nSame defect is in `skills/ai-diff-reviewer/SKILL.md` \u2014 fix source, refresh vendored via Step 3.5."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 81,
+      "severity": "info",
+      "body": "\"Ran `npx skills add \u2026` on `main`\" reads as history that already landed before this PR. The vendor tree is introduced **by** this PR. Prefer wording like \"Lands with this PR\" or \"Establishes the vendored baseline\" so the Unreleased notes stay accurate when cut into a release."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfooding bootstrap \u2014 pillar B wiring and the repo-tailored extension are the right shape \u2014 but Step 3.5's smoke test can green without proving the new tag installed, and a 3.5 failure currently skips the GitHub Release after the tag is already pushed.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:206` | `npx skills update` can exit 0 with an empty diff when the new tag never installs |\n| 2 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:175` | Step 3.5 failure skips Steps 4\u20135, so a published tag can ship with no GitHub Release |\n| 3 | \u26a0\ufe0f warning  | `.agents/skills/ai-diff-reviewer/SKILL.md:363` | Non-English `mi-repo/` example (Rule #1 / extension escalate-to-warning) |\n| 4 | \u26a0\ufe0f warning  | `CHANGELOG.md:59` | `[Unreleased]` omits `.review/extension.md` and the `self-review.yml` wiring |\n| 5 | \u2139\ufe0f info     | `.agents/skills/ai-diff-reviewer/SKILL.md:360` | Duplicate `**Option A**` heading |\n| 6 | \u2139\ufe0f info     | `CHANGELOG.md:81` | \"Ran \u2026 on `main`\" reads as already-merged history |\n\n## Notes\n\n- **What works well.** Two-pillar Rule #10 framing is clear. `self-review.yml` correctly layers `prompt-extension-file: .review/extension.md` on the matrix leg (all providers). `.review/extension.md` is concrete and code-anchored (stdlib-only, `shell=True`, `safe_repo_path`, marker contracts, `_CLI_ENV_ALLOWLIST`). Vendored `prompt.md` matches `prompts/default.md` byte-for-byte. `skills-lock.json` entry shape matches `dailybot` / `deepworkplan`. Job-level `[skip release]` / `chore(release):` guards prevent a dogfood push from re-entering auto-release.\n- **Same defects in source-of-truth skill.** `mi-repo/` and the duplicate Option A heading also live in `skills/ai-diff-reviewer/SKILL.md` (not in this PR's diff). Fix the source copy; do not hand-edit only the vendored tree (DON'T #14) \u2014 Step 3.5 is meant to refresh `.agents/` from the published tag.\n- **Extension size",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 6,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 3,
+    "changed_files": 12
+  }
+}

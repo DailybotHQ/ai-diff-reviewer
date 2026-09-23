@@ -1,0 +1,56 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 198.8,
+  "setup_seconds": 2.0,
+  "total_seconds": 200.7,
+  "usage": {
+    "in": 90157,
+    "cache_read": 575616,
+    "cache_write": 0,
+    "out": 9538,
+    "source": "cli"
+  },
+  "cost_usd": 0.4102268,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "Frontmatter `description` is **1280 characters**. Several skill hosts (Claude Code / skills.sh style registries) truncate or reject descriptions above **1024**, so the long capability list and trigger catalogue can be cut mid-sentence \u2014 agents then miss routing cues for `setup` / `open-pr`.\n\nThis line was already over the cap before the PR (~1275); the reframe adds a few more characters rather than compacting. Keep a short routing summary here and leave the full trigger catalogue under `## Activation` (the body is not length-capped)."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity": "warning",
+      "body": "Pinning the same tag guarantees a **shared base prompt** (and shared extension file under Flow B) \u2014 it does **not** guarantee bit-identical review output. The local pass runs on whatever model the coding agent uses; CI runs the Action's configured provider/model. Wording like \"identical reviews\" will set a false expectation the first time local and CI disagree on a borderline finding.\n\nSuggest: \"Pinning `@v1.4.2` on both surfaces guarantees the same base prompt (and the same extension file when Flow B wires `prompt-extension-file`).\" The second commit already softened the intro bullet; this Version-parity sentence is still the stronger overclaim."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid narrative reframe of the parent skill \u2014 the opening now surfaces both audiences, the Surface column makes local vs CI obvious, and the new **Default flow** header correctly scopes Steps 0\u20135 to capability #1. Steps 0\u20135 are byte-identical to the pre-PR base (verified). No security surface changes (`allowed-tools` stays read-oriented + Bash for git; no fetch-and-pipe install guidance).\n\nTwo precision issues remain in the rewritten intro/parity area; both are docs-only.\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `skills/ai-diff-reviewer/SKILL.md:3` | Frontmatter `description` is 1280 chars (hosts commonly cap at 1024) |\n| 2 | \u26a0\ufe0f warning | `skills/ai-diff-reviewer/SKILL.md:51` | \"guarantees identical reviews\" overclaims local\u2194CI parity |\n\n### Notes\n\n- **Already on `main`:** this change merged as #37 (`e5b8caa`). Current `main` (v2.5.1) keeps the Local & CI framing and has since grown a fifth capability (`apply-review`), IAR caveats, and a compacted \u22641024 description \u2014 so these two nits are largely historical unless someone re-lands the branch tip.\n- **Install pin example** still cites `@v1.4.2` while frontmatter `version` is `1.6.2` (pre-existing; only relocated). Not raised as a new finding.\n- **Vendored** `.agents/skills/ai-diff-reviewer/**` untouched \u2014 Rule #14 preserved.\n- **Procedural integrity:** `git diff` from PR base through HEAD leaves everything from `## Step 0 \u2014 Trust boundary` onward unchanged.\n\n**Recommendation:** comment-only (merge was appropriate; address the two wording/length nits in a follow-up if still open on an unreleased line).\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

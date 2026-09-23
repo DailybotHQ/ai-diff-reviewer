@@ -1,0 +1,63 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 13,
+  "tool_calls": null,
+  "seconds": 316.5,
+  "setup_seconds": 2.0,
+  "total_seconds": 318.4,
+  "usage": {
+    "in": 101246,
+    "cache_read": 938624,
+    "cache_write": 0,
+    "out": 15535,
+    "source": "cli"
+  },
+  "cost_usd": 0.5772892,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "`_read_github_event_repo_visibility()` only reads `repository.visibility` and returns `unknown` when that key is missing/empty. GitHub event payloads have long carried `repository.private` (boolean); older GHES builds, partial fixtures, and some reduced payloads still ship `private: true` without `visibility`.\n\n**Failure mode:** private org repo, webhook `author_association=CONTRIBUTOR`, collaborator permission `admin`/`write`, payload has `private: true` but no `visibility` \u2192 reader yields `unknown` \u2192 `_is_private_or_internal_visibility` is false \u2192 write-tier override never applies and the author is still skipped. That is the exact under-report bug this PR aims to fix.\n\nFall back to the boolean when `visibility` is absent:\n\n```suggestion\ndef _read_github_event_repo_visibility() -> str:\n    \"\"\"Return repo visibility from the event payload, or `unknown`.\n\n    Prefer `repository.visibility` (`public`/`private`/`internal`). When\n    that field is missing, fall back to the long-standing\n    `repository.private` boolean so private org repos still get the\n    permission-aware gate.\n    \"\"\"\n    payload = _read_github_event_payload()\n    repository = payload.get(\"repository\")\n    if not isinstance(repository, dict):\n        return \"unknown\"\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if visibility:\n        return visibility\n    if \"private\" in repository:\n        return \"private\" if repository.get(\"private\") else \"public\"\n    return \"unknown\"\n```\n\nAdd a unit test with `private: true` and no `visibility` key asserting the enhanced gate still allows on `permission=admin`."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity": "info",
+      "body": "`_author_gate_needs_permission_lookup()` triggers the collaborators permission API whenever the webhook association misses the allow-list, including on **public** repos where `resolve_author_association_gate_enhanced()` will never let permission override the association decision.\n\n`docs/SECURITY.md` describes the lookup as private/internal-only. Gate the call with `_is_private_or_internal_visibility(repo_visibility)` (after the `private` boolean fallback) so denied public authors stay association-only with no extra REST hop, matching the documented cheapest-first story."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid permission-aware gate with the right public/private split, fail-open/fail-closed matrix, and docs/skill sync. One robustness gap can leave the private-org under-report bug unfixed when `repository.visibility` is absent.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5317` | Visibility reader ignores `repository.private`, so permission override never fires when `visibility` is missing |\n| 2 | \u2139\ufe0f info | `scripts/reviewer.py:6399` | Permission API runs on public repos even though override is private/internal-only |\n\n## Review notes\n\n- Pure resolver coverage is strong (private admin/write allow, public association-only, fail-open/closed, strict `OWNER,MEMBER` on public).\n- `urllib.parse.quote(username)`, write-tier constants, and actionable log line look correct.\n- Stdlib-only, no `shell=True`, no new credential surface, public `action.yml` contract preserved (description-only).\n- `docs/TRIGGER_MODES.md` still says a denied author costs \"zero API cost\"; that file is outside this diff but is now slightly stale relative to the permission lookup.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 8
+  }
+}

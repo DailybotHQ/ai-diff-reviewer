@@ -1,0 +1,81 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 12,
+  "tool_calls": null,
+  "seconds": 300.8,
+  "setup_seconds": 3.4,
+  "total_seconds": 304.1,
+  "usage": {
+    "in": 106486,
+    "cache_read": 888064,
+    "cache_write": 0,
+    "out": 17543,
+    "source": "cli"
+  },
+  "cost_usd": 0.5846492,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5317,
+      "severity": "warning",
+      "body": "**Issue:** Visibility is read only from `repository.visibility`. The longstanding webhook field is `repository.private` (boolean). When `visibility` is absent/empty, this returns `\"unknown\"`.\n\n**Failure mode:** On a private org payload that only has `private: true`, `_is_private_or_internal_visibility` is false \u2014 so write-tier permission never overrides a weak webhook association, and lookup failures take the fail-closed path. I verified: `admin` + `repo_visibility=\"unknown\"` still denies. That can leave the exact under-report bug this PR targets unfixed.\n\n**Fix:** Fall back to the boolean before defaulting to unknown:\n\n```suggestion\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if visibility in (\"public\", \"private\", \"internal\"):\n        return visibility\n    private_flag = repository.get(\"private\")\n    if private_flag is True:\n        return \"private\"\n    if private_flag is False:\n        return \"public\"\n    return \"unknown\"\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6399,
+      "severity": "warning",
+      "body": "**Issue:** Permission lookup is gated only on association mismatch, not on repo visibility. `docs/SECURITY.md` (this PR) says the collaborator API runs on **private/internal** when the webhook mismatches; public repos are association-only.\n\n**Failure mode:** Every public external PR that fails the allow-list still pays a `GET .../collaborators/.../permission` call before deny. That weakens the cheapest-first / abuse-spam posture (GitHub REST rate limit + latency on the deny path) and the permission result is ignored for allow decisions on public anyway.\n\n**Fix:** After reading visibility (with the `private` fallback), only call the API when the repo is private/internal:\n\n```python\nif (\n    _author_gate_needs_permission_lookup(\n        gate=author_gate_raw,\n        webhook_association=pr_author_association,\n    )\n    and _is_private_or_internal_visibility(repo_visibility)\n):\n    ...\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 608,
+      "severity": "warning",
+      "body": "**Issue:** `gh_get_collaborator_permission` is new non-trivial network boundary logic (404 \u2192 `none`, other HTTP \u2192 `lookup_failed`, non-dict payload, empty username) but `AuthorAssociationGatePermissionTests` only covers the pure enhanced resolver.\n\n**Failure mode:** Regressions in status mapping (e.g. treating 403 as `none` instead of fail, or empty JSON body) would silently flip fail-open/fail-closed on private repos without a red test.\n\n**Fix:** Add a small `GhGetCollaboratorPermissionTests` class with mocked `gh_request` for: 200+`admin`, 404\u2192`none`, 403\u2192`unknown`+failed, non-dict body, empty username short-circuit. Mirror the patterns used for other GH helpers in `tests/`."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5050,
+      "severity": "info",
+      "body": "**Issue:** When `permission_lookup_failed` and visibility is not private/internal, the reason is hard-coded as `fail-closed on public`.\n\n**Failure mode:** Operators debugging a run with `visibility=unknown` will read \"fail-closed on public\" and misdiagnose the visibility read as having succeeded.\n\n**Fix:** Include the actual visibility in the reason, e.g. `fail-closed on {visibility}` (same pattern as the fail-open branch)."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 141,
+      "severity": "info",
+      "body": "**Issue:** This says permission fallback \"does not widen\" an `OWNER,MEMBER` preset. That is true on **public** repos only.\n\n**Failure mode:** On private/internal, any write-tier collaborator permission overrides a mismatched webhook association even when the gate is `OWNER,MEMBER` (verified: private + `write` + `CONTRIBUTOR` \u2192 allow). Setup agents will give wrong guidance for private consumers tightening the list.\n\n**Fix:** Clarify: public stays association-only; on private/internal, `admin`/`maintain`/`write` still pass regardless of which associations are listed (as long as the gate is enabled)."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid permission-aware gate design with good public/private split, actionable logs, and a solid pure-logic test matrix. Two warnings should be fixed before merge so the private-org under-report fix cannot no-op and so public deny paths stay cheapest-first.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5317` | Visibility reader ignores `repository.private` \u2014 unknown visibility disables the whole fallback |\n| 2 | \u26a0\ufe0f warning | `scripts/reviewer.py:6399` | Permission lookup runs on every association mismatch, including public repos |\n| 3 | \u26a0\ufe0f warning | `scripts/reviewer.py:608` | New `gh_get_collaborator_permission` has no unit tests for HTTP/parse edges |\n| 4 | \u2139\ufe0f info | `scripts/reviewer.py:5050` | Fail-closed reason always says \"public\" even when visibility is `unknown` |\n| 5 | \u2139\ufe0f info | `skills/.../setup/reference.md:141` | \"Does not widen OWNER,MEMBER\" is wrong for private write-tier override |\n\n## Notes\n\n- Option B semantics look correct when `repo_visibility` is actually `private`/`internal`: write-tier permission overrides, public stays association-only, fail-open/fail-closed match the SECURITY.md contract.\n- Docs sync (`action.yml`, README, SECURITY.md, CHANGELOG, setup skill + reference) is thorough for a behavior change of this weight.\n- `examples/open-source-safe.yml` still says empty `author-association` is \"only sensible for private repos\" \u2014 stale relative to this PR; not in the diff, worth a follow-up.\n- README still claims a denied gate costs \"zero API calls\" (line ~246, unchanged in the diff); finding #2 is what makes that stale for public mismatches.\n- Pure resolver tests pass; no tests exercise the new REST helper or the event-payload readers.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "46-fail-open-missing-login"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 8
+  }
+}

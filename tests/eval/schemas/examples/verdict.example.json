@@ -35,10 +35,10 @@
   "blocking": [],
   "notes": [],
   "thresholds": {
-    "promotable_cost_rel_delta": 0.27,
-    "promotable_recall_net_defects": 3,
-    "blocking_recall_drop_defects": 2,
-    "baseline_spread_median": 0.266,
+    "promotable_cost_rel_delta": 0.29,
+    "promotable_recall_net_defects": 2,
+    "blocking_recall_drop_defects": 1,
+    "baseline_spread_median": 0.286,
     "blocking_spread_median_factor": 1.5,
     "blocking_spread_worst": 1.0
   }

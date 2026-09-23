@@ -1,0 +1,50 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 10,
+  "tool_calls": null,
+  "seconds": 282.0,
+  "setup_seconds": 1.9,
+  "total_seconds": 283.9,
+  "usage": {
+    "in": 70514,
+    "cache_read": 548608,
+    "cache_write": 0,
+    "out": 13629,
+    "source": "cli"
+  },
+  "cost_usd": 0.3873844,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity": "warning",
+      "body": "Empty `matrix=[]` is treated as \"review never ran,\" but that is not only \"missing `ready`.\" This workflow subscribes to every `labeled` event; `scope` sets `matrix=[]` whenever the event label is not `ready` \u2014 including when `ready` is already on the PR and a bot/human adds `bug`, `dependencies`, etc.\n\n**Failure mode:** `ready` \u2192 review passes \u2192 gate green \u2192 mergeable; then any other label fires a new run on the same SHA, the gate fails, and branch protection sees the latest `Self-review gate` as red. `concurrency.cancel-in-progress: true` makes it worse mid-review: an unrelated label cancels the in-flight ready run and the follow-up run fails the gate. The comment on lines 234\u2013236 is therefore incorrect, and the error text telling people to re-apply `ready` is misleading on that path.\n\n**Why skipping the gate on unrelated labels is unsafe:** a skipped required check is treated as passing, so a later skip would overwrite a prior failure and unblock merge.\n\n**Fix direction:** on empty matrix, decide from *this head SHA's review outcome*, not from \"did this run review.\" For example, query check runs for `Self-review \u2014 *` on `head.sha` (needs `checks: read`), or re-assert success only when a prior successful leg exists for this SHA; still fail when there is no successful review on the SHA. Mirror the same logic in `docs/TRIGGER_MODES.md` technique 3 so consumers do not copy the footgun."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid fix for the real GitHub gotcha (a **Skipped** required check does not block merge). The stable-named `Self-review gate` + `if: always()` shape is the right instrument \u2014 one warning should be fixed before this is the only required check.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:238` | Empty matrix always fails the gate, so any non-`ready` `labeled` event re-blocks merge after a green review |\n\n## Notes\n\n- **Core design is correct.** Job-level skip honesty for legs + a separate always-on stable check for branch protection matches how GitHub actually evaluates required status checks. Docs call out marking **only** `Self-review gate` Required \u2014 necessary, because dynamic `Self-review \u2014 <provider>` names are a bad required-check target.\n- **Manual branch-protection step** is documented in the PR body; this diff alone does not enforce anything until that setting is updated.\n- **Docs recipe** in `TRIGGER_MODES.md` copies the same empty-matrix \u2192 fail logic, so consumers who paste technique 3 inherit the unrelated-label footgun. Fix the workflow, then mirror the fix in the recipe.\n- **Secondary empty-matrix paths** the error text does not mention: `ready` present but no provider secrets configured; `scope` succeeded with `matrix=[]` for a non-`ready` label while `ready` is already on the PR.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 3
+  }
+}

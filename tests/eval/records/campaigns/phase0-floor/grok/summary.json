@@ -1,0 +1,151 @@
+{
+  "records_total": 21,
+  "records_complete": 21,
+  "records_failed": 0,
+  "cells": {
+    "grok|xai|grok-4.5|baseline|chore/bootstrap-review-extension": {
+      "n": 3,
+      "cost_mean": 0.480608,
+      "cost_min": 0.4656584,
+      "cost_max": 0.4936056,
+      "cost_relative_spread": 0.05814967707570412,
+      "seconds_mean": 172.87199999999999,
+      "turns_mean": 8.0,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|ci/self-review-complexity-labels": {
+      "n": 3,
+      "cost_mean": 0.4161724,
+      "cost_min": 0.3963548,
+      "cost_max": 0.4516908,
+      "cost_relative_spread": 0.13296412736644717,
+      "seconds_mean": 127.74533333333333,
+      "turns_mean": 9.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|docs/skill-local-ci-companion": {
+      "n": 3,
+      "cost_mean": 0.37589786666666664,
+      "cost_min": 0.3155316,
+      "cost_max": 0.4102268,
+      "cost_relative_spread": 0.2519173647877402,
+      "seconds_mean": 171.17233333333334,
+      "turns_mean": 8.666666666666666,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/author-association-permission-gate": {
+      "n": 3,
+      "cost_mean": 0.5224456,
+      "cost_min": 0.4053984,
+      "cost_max": 0.5846492,
+      "cost_relative_spread": 0.3430994537995918,
+      "seconds_mean": 276.93833333333333,
+      "turns_mean": 11.0,
+      "recall_values": [
+        0,
+        1,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 1,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/complexity-labels-all-providers": {
+      "n": 3,
+      "cost_mean": 0.6245006666666666,
+      "cost_min": 0.5464484,
+      "cost_max": 0.686604,
+      "cost_relative_spread": 0.224428263220429,
+      "seconds_mean": 232.4416666666667,
+      "turns_mean": 12.666666666666666,
+      "recall_values": [
+        2,
+        2,
+        2
+      ],
+      "recall_total": 2,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/iteration-aware-review": {
+      "n": 3,
+      "cost_mean": 1.4617677333333334,
+      "cost_min": 1.2070836,
+      "cost_max": 1.6148988,
+      "cost_relative_spread": 0.278987687784051,
+      "seconds_mean": 442.9666666666667,
+      "turns_mean": 21.0,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|test/self-review-skip-status": {
+      "n": 3,
+      "cost_mean": 0.3412477333333333,
+      "cost_min": 0.249938,
+      "cost_max": 0.3873844,
+      "cost_relative_spread": 0.4027760086709246,
+      "seconds_mean": 251.70633333333333,
+      "turns_mean": 6.666666666666667,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    }
+  },
+  "noise_floor": {
+    "replicated_cells": 7,
+    "cost_relative_spread_median": 0.2519173647877402,
+    "cost_relative_spread_mean": 0.24176036895784112,
+    "cost_relative_spread_worst": 0.4027760086709246,
+    "recall_delta_max": 1,
+    "recall_delta_cells_nonzero": 1
+  },
+  "first_party_unknown_usage_run_ids": [],
+  "duplication": {
+    "available": false,
+    "reason": "run records carry finding counts, not anchors; duplication is measured over structured review outputs (RFC-05)"
+  },
+  "campaign_cost": {
+    "sum_usd": 12.66792,
+    "records_with_cost": 21,
+    "records_without_cost": 0
+  }
+}

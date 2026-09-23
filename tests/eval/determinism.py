@@ -46,10 +46,10 @@ BOOTSTRAP_SEED: int = 42
 
 # RFC-01 § Thresholds — Jev-campaign figures until Phase 0 re-measures them
 # (PLAN_v3_implementation Task 8 re-stamps these constants and RFC-01 together).
-PROMOTABLE_COST_REL_DELTA: float = 0.27        # ≥ 1.0 × median cell spread (0.266)
-PROMOTABLE_RECALL_NET_DEFECTS: int = 3         # > max observed repetition swing (2)
-BLOCKING_RECALL_DROP_DEFECTS: int = 2          # recall below baseline by more than the swing
-BASELINE_SPREAD_MEDIAN: float = 0.266
+PROMOTABLE_COST_REL_DELTA: float = 0.29        # ≥ 1.0 × median cell spread (0.286, Phase 0 re-measurement, n = 28 cells)
+PROMOTABLE_RECALL_NET_DEFECTS: int = 2         # > max observed repetition swing (1, Phase 0; Jev saw 2)
+BLOCKING_RECALL_DROP_DEFECTS: int = 1          # recall below baseline by more than the swing (1)
+BASELINE_SPREAD_MEDIAN: float = 0.286          # phase0-floor + phase0-trees-critical, grok-4.5 CLI balanced, 2026-09-23
 BLOCKING_SPREAD_MEDIAN_FACTOR: float = 1.5     # median > 1.5 × baseline median blocks
 BLOCKING_SPREAD_WORST: float = 1.0
 FIRST_PARTY_KINDS: frozenset[str] = frozenset({"anthropic", "openai"})

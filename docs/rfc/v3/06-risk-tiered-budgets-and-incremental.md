@@ -156,12 +156,12 @@ full round; a full round is always a **full-round budget**.
 
 Each target names its RFC-01 metric, the baseline row, the target and the
 n needed to see it above the noise floor (median relative cost spread
-0.266 → a paired difference must exceed ≈ 27 % with n ≥ 3 replications per
-cell to be promotable).
+0.286 as re-measured in Phase 0 → a paired difference must exceed ≈ 29 %
+with n ≥ 3 replications per cell to be promotable).
 
 | Target | Metric (RFC-01) | Baseline | Target | n |
 |---|---|---|---|---|
-| Incremental-round cost | `cost_usd` and `usage.input_tokens` per follow-up round on the multi-round IAR fixtures | R-04: ≈ 1.15 M tokens / round (recorded; re-measured in Phase 0) | **−50 % tokens** on 1–3-file deltas (well above the 27 % floor) | ≥ 4 fixtures × 3 reps × 2 rounds |
+| Incremental-round cost | `cost_usd` and `usage.input_tokens` per follow-up round on the multi-round IAR fixtures | R-04: ≈ 1.15 M tokens / round (recorded; re-measured in Phase 0) | **−50 % tokens** on 1–3-file deltas (well above the 29 % floor) | ≥ 4 fixtures × 3 reps × 2 rounds |
 | No-change round | `budget.turns_used` | ≈ 12 turns | **0 review turns** (verifier only) | 3 reps |
 | Zero-finding cap exhaustion | share of runs with `turns_used = max_turns` and `findings_total = 0` | E-36: 2 of 6 anthropic baseline runs | **0** after RFC-02's status contract (such a run becomes `incomplete`, never a silent approve) | corpus |
 | Low-tier cost | `cost_usd` on docs/tests-only corpus cases | ≈ $0.32 (pr15-class) | ≤ $0.30 with recall unchanged on those cases | ≥ 6 cases × 3 reps |
