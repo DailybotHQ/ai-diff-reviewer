@@ -1,0 +1,61 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C084",
+  "title": "CI script drops set -euo pipefail contrary to the documented rule",
+  "stack": "shell",
+  "change_class": "policy_prompt_file",
+  "risk_class": "warning_positive",
+  "family_group": "G84",
+  "gap_tags": [
+    "instruction_file"
+  ],
+  "fixture": {
+    "base": {
+      "AGENTS.md": "# AGENTS.md\n\n## Shell scripts\n\nEvery script under `ci/` starts with `set -euo pipefail`. Removing it needs a written exception in this file.\n",
+      "ci/publish.sh": "#!/usr/bin/env bash\nset -euo pipefail\n\nbuild_artifacts\nupload \"$ARTIFACT_DIR\"/*.tgz\n"
+    },
+    "head": {
+      "AGENTS.md": "# AGENTS.md\n\n## Shell scripts\n\nEvery script under `ci/` starts with `set -euo pipefail`. Removing it needs a written exception in this file.\n",
+      "ci/publish.sh": "#!/usr/bin/env bash\n# strict mode removed: upload glob sometimes matched nothing and aborted the job\n\nbuild_artifacts\nupload \"$ARTIFACT_DIR\"/*.tgz\n"
+    },
+    "pr_metadata": {
+      "title": "publish.sh: don't abort on empty upload glob",
+      "body": "The nightly job failed when no artifacts changed.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:63f7ad0cf521f3bcc0aa2873fe3c4d6b3e4387cf1dddba5f85ea430fb807c9c6"
+  },
+  "labels": [
+    {
+      "id": "C084-d1",
+      "severity": "warning",
+      "path": "ci/publish.sh",
+      "defect": "Contradicts AGENTS.md § Shell scripts: strict mode removed instead of handling the empty glob",
+      "evidence": "Without set -e a failed build_artifacts still runs upload; without -u an unset ARTIFACT_DIR uploads from `/`. The documented fix is `shopt -s nullglob` or an explicit check.",
+      "keywords": [
+        "set -euo pipefail",
+        "AGENTS.md",
+        "nullglob",
+        "strict"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C084-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

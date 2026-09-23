@@ -16,10 +16,11 @@ human finds?" — nothing else.
 | `corpus.json` | **Legacy** PR-keyed labels used by `run_eval.py score` (v3.1 era); kept untouched for backward compatibility |
 
 Case ids are assigned at authoring time and never reused. `C072` was never
-published, so files run C001–C074 minus C072 (73 cases) — the gap is
-intentional, and ids, not positions, are the identity. The validator pins
+published, so files run C001–C102 minus C072 (101 cases; C075–C102 are
+the v3 corpus-gap batch) — the gap is intentional, and ids, not positions, are
+the identity. The validator pins
 each case's `id` to its file name, so a renamed, duplicated, or hand-copied
-file fails the strict gate, and the declared inventory (C001–C074 minus
+file fails the strict gate, and the declared inventory (C001–C102 minus
 C072) is itself enforced by the validator — an omitted or replaced case
 cannot slip past the aggregate floors.
 
@@ -41,11 +42,11 @@ and any breach of the declared floors.
 
 | Dimension | Floor | Current |
 | --- | --- | --- |
-| Total cases | ≥ 60 | **73** |
-| Stack families | ≥ 3 (python, typescript, go) | **3** |
+| Total cases | ≥ 60 | **101** |
+| Stack families | ≥ 3 (python, typescript, go, shell, rust) | **5** |
 | Critical-positive cases | ≥ 20 (every label adjudicated, blinded) | **21** |
-| Warning-positive cases | — | **27** |
-| Negative/false-positive controls | ≥ 20, reasoned reference review | **25** |
+| Warning-positive cases | — | **53** |
+| Negative/false-positive controls | ≥ 20, reasoned reference review | **27** |
 
 Warning-positive labels are evidence-grounded but are not required to carry a
 blinded adjudication record (the validator enforces adjudication only for
@@ -74,6 +75,33 @@ Adversarial shapes are first-class: deceptive PR metadata (declared
 an incomplete-diff coverage probe (`inventory.missing_from_fixture` — any
 triage verdict must be `insufficient_evidence`, never a clean pass), and
 multi-round IAR cases (a partially fixed finding and a reintroduced one).
+
+## v3 corpus-gap coverage (RFC-01 § Corpus gaps)
+
+Added by PLAN_v3_implementation Task 5 as C075–C102. Gap classes are detected
+from case content by `tests/test_eval_corpus_gaps.py` (labels spanning more
+than one path; an instruction file in the trees or `change_class:
+policy_prompt_file`; `pr_metadata.deceptive`; a label path the reviewer omits
+by default or lists in `inventory.missing_from_fixture`; a `fixture.iar` block)
+and cross-checked against the `gap_tags` each new case declares.
+
+| Gap | Minimum | Cases |
+| --- | --- | --- |
+| Cross-file defects (labels on two paths) | ≥ 6 | C075–C080 (+ any earlier multi-path case) |
+| Instruction-file contradictions (the PR #37 class: `AGENTS.md` / `.review/extension.md` in the trees, the change violates a stated rule) | ≥ 5 | C081–C085 (+ C022, C059) |
+| Deceptive PR metadata (description claims an absent fix) | ≥ 6 | C086, C087 (+ C012, C017, C021, C022) |
+| Omitted / oversized patch (defect inside a default-ignored file: lockfile, minified bundle) | ≥ 4 | C088–C090 (+ C063) |
+| Multi-round IAR (`fixture.iar.round1_head` + `round1_findings`; `head` is the round-2 push; labels = what must still surface) | ≥ 4 | C091 (partially fixed), C092 (anchor moved), C093 (fake fix), C094 (regression) |
+| New stacks × 4 | shell, rust | C095–C098 (shell), C099–C102 (rust) |
+
+**Adjudication status of the batch.** All positive labels in C075–C102 are
+`warning` and every case carries `adjudication.status: pending`: no blinded
+adjudication (F7 / RFC-08 D-26) has run on them yet. A case the blinded
+adjudicator confirms as critical is upgraded to `critical_positive` with the
+adjudication record; the critical floor is protected by the 21 adjudicated
+cases already in the corpus. Multi-round fixtures are consumed by the
+incremental-review evaluation (RFC-06); `--tree` runs them as a single
+base → head review until that harness lands.
 
 ## Grouping before splitting (F2)
 

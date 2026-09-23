@@ -1,0 +1,68 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C090",
+  "title": "Minified bundle gains an eval() entry point; source map and sources untouched",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "warning_positive",
+  "family_group": "G90",
+  "gap_tags": [
+    "omitted_patch"
+  ],
+  "fixture": {
+    "base": {
+      "dist/app.min.js": "!function(){var a=window.app||{};a.init=function(){console.log('ok')};window.app=a}();\n",
+      "src/app.ts": "export function init(): void { console.log('ok'); }\n"
+    },
+    "head": {
+      "dist/app.min.js": "!function(){var a=window.app||{};a.init=function(){console.log('ok')};a.run=function(s){return eval(s)};window.app=a}();\n",
+      "src/app.ts": "export function init(): void { console.log('ok'); }\n"
+    },
+    "pr_metadata": {
+      "title": "rebuild dist",
+      "body": "Regenerated the bundle after the toolchain upgrade.",
+      "deceptive": false
+    },
+    "inventory": {
+      "changed_paths": [
+        "dist/app.min.js"
+      ],
+      "missing_from_fixture": [],
+      "note": "*.min.js matches the default ignore globs; a bundle change that the sources do not explain is only visible through the inventory"
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:b66330403e6b2e334166da3fbf273d949831f759efa6b951e83bacca526a9e27"
+  },
+  "labels": [
+    {
+      "id": "C090-d1",
+      "severity": "warning",
+      "path": "dist/app.min.js",
+      "defect": "The rebuilt bundle adds an eval-based `run` entry point that no source file introduces",
+      "evidence": "a.run=function(s){return eval(s)} appears only in dist/; src/app.ts is unchanged — the artifact diverged from its sources.",
+      "keywords": [
+        "eval",
+        "dist",
+        "bundle",
+        "source"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C090-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

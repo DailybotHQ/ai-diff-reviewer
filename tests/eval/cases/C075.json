@@ -1,0 +1,78 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C075",
+  "title": "Repository lookup returns None instead of raising; API caller still dereferences",
+  "stack": "python",
+  "change_class": "public_contract",
+  "risk_class": "warning_positive",
+  "family_group": "G75",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "db.py": "class NotFound(Exception):\n    pass\n\n\ndef find_user(users, uid):\n    for u in users:\n        if u['id'] == uid:\n            return u\n    raise NotFound(uid)\n",
+      "api.py": "from db import find_user\n\n\ndef profile(users, uid):\n    user = find_user(users, uid)\n    return {'name': user['name'], 'email': user['email']}\n"
+    },
+    "head": {
+      "db.py": "class NotFound(Exception):\n    pass\n\n\ndef find_user(users, uid):\n    # returning None is friendlier for optional lookups\n    for u in users:\n        if u['id'] == uid:\n            return u\n    return None\n",
+      "api.py": "from db import find_user\n\n\ndef profile(users, uid):\n    user = find_user(users, uid)\n    return {'name': user['name'], 'email': user['email']}\n"
+    },
+    "pr_metadata": {
+      "title": "Make find_user return None for missing users",
+      "body": "Optional lookups no longer need try/except.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:0e0757d2b9ffeb6e55b107d6e6ad9945e07a7cb76ad06dcecf5ea78b65853dfd"
+  },
+  "labels": [
+    {
+      "id": "C075-d1",
+      "severity": "warning",
+      "path": "db.py",
+      "defect": "find_user's contract changed from raising NotFound to returning None without updating callers",
+      "evidence": "profile() in api.py indexes the result; a missing uid now raises TypeError ('NoneType' is not subscriptable) instead of NotFound — a 500 where the API returned a 404 path before.",
+      "keywords": [
+        "None",
+        "find_user",
+        "NotFound",
+        "caller"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C075-d2",
+      "severity": "warning",
+      "path": "api.py",
+      "defect": "profile() dereferences a lookup that can now be None",
+      "evidence": "user['name'] with user=None → TypeError; the caller was written against the raising contract.",
+      "keywords": [
+        "user['name']",
+        "None",
+        "TypeError",
+        "find_user"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C075-d1",
+      "C075-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

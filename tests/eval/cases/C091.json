@@ -1,0 +1,80 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C091",
+  "title": "Round 2 fixes one of two flagged empty-input crashes; the other stays open",
+  "stack": "python",
+  "change_class": "error_handling",
+  "risk_class": "warning_positive",
+  "family_group": "G91",
+  "gap_tags": [
+    "iar_multi_round"
+  ],
+  "fixture": {
+    "base": {
+      "utils.py": "def total(items):\n    return sum(i.price for i in items)\n"
+    },
+    "head": {
+      "utils.py": "def total(items):\n    if not items:\n        return 0\n    return sum(i.price for i in items)\n\n\ndef first_name(user):\n    return user.name.split()[0]\n"
+    },
+    "pr_metadata": {
+      "title": "utils: handle empty items",
+      "body": "Addresses the review comments.",
+      "deceptive": false
+    },
+    "iar": {
+      "round1_head": {
+        "utils.py": "def total(items):\n    return sum(i.price for i in items)\n\n\ndef first_name(user):\n    return user.name.split()[0]\n"
+      },
+      "round1_findings": [
+        {
+          "path": "utils.py",
+          "line": 2,
+          "severity": "warning",
+          "body": "total() on an empty list is fine but callers pass None — guard it."
+        },
+        {
+          "path": "utils.py",
+          "line": 6,
+          "severity": "warning",
+          "body": "first_name() crashes on an empty name ('' .split()[0] → IndexError)."
+        }
+      ],
+      "note": "multi-round fixture (RFC-01 corpus gap): base → round1_head produced round1_findings; head is the round-2 push. Scoring: labels describe what must still be flagged (open / regressed) after round 2."
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:f5d576803edae5bd3f693787914b1f728fe4124db0929b5a9b3da172dc123789"
+  },
+  "labels": [
+    {
+      "id": "C091-d1",
+      "severity": "warning",
+      "path": "utils.py",
+      "defect": "Round-1 finding still open after the round-2 push: first_name() indexes an empty split",
+      "evidence": "Only total() was guarded; ''.split()[0] still raises IndexError. A reviewer must not mark the second finding resolved because the file changed.",
+      "keywords": [
+        "first_name",
+        "split()[0]",
+        "IndexError",
+        "still"
+      ],
+      "line": 8,
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C091-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

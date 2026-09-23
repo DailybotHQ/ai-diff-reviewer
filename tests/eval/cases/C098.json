@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C098",
+  "title": "Deploy script evals a value taken from the environment",
+  "stack": "shell",
+  "change_class": "injection",
+  "risk_class": "warning_positive",
+  "family_group": "G98",
+  "gap_tags": [
+    "new_stack_shell"
+  ],
+  "fixture": {
+    "base": {
+      "deploy.sh": "#!/usr/bin/env bash\nset -euo pipefail\nTARGET=\"${DEPLOY_TARGET:-staging}\"\ncase \"$TARGET\" in staging|prod) ;; *) echo bad target; exit 1;; esac\n./deploy-to \"$TARGET\"\n"
+    },
+    "head": {
+      "deploy.sh": "#!/usr/bin/env bash\nset -euo pipefail\neval \"./deploy-to $DEPLOY_TARGET\"\n"
+    },
+    "pr_metadata": {
+      "title": "deploy: support arbitrary targets",
+      "body": "Teams want custom target strings.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:bbd85537a8d82724af959a1e0ce78191315b722a59ed1fb052663081d868c738"
+  },
+  "labels": [
+    {
+      "id": "C098-d1",
+      "severity": "warning",
+      "path": "deploy.sh",
+      "defect": "Allow-list replaced by eval of an environment-controlled string",
+      "evidence": "eval \"./deploy-to $DEPLOY_TARGET\" executes any shell in DEPLOY_TARGET (e.g. `prod; curl …`); the previous case statement was the control.",
+      "keywords": [
+        "eval",
+        "DEPLOY_TARGET",
+        "allow-list",
+        "case"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C098-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

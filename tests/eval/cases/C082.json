@@ -1,0 +1,61 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C082",
+  "title": "Handler logs the full request body against the review extension's rule",
+  "stack": "typescript",
+  "change_class": "policy_prompt_file",
+  "risk_class": "warning_positive",
+  "family_group": "G82",
+  "gap_tags": [
+    "instruction_file"
+  ],
+  "fixture": {
+    "base": {
+      ".review/extension.md": "# Review overrides\n\n- **Always warning:** logging a request body or headers (`req.body`, `req.headers`) — PII and tokens end up in log storage.\n",
+      "src/handlers/login.ts": "export function login(req: any, res: any): void {\n  res.status(200).json({ ok: true });\n}\n"
+    },
+    "head": {
+      ".review/extension.md": "# Review overrides\n\n- **Always warning:** logging a request body or headers (`req.body`, `req.headers`) — PII and tokens end up in log storage.\n",
+      "src/handlers/login.ts": "export function login(req: any, res: any): void {\n  console.log('login payload', JSON.stringify(req.body));\n  res.status(200).json({ ok: true });\n}\n"
+    },
+    "pr_metadata": {
+      "title": "login: add debug logging",
+      "body": "Helps reproduce a support ticket.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:d69ad651c1c0f12a2b84f4758565d702b6b0bb824feb729f549e59f86f5a6171"
+  },
+  "labels": [
+    {
+      "id": "C082-d1",
+      "severity": "warning",
+      "path": "src/handlers/login.ts",
+      "defect": "Contradicts .review/extension.md: request body (credentials) written to logs",
+      "evidence": "console.log(JSON.stringify(req.body)) on the login route logs passwords in clear text; the extension names exactly this pattern.",
+      "keywords": [
+        "req.body",
+        "console.log",
+        "extension",
+        "password"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C082-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

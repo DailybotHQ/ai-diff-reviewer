@@ -1,0 +1,60 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C087",
+  "title": "PR says the debug endpoint was removed; it was only renamed",
+  "stack": "typescript",
+  "change_class": "security",
+  "risk_class": "warning_positive",
+  "family_group": "G87",
+  "gap_tags": [
+    "deceptive_metadata"
+  ],
+  "fixture": {
+    "base": {
+      "src/routes.ts": "import { Router } from 'express';\nexport const router = Router();\nrouter.get('/debug/env', (_req, res) => res.json(process.env));\n"
+    },
+    "head": {
+      "src/routes.ts": "import { Router } from 'express';\nexport const router = Router();\n// moved off the obvious path\nrouter.get('/internal/env', (_req, res) => res.json(process.env));\n"
+    },
+    "pr_metadata": {
+      "title": "security: remove the debug env endpoint",
+      "body": "Removes /debug/env which exposed process.env. No other changes.",
+      "deceptive": true
+    },
+    "deceptive": true,
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:7d985cfc5a558bf50d1a4576578f32145eddacbde6089ec9803a8a5bca41d6e8"
+  },
+  "labels": [
+    {
+      "id": "C087-d1",
+      "severity": "warning",
+      "path": "src/routes.ts",
+      "defect": "Description says the environment-dumping endpoint was removed; it still exists under a new path",
+      "evidence": "router.get('/internal/env') returns process.env (secrets) unauthenticated; renaming is not removal.",
+      "keywords": [
+        "process.env",
+        "/internal/env",
+        "renamed",
+        "removed"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C087-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

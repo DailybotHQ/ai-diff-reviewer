@@ -1,0 +1,77 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C077",
+  "title": "Config key renamed in loader; main still reads the old key and silently defaults",
+  "stack": "go",
+  "change_class": "public_contract",
+  "risk_class": "warning_positive",
+  "family_group": "G77",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "config.go": "package main\n\nimport \"os\"\n\nconst DBURLKey = \"DB_URL\"\n\nfunc dbURL() string {\n\tif v := os.Getenv(DBURLKey); v != \"\" {\n\t\treturn v\n\t}\n\treturn \"postgres://localhost/dev\"\n}\n",
+      "main.go": "package main\n\nimport \"os\"\n\nfunc main() {\n\turl := os.Getenv(\"DB_URL\")\n\tif url == \"\" {\n\t\turl = dbURL()\n\t}\n\tconnect(url)\n}\n"
+    },
+    "head": {
+      "config.go": "package main\n\nimport \"os\"\n\n// renamed to match the platform convention\nconst DBURLKey = \"DATABASE_URL\"\n\nfunc dbURL() string {\n\tif v := os.Getenv(DBURLKey); v != \"\" {\n\t\treturn v\n\t}\n\treturn \"postgres://localhost/dev\"\n}\n",
+      "main.go": "package main\n\nimport \"os\"\n\nfunc main() {\n\turl := os.Getenv(\"DB_URL\")\n\tif url == \"\" {\n\t\turl = dbURL()\n\t}\n\tconnect(url)\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Rename DB_URL to DATABASE_URL",
+      "body": "Platform sets DATABASE_URL; align the key.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:78d2388c2e26a5f8c9e94309c1551567d0295baf14a078f9f0b0101158eee2fe"
+  },
+  "labels": [
+    {
+      "id": "C077-d1",
+      "severity": "warning",
+      "path": "config.go",
+      "defect": "Environment key renamed in the loader while main.go still reads the literal old key",
+      "evidence": "Deployments that set DATABASE_URL take the dbURL() path only when DB_URL is empty; environments still exporting DB_URL connect to the legacy target with no warning.",
+      "keywords": [
+        "DATABASE_URL",
+        "DB_URL",
+        "Getenv",
+        "rename"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C077-d2",
+      "severity": "warning",
+      "path": "main.go",
+      "defect": "Hard-coded old key bypasses the renamed constant",
+      "evidence": "os.Getenv(\"DB_URL\") should use DBURLKey; the duplicated literal is what makes the rename half-applied.",
+      "keywords": [
+        "DB_URL",
+        "DBURLKey",
+        "Getenv"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C077-d1",
+      "C077-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

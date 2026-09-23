@@ -1,0 +1,61 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C081",
+  "title": "New script runs a subprocess with shell=True against the repo's documented rule",
+  "stack": "python",
+  "change_class": "policy_prompt_file",
+  "risk_class": "warning_positive",
+  "family_group": "G81",
+  "gap_tags": [
+    "instruction_file"
+  ],
+  "fixture": {
+    "base": {
+      "AGENTS.md": "# AGENTS.md\n\n## Rules\n\n1. Subprocesses use argv lists — `shell=True` is forbidden anywhere under `scripts/`.\n2. Never disable TLS verification.\n",
+      "scripts/pack.py": "import subprocess\n\n\ndef pack(paths):\n    subprocess.run(['tar', 'czf', 'out.tgz', *paths], check=True)\n"
+    },
+    "head": {
+      "AGENTS.md": "# AGENTS.md\n\n## Rules\n\n1. Subprocesses use argv lists — `shell=True` is forbidden anywhere under `scripts/`.\n2. Never disable TLS verification.\n",
+      "scripts/pack.py": "import subprocess\n\n\ndef pack(paths):\n    cmd = 'tar czf out.tgz ' + ' '.join(paths)\n    subprocess.run(cmd, shell=True, check=True)\n"
+    },
+    "pr_metadata": {
+      "title": "pack: build the tar command as a string",
+      "body": "Easier to log the exact command.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:c7f2c0417446ad631828f96e2de5d72dc9a91a6b63469c1c886ed31ab08d45d5"
+  },
+  "labels": [
+    {
+      "id": "C081-d1",
+      "severity": "warning",
+      "path": "scripts/pack.py",
+      "defect": "Contradicts the documented rule (AGENTS.md § Rules 1): shell=True with interpolated paths",
+      "evidence": "AGENTS.md forbids shell=True under scripts/; a path containing `;` or `$(...)` is executed by the shell.",
+      "keywords": [
+        "shell=True",
+        "AGENTS.md",
+        "argv",
+        "injection"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C081-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

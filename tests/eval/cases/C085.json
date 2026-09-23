@@ -1,0 +1,61 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C085",
+  "title": "HTTP client disables TLS verification against the documented rule",
+  "stack": "python",
+  "change_class": "policy_prompt_file",
+  "risk_class": "warning_positive",
+  "family_group": "G85",
+  "gap_tags": [
+    "instruction_file"
+  ],
+  "fixture": {
+    "base": {
+      "AGENTS.md": "# AGENTS.md\n\n## Rules\n\n1. Subprocesses use argv lists — `shell=True` is forbidden anywhere under `scripts/`.\n2. Never disable TLS verification.\n",
+      "scripts/fetch.py": "import requests\n\n\ndef fetch(url):\n    return requests.get(url, timeout=10).json()\n"
+    },
+    "head": {
+      "AGENTS.md": "# AGENTS.md\n\n## Rules\n\n1. Subprocesses use argv lists — `shell=True` is forbidden anywhere under `scripts/`.\n2. Never disable TLS verification.\n",
+      "scripts/fetch.py": "import requests\n\n\ndef fetch(url):\n    # staging certs are self-signed\n    return requests.get(url, timeout=10, verify=False).json()\n"
+    },
+    "pr_metadata": {
+      "title": "fetch: tolerate staging certificates",
+      "body": "Staging uses self-signed certs.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:44d0b8a09c2e6249e1183f2dd0b73c48079cc4201973bfdb050d3357b020f15a"
+  },
+  "labels": [
+    {
+      "id": "C085-d1",
+      "severity": "warning",
+      "path": "scripts/fetch.py",
+      "defect": "Contradicts AGENTS.md § Rules 2: TLS verification disabled for every environment",
+      "evidence": "verify=False is unconditional — production traffic becomes interceptable; the rule allows no exception and the staging CA should be pinned instead.",
+      "keywords": [
+        "verify=False",
+        "AGENTS.md",
+        "TLS",
+        "certificate"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C085-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

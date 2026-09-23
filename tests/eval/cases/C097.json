@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C097",
+  "title": "Installer pipes a remote script into bash",
+  "stack": "shell",
+  "change_class": "security",
+  "risk_class": "warning_positive",
+  "family_group": "G97",
+  "gap_tags": [
+    "new_stack_shell"
+  ],
+  "fixture": {
+    "base": {
+      "install.sh": "#!/usr/bin/env bash\nset -euo pipefail\ncurl -fsSL -o tool.tgz https://downloads.example.invalid/tool.tgz\nsha256sum -c tool.tgz.sha256\ntar xzf tool.tgz\n"
+    },
+    "head": {
+      "install.sh": "#!/usr/bin/env bash\nset -euo pipefail\ncurl -fsSL https://downloads.example.invalid/install | bash\n"
+    },
+    "pr_metadata": {
+      "title": "install: use the vendor one-liner",
+      "body": "Shorter and always current.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:244fab3f565053754a19afdb57a91e86d18f8106b4e9aba13faab35db58577a7"
+  },
+  "labels": [
+    {
+      "id": "C097-d1",
+      "severity": "warning",
+      "path": "install.sh",
+      "defect": "Checksum-verified download replaced by curl | bash of an unpinned remote script",
+      "evidence": "The previous flow verified a sha256 before extracting; the new one executes whatever the host serves, with no pin and no verification.",
+      "keywords": [
+        "| bash",
+        "curl",
+        "sha256",
+        "verif"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C097-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

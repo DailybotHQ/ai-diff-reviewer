@@ -1,0 +1,41 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C096",
+  "title": "Quoting hardening in a shell script — equivalent behaviour",
+  "stack": "shell",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G96",
+  "gap_tags": [
+    "new_stack_shell"
+  ],
+  "fixture": {
+    "base": {
+      "scripts/backup.sh": "#!/usr/bin/env bash\nset -euo pipefail\ntar czf $OUT $SRC\n"
+    },
+    "head": {
+      "scripts/backup.sh": "#!/usr/bin/env bash\nset -euo pipefail\ntar czf \"$OUT\" \"$SRC\"\n"
+    },
+    "pr_metadata": {
+      "title": "backup.sh: quote variables",
+      "body": "shellcheck SC2086.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:afbd47e580c2eee1f883320d5f15d37acfabf6e6ef6a1affc1258489b87c26c2"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [],
+    "reference_review": "Adjudicated SAFE: the change only adds double quotes around two variables that are required to be set (set -u) and used as single paths; behaviour is identical for well-formed inputs and strictly safer for paths with spaces. Flagging this as a behaviour change or a regression is the false positive this control exists for."
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}
