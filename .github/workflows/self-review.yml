@@ -126,6 +126,9 @@ jobs:
           HAS_GEMINI: ${{ secrets.GEMINI_API_KEY != '' }}
           HAS_QWEN: ${{ secrets.DASHSCOPE_API_KEY != '' }}
           HAS_OPENROUTER: ${{ secrets.OPENROUTER_API_KEY != '' }}
+          # Bedrock: one packed secret (ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION])
+          # consumed by the runtime's packed-`api-key` resolution (v2.5.0).
+          HAS_BEDROCK: ${{ secrets.AWS_REVIEW_CREDENTIALS != '' }}
           HAS_AZURE: ${{ secrets.AZURE_OPENAI_API_KEY != '' }}
           AZURE_BASE: ${{ vars.AZURE_OPENAI_BASE_URL }}
           AZURE_MODEL: ${{ vars.AZURE_OPENAI_MODEL_DAILY }}
@@ -206,12 +209,13 @@ jobs:
           [ "$HAS_QWEN" = "true" ] && add openai DASHSCOPE_API_KEY "self-reviewed:qwen" economy "https://dashscope.aliyuncs.com/compatible-mode/v1"
           [ "$HAS_GEMINI" = "true" ] && add openai GEMINI_API_KEY "self-reviewed:gemini" economy "https://generativelanguage.googleapis.com/v1beta/openai"
           [ "$HAS_OPENROUTER" = "true" ] && add openai OPENROUTER_API_KEY "self-reviewed:openrouter" economy "https://openrouter.ai/api/v1"
+          [ "$HAS_BEDROCK" = "true" ] && add anthropic AWS_REVIEW_CREDENTIALS "self-reviewed:bedrock" us.anthropic.claude-sonnet-5 "https://bedrock-runtime.us-east-1.amazonaws.com"
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
           # print an accurate hint. Reaching here means `ready` is applied, so an
           # empty matrix means "no provider secret is configured on this repo".
           if [ "$matrix" = "[]" ]; then
-            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable), DEEPSEEK_API_KEY, MOONSHOT_API_KEY, MINIMAX_API_KEY, DASHSCOPE_API_KEY, GEMINI_API_KEY, or OPENROUTER_API_KEY as a repo secret so the self-review gate can run."
+            echo "::error::No provider secret configured. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable), DEEPSEEK_API_KEY, MOONSHOT_API_KEY, MINIMAX_API_KEY, DASHSCOPE_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, or AWS_REVIEW_CREDENTIALS (packed ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION]) as a repo secret so the self-review gate can run."
             echo 'empty_reason=no-provider-secret' >> "$GITHUB_OUTPUT"
           else
             echo 'empty_reason=' >> "$GITHUB_OUTPUT"

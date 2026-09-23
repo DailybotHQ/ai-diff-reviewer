@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import hashlib
 import functools
+import hmac
 import json
 import os
 import re
@@ -87,6 +88,7 @@ import sys
 import threading
 import tempfile
 import time
+from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -233,6 +235,7 @@ MODEL_REQUIRED_HINTS: dict[str, str] = {
     "minimax": "a MiniMax model id (e.g. `MiniMax-M2`)",
     "gemini": "a Gemini model id (e.g. `gemini-2.5-pro`)",
     "openrouter": "an OpenRouter model id (e.g. `deepseek/deepseek-chat`)",
+    "bedrock": "a Bedrock model id or inference profile (e.g. `anthropic.claude-sonnet-5` or `us.anthropic.claude-sonnet-5`)",
 }
 MODEL_TIERS: tuple[str, ...] = (
     MODEL_TIER_BALANCED,
@@ -321,6 +324,17 @@ _GEMINI_TIERS: dict[str, str] = {
     MODEL_TIER_ECONOMY: "gemini-2.5-flash",
     MODEL_TIER_DEEP: "gemini-2.5-pro",
 }
+_BEDROCK_TIERS: dict[str, str] = {
+    # Bedrock inference profiles: the on-demand `bedrock-runtime` endpoint
+    # requires the cross-region profile form (`us.anthropic.…`) — bare
+    # foundation ids are not accepted. `us.` suits US-region endpoints;
+    # other geographies pin the explicit profile (`eu.` / `apac.` /
+    # `global.`). AWS bills Bedrock separately — the indicative prices
+    # below mirror first-party list rates as an estimate.
+    MODEL_TIER_BALANCED: "us.anthropic.claude-sonnet-5",
+    MODEL_TIER_ECONOMY: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    MODEL_TIER_DEEP: "us.anthropic.claude-opus-5",
+}
 _OPENROUTER_TIERS: dict[str, str] = {
     # Meta-gateway: model ids are vendor-prefixed (`vendor/model`). Defaults
     # pinned to measured families; consumers override per taste. Prices are
@@ -356,6 +370,7 @@ MODEL_TIER_TABLE: dict[tuple[str, str], dict[str, str]] = {
     ("claude-code", "minimax"): _MINIMAX_TIERS,
     ("openai", "gemini"): _GEMINI_TIERS,
     ("openai", "openrouter"): _OPENROUTER_TIERS,
+    ("anthropic", "bedrock"): _BEDROCK_TIERS,
     # NOTE: deliberately no (codex, ...) rows for the six v2.4.0
     # chat-completions backends. The Codex CLI speaks the Responses API to
     # every non-default gateway (`codex_wire_api` is pinned to "responses"),
@@ -391,6 +406,11 @@ INDICATIVE_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "MiniMax-Text-01": (0.20, 1.20),
     "gemini-2.5-pro": (1.25, 10.0),
     "gemini-2.5-flash": (0.30, 2.50),
+    # Bedrock ids: indicative mirror of first-party list rates — AWS bills
+    # Bedrock separately (see docs/PROVIDERS.md § AWS Bedrock).
+    "anthropic.claude-sonnet-5": (2.0, 10.0),
+    "anthropic.claude-haiku-4-5": (1.0, 5.0),
+    "anthropic.claude-opus-5": (5.0, 25.0),
     "deepseek/deepseek-chat": (0.30, 1.20),
     "deepseek/deepseek-reasoner": (0.60, 2.40),
 }
@@ -453,6 +473,7 @@ ENDPOINT_KIND_QWEN: str = "qwen"
 ENDPOINT_KIND_MINIMAX: str = "minimax"
 ENDPOINT_KIND_GEMINI: str = "gemini"
 ENDPOINT_KIND_OPENROUTER: str = "openrouter"
+ENDPOINT_KIND_BEDROCK: str = "bedrock"
 ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_ANTHROPIC,
     ENDPOINT_KIND_OPENAI,
@@ -466,6 +487,7 @@ ENDPOINT_KINDS: tuple[str, ...] = (
     ENDPOINT_KIND_MINIMAX,
     ENDPOINT_KIND_GEMINI,
     ENDPOINT_KIND_OPENROUTER,
+    ENDPOINT_KIND_BEDROCK,
 )
 
 # Host → kind classification. A suffix starting with `.` matches any
@@ -486,6 +508,137 @@ ENDPOINT_HOST_SUFFIXES: tuple[tuple[str, str], ...] = (
     ("generativelanguage.googleapis.com", ENDPOINT_KIND_GEMINI),
     ("openrouter.ai", ENDPOINT_KIND_OPENROUTER),
 )
+
+# AWS Bedrock (SigV4). The signer is pure — the timestamp is a parameter — so
+# the known-answer test is deterministic. Service is `bedrock`; the region is
+# parsed from the regional endpoint host (Task 1's
+# `_bedrock_region_from_host`).
+BEDROCK_SERVICE: str = "bedrock"
+BEDROCK_ANTHROPIC_VERSION: str = "bedrock-2023-05-31"
+SIGV4_ALGORITHM: str = "AWS4-HMAC-SHA256"
+SIGV4_TERMINATOR: str = "aws4_request"
+
+
+def _sigv4_sign_request(
+    *,
+    method: str,
+    uri_path: str,
+    query: str,
+    body: bytes,
+    host: str,
+    region: str,
+    service: str,
+    access_key: str,
+    secret_key: str,
+    session_token: str | None,
+    now_utc: datetime,
+    content_type: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Sign one AWS API request with Signature Version 4 (pure).
+
+    Returns the headers to merge into the request: `Authorization`,
+    `x-amz-date`, `x-amz-security-token` (when a session token is given).
+    The payload hash signs the exact bytes sent. `content_type` is signed
+    when provided. Credential material never appears in the output beyond
+    the access-key id inside the `Credential=` element (per the SigV4 spec).
+    """
+    amz_date: str = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    date_stamp: str = now_utc.strftime("%Y%m%d")
+    payload_hash: str = hashlib.sha256(body).hexdigest()
+    merged: dict[str, str] = {"host": host, "x-amz-date": amz_date}
+    if content_type:
+        merged["content-type"] = content_type
+    if session_token:
+        merged["x-amz-security-token"] = session_token
+    if extra_headers:
+        merged.update(extra_headers)
+    # SigV4 requires lowercase names in CanonicalHeaders and SignedHeaders —
+    # normalize here so no caller can emit an uppercase entry.
+    headers: dict[str, str] = {k.lower(): v for k, v in merged.items()}
+    signed_names: list[str] = sorted(headers)
+    canonical_headers: str = "".join(
+        f"{name}:{headers[name].strip()}\n" for name in signed_names
+    )
+    signed_headers: str = ";".join(signed_names)
+    canonical_request: str = "\n".join(
+        [
+            method.upper(),
+            uri_path,
+            query,
+            canonical_headers,
+            signed_headers,
+            payload_hash,
+        ]
+    )
+    scope: str = f"{date_stamp}/{region}/{service}/{SIGV4_TERMINATOR}"
+    string_to_sign: str = "\n".join(
+        [
+            SIGV4_ALGORITHM,
+            amz_date,
+            scope,
+            hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+        ]
+    )
+    key_date: bytes = hmac.new(
+        ("AWS4" + secret_key).encode("utf-8"), date_stamp.encode("utf-8"), hashlib.sha256
+    ).digest()
+    key_region: bytes = hmac.new(key_date, region.encode("utf-8"), hashlib.sha256).digest()
+    key_service: bytes = hmac.new(key_region, service.encode("utf-8"), hashlib.sha256).digest()
+    signing_key: bytes = hmac.new(key_service, b"aws4_request", hashlib.sha256).digest()
+    signature: str = hmac.new(
+        signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    authorization: str = (
+        f"{SIGV4_ALGORITHM} Credential={access_key}/{scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+    out: dict[str, str] = {"Authorization": authorization, "x-amz-date": amz_date}
+    if session_token:
+        out["x-amz-security-token"] = session_token
+    return out
+
+
+def _resolve_aws_credentials(api_key: str | None) -> tuple[str, str, str | None]:
+    """Resolve AWS credentials for Bedrock, in order:
+
+    1. The environment (`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, with
+       optional `AWS_SESSION_TOKEN`) — the GitHub OIDC pattern, where
+       `aws-actions/configure-aws-credentials` exports exactly these.
+    2. The packed `api-key` input format `KEY:SECRET[:SESSION_TOKEN]` (AWS
+       access key ids never contain `:`).
+
+    A partially set environment raises rather than silently mixing sources.
+    Errors name what is missing — never any credential value.
+    """
+    env_key: str = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    env_secret: str = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    env_token: str | None = os.environ.get("AWS_SESSION_TOKEN") or None
+    if env_key and env_secret:
+        return env_key, env_secret, env_token
+    if env_key or env_secret:
+        raise ValueError(
+            "AWS credentials incomplete: both AWS_ACCESS_KEY_ID and "
+            "AWS_SECRET_ACCESS_KEY must be set when either is set."
+        )
+    packed: str = (api_key or "").strip()
+    if packed:
+        parts: list[str] = packed.split(":")
+        if len(parts) == 2 and all(parts):
+            return parts[0], parts[1], None
+        if len(parts) == 3 and all(parts):
+            return parts[0], parts[1], parts[2]
+        raise ValueError(
+            "The packed AWS `api-key` format is KEY:SECRET[:SESSION_TOKEN] "
+            "(no other colons) — the provided value does not match."
+        )
+    raise ValueError(
+        "AWS credentials not found: set AWS_ACCESS_KEY_ID and "
+        "AWS_SECRET_ACCESS_KEY in the environment (an AWS_SESSION_TOKEN is "
+        "honoured for temporary credentials), or store the packed "
+        "`api-key` format KEY:SECRET[:SESSION_TOKEN]."
+    )
+
 
 # Well-known base URLs (documentation + runner defaults). The Anthropic base
 # deliberately has no `/v1` — the Messages path is appended by the provider.
@@ -1956,9 +2109,43 @@ def review_scope_id(provider_id: str, api_base: str) -> str:
     return f"{provider_id}:{digest}"
 
 
-def classify_endpoint_host(host: str) -> str:
-    """Map a hostname to an endpoint kind via `ENDPOINT_HOST_SUFFIXES`."""
+def _is_bedrock_runtime_host(h: str) -> bool:
+    """True for the regional Bedrock runtime endpoints
+    (`bedrock-runtime.{region}.amazonaws.com` and the `-fips` variant).
+    Regional hosts cannot be expressed as a suffix-table entry without
+    catching every `amazonaws.com` service, so they get an explicit check:
+    exactly four labels, first label `bedrock-runtime` / `bedrock-runtime-fips`,
+    registrable domain `amazonaws.com`."""
+    labels: list[str] = h.split(".")
+    if not (
+        len(labels) == 4
+        and labels[0] in ("bedrock-runtime", "bedrock-runtime-fips")
+        and labels[2] == "amazonaws"
+        and labels[3] == "com"
+    ):
+        return False
+    # The second label becomes the SigV4 region — require the AWS region
+    # shape (`geography[-gov]-direction-number`) so a nonsense label cannot
+    # flow into the credential scope.
+    return re.fullmatch(r"[a-z]{2}(-gov)?-[a-z]+-\d{1,2}", labels[1]) is not None
+
+
+def _bedrock_region_from_host(host: str) -> str | None:
+    """Return the AWS region embedded in a Bedrock runtime host
+    (`bedrock-runtime.{region}.amazonaws.com` -> `{region}`), else None."""
     h: str = (host or "").lower()
+    if not _is_bedrock_runtime_host(h):
+        return None
+    return h.split(".")[1]
+
+
+def classify_endpoint_host(host: str) -> str:
+    """Map a hostname to an endpoint kind via `ENDPOINT_HOST_SUFFIXES`,
+    with an explicit pattern check for the regional Bedrock runtime hosts
+    (which a suffix entry cannot express without over-matching)."""
+    h: str = (host or "").lower()
+    if _is_bedrock_runtime_host(h):
+        return ENDPOINT_KIND_BEDROCK
     for suffix, kind in ENDPOINT_HOST_SUFFIXES:
         if suffix.startswith("."):
             if h.endswith(suffix):
@@ -2239,9 +2426,17 @@ def normalise_usage(raw: Any) -> UsageTelemetry | None:
 
 def lookup_indicative_price(model: str) -> tuple[float, float] | None:
     """Longest-prefix match into `INDICATIVE_PRICES_USD_PER_MTOK`."""
+    candidate: str = model or ""
+    # Bedrock cross-region inference profiles prefix a geo segment
+    # (`us.anthropic.claude-…` / `eu.anthropic.claude-…`); strip it so the
+    # documented `anthropic.` price entries keep applying (indicative only).
+    for geo in ("us.", "eu.", "apac.", "global.", "au.", "jp."):
+        if candidate.startswith(geo):
+            candidate = candidate[len(geo):]
+            break
     best: str = ""
     for prefix in INDICATIVE_PRICES_USD_PER_MTOK:
-        if model.startswith(prefix) and len(prefix) > len(best):
+        if candidate.startswith(prefix) and len(prefix) > len(best):
             best = prefix
     return INDICATIVE_PRICES_USD_PER_MTOK.get(best) if best else None
 
@@ -2418,6 +2613,12 @@ class ProviderRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 
 
+# Hard cap on bytes read from any HTTP response body (success or error):
+# vendor output is untrusted input and must not be able to exhaust memory
+# before parsing/truncation. Review payloads are KBs; 8 MB is generous.
+MAX_HTTP_BODY_BYTES: int = 8_000_000
+
+
 def _post_json_with_retries(
     *, url: str, body: bytes, headers: dict[str, str], api_label: str
 ) -> dict[str, Any]:
@@ -2441,9 +2642,11 @@ def _post_json_with_retries(
             with opener.open(
                 request, timeout=API_REQUEST_TIMEOUT
             ) as response:
-                return json.loads(response.read())
+                return json.loads(response.read(MAX_HTTP_BODY_BYTES + 1))
         except urllib.error.HTTPError as e:
-            err_body: str = e.read().decode("utf-8", errors="replace")
+            err_body: str = e.read(MAX_HTTP_BODY_BYTES + 1).decode(
+                "utf-8", errors="replace"
+            )
             last_error = RuntimeError(
                 f"{api_label} HTTP {e.code}: {err_body[:MAX_ERROR_BODY_CHARS]}"
             )
@@ -2596,28 +2799,110 @@ class AnthropicProvider(Provider):
         # tolerance for extra sampling fields is not documented.
         if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
             anthropic_body["temperature"] = REVIEW_TEMPERATURE
+        if self.profile.kind == ENDPOINT_KIND_BEDROCK:
+            # Bedrock InvokeModel takes the Anthropic Messages body with the
+            # version INSIDE the body (there is no `anthropic-version`
+            # header) and no `x-api-key` — auth is SigV4 (below). The model
+            # id is a PATH parameter on InvokeModel: a top-level `model`
+            # field is not part of the AWS request schema and is removed.
+            anthropic_body["anthropic_version"] = BEDROCK_ANTHROPIC_VERSION
+            anthropic_body.pop("model", None)
+            # No sampling or thinking parameters on Bedrock v1: per-model
+            # schemas differ on what they accept alongside thinking fields,
+            # and that cannot be verified offline. Conservative = the plain
+            # Messages shape (same posture as `cache_control` below); the
+            # deterministic-sampling rollout covers the other backends.
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
-        headers: dict[str, str] = {
-            "Content-Type": "application/json",
-            "x-api-key": self.api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-        }
-        if self.profile.anthropic_auth_style == ANTHROPIC_AUTH_STYLE_BOTH:
-            # Anthropic-compatible gateways (Z.ai documents bearer auth, xAI
-            # documents x-api-key); sending both is harmless and avoids a
-            # per-gateway matrix.
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        url: str = join_endpoint_path(self.profile.base_url, ANTHROPIC_MESSAGES_PATH)
-        api_label: str = (
-            "Anthropic API"
-            if self.profile.is_default
-            else f"{self.profile.kind} messages API ({self.profile.host})"
-        )
+        if self.profile.kind == ENDPOINT_KIND_BEDROCK:
+            url, headers, api_label = self._bedrock_request_parts(body)
+        else:
+            headers: dict[str, str] = {
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": ANTHROPIC_VERSION,
+            }
+            if self.profile.anthropic_auth_style == ANTHROPIC_AUTH_STYLE_BOTH:
+                # Anthropic-compatible gateways (Z.ai documents bearer auth, xAI
+                # documents x-api-key); sending both is harmless and avoids a
+                # per-gateway matrix.
+                headers["Authorization"] = f"Bearer {self.api_key}"
+            url = join_endpoint_path(self.profile.base_url, ANTHROPIC_MESSAGES_PATH)
+            api_label = (
+                "Anthropic API"
+                if self.profile.is_default
+                else f"{self.profile.kind} messages API ({self.profile.host})"
+            )
         resp: dict[str, Any] = _post_json_with_retries(
             url=url, body=body, headers=headers, api_label=api_label
         )
         _log_usage(api_label, resp)
         return resp
+
+    def _bedrock_request_parts(self, body: bytes) -> tuple[str, dict[str, str], str]:
+        """Compose the SigV4-signed InvokeModel request for AWS Bedrock.
+
+        The model id travels in the URL path, the Anthropic API version rides
+        inside the body (added by `complete`), and auth is SigV4 over
+        `content-type;host;x-amz-date[;x-amz-security-token]` — no
+        `x-api-key` / `anthropic-version` headers. Credentials resolve from
+        the environment first (the OIDC pattern) and the packed `api-key`
+        second (Task 2).
+        """
+        region: str | None = _bedrock_region_from_host(self.profile.host)
+        if region is None:
+            raise ValueError(
+                "provider: anthropic on bedrock requires a regional "
+                "bedrock-runtime.{region}.amazonaws.com endpoint — no region "
+                f"found in host {self.profile.host!r}."
+            )
+        # Strict path encoding (safe=""): unreserved bytes stay literal,
+        # `:` in versioned ids becomes %3A and `/` in ARNs becomes %2F —
+        # matching the AWS SDK serializers so the SigV4 canonical URI
+        # agrees with the wire.
+        model_path: str = urllib.parse.quote(self.model, safe="")
+        url: str = join_endpoint_path(
+            self.profile.base_url, f"/model/{model_path}/invoke"
+        )
+        # Sign the exact host the wire sends: include the port when the
+        # endpoint carries a non-default one (urllib would otherwise send
+        # `Host: host:port` while the signature covered the bare hostname).
+        url_parts = urllib.parse.urlsplit(self.profile.base_url)
+        sign_host: str = self.profile.host
+        if url_parts.port:
+            sign_host = f"{self.profile.host}:{url_parts.port}"
+        access_key, secret_key, session_token = _resolve_aws_credentials(
+            self.api_key
+        )
+        # The outbound scrub gate (scrub_secrets) can only redact values it
+        # knows: register the AWS credentials so a leaked/echoed value can
+        # never reach a PR comment or review body.
+        register_secret(access_key)
+        register_secret(secret_key)
+        if session_token:
+            register_secret(session_token)
+        signed: dict[str, str] = _sigv4_sign_request(
+            method="POST",
+            uri_path=urllib.parse.urlsplit(url).path,
+            query="",
+            body=body,
+            host=sign_host,
+            region=region,
+            service=BEDROCK_SERVICE,
+            access_key=access_key,
+            secret_key=secret_key,
+            session_token=session_token,
+            now_utc=datetime.now(timezone.utc),
+            content_type="application/json",
+            extra_headers={"Accept": "application/json"},
+        )
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Host": sign_host,
+            **signed,
+        }
+        api_label: str = f"bedrock invoke API ({self.profile.host})"
+        return url, headers, api_label
 
 
 # ---------------------------------------------------------------------------
@@ -4249,6 +4534,13 @@ def build_provider(
     keeps the runner's default endpoint.
     """
     profile: EndpointProfile = resolve_endpoint_profile(api_base, provider_id)
+    if profile.kind == ENDPOINT_KIND_BEDROCK and provider_id != "anthropic":
+        raise ValueError(
+            f"provider: {provider_id!r} cannot reach bedrock backends — only "
+            "`provider: anthropic` implements the SigV4-signed InvokeModel "
+            "wire. Use `provider: anthropic` with the same `api-base` "
+            "(see docs/PROVIDERS.md § AWS Bedrock)."
+        )
     if api_base and provider_id in PROVIDERS_WITHOUT_API_BASE:
         log(
             f"WARNING: api-base is set but provider {provider_id!r} has no "
@@ -10122,7 +10414,57 @@ def main() -> int:
     )
     action_path: str = os.environ.get("AIPRR_ACTION_PATH", "").strip()
 
-    if not (api_key and gh_token and repo and pr_number_raw and head_sha):
+    # Backend selection must precede the api-key requirement: the AWS
+    # Bedrock lane (v2.5.0) authenticates from the environment (OIDC), so an
+    # empty `api-key` is acceptable exactly there — checked below.
+    try:
+        api_base: str = validate_api_base(os.environ.get(API_BASE_ENV, ""))
+    except ValueError as e:
+        log(f"CONFIGURATION ERROR: {e} Aborting.")
+        write_all_outputs(skipped=False)
+        return 1
+    backend_profile: EndpointProfile = resolve_endpoint_profile(
+        api_base, provider_id
+    )
+    bedrock_env_credentials: bool = False
+    if (
+        api_key
+        and provider_id == "anthropic"
+        and backend_profile.kind == ENDPOINT_KIND_BEDROCK
+    ):
+        # packed lane: register the components so partial leaks scrub too
+        for part in api_key.split(":"):
+            if part:
+                register_secret(part)
+    if (
+        not api_key
+        and provider_id == "anthropic"
+        and backend_profile.kind == ENDPOINT_KIND_BEDROCK
+    ):
+        try:
+            # resolve AND register immediately: any public-facing failure
+            # text produced before the first InvokeModel call is scrubbed.
+            probe_access, probe_secret, probe_session = _resolve_aws_credentials(None)
+            register_secret(probe_access)
+            register_secret(probe_secret)
+            if probe_session:
+                register_secret(probe_session)
+            bedrock_env_credentials = True
+        except ValueError as exc:
+            log(
+                f"CONFIGURATION ERROR: {exc} Set AWS_ACCESS_KEY_ID and "
+                "AWS_SECRET_ACCESS_KEY in the environment (OIDC), or pass "
+                "the packed `api-key` KEY:SECRET[:SESSION]. Aborting."
+            )
+            write_all_outputs(skipped=False)
+            return 1
+    if (
+        not (api_key or bedrock_env_credentials)
+        or not gh_token
+        or not repo
+        or not pr_number_raw
+        or not head_sha
+    ):
         log(
             "Missing required env (AIPRR_API_KEY, AIPRR_GH_TOKEN, AIPRR_REPO, "
             "AIPRR_PR_NUMBER, AIPRR_HEAD_SHA). Aborting."
@@ -10134,18 +10476,6 @@ def main() -> int:
     register_secret(api_key)
     register_secret(gh_token)
     pr_number: int = int(pr_number_raw)
-
-    # Backend selection (v2.1.0+). Validate before anything outward-facing
-    # happens: the credential in `api-key` will be sent to this host.
-    try:
-        api_base: str = validate_api_base(os.environ.get(API_BASE_ENV, ""))
-    except ValueError as e:
-        log(f"CONFIGURATION ERROR: {e} Aborting.")
-        write_all_outputs(skipped=False)
-        return 1
-    backend_profile: EndpointProfile = resolve_endpoint_profile(
-        api_base, provider_id
-    )
     review_scope: str = review_scope_id(provider_id, api_base)
     log_backend_selection(backend_profile)
 
