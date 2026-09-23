@@ -1,0 +1,78 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 16,
+  "tool_calls": null,
+  "seconds": 441.6,
+  "setup_seconds": 2.0,
+  "total_seconds": 443.6,
+  "usage": {
+    "in": 85792,
+    "cache_read": 721664,
+    "cache_write": 0,
+    "out": 18611,
+    "source": "cli"
+  },
+  "cost_usd": 1.255067,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5482,
+      "severity": "warning",
+      "body": "The heuristic's thresholds (`8`, `500`, `3`, `100`) are meaningful caps left as inline magic numbers \u2014 repo convention is to promote these to annotated module constants at the top of the file, exactly like the sibling `_COMPLEXITY_HIGH_PATH_MARKERS` tuple two lines up. They're the knobs a future tuning PR will touch, and bare ints in a 10k-LOC file are easy to collide with. Suggest `_COMPLEXITY_HIGH_FILES = 8`, `_COMPLEXITY_HIGH_LINE_DELTA = 500`, etc. beside the marker tuple."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 71,
+      "severity": "warning",
+      "body": "Only 2 of the heuristic's ~6 branches are covered (`docs-only \u2192 low`, `runtime path \u2192 high`). The medium/high size thresholds (`>= 3` files, `> 100` delta, `>= 8` files, `> 500` delta), the empty-`changed_files` path, and the marker-precedence-over-docs interaction are untested \u2014 and those thresholds are exactly what a follow-up tuning PR would change. Cheap to add as pure-logic cases in this same class; no provider mocking needed."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5443,
+      "severity": "info",
+      "body": "These are bare substrings matched anywhere in any path, and they're checked *before* the docs-only branch: `src/styles/design-tokens.css` or `docs/jwt-tokens.md` scores `complexity:high`, and a single-file docs PR touching `docs/SECURITY.md` never reaches the `low` branch. Also note `\"scripts/reviewer.py\"` bakes this repo's layout into a generic shipped runtime (harmless for consumers \u2014 it just never matches \u2014 but it's dogfood data in product code). Segment-level matching (or matching on the basename only) would cut most false positives."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "info",
+      "body": "The optional path embeds a `// optional` comment inside the ```json example while the same Rules block says the file MUST parse with Python `json.load()` \u2014 a CLI that echoes the example verbatim writes a comment into its JSON and the whole findings file fails to parse (dropping every inline finding to the summary-only fallback). The Rules bullet already states optionality, so the annotation is redundant. The failure probability is low, but the fix is free:\n\n```suggestion\n        else ',\\n  \"complexity\": \"low | medium | high\"\\n'\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-verified feature \u2014 complexity labeling bridged to agent-runners with a sane best-effort fallback. **No blocking findings**; two warnings worth addressing (repo conventions), two nits.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5482` | Heuristic size thresholds (3/8/100/500) are meaningful caps left as magic numbers \u2014 promote to module constants |\n| 2 | \u26a0\ufe0f warning | `tests/test_findings_parser.py:71` | Only 2 of ~6 heuristic branches tested; the tunable thresholds have zero coverage |\n| 3 | \u2139\ufe0f info | `scripts/reviewer.py:5443` | Bare-substring markers (`token`, `security`, \u2026) over-match and preempt the docs-only branch; `scripts/reviewer.py` is repo-specific data in a generic runtime |\n| 4 | \u2139\ufe0f info | `scripts/reviewer.py:5645` | `// optional` comment inside the JSON example contradicts the same prompt's `json.load()` rule |\n\n## What I verified (no findings)\n\n- **Signature back-compat:** `run_review`'s new `require_complexity_in_findings` is keyword-only with a default; exactly one call site (`reviewer.py:6564`), all three provider implementations + the abstract base updated. External subclasses keep working.\n- **Runtime scoping:** `pr_ctx` is bound at `reviewer.py:6515`, well before the label block; `complexity_labels_enabled` is the same `main()` local the old block used; `PR_COMPLEXITY_LEVELS` / `PR_COMPLEXITY_*` constants pre-exist at `reviewer.py:216-222`; `PRContext.changed_files` is `list[dict[str, Any]]`, so `f.get(\"filename\")` is type-safe.\n- **Label rename (`AIReview` \u2192 `ready`):** consistent end-to-end \u2014 `docs/TRIGGER_MODES.md:64` already titled the recipe \"`ready`\" (the workflow comment was the laggard; this PR closes a pre-existing inconsistency), the runtime `label-gate` matching is case-insensitive (`reviewer.py:5171-5174`) so the scope script and the action agree, `no-gate-label` \u2192 `no-ready-label` renamed at both the producer and the gate's `if:`, a",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 10
+  }
+}

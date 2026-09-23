@@ -1,0 +1,62 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 401.3,
+  "setup_seconds": 2.0,
+  "total_seconds": 403.2,
+  "usage": {
+    "in": 65184,
+    "cache_read": 249280,
+    "cache_write": 0,
+    "out": 15101,
+    "source": "cli"
+  },
+  "cost_usd": 0.828085,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 237,
+      "severity": "warning",
+      "body": "Any non-`ready` label now re-blocks a reviewed PR \u2014 and cancels an in-flight review. The workflow fires on `labeled` for *any* label (`types: [opened, labeled]`, line 50), so adding `bug`/`dependencies` (a common bot label) re-runs `scope` \u2192 emits `[]` \u2192 this check exits 1, painting the required gate red on the same head SHA a passing review had already turned green; with `cancel-in-progress: true` (line 54) it also kills a review that is mid-flight, and the only recovery (remove + re-add `ready`) re-runs the full review. Exit 1 is the right call \u2014 exit 0 on non-`ready` label events would let \\u201copen PR \u2192 add `bug` \u2192 gate green \u2192 merge unreviewed\\u201d bypass the gate \u2014 but neither the goal-4 comment, the TRIGGER_MODES recipe, nor the CHANGELOG warns that any label toggle re-blocks the merge. Please document it in both places, e.g. \\u201cany later non-`ready` label event re-fires the gate red on the same SHA; re-apply `ready` to restore green (this re-runs the review)\\u201d."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 120,
+      "severity": "warning",
+      "body": "The recipe's job names collide. Technique 2's decision job is named `gate` (line 111 even says `strategy.matrix.include: ${{ fromJSON(needs.gate.outputs.matrix) }}`), and this snippet names the *merge-gate* job `gate` as well while `needs: [gate-decision, review]` references a `gate-decision` job that appears nowhere else in the recipe. A consumer assembling techniques 2+3 gets a duplicate `gate` YAML key (last one silently wins) plus unresolved `needs.gate-decision.*` references, so the copied workflow fails validation. Rename the decision job consistently (e.g. `decide`) across techniques 2 and 3, mirroring the real workflow's `scope`/`gate` split."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 218,
+      "severity": "info",
+      "body": "The `gate` job inherits `pull-requests: write` from the workflow-level `permissions:` block (lines 56\\u201358) but never touches the API. Declaring `permissions: {}` makes \\u201cthis job needs no token\\u201d explicit and load-bearing; worth mirroring in the TRIGGER_MODES snippet, since consumer workflows that copy it may not have a workflow-level block. Not exploitable as-is (no checkout, no API calls here) \u2014 a least-privilege nit.\n\n```suggestion\n  gate:\n    name: 'Self-review gate'\n    needs: [scope, self-review]\n    if: always()\n    runs-on: ubuntu-latest\n    permissions: {}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nThe gate mechanism is correct and does what the PR claims \u2014 verified against the `scope` job's actual output contract and the workflow's event surface. Two warnings worth addressing (both effectively doc-level), neither blocking.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:237` | Any unrelated label re-blocks a reviewed PR and cancels an in-flight review \u2014 undocumented |\n| 2 | \u26a0\ufe0f warning | `docs/TRIGGER_MODES.md:120` | Recipe names collide: `gate` is both decision job (technique 2) and merge gate; `gate-decision` is never defined |\n| 3 | \u2139\ufe0f info | `.github/workflows/self-review.yml:214` | Gate job could declare `permissions: {}` instead of inheriting `pull-requests: write` |\n\n## What I verified as sound\n\n- **Matrix comparison:** `scope` emits exactly `matrix=[]` (line 112) or compact `jq -c` JSON (line 151) via `$GITHUB_OUTPUT`, so the exact-string `[ \"${MATRIX:-[]}\" = \"[]\" ]` test is correct, and the `:-` fallback is fail-safe under `set -euo pipefail` if the output were ever missing.\n- **Check ordering:** scope-failure \u2192 block; a `skipped` `self-review` result is only reachable with an empty matrix (job-level `if:` at line 162), so the label message is always the right one; with `fail-fast: false` a single failing leg yields `result=failure` \u2192 block.\n- **Exit-1-on-empty is the only bypass-safe choice** \u2014 an exit 0 for non-`ready` label events would allow open \u2192 label `bug` \u2192 merge unreviewed. The finding above is about documenting the trade-off, not changing the logic.\n- **Security pattern:** the new gate (and the docs snippet) route all `${{ }}` expressions through `env:` mapping, never into the shell \u2014 matches the repo's workflow-security guidance.\n- **CHANGELOG** follows the house `[Unreleased]` convention with working links.\n\n## Notes\n\n- On severity for finding 3: the repo override calls a missing per-job `permissions:` block critical, but the pre-existing w",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

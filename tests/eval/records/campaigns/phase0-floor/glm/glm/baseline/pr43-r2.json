@@ -1,0 +1,56 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "05c581a",
+  "turns": 17,
+  "tool_calls": null,
+  "seconds": 392.7,
+  "setup_seconds": 1.7,
+  "total_seconds": 394.4,
+  "usage": {
+    "in": 70405,
+    "cache_read": 724224,
+    "cache_write": 0,
+    "out": 14369,
+    "source": "cli"
+  },
+  "cost_usd": 1.0733620000000001,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 122,
+      "severity": "warning",
+      "body": "This gate was renamed to `AIReview`, but the repo's actual label is still `Ready` \u2014 `gh label list` shows no `AIReview` label exists. After merge, applying `Ready` no longer matches `\"aireview\"`, so the `scope` job always exits with an empty matrix and the whole self-review dogfood silently stops firing until someone creates the new label by hand. Rename the existing `Ready` label to `AIReview` when this lands (a rename keeps it applied to open PRs), or create `AIReview` and retire `Ready` in the same change."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 56,
+      "severity": "info",
+      "body": "This comment now cites `docs/TRIGGER_MODES.md \u00a7 \"Recipe: run once when labelled \\`AIReview\\`\u2026\"`, but that section (`docs/TRIGGER_MODES.md:64`) is still titled *\u2026labelled `ready`\u2026* and its `empty_reason` example is still `no-ready-label` (`docs/TRIGGER_MODES.md:181,190`). `AGENTS.md:315` also still describes the dogfood as \"label-gated on `ready`\". Update those three spots so the docs keep tracking the reference implementation."
+    }
+  ],
+  "summary": "## Verdict\n\nThe complexity-labeling dogfood itself is correctly wired, but the PR also renames the self-review gate label (`ready` \u2192 `AIReview`) without renaming the actual repo label \u2014 as it stands, merging this silently disables the self-review dogfood until a label is created manually.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:122` | No `AIReview` label exists on the repo (gate label is still `Ready`) \u2014 the dogfood can never fire after merge |\n| 2 | \u2139\ufe0f info | `.github/workflows/self-review.yml:56` | Comment cites a TRIGGER_MODES.md section title that still says `ready`; `AGENTS.md:315` also stale |\n\n## Verified as correct\n\n- **Complexity labeling (the stated purpose) checks out end-to-end:** `complexity-labels-enabled` / `complexity-label-prefix` exist in `action.yml:118-125` and are wired to `AIPRR_COMPLEXITY_LABELS_ENABLED` / `AIPRR_COMPLEXITY_LABEL_PREFIX` (`action.yml:325-326`). `gh_apply_label` (`scripts/reviewer.py:731`) creates a missing label on the 422 fallback, and `gh_remove_labels_by_prefix` replaces stale `complexity:*` labels on re-review \u2014 so the repo's existing `complexity:low/medium/high` labels will be reused, and the test-plan expectation \"prior labels replaced\" matches the code at `scripts/reviewer.py:6664-6682`.\n- **The agent-runner no-op claim is accurate:** `build_agent_runner_noop_warning` (`scripts/reviewer.py:5241`) logs exactly the warning described in the PR for `claude-code`/`cursor` legs.\n- **Case handling is consistent:** the scope job lowercases both the label list and the event label, and the action's defense-in-depth `label-gate: AIReview` matches case-insensitively via `gh_pr_has_label` (`scripts/reviewer.py:773`).\n- **`empty_reason` rename is internally consistent:** producer (line 136) and the gate consumer (line 382) were both updated.\n\n## Outside the diff\n\n- **The PR description's test plan is stale:** it says \"apply the `ready` lab",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "43-complexity-vs-docs"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

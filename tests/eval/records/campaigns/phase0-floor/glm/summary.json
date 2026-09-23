@@ -1,0 +1,151 @@
+{
+  "records_total": 21,
+  "records_complete": 21,
+  "records_failed": 0,
+  "cells": {
+    "claude-code|zai|glm-5.3-flash|baseline|chore/bootstrap-review-extension": {
+      "n": 3,
+      "cost_mean": 1.5597203333333336,
+      "cost_min": 1.253342,
+      "cost_max": 1.72857,
+      "cost_relative_spread": 0.30468795581088143,
+      "seconds_mean": 650.2116666666667,
+      "turns_mean": 13.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|ci/self-review-complexity-labels": {
+      "n": 3,
+      "cost_mean": 1.0505526666666667,
+      "cost_min": 1.030504,
+      "cost_max": 1.0733620000000001,
+      "cost_relative_spread": 0.04079567008856931,
+      "seconds_mean": 407.21166666666664,
+      "turns_mean": 14.666666666666666,
+      "recall_values": [
+        1,
+        1,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 1,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|docs/skill-local-ci-companion": {
+      "n": 3,
+      "cost_mean": 0.9134306666666667,
+      "cost_min": 0.8382090000000001,
+      "cost_max": 1.0569870000000001,
+      "cost_relative_spread": 0.23951243152189622,
+      "seconds_mean": 381.0213333333333,
+      "turns_mean": 12.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/author-association-permission-gate": {
+      "n": 3,
+      "cost_mean": 1.3976116666666665,
+      "cost_min": 1.2501939999999998,
+      "cost_max": 1.5383229999999999,
+      "cost_relative_spread": 0.20615812451479734,
+      "seconds_mean": 624.1033333333334,
+      "turns_mean": 15.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/complexity-labels-all-providers": {
+      "n": 3,
+      "cost_mean": 1.1954163333333332,
+      "cost_min": 1.08103,
+      "cost_max": 1.255067,
+      "cost_relative_spread": 0.14558693498415756,
+      "seconds_mean": 454.00533333333334,
+      "turns_mean": 16.333333333333332,
+      "recall_values": [
+        0,
+        2,
+        2
+      ],
+      "recall_total": 2,
+      "recall_delta": 2,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/iteration-aware-review": {
+      "n": 3,
+      "cost_mean": 3.471505666666667,
+      "cost_min": 3.1143169999999993,
+      "cost_max": 4.1269860000000005,
+      "cost_relative_spread": 0.29170887137636853,
+      "seconds_mean": 666.601,
+      "turns_mean": 41.333333333333336,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|test/self-review-skip-status": {
+      "n": 3,
+      "cost_mean": 0.8850079999999999,
+      "cost_min": 0.828085,
+      "cost_max": 0.9626519999999998,
+      "cost_relative_spread": 0.15205173286569149,
+      "seconds_mean": 385.6863333333333,
+      "turns_mean": 7.333333333333333,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    }
+  },
+  "noise_floor": {
+    "replicated_cells": 7,
+    "cost_relative_spread_median": 0.20615812451479734,
+    "cost_relative_spread_mean": 0.19721453159462313,
+    "cost_relative_spread_worst": 0.30468795581088143,
+    "recall_delta_max": 2,
+    "recall_delta_cells_nonzero": 2
+  },
+  "first_party_unknown_usage_run_ids": [],
+  "duplication": {
+    "available": false,
+    "reason": "run records carry finding counts, not anchors; duplication is measured over structured review outputs (RFC-05)"
+  },
+  "campaign_cost": {
+    "sum_usd": 31.419736,
+    "records_with_cost": 21,
+    "records_without_cost": 0
+  }
+}

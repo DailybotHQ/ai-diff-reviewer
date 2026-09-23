@@ -1,0 +1,86 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "run-claude-code-zai-test-self-re-1790199579",
+  "recorded_at": "2026-09-23T21:39:39Z",
+  "runner": "cli",
+  "provider": "claude-code",
+  "endpoint_kind": "zai",
+  "model": "glm-5.3-flash",
+  "model_alias": null,
+  "runtime_sha": "426aa0eb574dafd17b99ae087d400b367a05b0ea",
+  "prompt_sha256": "ecd63c769299564f3fb0a1b245c677fde7e1af51815d914d44b9b38838678b66",
+  "extension_sha256": null,
+  "sampling": {
+    "requested": {},
+    "sent": {},
+    "stripped": []
+  },
+  "context": {
+    "repo_kind": "pull_request",
+    "head_sha": "test/self-review-skip-status",
+    "base_sha": "",
+    "corpus_case_id": null,
+    "corpus_sha256": null,
+    "changed_files": 3,
+    "omitted_files": 0,
+    "diff_chars": 11418,
+    "diff_truncated": false,
+    "iar_mode": "none",
+    "instruction_files_read": []
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 6,
+    "tool_calls": 0,
+    "risk_tier": "unclassified",
+    "verifier_runs": 0
+  },
+  "outcome": {
+    "findings_total": 3,
+    "findings_by_severity": {
+      "critical": 0,
+      "warning": 2,
+      "info": 1
+    },
+    "findings_verified": 0,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "lenient",
+      "passed": true
+    },
+    "score": {
+      "must_find_total": 0,
+      "must_find_hits": 0,
+      "false_positives": 0,
+      "unlabelled": 3,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 65184,
+    "cache_read_tokens": 249280,
+    "cache_write_tokens": 0,
+    "output_tokens": 15101,
+    "source": "cli"
+  },
+  "cost_usd": 0.828085,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 1.971,
+    "provider_seconds": 401.269,
+    "verifier_seconds": null,
+    "total_seconds": 403.217
+  },
+  "status": "completed",
+  "failure_class": null,
+  "campaign": {
+    "id": "phase0-floor",
+    "cell": "glm|baseline|pr15",
+    "repetition": 1,
+    "arm": "baseline"
+  }
+}

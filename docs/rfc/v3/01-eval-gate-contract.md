@@ -97,31 +97,37 @@ n = 27 replicated cells from the Jev campaign: median spread 0.266, worst
 bootstrap 95 % interval clustered by PR family, ×3 repetitions).
 **Re-measured 2026-09-23 (Phase 0, PLAN_v3_implementation Task 8)** on the
 stabilized runtime (temperature 0 since v2.4.0), default lane grok-4.5 CLI
-`balanced`, runtime `426aa0e`: the 7 historical PRs × 3 (`phase0-floor`,
-median spread 0.252, worst 0.403, recall swing 1 in 1 of 7 cells) and the 21
-critical fixture trees × 3 (`phase0-trees-critical`, median 0.294, worst
-0.680, recall swing 0). The numbers below are the **pooled default-lane
-floor, n = 28 replicated cells**: median 0.286, mean 0.270, worst 0.680,
-recall swing 1. Records: `tests/eval/records/campaigns/phase0-*/`, summaries in
-each `summary.json`; the constants live in `tests/eval/determinism.py`.
+`balanced`, runtime `426aa0e`: the 7 historical PRs × 3 (`phase0-floor`
+grok lane, median spread 0.252, worst 0.403, recall swing 1 in 1 of 7 cells)
+and the 21 critical fixture trees × 3 (`phase0-trees-critical`, median 0.294,
+worst 0.680, recall swing 0). A second floor lane, Claude Code on Z.ai
+`glm-5.3-flash` (`phase0-floor` glm, 7 × 3), measured median 0.206, worst
+0.305 and a **recall swing of 2** in 2 of 7 cells. Because the verdict pairs
+cells from every lane in the baseline, the numbers below are the **all-lane
+floor, n = 35 replicated cells**: median 0.268, mean 0.256, worst 0.680,
+recall swing 2 — within 1 % of the Jev estimate, so the floor is confirmed,
+not shrunk (the default lane alone would allow 0.286 / swing 1; the
+decision log may tighten per lane later, never loosen). Records:
+`tests/eval/records/campaigns/phase0-*/`, summaries in each `summary.json`
+and `campaigns/summary.json`; the constants live in `tests/eval/determinism.py`.
 
 | Verdict | Rule | Number today | Why this number |
 |---|---|---|---|
-| **Promotable — cost** | paired relative cost difference, CI excludes 0 **and** point estimate ≥ 1.0 × median cell spread | ≥ 0.29 (≈ 29 %) | anything smaller is inside one cell's typical repetition spread (`noise_floor.cost_relative_spread_median` = 0.286, n = 28) |
-| **Promotable — recall** | net additional must-find hits across the corpus, CI excludes 0 **and** net ≥ (max observed repetition swing + 1) | ≥ 2 defects | the largest swing between identical runs was 1 (`noise_floor.recall_delta_max`; Jev had seen 2 before temperature 0) |
+| **Promotable — cost** | paired relative cost difference, CI excludes 0 **and** point estimate ≥ 1.0 × median cell spread | ≥ 0.27 (≈ 27 %) | anything smaller is inside one cell's typical repetition spread (`noise_floor.cost_relative_spread_median` = 0.268, n = 35) |
+| **Promotable — recall** | net additional must-find hits across the corpus, CI excludes 0 **and** net ≥ (max observed repetition swing + 1) | ≥ 3 defects | the largest swing between identical runs was 2 (`noise_floor.recall_delta_max`, glm lane; the default lane swung 1) |
 | **Promotable — precision** | false-positive findings per case reduced, CI excludes 0, ≥ 20 adjudicated positive cases in the sample | ≥ 20 % fewer FP per case | S7 "Claim improved quality only with separate evidence: ≥ 20 % fewer false-positive findings per PR" |
-| **Blocking — recall regression** | lane recall on the pinned corpus below the stored baseline by more than the swing | > 1 defect below baseline | E-15a; swing 1 measured in Phase 0 |
+| **Blocking — recall regression** | lane recall on the pinned corpus below the stored baseline by more than the swing | > 2 defects below baseline | E-15a; swing 2 re-measured in Phase 0 |
 | **Blocking — unadjudicated critical** | any `critical_positive` label with `adjudication.status != adjudicated` in the scored set | 0 tolerated | `corpus_validate.py` F7 rule, extended to the reviewer scorer |
-| **Blocking — determinism widened** | lane median spread > 1.5 × stored baseline median, or worst > 1.0 | median > 0.43 or worst > 1.0 | baseline median 0.286, worst 0.680 (Phase 0) |
+| **Blocking — determinism widened** | lane median spread > 1.5 × stored baseline median, or worst > 1.0 | median > 0.40 or worst > 1.0 | baseline median 0.268, worst 0.680 (Phase 0) |
 | **Blocking — instrument** | any run record invalid against the schema; any first-party lane run with `usage_known = false`; a cell missing a repetition | 0 tolerated | P-7; S7 F4 |
 | **Descriptive only** | n < 3 per cell, or a lane with fewer than 4 cases | — | E-17 |
 
 The promotion factor 1.0 × median spread is deliberately conservative and
 cheap to explain; the decision log may raise it, never lower it. Phase 0
-kept the factor at 1.0: the re-measured median (0.286) landed within 8 % of
-the Jev figure, so the floor was confirmed rather than shrunk, and the
-recall thresholds tightened by one defect because temperature 0 removed
-the 2-defect swings. First measured precision on the default lane: 82 / 82
+kept the factor at 1.0 and the recall thresholds unchanged: the re-measured
+all-lane median (0.268) landed within 1 % of the Jev figure and the glm lane
+still swings by 2 defects, so the floor was confirmed rather than shrunk.
+First measured precision on the default lane: 82 / 82
 findings adjudicated true over the 21 critical trees
 (`tests/eval/records/adjudications/phase0-trees-critical.json`, adjudicated
 by the executing agent against the fixture trees; developer countersign

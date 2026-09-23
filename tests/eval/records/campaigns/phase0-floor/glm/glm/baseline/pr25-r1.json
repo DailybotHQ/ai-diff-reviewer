@@ -1,0 +1,71 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 14,
+  "tool_calls": null,
+  "seconds": 498.9,
+  "setup_seconds": 2.0,
+  "total_seconds": 500.9,
+  "usage": {
+    "in": 98066,
+    "cache_read": 570624,
+    "cache_write": 0,
+    "out": 19108,
+    "source": "cli"
+  },
+  "cost_usd": 1.253342,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 175,
+      "severity": "warning",
+      "body": "This step sits between the tag push (Step 3) and the release notes + GitHub Release (Steps 4\u20135), so any transient failure here \u2014 an `npx`/npm hiccup, tag propagation longer than the 5 s sleep, or a non-fast-forward rejection because `main` moved during the run \u2014 fails the job after the tag exists but **before the GitHub Release is created**. That orphans the release: `release.yml` fires on `release: published` and never runs, the generated notes are lost, and the next merge to `main` starts cutting the *next* version rather than recovering this one. Moving Step 3.5 after Step 5 keeps the loud-failure smoke test (the workflow still goes red) while guaranteeing a completed release; the PR's Risks section covers the tag being safe but not the skipped Steps 4\u20135."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 209,
+      "severity": "warning",
+      "body": "If the just-pushed tag hasn't propagated when `npx skills update` resolves tags (the 5 s sleep is best-effort), the update lands on the *previous* tag, the vendored copy stays unchanged, and this branch reports success \u2014 `Vendored ai-diff-reviewer already at ${NEW_VERSION}` \u2014 while the copy is actually one release behind. All three stated benefits (smoke-test, cloning parity, lockfile freshness) then degrade silently instead of failing loudly. Assert the vendored frontmatter version before the diff check so a stale resolution fails:\n\n```suggestion\n          # Guard against tag-propagation lag: if `npx skills update` resolved\n          # the PREVIOUS tag, the vendored copy is unchanged and would hit the\n          # \"nothing to sync\" path below while reporting success at NEW_VERSION.\n          VENDORED_VERSION=\"$(sed -n 's/^version: \"\\(.*\\)\"/\\1/p' \\\n            .agents/skills/ai-diff-reviewer/SKILL.md | head -n1)\"\n          if [ \"$VENDORED_VERSION\" != \"${NEW_VERSION#v}\" ]; then\n            echo \"::error::Vendored ai-diff-reviewer at ${VENDORED_VERSION}, expected ${NEW_VERSION#v} \u2014 tag not propagated yet or update silently failed.\"\n            exit 1\n          fi\n\n          if git diff --quiet -- .agents/skills/ai-diff-reviewer skills-lock.json; then\n            echo \"Vendored ai-diff-reviewer already at ${NEW_VERSION}; nothing to sync.\"\n            exit 0\n          fi\n```"
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "info",
+      "body": "`npx --yes skills` executes `skills@latest` \u2014 an unpinned third-party CLI \u2014 in the release path, while the checkout token is persisted in `.git/config` and the job holds `contents: write`; a compromised or merely breaking `skills` release runs arbitrary code at every tag cut. Consider pinning it (`npx --yes skills@<version> update`, bumped deliberately) \u2014 the same SLSA-2 logic the repo applies to third-party actions."
+    }
+  ],
+  "summary": "## Verdict\n\nStrong, well-verified dogfooding infrastructure \u2014 the vendored copy is provably consistent with its sources, and the new self-review input is real and honored by the runtime. Two warnings on the new `auto-release.yml` Step 3.5 are release-pipeline robustness gaps worth fixing (both are small, mechanical changes); nothing blocking.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:175` | Step 3.5 failure orphans the release \u2014 tag pushed but GitHub Release + notes never created |\n| 2 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:209` | Stale-tag resolution yields a false \"already at ${NEW_VERSION}\" success; no version assertion after update |\n| 3 | \u2129\ufe0f info     | `.github/workflows/auto-release.yml:206` | `npx --yes skills` runs an unpinned third-party CLI in the release path |\n\n## What I verified (and found clean)\n\n- **Vendored consistency:** `diff -rq .agents/skills/ai-diff-reviewer skills/ai-diff-reviewer` is empty \u2014 the vendored baseline is byte-identical to the source-of-truth copy, and `.agents/skills/ai-diff-reviewer/prompt.md` is byte-identical to `prompts/default.md`, so the `Skills \u2014 prompt-sync invariant` CI job holds from day one. The first-time vendor is the bootstrap itself, not a DON'T #14 violation.\n- **`self-review.yml` input is real:** `prompt-extension-file` is a declared input (`action.yml:54`), wired to `AIPRR_PROMPT_EXTENSION_FILE` (`action.yml:267`), and honored by the runtime (`scripts/reviewer.py:3664`). The file will exist in the checked-out PR head, so the extension actually layers on.\n- **No re-trigger loop:** GitHub doesn't natively honor `[skip release]`, but the job-level guard at `auto-release.yml:35-37` catches the Step 3.5 commit's own push by both the `chore(release):` prefix and the marker substring. Correct as documented.\n- **`.review/extension.md` anchors all check out:** every referenced helper exists in `scripts/reviewer.py` ",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 12
+  }
+}

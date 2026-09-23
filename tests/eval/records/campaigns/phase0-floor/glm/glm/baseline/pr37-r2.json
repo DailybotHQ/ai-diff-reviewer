@@ -1,0 +1,56 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 11,
+  "tool_calls": null,
+  "seconds": 490.7,
+  "setup_seconds": 1.8,
+  "total_seconds": 492.5,
+  "usage": {
+    "in": 74943,
+    "cache_read": 406144,
+    "cache_write": 0,
+    "out": 19168,
+    "source": "cli"
+  },
+  "cost_usd": 1.0569870000000001,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "This branch forked from the v1.6.2 era of `main` (merge-base `7f75f05`); `main` has since shipped through v2.5.1 and rewrote this same file \u2014 its rewrite spans lines 1\u2013121, exactly the region this hunk modifies. `git merge-tree main HEAD` reports a content conflict in `skills/ai-diff-reviewer/SKILL.md`, so the branch cannot merge as-authored, and resolving in favor of this side would revert main's v2.x docs (five capabilities \u2192 four, `@v2` \u2192 `@v1`, dropping the IAR dedupe note and `apply-review` references). Main's H1 is already character-identical to this PR's proposed title \u2014 the reframe exists there in further-evolved form. Rebase onto current `main` and re-evaluate, or close as superseded."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 34,
+      "severity": "info",
+      "body": "On current `main` this table has five rows \u2014 a fifth sub-skill, `apply-review` (read the CI-posted review on the open PR and walk through applying its findings), was added in the v2.x line, and the `Surface` column this PR introduces already exists there. If this branch is rebased rather than closed, this table, the frontmatter `description:`, and the \"Two supported flows\" table all need the fifth capability folded in, or the doc will under-describe the shipped skill."
+    }
+  ],
+  "summary": "## Verdict\n\nDo not merge as-is \u2014 this branch forked from the v1.6.2 era of `main` and the work it proposes has already shipped on `main` in further-evolved form. Rebase onto current `main` and re-evaluate, or close as superseded.\n\n## What I verified\n\n- **Branch topology.** Merge-base with `main` is `7f75f05` (the v1.6.2 dogfood commit). `main` has since advanced to v2.5.1 (PRs up to #59 merged) and rewrote this same file \u2014 180 insertions / 104 deletions, with the rewrite spanning lines 1\u2013121, exactly where this PR's hunks live.\n- **Merge conflict, confirmed not predicted.** `git merge-tree --write-tree main HEAD` reports `CONFLICT (content): Merge conflict in skills/ai-diff-reviewer/SKILL.md`. The branch cannot merge as-authored, and resolving the conflicts in favor of this side would regress main's v2.x documentation: five capabilities \u2192 four, `@v2` \u2192 `@v1` pins, dropping the \"a recommendation is not a check result\" paragraph, the IAR round-2+ dedupe note, and the `apply-review` sub-skill references.\n- **The reframe already exists on `main`.** Main's H1 is already `# AI Diff Reviewer \u2014 Local & CI Companion Skill` \u2014 character-identical to this PR's proposed title \u2014 and its frontmatter `description:` already opens \"Local & CI companion\u2026\". Main also already has the `Surface` column this PR introduces, plus a \"CI-only surfaces\" section and a fifth sub-skill (`apply-review`) this PR predates.\n- **On its own base, the craft is sound.** Relative to the merge-base, Steps 0\u20135 and Notes are untouched (the final hunk is a pure 13-line insertion); the removed \"First-time bootstrap\" trailer is fully covered by Step 2.5 (yes/no/never + `.review/.skip-bootstrap`); the compressed parity paragraph preserves the semantics \u2014 I checked `setup/SKILL.md` Step 5: accepting the handoff wires `prompt-extension-file:` into the workflow, declining omits it. The vendored `.agents/skills/ai-diff-reviewer/` copy is correctly left alone (Rule #14).\n\n## Findings\n\n| # | Severity | File | Summary |",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

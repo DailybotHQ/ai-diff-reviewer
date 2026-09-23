@@ -1,0 +1,68 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 347.5,
+  "setup_seconds": 1.8,
+  "total_seconds": 349.3,
+  "usage": {
+    "in": 71259,
+    "cache_read": 309184,
+    "cache_write": 0,
+    "out": 14136,
+    "source": "cli"
+  },
+  "cost_usd": 0.8642869999999999,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 237,
+      "severity": "warning",
+      "body": "Any label application by a human or a third-party bot re-fires this workflow (`labeled` is subscribed and fires for *any* label \u2014 see `docs/TRIGGER_MODES.md:62`), and on that run `scope` emits `matrix=[]`, so this check replaces the previously **green** `Self-review gate` on the same SHA with a **red** one. Concrete sequence: review passes on commit X \u2192 teammate triages by adding `bug` \u2192 merge is blocked again, and the only unblock is remove + re-add `ready`, i.e. a full paid re-review of an unchanged diff. (The action's own `self-reviewed:*` label is safe \u2014 `gh_apply_label` uses the workflow `GITHUB_TOKEN`, which GitHub doesn't recurse runs from \u2014 but ordinary triage labels are not.) Consider treating a non-`ready` `labeled` event as satisfied when the PR already carries a review stamp (e.g. check `github.event.pull_request.labels.*.name` for `self-reviewed:*`) instead of failing on the empty matrix."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 64,
+      "severity": "warning",
+      "body": "This rename leaves `README.md:291` still pointing readers at the old title \u2014 it quotes and links \"Recipe: run once when labelled `ready`, and show Skipped (not green)\", which no longer exists as a section name. Update the README link text in this PR so the cross-reference resolves (Rule #7 \u2014 docs stay in sync)."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 218,
+      "severity": "info",
+      "body": "This job only runs `echo`/`exit`, but it inherits `pull-requests: write` from the workflow-level `permissions:` block. Consumers copying the technique-3 recipe into a repo without a workflow-level block would hand a write token to a pure-decision job; an explicit empty grant keeps the least-privilege posture the recipe teaches.\n\n```suggestion\n    if: always()\n    permissions: {}\n    runs-on: ubuntu-latest\n```"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 120,
+      "severity": "info",
+      "body": "Naming collision in the copy-paste recipe: technique 2's decision job is named `gate` (line 80, and line 111 references `needs.gate.outputs.matrix`), while this snippet names the *merge* gate `gate` and expects the decision job to be `gate-decision`. A reader stitching techniques 2 + 3 verbatim gets two jobs named `gate` (invalid workflow). Consider renaming technique 2's decision job to `gate-decision` or adding a one-line note."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-documented fix to a real GitHub gotcha \u2014 the gate mechanic itself is correct (fail-closed on scope crash, env-mapped interpolation with no `${{ }}` reaching the shell, per-leg Skipped semantics preserved). Two warnings before merge: the gate can flip red *after* a passing review when any unrelated label is applied, and the recipe rename leaves a stale cross-reference in `README.md`.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:237` | Gate flips red when any unrelated label is applied after a passing review, blocking merge until a full paid re-review |\n| 2 | \u26a0\ufe0f warning | `docs/TRIGGER_MODES.md:64` | Recipe rename leaves `README.md:291` referencing a section title that no longer exists |\n| 3 | \u2139\ufe0f info | `.github/workflows/self-review.yml:218` | Gate job inherits `pull-requests: write` it never needs |\n| 4 | \u2139\ufe0f info | `docs/TRIGGER_MODES.md:120` | Recipe's technique 2 and technique 3 use colliding job names for different jobs |\n\n## Notes\n\n- **Non-obvious and load-bearing, worth a comment in the workflow:** the design only stays coherent because the action applies `self-reviewed:*` via the workflow's `GITHUB_TOKEN` (`github-token: ${{ secrets.GITHUB_TOKEN }}`), and GitHub does not create new workflow runs from `GITHUB_TOKEN`-triggered events. If a consumer switches to a PAT for `github-token`, the action's own label application re-fires the workflow into an empty-matrix run and the gate goes red moments after turning green. One line in the technique-3 note would spare consumers that trap.\n- **Branch-protection flip is manual and unverifiable from the diff.** The gate only works once the dynamic `Self-review \u2014 <provider>` names are removed from Required and `Self-review gate` is added \u2014 the PR description says to do it; make sure it happens in the same merge window, or the protection momentarily requires checks that no longer exist.\n- **Nice touch:** the `> ",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

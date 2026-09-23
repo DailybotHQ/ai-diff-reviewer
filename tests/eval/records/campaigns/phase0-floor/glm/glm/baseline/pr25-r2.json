@@ -1,0 +1,71 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 14,
+  "tool_calls": null,
+  "seconds": 552.8,
+  "setup_seconds": 2.0,
+  "total_seconds": 554.7,
+  "usage": {
+    "in": 110479,
+    "cache_read": 1039808,
+    "cache_write": 0,
+    "out": 24998,
+    "source": "cli"
+  },
+  "cost_usd": 1.6972490000000002,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 191,
+      "severity": "warning",
+      "body": "Step 3.5 runs **before** the release is published, so its failure takes Steps 4\u20135 down with it: GitHub Actions halts the job on a failed step, meaning a transient `npx skills update` error (the `sleep 5` propagation guard is optimistic) leaves the already-pushed `vX.Y.Z` tag with no GitHub Release object or notes. The `git push origin HEAD:main` below also has no pull/rebase, so a commit landing on `main` during the multi-second npm install rejects the push with the same effect.\n\nMove this step after Step 5 \u2014 the release publish consumes nothing it produces \u2014 and add `git pull --rebase --autostash origin main` before committing. The PR's risk note (\"the tag itself is already published even if 3.5 fails\") undercounts the blast radius: Steps 4\u20135 are skipped too."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "warning",
+      "body": "This is the first workflow step in the repo that executes an npm package at run time, and `npx --yes skills` resolves to whatever is latest on npm at that moment \u2014 a compromised or maliciously updated `skills` release would execute on this runner holding a token that can push to `main` (`permissions: contents: write`; the checkout at line 43 uses `AUTOMATION_GITHUB_TOKEN || GITHUB_TOKEN`). That's arbitrary code execution in the release path of an action thousands of consumers pin.\n\nPin the CLI the same way third-party actions are SHA-pinned: `npx --yes skills@<version> update ai-diff-reviewer`, bumped deliberately in a reviewed change. The smoke-test value is unaffected \u2014 the skill *content* still installs exactly as a consumer's would. (Verified: no other workflow under `.github/workflows/` runs `npx` today, so this is a new surface, not an existing pattern.)"
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 210,
+      "severity": "info",
+      "body": "If tag propagation lags past the `sleep 5`, `npx skills update` can resolve the *previous* tag, change nothing, and this line then claims the vendored copy is \"already at ${NEW_VERSION}\" while it is actually still on the prior release \u2014 misleading precisely during the lag scenario this step is built around.\n\nDerive the message from the installed version (e.g. `grep '^version:' .agents/skills/ai-diff-reviewer/SKILL.md`) instead of asserting the expected one."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-evidenced dogfooding work \u2014 the vendoring is byte-consistent and every code-anchored claim in the new `.review/extension.md` verifies against the codebase \u2014 but the new `auto-release.yml` step sits **before** release publication (so its failure suppresses release notes), and it introduces an unpinned npm-execution surface into the release path.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:191` | Step 3.5 failure skips Steps 4\u20135 \u2014 pushed tag ends up with no GitHub Release or notes |\n| 2 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:206` | `npx --yes skills` is unpinned and executes on a runner holding a `main`-pushing token |\n| 3 | \u2139\ufe0f info     | `.github/workflows/auto-release.yml:210` | \"already at ${NEW_VERSION}\" message can be wrong during tag-propagation lag |\n\n## What didn't fit in inline comments\n\n**Parity verification \u2014 all green.** `diff -rq .agents/skills/ai-diff-reviewer skills/ai-diff-reviewer` \u2192 byte-identical; both `prompt.md` copies are byte-identical to `prompts/default.md` (the CI prompt-sync invariant holds); all three SKILL.md `version:` fields agree at 1.4.2 between vendored and source-of-truth copies.\n\n**The `[skip release]` loop-guard is sound.** The job-level `if` (`.github/workflows/auto-release.yml:35-37`) catches both the `chore(release):` prefix and the `[skip release]` marker, so Step 3.5's own push to `main` cannot re-trigger the workflow. The Step 2.5 \u2192 3 \u2192 3.5 sequencing (bump version \u2192 tag \u2192 refresh vendored from the fresh tag) is coherent.\n\n**`.review/extension.md` fact-check \u2014 every claim resolves.** `scripts/reviewer.py` is 4018 LOC (\"~4000\" \u2713); `MAX_TOOL_OUTPUT_BYTES: int = 32_000`, `DEFAULT_MAX_TURNS: int = 30`, and `SEVERITY_CRITICAL: str = \"critical\"` exist verbatim; every named helper (`safe_repo_path`, `_build_cli_env`, `_CLI_ENV_ALLOWLIST`, `run_cmd`, `redact_for_log`, `register_secret`/`scrub_secrets`, `w",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 12
+  }
+}

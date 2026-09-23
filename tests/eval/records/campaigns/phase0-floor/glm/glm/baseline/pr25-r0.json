@@ -1,0 +1,89 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 12,
+  "tool_calls": null,
+  "seconds": 898.9,
+  "setup_seconds": 1.9,
+  "total_seconds": 900.8,
+  "usage": {
+    "in": 118087,
+    "cache_read": 534720,
+    "cache_write": 0,
+    "out": 34831,
+    "source": "cli"
+  },
+  "cost_usd": 1.72857,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 175,
+      "severity": "warning",
+      "body": "Step 3.5 sits between tag publication (Step 3) and GitHub Release publication (Steps 4\u20135), so any transient failure here \u2014 npm registry hiccup, tag propagation slower than the 5s sleep, or a concurrent merge to `main` making the `git push origin HEAD:main` a non-fast-forward \u2014 kills the job with the `vX.Y.Z` and `v1` tags already public but **no GitHub Release ever created**. A re-run doesn't repair it: Step 2 now sees the just-pushed tag as `LATEST_TAG`, finds no commits since it, sets `skip=true`, and the run goes green with Steps 4\u20135 skipped. The PR's risk section covers the tag being out, but not the release page being suppressed.\n\nFix: move this step after Step 5. `npx skills update` only needs the git tag, which Step 3 already pushed \u2014 release publication becomes immune to install/propagation failures, and a failure here still fails the workflow loudly as intended."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "warning",
+      "body": "`npx --yes skills` executes whatever `skills@latest` resolves to at run time, and this job's checkout deliberately persists a push-to-`main` token (`AUTOMATION_GITHUB_TOKEN || GITHUB_TOKEN`) in `.git/config` \u2014 so a compromised or maliciously updated `skills` npm package gets code execution on the release runner with credentials that can rewrite the action code every consumer runs via `@v1`. This is the first executable `npx` in `.github/workflows/`, and the repo's own posture pins third-party supply chain elsewhere (SHA-pinned actions, `skills-lock.json` hashes).\n\nPin a concrete version (`npx --yes skills@X.Y.Z update ai-diff-reviewer`) and bump it deliberately, like any other dependency."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 232,
+      "severity": "warning",
+      "body": "Once this lands, every self-review leg hard-fails on any PR whose branch doesn't contain `.review/extension.md`: the runtime reads the file unconditionally when the input is set (`scripts/reviewer.py:3667`) and a missing file hits the `OSError` path that flips the tracking comment to FAILED and returns exit 1. Long-lived branches cut before this merge \u2014 and fork PRs cut from older `main` \u2014 go red on **all** legs when `ready` is applied, blocking the gate with \"Could not read prompt extension file\" as the only signal.\n\nConsider degrading a *missing* extension file to a logged warning + base-prompt-only review (split `except FileNotFoundError` from other `OSError`, which can stay fatal) \u2014 that matches the non-fatal treatment collapse-previous and the tracking comment already get, and stale branches still get reviewed."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 209,
+      "severity": "info",
+      "body": "`git diff --quiet` sees only tracked files, so a release that purely *adds* files under the skill (e.g. a new sub-skill directory) leaves this check green and prints a false \"already at ${NEW_VERSION}; nothing to sync\" while the new content is never committed. The lockfile hash and SKILL.md version bump usually change too and mask it, but the guard is one `git add -A` away from being airtight (the later directory-form `git add` on line 214 already stages new files \u2014 only the check misses them):\n\n```suggestion\ngit add -A .agents/skills/ai-diff-reviewer skills-lock.json\nif git diff --cached --quiet -- .agents/skills/ai-diff-reviewer skills-lock.json; then\n```"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity": "info",
+      "body": "This line duplicates line 358 verbatim (\"**Option A \u2014 `.review/extension.md`** (recommended):\" appears twice back-to-back). Since this vendored copy is a byte-copy of the released tag *and* of the `skills/ai-diff-reviewer/` source-of-truth, the fix belongs in `skills/ai-diff-reviewer/SKILL.md` (per the new DON'T #14 you'd never hand-edit this file) \u2014 worth doing in this PR or before the next tag so the Step 3.5 refresh cycle doesn't re-vendor the duplicate on every release.\n\n```suggestion\n**Option A \u2014 `.review/extension.md`** (recommended):\n```"
+    },
+    {
+      "path": ".review/extension.md",
+      "line": 136,
+      "severity": "info",
+      "body": "The citation is wrong on arity: `safe_repo_path` takes a single repo-relative path \u2014 `def safe_repo_path(rel: str) -> Path` (`scripts/reviewer.py:2122`) \u2014 not `(repo_root, candidate)`. This file steers every future self-review, and a phantom two-arg signature either gets cargo-culted or undermines trust in the override. Every other code anchor in the file checks out, which makes this one stand out.\n\n```suggestion\n  `safe_repo_path(candidate)`. Direct `Path.resolve()` on\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-documented dogfooding infrastructure whose code anchors almost all verify cleanly \u2014 but the new release step's placement can silently suppress GitHub Release publication, and the self-review wiring now hard-fails on any branch lacking the extension file. Three warnings worth addressing before merge.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/auto-release.yml:175` | Step 3.5 failure after tag push skips Steps 4\u20135 \u2014 tag public, GitHub Release never created, and a re-run self-heals green |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/auto-release.yml:206` | Unpinned `npx --yes skills` runs `skills@latest` with a persisted push-to-main token in `.git/config` |\n| 3 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:232` | Missing `.review/extension.md` on stale branches / fork PRs hard-fails all review legs (`reviewer.py:3667`) |\n| 4 | \u2139\ufe0f info | `.github/workflows/auto-release.yml:209` | `git diff --quiet` misses untracked new files; pure-addition releases silently no-op with a false \"already at\" message |\n| 5 | \u2139\ufe0f info | `.agents/skills/ai-diff-reviewer/SKILL.md:360` | Duplicated \"Option A\" line, vendored from the released tag \u2014 fix belongs in `skills/` (source of truth) |\n| 6 | \u2139\ufe0f info | `.review/extension.md:136` | `safe_repo_path(repo_root, candidate)` cites a two-arg signature; the real one takes a single arg |\n\n## What I verified and found correct\n\nThe verification quality of this PR is genuinely high, and it shows:\n\n- **Vendored-copy integrity.** `.agents/skills/ai-diff-reviewer/` is byte-identical to the `skills/ai-diff-reviewer/` source-of-truth, and the vendored `prompt.md` is byte-identical to `prompts/default.md` \u2014 the two-copy invariant this PR formalizes starts out actually true. The `skills-lock.json` entry matches its siblings' shape.\n- **Extension anchors are real.** All twelve-plus symbols the extension cites exist in `scripts/reviewer.py` at this commit (`safe_",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 6,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 3,
+    "coverage_paths": 4,
+    "changed_files": 12
+  }
+}

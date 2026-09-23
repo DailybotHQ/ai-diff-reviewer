@@ -279,15 +279,16 @@ Example CI dashboard snippet — surface cost telemetry as a workflow annotation
 
 ## Measured noise floor and the eval-gate verdict (v3)
 
-Since v3 every run writes a `run-record/3.0` file (`.aiprr/run-record.json`) with cost, usage, turns and separated timings, and the eval gate ([RFC-01](rfc/v3/01-eval-gate-contract.md)) reasons over replicated runs of the pinned corpus instead of single dogfood logs. The first measured floor (Phase 0, 2026-09-23, default lane grok-4.5 CLI `balanced`, 3 repetitions per cell):
+Since v3 every run writes a `run-record/3.0` file (`.aiprr/run-record.json`) with cost, usage, turns and separated timings, and the eval gate ([RFC-01](rfc/v3/01-eval-gate-contract.md)) reasons over replicated runs of the pinned corpus instead of single dogfood logs. The first measured floor (Phase 0, 2026-09-23, 3 repetitions per cell; default lane grok-4.5 CLI `balanced` unless noted):
 
 | Set | Cells | Cost spread median `(max−min)/mean` | Worst | Recall swing | Mean cost / run |
 |---|---|---|---|---|---|
 | 7 historical PRs (`phase0-floor`) | 7 | 0.252 | 0.403 | 1 defect (1 of 7 cells) | $0.60 (range $0.34–$1.46) |
 | 21 critical fixture trees (`phase0-trees-critical`) | 21 | 0.294 | 0.680 | 0 | $0.093 |
-| **Pooled default lane** | **28** | **0.286** | **0.680** | **1** | — |
+| 7 historical PRs, Claude Code on Z.ai `glm-5.3-flash` (`phase0-floor` glm) | 7 | 0.206 | 0.305 | 2 defects (2 of 7 cells) | $1.50 (range $0.89–$3.47, list price) |
+| **All baseline lanes** | **35** | **0.268** | **0.680** | **2** | — |
 
-What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 29 % on a paired comparison is inside the noise and is not promotable; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.43) or any cell exceeds 1.0. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
+What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 27 % on a paired comparison is inside the noise and is not promotable; a recall claim needs a net gain of 3 defects; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.40) or any cell exceeds 1.0. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
 
 ## Complete token accounting and focused context
 
