@@ -3,6 +3,8 @@ version: 2
 # Keep the GitHub Actions used by this repo's workflows up to date. The
 # runtime itself is stdlib-only (no pip/npm ecosystem to track), so the only
 # dependency surface worth automating is the `uses:` action versions.
+# `directory: /` covers every file under .github/workflows/ — including
+# eval-campaign.yml (v3 eval gate, online half) added by PLAN_v3_implementation.
 updates:
   - package-ecosystem: github-actions
     directory: /

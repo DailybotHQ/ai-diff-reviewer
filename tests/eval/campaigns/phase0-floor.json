@@ -1,0 +1,19 @@
+{
+  "campaign_id": "phase0-floor",
+  "repetitions": 3,
+  "lanes": {
+    "grok": {"provider": "grok", "model": "balanced", "api_base": "", "api_key_env": "XAI_API_KEY", "indicative_max_cost_usd": 1.5},
+    "glm": {"provider": "claude-code", "model": "economy", "api_base": "https://api.z.ai/api/anthropic", "api_key_env": "ZAI_CODING_API_KEY", "indicative_max_cost_usd": 2.5}
+  },
+  "arms": [{"name": "baseline", "prompt": "prompts/default.md", "extension": ".review/extension.md"}],
+  "cells": [
+    {"kind": "tree", "case": "tests/eval/cases/C064.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C065.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C066.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C067.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C071.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C073.json"},
+    {"kind": "tree", "case": "tests/eval/cases/C074.json"}
+  ],
+  "note": "Phase 0 floor re-measurement (RFC-01 § Thresholds): the 7 historical PRs as corpus cells × 3 repetitions on the lanes whose secrets exist. Historical-PR cases are `historical_pr` fixtures — the driver runs them as PR cells when a worktree is provided; edit `cells` to `{kind: pr, repo, pr, worktree}` on a runner with the worktrees checked out, or point at `trees` cases for an offline-shaped campaign."
+}

@@ -312,6 +312,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         usage = state.usage
         cost = r.estimate_cost_usd(args.model or "", usage) if usage else None
         tool_calls = sum(1 for m in messages if m["role"] == "assistant" for b in (m["content"] if isinstance(m["content"], list) else []) if isinstance(b, dict) and b.get("type") == "tool_use")
+    # Run record for the PR path (v3): same shape the runtime writes; the
+    # campaign driver stamps `campaign` and stores it beside the result.
+    record = r.RunRecord()
+    record.provider = args.provider if args.provider in r.PROVIDER_IDS_FOR_RECORD else record.provider
+    record.model = args.model or ""
+    record.endpoint_kind = getattr(getattr(provider, "profile", None), "kind", "unknown") or "unknown"
+    record.runtime_sha = r._runtime_sha(str(ROOT))
+    record.prompt_sha256 = r._sha256_text(system_prompt)
+    record.head_sha = ctx.head_ref
+    record.populate_context(ctx, base_sha="", iar_mode="none")
+    record.setup_seconds = round(setup_seconds, 3)
+    record.run_started = True
+    record.provider_seconds = round(time.time() - t0, 3)
+    _usage_obj = usage or r.UsageTelemetry()
+    if _usage_obj.source != r.USAGE_SOURCE_UNAVAILABLE and _usage_obj.cost_usd is None and cost is not None:
+        _usage_obj.cost_usd = cost
+    record.populate_from_run(provider=provider, state=None if isinstance(provider, r.AgentRunnerProvider) else state,
+                             result=result, usage=_usage_obj, max_turns=args.max_turns)
+    record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
     payload = {
         "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
         "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
@@ -330,6 +349,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     payload["score"] = score_run(payload)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(payload, indent=2))
+    doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
+    sc = payload["score"]
+    doc["outcome"]["score"] = {"must_find_total": sc["must_find_total"], "must_find_hits": sc["must_find_hits"],
+                               "false_positives": len(sc["false_positives"]), "unlabelled": sc["unlabelled_findings"],
+                               "adjudicated_true": None, "adjudicated_false": None}
+    Path(str(args.out) + ".run-record.json").write_text(r.scrub_secrets(json.dumps(doc, indent=2)) + "\n", encoding="utf-8")
     print(fmt_row(payload))
     return payload
 

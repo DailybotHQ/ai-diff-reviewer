@@ -9,7 +9,8 @@ Checks, without any network or dependency:
 - `usage_known == false` ⇒ `usage` and `cost_usd` are null (unknown is never zero);
 - files are bounded (1 MB each, 1 000 per tree);
 - when a `campaign.json` manifest sits beside records, every declared cell
-  has at least `repetitions` completed records;
+  has at least `repetitions` completed records (`ledger.json` / `summary.json`
+  written by the campaign driver are auxiliary and skipped);
 - every `verdicts/*.json` validates against `verdict.schema.json`.
 
     python3 tests/eval/records_validate.py --records tests/eval/records
@@ -32,6 +33,7 @@ RUN_SCHEMA: Path = HERE / "schemas" / "run-record.schema.json"
 VERDICT_SCHEMA: Path = HERE / "schemas" / "verdict.schema.json"
 MAX_RECORD_FILE_BYTES: int = 1_000_000
 MAX_RECORD_FILES: int = 1_000
+AUXILIARY_FILES: frozenset[str] = frozenset({"ledger.json", "summary.json"})
 
 
 def _load_json(path: Path) -> Any:
@@ -61,6 +63,9 @@ def validate_tree(records_dir: Path) -> list[str]:
             continue
         if path.name == "campaign.json":
             manifests.append(path)
+            continue
+        if path.name in AUXILIARY_FILES:
+            # campaign driver outputs beside the records — not run records
             continue
         if not isinstance(data, dict):
             problems.append(f"{path}: not an object")
