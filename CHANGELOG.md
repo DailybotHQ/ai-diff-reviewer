@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Releases are gated on a current, non-blocking eval verdict (BC-02).** `auto-release.yml` Step 1.5 runs `tests/eval/release_gate.py` before the version bump: when no verdict matches the candidate's runtime + prompt content, the newest match is older than 30 days, or it lists blocking findings, the release is **skipped** (never half-published) with the reason in the log; recovery in `docs/RELEASE_RECOVERY.md`. Verdicts carry `candidate_content_sha256` so docs-only commits after the measured commit still release.
+
 ### Added
 
 - **Evaluation corpus grows to 101 cases across five stacks** (`tests/eval/cases/C075–C102`): cross-file defects, instruction-file contradictions (the documented-rule class), deceptive PR metadata, defects hidden in default-ignored files (lockfiles, minified bundles), multi-round IAR fixtures (`fixture.iar`), and shell + rust cases — the RFC-01 corpus gaps. New positives are warning-labelled pending blinded adjudication; `run_eval.py --tree` scores fixture trees offline so the 21 adjudicated critical cases become reviewer-scorable; `tests/eval/schema_check.py`, `determinism.py`, `records_validate.py` and the `tests/eval/records/` layout ship the offline half of the eval gate.
