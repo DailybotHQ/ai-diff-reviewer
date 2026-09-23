@@ -1201,7 +1201,7 @@ class ToolsSchemaGatingTests(unittest.TestCase):
         names = [t["name"] for t in schema]
         self.assertIn("set_pr_description", names)
         self.assertIn("set_pr_complexity", names)
-        self.assertEqual(len(names), 10)  # 8 base (incl. v3 parity tools) + 2 optional
+        self.assertEqual(len(names), 11)  # 9 base (incl. v3 parity tools + emit_finding) + 2 optional
 
 
 class ComposeSystemPromptTests(unittest.TestCase):
@@ -1880,7 +1880,7 @@ class BuildProviderTests(unittest.TestCase):
 
 class ToolsSchemaTests(unittest.TestCase):
     def test_all_base_tools_present(self) -> None:
-        # Five classic tools plus the three v3 parity tools (RFC-02).
+        # Five classic tools, the three v3 parity tools (RFC-02) and emit_finding (RFC-03).
         names = {t["name"] for t in reviewer.tools_schema(10)}
         self.assertEqual(
             names,
@@ -1893,6 +1893,7 @@ class ToolsSchemaTests(unittest.TestCase):
                 "get_change_inventory",
                 "get_patch",
                 "read_instruction_files",
+                "emit_finding",
             },
         )
 

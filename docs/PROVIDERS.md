@@ -176,6 +176,8 @@ The return value must look like an Anthropic `Messages.create` response — mini
 
 Then register the implementation in `build_provider()` and add a default model in `DEFAULT_MODELS`. That's it.
 
+**Findings on the chat-completions path (v3).** The model reports findings through the `emit_finding` tool — anchor, `severity`, `title`, `category` (the finding v3 enum), optional `suggestion` and `evidence` (`files_read`, typed `checks`, `documented_rule`); invalid enums come back as tool errors, never as reinterpreted findings. `post_inline_comment` remains as an alias for one minor cycle (title from the body's first line, category `other`). After the loop the runtime completes the runtime-owned fields (`complete_finding_evidence`) so both families converge on the same finding v3 document (`docs/rfc/v3/schemas/finding-v3.schema.json`).
+
 ## Per-provider translation notes and roadmap
 
 ### OpenAI / Azure / OpenAI-compatible — shipped as `provider: openai`
@@ -384,7 +386,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 | `findings[].side` | string | optional (default `RIGHT`) | `LEFT` or `RIGHT` (case-normalised). `RIGHT` = new code, `LEFT` = removed. |
 | `findings[].title` | string | optional (v3) | One line naming the defect; cut at 120 characters. |
 | `findings[].category` | string | optional (v3) | Exactly one of `correctness`, `security`, `data-loss`, `broken-contract`, `concurrency`, `performance`, `maintainability`, `contradicts-documented-rule`, `test-gap`, `style`, `other` (case-normalised; anything else is rejected like an unknown severity). |
-| `findings[].evidence` | object | optional (v3) | What the agent verified: `files_read` (≤ 20 strings), `checks` (≤ 20 of `{kind: read_anchor \| grep_callers \| read_base_version \| read_instruction_file \| run_test \| type_check \| other, target, result: supports \| contradicts \| inconclusive, note ≤ 300}`), `documented_rule` (`{file, quote ≤ 500}` for `contradicts-documented-rule`, else `null`). Wrong types and unknown enum values are rejected; unknown keys inside `evidence` are ignored. Until finding v3 lands (Task 13) these are carried on `Finding.extra`. |
+| `findings[].evidence` | object | optional (v3) | What the agent verified: `files_read` (≤ 20 strings), `checks` (≤ 20 of `{kind: read_anchor \| grep_callers \| read_base_version \| read_instruction_file \| run_test \| type_check \| other, target, result: supports \| contradicts \| inconclusive, note ≤ 300}`), `documented_rule` (`{file, quote ≤ 500}` for `contradicts-documented-rule`, else `null`). Wrong types and unknown enum values are rejected; unknown keys inside `evidence` are ignored. They are promoted to the typed finding v3 fields (`Finding.title` / `category` / `evidence`) and the raw validated dict stays on `Finding.extra`. |
 
 ### Validation guarantees
 

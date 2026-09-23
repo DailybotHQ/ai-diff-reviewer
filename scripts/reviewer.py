@@ -869,6 +869,17 @@ MAX_EVIDENCE_CHECKS: int = 20
 MAX_EVIDENCE_NOTE_CHARS: int = 300
 MAX_EVIDENCE_TARGET_CHARS: int = 300
 MAX_DOCUMENTED_RULE_QUOTE_CHARS: int = 500
+# Finding v3 (RFC-03 § Finding v3 contract): runtime-owned fields.
+FINDING_ID_PREFIX: str = "f-"
+FINDING_EXCERPT_MAX_CHARS: int = 2_000
+FINDING_EXCERPT_RADIUS: int = 3          # lines around the anchor shown in `evidence.excerpt`
+MAX_EVIDENCE_TOOL_TRACE_IDS: int = 50
+FINDING_CATEGORY_DEFAULT: str = "other"
+VERIFICATION_STATUSES: tuple[str, ...] = ("unverified", "verified", "refuted", "downgraded", "skipped")
+VERIFICATION_UNVERIFIED: str = "unverified"
+LIFECYCLE_STATES: tuple[str, ...] = ("new", "open", "retired", "regressed")
+RETIRED_REASONS: tuple[str, ...] = ("verified_fixed", "maintainer_resolved", "file_removed")
+ORIGIN_UNKNOWN_RUN_ID: str = "unknown"
 # Deterministic review generation: temperature 0 (the API default is 1.0,
 # whose sampling variance drove ±45% cost and 2-defect recall swings between
 # identical runs — see the PLAN_jev_review_acceleration noise-floor finding).
@@ -1495,6 +1506,9 @@ class RunRecord:
     diff_truncated: bool = False
     iar_mode: str = "none"
     instruction_files_read: list[str] = field(default_factory=list)
+    # Generated once (`ensure_run_id`) so findings' `origin.run_id` and the
+    # written record agree.
+    run_id: str = ""
     max_turns: int = DEFAULT_MAX_TURNS
     turns_used: int = 0
     tool_calls: int = 0
@@ -1556,6 +1570,18 @@ class RunRecord:
         self.diff_truncated = "[diff truncated at" in (ctx.diff or "")
         self.iar_mode = iar_mode
 
+    def ensure_run_id(self) -> str:
+        """The record's id, generated on first use (provider, endpoint kind,
+        head, time, entropy — second granularity alone collides across
+        repetitions of the same head)."""
+        if not self.run_id:
+            raw: str = (
+                f"run-{self.provider}-{self.endpoint_kind}-"
+                f"{(self.head_sha or 'nohead')[:12]}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+            ).lower()
+            self.run_id = re.sub(r"[^a-z0-9-]", "-", raw)[:64]
+        return self.run_id
+
     def to_dict(self, *, status: str, failure_class: str | None) -> dict[str, Any]:
         usage: UsageTelemetry | None = self.usage
         usage_known: bool = bool(
@@ -1582,13 +1608,9 @@ class RunRecord:
         total_seconds: float = round(time.monotonic() - self.started_monotonic, 3)
         # Second granularity alone collides across repetitions of the same head
         # (campaign cells); the uuid suffix makes every written record unique.
-        run_id: str = (
-            f"run-{self.provider}-{self.endpoint_kind}-"
-            f"{(self.head_sha or 'nohead')[:12]}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-        ).lower()
         return {
             "schema_version": RUN_RECORD_SCHEMA_VERSION,
-            "run_id": re.sub(r"[^a-z0-9-]", "-", run_id)[:64],
+            "run_id": self.ensure_run_id(),
             "recorded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "runner": self.runner,
             "provider": self.provider,
@@ -5909,13 +5931,74 @@ def increment_round_in_generation(
 
 
 @dataclass
+class FindingEvidence:
+    """Finding v3 `evidence` (RFC-03): what supports the finding.
+
+    `anchor_sha256` and `excerpt` are runtime-owned (filled by
+    `complete_finding_evidence` from the head tree, excerpt scrubbed and
+    bounded); `files_read`, `tool_trace_ids` come from the tool trace for
+    in-process lanes or from the findings file for CLI lanes; `checks` and
+    `documented_rule` are the model's own, validated at the boundary.
+    """
+
+    anchor_sha256: str = ""
+    excerpt: str = ""
+    files_read: list[str] = field(default_factory=list)
+    tool_trace_ids: list[str] = field(default_factory=list)
+    checks: list[dict[str, Any]] = field(default_factory=list)
+    documented_rule: dict[str, str] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        anchor: str = self.anchor_sha256 or hashlib.sha256(b"no_context").hexdigest()[:16]
+        return {
+            "anchor_sha256": anchor,
+            "excerpt": self.excerpt[:FINDING_EXCERPT_MAX_CHARS],
+            "files_read": list(self.files_read[:MAX_EVIDENCE_FILES_READ]),
+            "tool_trace_ids": list(self.tool_trace_ids[:MAX_EVIDENCE_TOOL_TRACE_IDS]),
+            "checks": [dict(c) for c in self.checks[:MAX_EVIDENCE_CHECKS]],
+            "documented_rule": dict(self.documented_rule) if self.documented_rule else None,
+        }
+
+
+@dataclass
+class FindingVerification:
+    """Finding v3 `verification` (RFC-03): the verifier's verdict. Defaults to
+    `unverified` — the state every finding has until the verifier (Task 14)
+    runs; `critical` never publishes as `critical` while unverified."""
+
+    status: str = "unverified"
+    reason: str = ""
+    verifier_model_alias: str | None = None
+    verifier_endpoint_kind: str | None = None
+    verified_at: str | None = None
+    checks: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status if self.status in VERIFICATION_STATUSES else VERIFICATION_UNVERIFIED,
+            "reason": self.reason[:500],
+            "verifier_model_alias": self.verifier_model_alias,
+            "verifier_endpoint_kind": self.verifier_endpoint_kind,
+            "verified_at": self.verified_at,
+            "checks": [dict(c) for c in self.checks[:MAX_EVIDENCE_CHECKS]],
+        }
+
+
+def _default_lifecycle() -> dict[str, Any]:
+    return {"state": "new", "first_seen_run_id": None, "retired_reason": None}
+
+
+@dataclass
 class Finding:
-    """A single inline finding, provider-independent.
+    """A single inline finding, provider-independent — the convergence type.
 
     Both provider families (chat-completions via `Provider` and agent-runner
     via `AgentRunnerProvider`) surface findings as this dataclass so the
     downstream submission / label / strictness paths never need to know
-    which provider produced the review.
+    which provider produced the review. v3 (RFC-03) adds the typed
+    evidence / verification / lifecycle / origin fields with defaults that
+    keep every existing constructor valid; `to_v3_dict()` is the
+    `finding-v3.schema.json` shape.
     """
 
     path: str
@@ -5928,11 +6011,73 @@ class Finding:
     # present, the inline comment carries it in a hidden marker so the next
     # round can match the finding back from the PR thread.
     fingerprint: str | None = None
-    # v3 optional fields lifted from findings.json (`title`, `category`,
-    # `evidence`) — validated and bounded by `parse_findings_file`; empty
-    # for legacy files and for chat-completions findings. Promoted to
-    # first-class finding v3 fields in Task 13.
+    # v3 optional fields as lifted from findings.json (`title`, `category`,
+    # `evidence`) — kept as the raw validated dict for the CLI lift; the
+    # typed fields below are the published form.
     extra: dict[str, Any] = field(default_factory=dict)
+    # --- finding v3 (RFC-03) ---------------------------------------------
+    # The model's original severity claim; `severity` is what policy publishes.
+    severity_claimed: str | None = None
+    category: str = "other"
+    title: str = ""
+    suggestion: str | None = None
+    evidence: FindingEvidence = field(default_factory=FindingEvidence)
+    verification: FindingVerification = field(default_factory=FindingVerification)
+    # Filled by the aggregator (RFC-04); None on a single-leg review.
+    agreement: dict[str, Any] | None = None
+    lifecycle: dict[str, Any] = field(default_factory=_default_lifecycle)
+    # `{run_id, provider, endpoint_kind, model}` — filled by
+    # `complete_finding_evidence` from the run record.
+    origin: dict[str, Any] | None = None
+
+    def effective_title(self) -> str:
+        """`title`, or the body's first non-empty line, cut to the schema bound."""
+        title: str = (self.title or "").strip()
+        if not title:
+            for line in (self.body or "").splitlines():
+                # first non-empty line, minus markdown decoration (headings,
+                # bullets, emphasis, inline code) so tables stay plain text
+                stripped: str = re.sub(r"[*_`]+", "", line.strip().lstrip("#-> ")).strip()
+                if stripped:
+                    title = stripped
+                    break
+        title = title[:MAX_FINDING_TITLE_CHARS].strip()
+        return title or "(untitled finding)"
+
+    def to_v3_dict(self) -> dict[str, Any]:
+        """The finding-v3 document (schema-valid on its own; the runtime-owned
+        fields carry neutral defaults until `complete_finding_evidence` ran —
+        `origin` is then the unknown-run placeholder)."""
+        fingerprint: str = self.fingerprint or finding_fingerprint(finding=self, code_context=None)
+        category: str = self.category if self.category in FINDING_CATEGORIES else FINDING_CATEGORY_DEFAULT
+        severity_claimed: str = self.severity_claimed or self.severity
+        lifecycle: dict[str, Any] = _default_lifecycle()
+        lifecycle.update({k: v for k, v in (self.lifecycle or {}).items() if k in lifecycle})
+        if lifecycle["state"] not in LIFECYCLE_STATES:
+            lifecycle["state"] = "new"
+        if lifecycle["retired_reason"] not in RETIRED_REASONS:
+            lifecycle["retired_reason"] = None
+        origin: dict[str, Any] = dict(self.origin) if self.origin else {
+            "run_id": ORIGIN_UNKNOWN_RUN_ID, "provider": "anthropic", "endpoint_kind": "unknown", "model": "",
+        }
+        return {
+            "id": f"{FINDING_ID_PREFIX}{fingerprint}",
+            "path": self.path,
+            "line": int(self.line),
+            "start_line": self.start_line,
+            "side": self.side or "RIGHT",
+            "severity": self.severity if self.severity in ALLOWED_SEVERITIES else SEVERITY_INFO,
+            "severity_claimed": severity_claimed if severity_claimed in ALLOWED_SEVERITIES else SEVERITY_INFO,
+            "category": category,
+            "title": self.effective_title(),
+            "body": self.body or "(no body)",
+            "suggestion": self.suggestion,
+            "evidence": self.evidence.to_dict(),
+            "verification": self.verification.to_dict(),
+            "agreement": dict(self.agreement) if self.agreement else None,
+            "lifecycle": lifecycle,
+            "origin": {k: origin.get(k) for k in ("run_id", "provider", "endpoint_kind", "model")},
+        }
 
 
 @dataclass
@@ -7401,6 +7546,69 @@ def _load_code_contexts_for_findings(
     for path in unique_paths:
         contexts[path] = load_code_context(path=path, review_sha=review_sha)
     return contexts
+
+
+def complete_finding_evidence(
+    result: "ReviewResult",
+    *,
+    state: "ReviewState | None",
+    head_sha: str,
+    run_id: str,
+    provider_id: str,
+    endpoint_kind: str,
+    model: str,
+    repo_root: str | None = None,
+) -> None:
+    """Fill the runtime-owned finding v3 fields after the loop (RFC-03).
+
+    Per finding: `fingerprint` (when the IAR step did not set one), the
+    anchor hash at head (same radius as the fingerprint), a scrubbed, bounded
+    excerpt around the anchor, `files_read` / `tool_trace_ids` from the
+    in-process tool trace (entries that touched the finding's path; CLI lanes
+    keep what their findings file declared), `severity_claimed`, `origin`
+    and the lifecycle's first-seen run. Best-effort: never raises.
+    """
+    contexts: dict[str, "CodeContext | None"] = _load_code_contexts_for_findings(
+        findings=result.findings, review_sha=head_sha
+    ) if head_sha else {}
+    for finding in result.findings:
+        try:
+            ctx: "CodeContext | None" = contexts.get(finding.path)
+            if not finding.fingerprint:
+                finding.fingerprint = finding_fingerprint(finding=finding, code_context=ctx)
+            if ctx is not None:
+                around: list[str] = ctx.lines_around(finding.line, IAR_CONTEXT_HASH_RADIUS)
+                finding.evidence.anchor_sha256 = hashlib.sha256("\n".join(around).encode("utf-8")).hexdigest()[:16]
+                excerpt_lines: list[str] = ctx.lines_around(finding.line, FINDING_EXCERPT_RADIUS)
+                finding.evidence.excerpt = scrub_secrets("\n".join(excerpt_lines))[:FINDING_EXCERPT_MAX_CHARS]
+            else:
+                finding.evidence.anchor_sha256 = hashlib.sha256(b"no_context").hexdigest()[:16]
+                finding.evidence.excerpt = ""
+            if state is not None and state.tool_trace:
+                touched_ids: list[str] = []
+                touched_paths: list[str] = []
+                for entry in state.tool_trace:
+                    args_text: str = json.dumps(entry.get("args") or {})
+                    if finding.path and finding.path in args_text:
+                        touched_ids.append(f"t-{int(entry.get('index', 0)):04d}")
+                        arg_path: Any = (entry.get("args") or {}).get("path")
+                        if isinstance(arg_path, str) and arg_path not in touched_paths:
+                            touched_paths.append(arg_path)
+                finding.evidence.tool_trace_ids = touched_ids[:MAX_EVIDENCE_TOOL_TRACE_IDS]
+                if not finding.evidence.files_read:
+                    finding.evidence.files_read = touched_paths[:MAX_EVIDENCE_FILES_READ]
+            if not finding.severity_claimed:
+                finding.severity_claimed = finding.severity
+            finding.origin = {
+                "run_id": run_id or ORIGIN_UNKNOWN_RUN_ID,
+                "provider": provider_id if provider_id in PROVIDER_IDS_FOR_RECORD else "anthropic",
+                "endpoint_kind": endpoint_kind or "unknown",
+                "model": model or "",
+            }
+            if finding.lifecycle.get("state", "new") == "new" and not finding.lifecycle.get("first_seen_run_id"):
+                finding.lifecycle["first_seen_run_id"] = run_id or None
+        except Exception as exc:  # noqa: BLE001 — evidence completion never breaks a review
+            log(f"finding v3 completion skipped for {finding.path}:{finding.line}: {type(exc).__name__}: {exc}")
 
 
 def _estimate_cost_vs_baseline(
@@ -9201,8 +9409,9 @@ def tools_schema(
     `set_pr_description` is exposed only when `allow_set_pr_description`
     is True (i.e. `pr-description-mode: autocomplete`). Similarly for
     `set_pr_complexity` and the complexity-labeling feature. The base
-    eight tools are always present (five classic ones plus the v3 parity
-    tools `get_change_inventory`, `get_patch`, `read_instruction_files`).
+    nine tools are always present (the five classic ones, the v3 parity
+    tools `get_change_inventory`, `get_patch`, `read_instruction_files`, and
+    `emit_finding` — of which `post_inline_comment` is the v2 alias).
     """
     base: list[dict[str, Any]] = [
         {
@@ -9346,15 +9555,108 @@ def tools_schema(
             },
         },
         {
+            "name": "emit_finding",
+            "description": (
+                "Queue one finding with its evidence. Findings are batched "
+                "and posted with the final review. The line you reference "
+                "MUST appear in the PR diff (RIGHT side for new lines, LEFT "
+                "for removed lines); for multi-line, set `start_line` < "
+                "`line`. Set `severity` honestly — it drives the GitHub check "
+                "via the consumer's strictness. `category` names the defect "
+                "class; `evidence.checks` records what you verified and "
+                "whether it supports the finding; quote the exact rule in "
+                "`evidence.documented_rule` when the change contradicts a "
+                f"repository instruction. Cap: {max_inline_comments} findings "
+                "per review."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Repository-relative file path."},
+                    "line": {"type": "integer", "description": "Line number (end line for multi-line)."},
+                    "body": {
+                        "type": "string",
+                        "description": (
+                            "Markdown body. Supports GitHub suggestion blocks via "
+                            "```suggestion ... ``` — those replace the entire "
+                            "commented line range."
+                        ),
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "warning", "info"],
+                        "description": (
+                            "`critical` = correctness/security/data-loss/broken-API. "
+                            "`warning` = bug-prone, perf, maintainability. `info` = "
+                            "style/nit/improvement. Default `info`."
+                        ),
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": f"One line naming the defect (<= {MAX_FINDING_TITLE_CHARS} chars).",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": list(FINDING_CATEGORIES),
+                        "description": "The defect class. Default `other`.",
+                    },
+                    "suggestion": {
+                        "type": "string",
+                        "description": "Optional replacement code for the anchored range (plain text, no fence).",
+                    },
+                    "evidence": {
+                        "type": "object",
+                        "description": "What you verified before reporting.",
+                        "properties": {
+                            "files_read": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": f"Paths you read to confirm this (<= {MAX_EVIDENCE_FILES_READ}).",
+                            },
+                            "checks": {
+                                "type": "array",
+                                "description": f"Typed checks (<= {MAX_EVIDENCE_CHECKS}).",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "enum": list(EVIDENCE_CHECK_KINDS)},
+                                        "target": {"type": "string"},
+                                        "result": {"type": "string", "enum": list(EVIDENCE_CHECK_RESULTS)},
+                                        "note": {"type": "string"},
+                                    },
+                                    "required": ["kind", "result"],
+                                },
+                            },
+                            "documented_rule": {
+                                "type": "object",
+                                "description": "For `contradicts-documented-rule`: the instruction file and the exact rule.",
+                                "properties": {"file": {"type": "string"}, "quote": {"type": "string"}},
+                                "required": ["file", "quote"],
+                            },
+                        },
+                    },
+                    "start_line": {"type": "integer", "description": "Optional. Start line for multi-line findings."},
+                    "side": {
+                        "type": "string",
+                        "enum": ["LEFT", "RIGHT"],
+                        "description": "RIGHT (new code, default) or LEFT (removed code).",
+                    },
+                },
+                "required": ["path", "line", "body"],
+            },
+        },
+        {
             "name": "post_inline_comment",
             "description": (
-                "Queue a single inline review comment. Comments are batched "
-                "and submitted with the final review. The line you "
-                "reference MUST appear in the PR diff (RIGHT side for new "
-                "lines, LEFT for removed lines). For multi-line, set "
-                "`start_line` < `line`. Set `severity` honestly: it drives "
-                "the GitHub check status via the consumer's strictness "
-                f"setting. Cap: {max_inline_comments} comments per review."
+                "Alias of `emit_finding` without evidence (kept for "
+                "compatibility; prefer `emit_finding`). Queue a single inline "
+                "review comment. Comments are batched and submitted with the "
+                "final review. The line you reference MUST appear in the PR "
+                "diff (RIGHT side for new lines, LEFT for removed lines). For "
+                "multi-line, set `start_line` < `line`. Set `severity` "
+                "honestly: it drives the GitHub check status via the "
+                f"consumer's strictness setting. Cap: {max_inline_comments} "
+                "comments per review."
             ),
             "input_schema": {
                 "type": "object",
@@ -9867,7 +10169,12 @@ def tool_glob(args: dict[str, Any]) -> str:
     return truncate_for_tool("\n".join(paths), label="glob")
 
 
-def tool_post_inline_comment(args: dict[str, Any], state: ReviewState) -> str:
+def tool_emit_finding(args: dict[str, Any], state: ReviewState) -> str:
+    """Queue a finding v3 (RFC-03): the classic anchor + severity, plus
+    `title`, `category`, `suggestion` and the model's `evidence`
+    (`files_read`, typed `checks`, `documented_rule`). Enums and bounds are
+    validated here — an invalid value comes back as an error the model can
+    fix, never a silently reinterpreted finding."""
     if len(state.inline_comments) >= state.max_inline_comments:
         return (
             f"Error: inline-comment cap reached ({state.max_inline_comments}). "
@@ -9876,11 +10183,26 @@ def tool_post_inline_comment(args: dict[str, Any], state: ReviewState) -> str:
     severity: str = (args.get("severity") or SEVERITY_INFO).lower()
     if severity not in SEVERITY_RANK or severity == SEVERITY_NONE:
         severity = SEVERITY_INFO
+    try:
+        v3: dict[str, Any] = _parse_finding_v3_optional(
+            {k: args.get(k) for k in ("title", "category", "evidence")}, len(state.inline_comments)
+        )
+    except ValueError as e:
+        return f"Error: {e}"
+    if args.get("suggestion") is not None and not isinstance(args["suggestion"], str):
+        return "Error: suggestion must be a string"
     comment: dict[str, Any] = {
         "path": args["path"],
         "body": args["body"],
         "line": int(args["line"]),
         "side": args.get("side", "RIGHT"),
+        "v3": {
+            "title": v3.get("title", ""),
+            "category": v3.get("category", FINDING_CATEGORY_DEFAULT),
+            "evidence": v3.get("evidence") or {},
+            "suggestion": args.get("suggestion"),
+            "severity_claimed": severity,
+        },
     }
     if "start_line" in args and args["start_line"] is not None:
         comment["start_line"] = int(args["start_line"])
@@ -9888,10 +10210,22 @@ def tool_post_inline_comment(args: dict[str, Any], state: ReviewState) -> str:
     state.inline_comments.append(comment)
     state.severities.append(severity)
     return (
-        f"Queued inline comment #{len(state.inline_comments)} on "
-        f"{comment['path']}:{comment['line']} (severity={severity}). It will "
-        "post with the final review when you call submit_review."
+        f"Queued finding #{len(state.inline_comments)} on "
+        f"{comment['path']}:{comment['line']} (severity={severity}, "
+        f"category={comment['v3']['category']}). It will post with the final "
+        "review when you call submit_review."
     )
+
+
+def tool_post_inline_comment(args: dict[str, Any], state: ReviewState) -> str:
+    """v2 alias of `emit_finding` (kept for one minor cycle): the title is the
+    body's first line and the category is `other`."""
+    mapped: dict[str, Any] = dict(args)
+    mapped.pop("title", None)
+    mapped.pop("category", None)
+    mapped.pop("evidence", None)
+    mapped.pop("suggestion", None)
+    return tool_emit_finding(mapped, state)
 
 
 def tool_submit_review(args: dict[str, Any], state: ReviewState) -> str:
@@ -10015,6 +10349,8 @@ def _dispatch_tool(name: str, args: dict[str, Any], state: ReviewState) -> str:
             return tool_get_patch(args, state)
         if name == "read_instruction_files":
             return tool_read_instruction_files(args, state)
+        if name == "emit_finding":
+            return tool_emit_finding(args, state)
         if name == "post_inline_comment":
             return tool_post_inline_comment(args, state)
         if name == "submit_review":
@@ -10760,6 +11096,8 @@ def state_to_review_result(
         severity: str = (
             state.severities[i] if i < len(state.severities) else SEVERITY_INFO
         )
+        v3: dict[str, Any] = comment.get("v3") or {}
+        ev: dict[str, Any] = v3.get("evidence") or {}
         findings.append(
             Finding(
                 path=str(comment.get("path", "")),
@@ -10773,6 +11111,15 @@ def state_to_review_result(
                     else None
                 ),
                 side=comment.get("side", "RIGHT"),
+                severity_claimed=str(v3.get("severity_claimed") or severity),
+                category=str(v3.get("category") or FINDING_CATEGORY_DEFAULT),
+                title=str(v3.get("title") or ""),
+                suggestion=v3.get("suggestion"),
+                evidence=FindingEvidence(
+                    files_read=list(ev.get("files_read") or []),
+                    checks=list(ev.get("checks") or []),
+                    documented_rule=ev.get("documented_rule"),
+                ),
             )
         )
     severities: list[str] = [f.severity for f in findings]
@@ -11098,6 +11445,8 @@ def parse_findings_file(
                     f"finding[{i}].side={side_val!r} not in {ALLOWED_SIDES}"
                 )
 
+        extra: dict[str, Any] = _parse_finding_v3_optional(item, i)
+        ev: dict[str, Any] = extra.get("evidence") or {}
         findings.append(
             Finding(
                 path=path_val,
@@ -11106,7 +11455,15 @@ def parse_findings_file(
                 severity=severity_val,
                 start_line=start_line_val,
                 side=side_val,
-                extra=_parse_finding_v3_optional(item, i),
+                extra=extra,
+                severity_claimed=severity_val,
+                category=str(extra.get("category") or FINDING_CATEGORY_DEFAULT),
+                title=str(extra.get("title") or ""),
+                evidence=FindingEvidence(
+                    files_read=list(ev.get("files_read") or []),
+                    checks=list(ev.get("checks") or []),
+                    documented_rule=ev.get("documented_rule"),
+                ),
             )
         )
 
@@ -12715,6 +13072,18 @@ def _main_impl(record: RunRecord) -> int:
     # single source of truth; the tracking comment and the exit code below
     # reuse this exact `(blocked, block_reason)` pair (v2.3.1).
     # ------------------------------------------------------------------
+    # Finding v3 (RFC-03): fill the runtime-owned evidence / origin fields
+    # once the findings are final (after IAR fingerprinting), before anything
+    # reads them (gate, submission, structured output).
+    complete_finding_evidence(
+        result,
+        state=None if isinstance(provider, AgentRunnerProvider) else state,
+        head_sha=head_sha,
+        run_id=record.ensure_run_id(),
+        provider_id=provider_id,
+        endpoint_kind=record.endpoint_kind,
+        model=model,
+    )
     severity: str = result.overall_severity
     blocked, block_reason = compute_check_gate(
         severity=severity,
