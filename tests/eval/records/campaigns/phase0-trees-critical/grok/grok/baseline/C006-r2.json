@@ -1,0 +1,51 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.1,
+  "usage": {
+    "in": 27930,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 931,
+    "source": "cli"
+  },
+  "cost_usd": 0.0778812,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "**JWT authenticity checks are fully disabled.** With `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, `identity()` accepts any caller-supplied token and trusts its claims (including `sub` / roles). An attacker can mint an unsigned or arbitrarily signed JWT and authenticate as any user.\n\nThis is unconditional \u2014 there is no staging-only env guard in the diff, so the same code path applies everywhere this module runs.\n\n**Fix:** restore signature verification and keep the real `SECRET`, `algorithms`, `audience`, and `issuer`. For the migration, either re-issue staging tokens under the current key material, or temporarily accept multiple valid issuers/keys via explicit verification \u2014 never `verify_signature: False`.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, which means any forged token is accepted as a valid identity.\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `auth.py:7` | JWT verification fully disabled \u2014 forged tokens authenticate as any identity |\n\n## Details\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` turns off every meaningful authenticity check. There is no staging-only guard, feature flag, or environment gate in the diff \u2014 the same path would run wherever this module is deployed.\n\nThe comment cites temporary staging token re-issuance (TICKET-412). The correct fix is to re-issue tokens under the current signing key / issuer / audience, or to accept both old and new verification parameters during a controlled migration window \u2014 without turning signature verification off.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

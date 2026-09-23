@@ -1,0 +1,51 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 22.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 22.6,
+  "usage": {
+    "in": 28040,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1239,
+    "source": "cli"
+  },
+  "cost_usd": 0.0799876,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** `request.args.get(\"path\", name)` is passed straight into `os.path.join(REPORTS, \u2026)` and `send_file` with no validation. Any client can request files outside the reports root, e.g. `GET /reports/x?path=../../etc/passwd` \u2014 `os.path.join(\"/srv/reports\", \"../../etc/passwd\")` resolves outside `REPORTS`. The previous `os.path.basename(name)` guard is gone, so the route parameter is also no longer normalized when `path` is omitted.\n\n**Fix:** resolve the final path and enforce a root prefix before sending:\n\n```python\nbase = os.path.realpath(REPORTS)\ncandidate = os.path.realpath(os.path.join(base, request.args.get(\"path\", name)))\nif not (candidate == base or candidate.startswith(base + os.sep)):\n    abort(400)\nreturn send_file(candidate)\n```\n\nAlso prefer a single path source (route `<path:name>` *or* a query param), and reject absolute `path` values (`os.path.isabs`)."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical path-traversal regression \u2014 do not merge until download paths are constrained under `REPORTS`.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `reports.py:10` | User-controlled `path` query param joined into `send_file` with no sandboxing |\n\n## Notes\n\nThe prior `os.path.basename(name)` guard blocked directory components in the route parameter. Replacing it with `request.args.get(\"path\", name)` both introduces an unsanitized query input and removes the only normalization on the fallback `name`.\n\nA safe nested-folder design should resolve the candidate under `REPORTS`, reject paths that escape that root (e.g. after `os.path.realpath`), and keep allowing only relative subpaths such as `2024/q3/report.pdf`.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

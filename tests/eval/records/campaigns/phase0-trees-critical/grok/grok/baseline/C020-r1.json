@@ -1,0 +1,57 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 36.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.6,
+  "usage": {
+    "in": 29415,
+    "cache_read": 140288,
+    "cache_write": 0,
+    "out": 1975,
+    "source": "cli"
+  },
+  "cost_usd": 0.1127664,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the SQL string with `fmt.Sprintf`, so any value reaching `Balance` is executed as SQL. Input that closes the string literal (for example a quote plus `OR '1'='1`) alters the predicate; stacked statements can run if the driver/connection allows them.\n\nRestore a bound parameter and put the wildcards in the Go value:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso escape `%` and `_` in `account` if callers pass raw UI input and you need literal substring match."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "body": "**Ambiguous partial match:** `QueryRow` with `LIKE '%\u2026%'` does not fail when multiple rows match \u2014 it scans an arbitrary first row. A partial account number that hits more than one account silently returns the wrong balance.\n\nIf the UI is partial search, either require a unique match (`rows` + count check, error when the match count is not exactly 1), or use a prefix/suffix rule that preserves uniqueness after validation."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a classic SQL injection by building the query with `fmt.Sprintf` instead of a bound parameter.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `ledger/query.go:11` | SQL injection via string-interpolated `LIKE` |\n| 2 | warning | `ledger/query.go:11` | `QueryRow` + partial `LIKE` is undefined when multiple accounts match |\n\n## Notes\n\nThe previous code correctly used `$1` parameterization. Partial-number search is fine as a product goal, but the pattern must stay parameterized (`LIKE $1` with a bound value that includes the wildcards), and metacharacters (`%`, `_`) in the user input should be escaped if literal substring match is intended.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 29.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.0,
+  "usage": {
+    "in": 28115,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1402,
+    "source": "cli"
+  },
+  "cost_usd": 0.0811156,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** `request.args.get(\"path\", name)` is joined onto `REPORTS` with no sanitization. The previous `os.path.basename(name)` guard is gone, so a client can escape `/srv/reports`.\n\n**Failure mode:** `GET /reports/anything?path=../../etc/passwd` \u2192 `send_file` serves `/etc/passwd` (or any file the process can read). Omitting `path` and putting `../` in the route value is also unsafe if the framework passes it through.\n\n**Fix:** resolve the final path and require it to stay under `REPORTS`, e.g.:\n\n```python\ncandidate = request.args.get(\"path\", name)\nfull = os.path.realpath(os.path.join(REPORTS, candidate))\nreports_root = os.path.realpath(REPORTS)\nif not full.startswith(reports_root + os.sep) and full != reports_root:\n    abort(400)\nreturn send_file(full)\n```\n\nAlso reject absolute `candidate` values before join. Prefer explicit nested route segments or an allowlisted relative subpath over a free-form query parameter."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical path-traversal / arbitrary file read on the report download endpoint.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `reports.py:10` | Unsanitized `path` query param enables path traversal outside `/srv/reports` |\n\n## Details\n\nThe previous implementation used `os.path.basename(name)`, which stripped directory components and kept reads under `REPORTS`. The new code joins `request.args.get(\"path\", name)` directly onto `REPORTS` with no normalization, allowlist, or containment check.\n\nA request like `GET /reports/x?path=../../etc/passwd` resolves to a path outside `/srv/reports` and `send_file` will serve it (subject to process permissions). The same applies when `path` is omitted but `name` contains separators, depending on routing.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) needs a safe join: resolve the candidate under `REPORTS`, reject absolute paths and any result that does not stay inside `REPORTS` after `os.path.realpath`, and prefer a path segment allowlist over a free-form query string.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

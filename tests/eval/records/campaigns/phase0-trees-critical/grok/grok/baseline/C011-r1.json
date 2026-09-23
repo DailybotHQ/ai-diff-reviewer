@@ -1,0 +1,51 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 27.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 27.4,
+  "usage": {
+    "in": 28512,
+    "cache_read": 82688,
+    "cache_write": 0,
+    "out": 1296,
+    "source": "cli"
+  },
+  "cost_usd": 0.0896064,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Credential leak in debug logs.** `process.env.PROCESSOR_KEY` is included in the log payload. Anyone with access to debug logs (log aggregator, support tooling, crash dumps, verbose CI) can exfiltrate the payment processor secret and replay or forge charges.\n\nRemove `key` from the logged object. Keep only non-secret charge context (`orderId`, `ref`). If support needs to retry a failure, use a server-side replay path that reads the key from the secret store at execution time \u2014 never from log history.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: payment processor credentials are written into debug logs.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/payments/charge.ts:8` | `PROCESSOR_KEY` logged in charge context payload |\n\n## Notes\n\nSupport can debug charge failures with `orderId` and `ref` alone. Processor keys belong in a secrets manager and must never appear in log pipelines (aggregators, support tooling, retained debug dumps).\n\nAlso note the previous `log.info(\"charge created\", \u2026)` success breadcrumb was removed; restoring an info-level line with non-secret fields keeps operational visibility without exposing credentials.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

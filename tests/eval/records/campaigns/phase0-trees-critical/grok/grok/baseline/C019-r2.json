@@ -1,0 +1,52 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 55.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 55.2,
+  "usage": {
+    "in": 57933,
+    "cache_read": 55936,
+    "cache_write": 0,
+    "out": 2411,
+    "source": "cli"
+  },
+  "cost_usd": 0.1471128,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Broken migration graph:** this file depends on `(\"billing\", \"0007_add_reason\")`, but the same PR deletes `migrations/0007_add_reason.py`. Django cannot resolve the graph (`NodeNotFoundError`), so `migrate` fails on every environment.\n\nPick one path:\n- **`0007` never applied anywhere:** drop this `0008` file and only delete `0007` (there is no column to remove).\n- **`0007` already applied:** restore `0007_add_reason.py` and keep this forward `RemoveField` migration so existing DBs can upgrade cleanly.\n\nDeleting a shipped migration while a later migration still depends on it always breaks both fresh installs and existing databases."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken migration graph \u2014 do not merge until the `0007` / `0008` dependency chain is fixed.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `migrations/0008_drop_reason.py:5` | `0008` depends on `0007_add_reason`, but that migration file was deleted in the same PR |\n\n## Discussion\n\n`0008_drop_reason` lists `dependencies = [(\"billing\", \"0007_add_reason\")]` while this PR deletes `migrations/0007_add_reason.py`. Django will raise `NodeNotFoundError` on any fresh graph load, and environments that already applied `0007` will have a row in `django_migrations` with no matching file.\n\n**Correct approaches:**\n\n- **If `0007` has never been applied anywhere:** delete `0007` only and do not add `0008`. The add never landed, so there is nothing to remove.\n- **If `0007` has already been applied (any env/shared DB):** keep `0007_add_reason.py` in the tree forever and ship `0008` as a forward migration that removes the field. Also drop `void_reason` from the `Invoice` model if it is still declared there.\n\n`RemoveField` will DROP the column and discard any stored values; that is fine only when the forward-migration path above is intact and the data is confirmed unused.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

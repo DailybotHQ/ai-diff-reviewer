@@ -1,0 +1,57 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 38.5,
+  "setup_seconds": 0.1,
+  "total_seconds": 38.6,
+  "usage": {
+    "in": 15467,
+    "cache_read": 68224,
+    "cache_write": 0,
+    "out": 1481,
+    "source": "cli"
+  },
+  "cost_usd": 0.0602872,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Command injection:** `exec()` runs the string through a shell, and both `src` and `filter` are interpolated unsanitized. A value like `\"; id; #` in `filter`, or `\"$(id)\"` / `` `\"` breakout in `src`, executes arbitrary commands on the host.\n\nThe claim that `-filter` needs a shell is incorrect \u2014 ImageMagick accepts it as a normal argv flag. Keep `execFile` (or `spawn` with `shell: false`) and pass arguments as a list:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\"`. If filter values must be restricted, validate against an allowlist of ImageMagick filter names (e.g. `Lanczos`, `Mitchell`) before invoking."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**API shape change:** `filter` is inserted as a required second parameter, shifting `w` from position 2 to 3. Existing callers of `resize(src, w)` will pass a number as `filter` and `undefined` as `w`, producing a broken command (`-filter 200 -resize undefinedx`) at runtime.\n\nMake `filter` optional with a safe default (e.g. `filter: string = \"Lanczos\"`) and keep `(src, w)` order, or add an options object as the last argument so positional callers keep working."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression \u2014 do not merge until the shell injection is fixed.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/images/resize.ts:6` | Command injection via `exec()` with interpolated `src` and `filter` |\n| 2 | \u26a0\ufe0f warning | `src/images/resize.ts:3` | Required `filter` parameter breaks existing `(src, w)` callers |\n\n## Notes\n\nImageMagick `-filter` does not require a shell. Pass it as an argv element with `execFile` (or `spawn` with `shell: false`). The previous `execFile` form was the safe pattern; this change undoes that.\n\nThe fixed `/tmp/out.png` output path (pre-existing) still races under concurrent calls \u2014 worth a follow-up.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 65.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 66.0,
+  "usage": {
+    "in": 56050,
+    "cache_read": 57344,
+    "cache_write": 0,
+    "out": 2350,
+    "source": "cli"
+  },
+  "cost_usd": 0.1434032,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Credentialed CORS now allows any origin.** Returning `Access-Control-Allow-Origin` set to the request `origin` (or `*`) together with `Access-Control-Allow-Credentials: true` means any malicious site can make credentialed cross-origin requests and read the responses \u2014 session cookies and authenticated API data are exposed to attacker-controlled pages.\n\nNative mobile clients are outside browser CORS; they do not need a reflected origin. Webviews that send `Origin` still need an explicit allowlist (known https hosts / app schemes), not an open reflect.\n\nAlso, `Origin: *` + `Credentials: true` (when `origin` is null) is invalid per the CORS spec and browsers will ignore it.\n\nRestore an allowlist (include any new mobile webview origins), and only attach `Access-Control-Allow-Credentials` when the origin matched:\n\n```suggestion\n  const ALLOWED = new Set([\n    \"https://app.example.com\",\n    // add known mobile webview origins here\n  ]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change disables origin allowlisting while keeping credentialed CORS, which lets any website read authenticated API responses.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/middleware/cors.ts:4` | Reflects arbitrary `Origin` with `Access-Control-Allow-Credentials: true` |\n\n## Analysis\n\nPreviously only `https://app.example.com` received `Access-Control-Allow-Origin` plus credentials. The new path echoes whatever `Origin` the client sends (or `*` when absent) and always attaches credentials.\n\nThat combination is the classic browser CORS credential-exfiltration pattern: a malicious page can trigger a credentialed cross-origin request and read the response because the server mirrors its origin.\n\nThe mobile rationale does not justify this. Native apps are not subject to browser CORS. Mobile webviews that *do* send an `Origin` still need an explicit allowlist (app scheme, known https hosts), not a wildcard reflect.\n\nSeparately, `Access-Control-Allow-Origin: *` paired with `Access-Control-Allow-Credentials: true` (the `origin == null` branch) is invalid per the Fetch CORS spec; browsers reject it, so the null-origin path is both insecure in intent and non-functional in practice.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

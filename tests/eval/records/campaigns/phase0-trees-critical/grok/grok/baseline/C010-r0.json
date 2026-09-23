@@ -1,0 +1,51 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 46.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.0,
+  "usage": {
+    "in": 16589,
+    "cache_read": 96768,
+    "cache_write": 0,
+    "out": 1502,
+    "source": "cli"
+  },
+  "cost_usd": 0.0712204,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Broken authorization (IDOR):** `body.accountId` is used as the lookup key with no check that the caller is support staff (or otherwise allowed to read other accounts).\n\nAny authenticated user who can hit this handler can pass an arbitrary `accountId` and read another tenant\u2019s account row. Before this change, lookup was always scoped to `caller.accountId` from `auth(req)`.\n\nAuthorize first, then resolve the id \u2014 for example require a support/admin role (or equivalent claim) when `body.accountId` is present and differs from `caller.accountId`; otherwise ignore or reject the override:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nconst requestedId = body.accountId;\nif (requestedId != null && requestedId !== caller.accountId) {\n  if (!caller.isSupport) { // or role/permission check from auth()\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n}\nconst id: string = requestedId ?? caller.accountId;\n```\n\nAlso confirm `accountId` is a non-empty string before querying."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical IDOR: any authenticated caller can load any account by sending `accountId` in the body, with no staff/role authorization check.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/routes/account.ts:8` | Missing authorization on explicit account id lookup (IDOR) |\n\n## Details\n\nPreviously `getAccount` always resolved `caller.accountId` from `auth(req)`, so a user could only read their own row. The new path trusts `body.accountId` whenever it is present. The comment claims this is for support staff tools, but nothing inspects caller role, a support claim, or an allowlist before honoring that override.\n\nConcrete failure mode: an ordinary authenticated user POSTs `{\"accountId\": \"<victim>\"}` and receives the victim account JSON.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

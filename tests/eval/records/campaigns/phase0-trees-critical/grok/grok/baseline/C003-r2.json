@@ -1,0 +1,51 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 55.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 55.8,
+  "usage": {
+    "in": 27962,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 1052,
+    "source": "cli"
+  },
+  "cost_usd": 0.0786712,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded production SMTP password in source.**\n\n`os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` embeds a live-looking credential in the repo. Anyone with clone/PR/CI access can read it, it persists in git history, and missing env config now silently logs in with a shared backup secret instead of failing loudly.\n\n**Failure mode:** secret not mounted \u2192 code still authenticates to `smtp.internal.example` with the committed password; credential is also leaked via the diff and future checkouts.\n\n**Fix:** require the env var (or skip send + log on absence). Do not put passwords in source:\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is not set\")\n        s.login(\"notifications\", password)\n```\n\nIf `smtp-prod-backup-77` was ever real, rotate it in the mail provider now."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default fallback.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `mailer.py:8` | Hard-coded production SMTP password in source |\n\n## Discussion\n\nCron jobs failing when `SMTP_PASSWORD` is unset is a real ops problem, but the safe fix is fail-closed with a clear error (or skip send and log), plus ensuring the secret is mounted in the cron environment. A string default in the repo:\n\n- lands the live password in git history for every clone and fork\n- shows up in PR diffs, CI logs, and code search\n- silently authenticates with a shared backup credential when the real secret is missing, so misconfiguration is hard to detect\n\nRotate `smtp-prod-backup-77` immediately if it was ever a real credential, and keep passwords only in the secret store / runner env.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

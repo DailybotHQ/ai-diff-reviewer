@@ -1,0 +1,51 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 94.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 94.9,
+  "usage": {
+    "in": 17816,
+    "cache_read": 127360,
+    "cache_write": 0,
+    "out": 3404,
+    "source": "cli"
+  },
+  "cost_usd": 0.094264,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "**Prototype pollution regression.** Removing the `BLOCKED` set lets hostile keys reach the recursive assignment path.\n\n`JSON.parse` *does* yield dangerous keys: `Object.entries(JSON.parse('{\"__proto__\": {\"polluted\": true}}'))` returns `[[\"__proto__\", {polluted: true}]]` as an own enumerable property. With this merge:\n\n1. `k === \"__proto__\"`, `v` is a plain object \u2192 take the recursive branch\n2. `base[\"__proto__\"] ??= {}` reads `Object.prototype` (truthy) and does not replace it\n3. `deepMerge(Object.prototype, v)` writes attacker-controlled properties onto `Object.prototype`\n\nVerified post-change: after `deepMerge({}, thatPatch)`, `({}).polluted === true`. The same pattern works via `constructor` / `prototype`.\n\nRestore the blocklist (or skip `__proto__`, `constructor`, and `prototype` on every key via `Object.hasOwn` + null-prototype targets / `Object.defineProperty`). Do not rely on `JSON.parse` as a safety boundary \u2014 this helper accepts any `Record<string, unknown>`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`. The PR claim that `JSON.parse` never yields dangerous keys is false.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/config/merge.ts:2` | Blocklist removal allows `__proto__` / `constructor` pollution via recursive merge |\n\n## Details\n\n`JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an object whose **own enumerable** key is `__proto__` (verified with `Object.entries`). The merge then does `base[\"__proto__\"] ??= {}`, which resolves to `Object.prototype` (truthy, so no replace), and recurses into it \u2014 assigning `Object.prototype.polluted = true`.\n\nReproduced with the post-change function: after `deepMerge({}, JSON.parse('{\"__proto__\": {\"polluted\": true}}'))`, `({}).polluted === true`.\n\nThe same class of attack works with `constructor` / `prototype` paths. Even if one caller only fed trusted JSON, `deepMerge` is a generic utility typed as `Record<string, unknown>` \u2014 any untrusted patch is enough.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

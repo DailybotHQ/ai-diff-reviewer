@@ -1,0 +1,51 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.2,
+  "usage": {
+    "in": 29875,
+    "cache_read": 82816,
+    "cache_write": 0,
+    "out": 1740,
+    "source": "cli"
+  },
+  "cost_usd": 0.0950348,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Authorization bypass:** `middleware.RequireRole(\"admin\")` previously wrapped both admin handlers; this diff registers bare `http.HandlerFunc`s on the new subrouter. Any client that can reach `GET /api/v2/admin/users` or `POST /api/v2/admin/roles` gets admin behavior with no role check.\n\nRe-apply the guard on the v2 group, for example:\n\n```go\nauthz := middleware.RequireRole(\"admin\")\nv2 := r.PathPrefix(\"/api/v2\").Subrouter()\nv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\nv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nOr `v2.Use` with an equivalent admin middleware if that matches the project's mux patterns."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 the PathPrefix move under `/api/v2` is fine as versioning cleanup, but the change also drops `middleware.RequireRole(\"admin\")` from both admin handlers, leaving user listing and role editing unauthenticated at the new paths.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `cmd/server/routes.go:6` | Admin role middleware removed from both admin routes |\n\n## Notes\n\n- Intended path shape after the subrouter is `/api/v2/admin/users` and `/api/v2/admin/roles` (gorilla `PathPrefix` + relative `Handle`), which matches the versioning goal.\n- Callers still on `/admin/users` and `/admin/roles` will 404 after this lands; if that cutover is deliberate, document or dual-mount during migration.\n- Restore authorization on the v2 subrouter (per-route wrap or `v2.Use(...)`) before merge.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

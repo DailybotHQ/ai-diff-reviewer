@@ -1,0 +1,51 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 19.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 19.4,
+  "usage": {
+    "in": 27760,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 863,
+    "source": "cli"
+  },
+  "cost_usd": 0.0771332,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Secret leakage:** this logs `process.env.PROCESSOR_KEY` into the charge debug payload. Anyone with access to debug/application logs (aggregators, support tooling, CI artifacts) can exfiltrate the payment-processor credential and replay or forge charges.\n\nRemove `key` from the log fields. Keep `orderId` and `ref` for correlation; if support needs replay, route that through a secured break-glass path that reads the key from a secret store rather than from log lines.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: payment charge logging now emits the processor credential into debug payloads.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/payments/charge.ts:7` | `PROCESSOR_KEY` logged in charge context payload |\n\n## Notes\n\nSupport can already correlate failures with `orderId` and `ref` from the previous info log. Replaying a charge against the processor must use secured support tooling / vault access, not application log streams. Debug-level logs are still routinely shipped to aggregators, retained, and readable by anyone with log access.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

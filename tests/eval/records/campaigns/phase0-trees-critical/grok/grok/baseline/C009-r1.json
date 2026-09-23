@@ -1,0 +1,51 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 85.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.1,
+  "usage": {
+    "in": 28329,
+    "cache_read": 82432,
+    "cache_write": 0,
+    "out": 1116,
+    "source": "cli"
+  },
+  "cost_usd": 0.0880836,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `body` is injected via `dangerouslySetInnerHTML` with no escaping or sanitization.\n\nAny comment containing HTML such as `<img src=x onerror=...>` or `<script>...` executes in every viewer session. The removed `escapeHtml` was the only defense; dropping it for \"rich formatting\" turns user content into executable markup.\n\n**Fix:** either (1) restore escaping and render markdown through a safe path (e.g. a markdown library that escapes by default), or (2) sanitize with a strict allowlist (e.g. DOMPurify) before assigning `__html`. Do not pass raw `body` to `dangerouslySetInnerHTML`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical XSS regression \u2014 do not merge until comment HTML is sanitized or rendered safely.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/components/Comment.tsx:5` | Unescaped `body` passed to `dangerouslySetInnerHTML` enables stored XSS |\n\n## Notes\n\nThe previous `escapeHtml` helper neutralized `&`, `<`, and `>` before injection. Removing it and assigning `body` straight to `__html` means any comment payload with a script tag, event handler, or `javascript:` URL runs in the viewer session.\n\nIf the goal is bold/links from community markdown, use a markdown renderer that emits safe HTML (or sanitize with a vetted allowlist such as DOMPurify) before `dangerouslySetInnerHTML`. Plain `dangerouslySetInnerHTML={{ __html: body }}` is not rich formatting \u2014 it is raw HTML execution.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

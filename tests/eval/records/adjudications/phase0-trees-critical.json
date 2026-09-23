@@ -1,0 +1,1528 @@
+{
+  "schema": "adjudication/1.0",
+  "campaign_id": "phase0-trees-critical",
+  "adjudicator": "agent:claude-fable-5.1 (PLAN_v3_implementation Task 8; source-grounded against fixture head trees and case labels) \u2014 developer countersign pending",
+  "blind": true,
+  "method": "source-grounded: head-tree excerpt at the anchor + case labels read before the verdict; arm and lane hidden until seal",
+  "adjudicated_at": "2026-09-23T20:24:50Z",
+  "positive_cases": [
+    "C001",
+    "C002",
+    "C003",
+    "C004",
+    "C005",
+    "C006",
+    "C008",
+    "C009",
+    "C010",
+    "C011",
+    "C012",
+    "C013",
+    "C014",
+    "C016",
+    "C019",
+    "C020",
+    "C021",
+    "C022",
+    "C068",
+    "C069",
+    "C070"
+  ],
+  "notes": "Blinded worksheet (seed 7) built from the 63 grok-4.5 CLI runs of phase0-trees-critical (21 critical_positive cases \u00d7 3 reps). Every item was read against the head-tree excerpt at the anchor and the base tree where the claim compared against it (C019, C069, C070). 'true' includes correct secondary observations that are not the labelled defect (C002 partial-match, C005 PATH, C013 token length, C014 '*'+credentials, C016 transport defaults, C019 broken migration graph, C020 ambiguous LIKE, C069 route move, C070 parameter shift). Corpus follow-up: C019's head tree deletes migration 0007 that 0008 depends on, so the reviewer correctly reports a broken graph instead of the labelled data-loss defect \u2014 fixture defect, not reviewer error. F7 caveat: adjudicated by the executing agent, not an independent human; the developer should spot-check and countersign before this precision figure is cited outside Phase 0.",
+  "findings": [
+    {
+      "id": "fcf16c6b53b0909b",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "C001: same defect, suggestion restores the decorator",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "bedc5ca2b64faf503c7ee8c36fbced535e7c8a5f8e83d87bf5ff9519e6d72813"
+    },
+    {
+      "id": "c7f9ba6684a4dfa0",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "C001: same defect; also notes the decorator's path-vs-caller bug",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "c188b2d6e04c3e943d45f0bc64dee8dc0c08f901c288efaa6398c8b188045b63"
+    },
+    {
+      "id": "de229479a703fe24",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "C001: DELETE /users/<user> has no remaining auth check after decorator removal",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "4ac7aea7963c1eca654102667f9c9d04933fc32e677a76584da00ea0f9c08ed6"
+    },
+    {
+      "id": "5cccd4a4a872499c",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "C002: f-string SQL with user-controlled email at line 6",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "0993e01c61c58b4ea3ac9a6ab073768f5734d6a40f764b9fea55a4ca2cce1f2f"
+    },
+    {
+      "id": "fa99ba48f05c6da3",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "C002: same injection defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3eca75c7c1af98b0909e0c4e5a2964952398f652ddf172d9f5cbdd4a3ca1e013"
+    },
+    {
+      "id": "d7d219e5d213d4d8",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "C002: not the labelled injection \u2014 a correct functional observation: predicate is still '=' while the change claims partial match; warning is proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "169ba1647e0687685b981131d12c33483de2485e7bb56453712fae2cfe2e7be7"
+    },
+    {
+      "id": "b63456bd5e4d0023",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "C002: functional observation (no partial match implemented) \u2014 real, not the labelled defect; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "f3da7ca97cdfcb1cdc84ded696e1a98d512320794d3fee42a42f331843b59222"
+    },
+    {
+      "id": "1783c045b60c0495",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "C002: same injection defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "b0eb923939c25b993f345678fb3e470addf6474fac045b79b12e7e628867572e"
+    },
+    {
+      "id": "015ccb1cad6f9168",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "C003: same literal credential default",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "cb6ec96997b899cbe5ebe800c19d01474c302ebdb597aa881c0943d266733d0e"
+    },
+    {
+      "id": "1173db2a14e09d68",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "C003: same literal credential default",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "c9c1cb79b57338a8c353d80b54282df8316cb7e5c46da842f43b6076b16b1920"
+    },
+    {
+      "id": "cc3b3384b9c5618b",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "C003: literal password default in os.environ.get at line 8",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "6c64de8359c5c74bd01b32ce8205b3ec33548cc5f438d5fb47261b99e36fe3b2"
+    },
+    {
+      "id": "77d8682a4f2413ce",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "C004: same traversal defect; also notes absolute-path join behaviour",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "7a2e2e1725ad81652e82bcf939080cbf0801b30ed6e273cbf7f9dae2d2a9fa13"
+    },
+    {
+      "id": "7036e7af32a34601",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "C004: same traversal defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3fb209c477c774d1dd91f5a4aab1a7444b7bef748be15df0648084f89bfa2e08"
+    },
+    {
+      "id": "5be2915734aa72bb",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "C004: os.path.join(REPORTS, request.args['path']) into send_file, basename guard removed \u2014 traversal confirmed at line 10",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "e62910d729c2181f36d285c0f5d6848be1ed4853918f0054cf091e48cb3d7ba3"
+    },
+    {
+      "id": "e4c1483a2c5382fc",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "C005: secondary, real \u2014 base used /usr/bin/convert, head resolves bare convert via the shell PATH; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "b0384d88298fe11b3e0af27e5d068e01ef3002b9f57f08b1ed3844d2feaffbd6"
+    },
+    {
+      "id": "5b4c3f3127439a0b",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "C005: shell=True + interpolated inputs",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "dfe1534a14834c7cfba751524542366138c5c859c25c4ba3f3c1a00e7444c8f0"
+    },
+    {
+      "id": "e843fe934db07c2a",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "C005: same injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "318151b9490cf7455acc6b4538d1ecee7ae9ba06f09e3e067c03b24d39c34943"
+    },
+    {
+      "id": "bb1952c17f712363",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "C005: shell=True with interpolated upload_dir/name/oid at lines 6-7",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "6343b327881027fe2aa04f099a12000203cd65efb14684f61824eb1da1c2018b"
+    },
+    {
+      "id": "1727638c266da692",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "C006: same bypass",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "c3021f1340e77e0267e01a4f0b811eaf007dca1245241918842f2bb913e230fa"
+    },
+    {
+      "id": "7e84b8ccc0a915cb",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "C006: same bypass",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "fc1de9c70e432dd9ec16fdf0ca81c364b42c2260c0b439262ffc0f57e188cb16"
+    },
+    {
+      "id": "ac0223de5df6d241",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "C006: all verify_* False, no env guard",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "588ef6e69103a6044d4f494dc8c53144ef6be43dab94c3384b43b5e79bf57fc2"
+    },
+    {
+      "id": "c917c8c34e1dc6cb",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "C008: urlopen on caller-supplied url, allowlist removed",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "075f3a64ab27dd13c3c7a4a3de41d4b625206c89ce5430dcfbd0bb57107e9638"
+    },
+    {
+      "id": "3a097e8811ce75eb",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "C008: same SSRF",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "ef9135913b2449d2a7cccb72b03a9eeeef43ddce8bfdcf9c92f50d5a8d4a4f0d"
+    },
+    {
+      "id": "ab1bfe5d3fd80391",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "C008: same SSRF, anchored at the Request line",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3d92b27da7eca2b07e8e8dc69c397605d57f4188e9ecfad8029fba4e7ec924a9"
+    },
+    {
+      "id": "fe75a38717007741",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "C009: raw body into dangerouslySetInnerHTML, escapeHtml removed",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "bd39f5c60ee9f39f238494765f2be8513ca92365778cb1fda80cb5ae17034e47"
+    },
+    {
+      "id": "8d0653445ee78b14",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "C009: same XSS",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "086bf102577dd2ec827602f6e17e84977f1fb8a3a7229c73e8dea24683b141ab"
+    },
+    {
+      "id": "11a5de8f52a866b3",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "C009: same XSS",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "a11a68e553b19b7ef6c3a4a28843781a060d8a7983834cb1e84419a0857ffea7"
+    },
+    {
+      "id": "3edb4af59f0ed6f7",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "C010: body.accountId overrides caller scope with no role check at line 8",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "6d4fd99bf9b6583de0e45ec8ee5dd39a2df1d120486f29e0c2b0822a1b7093b2"
+    },
+    {
+      "id": "43a6ba30db6d14c6",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "C010: same IDOR",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "9bf3b2ba2532c02368bca8787014a1f5fb7b6747a6d42d1363d0f909b55daae6"
+    },
+    {
+      "id": "8192e7d27e4aff00",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "C010: same IDOR",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "0b6315d8bf71a998526b82a6045b142c769cf7dbef608cac6f8411440026b844"
+    },
+    {
+      "id": "f70f1e8a20f0c212",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "C011: same secret leak",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "0cc847334ece7ed8d5c7438e72d0e1509fdefedbf7ed6d2e6a162c586c849204"
+    },
+    {
+      "id": "4fb2b6f681fa9ae3",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "C011: same secret leak",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "406aa1f5a277a200942c5c2f0d10a98e2a7b7db2557522fecb3689e1b4eeaa5a"
+    },
+    {
+      "id": "1e9b7c0b153bd350",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "C011: PROCESSOR_KEY in log.debug payload; anchor one line below the log call, same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "638b102fc8e4a21b0023e2fcec6f083d1e66af824bec4b6e03bbaf61900eb1b5"
+    },
+    {
+      "id": "71e896ec657d8412",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "C012: BLOCKED set removed; __proto__ key reaches the recursive assignment",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "e910f7e8b9a5ed96800efd15fdfaff518bd6c739f39a9bb2e4a1a36b85e2f343"
+    },
+    {
+      "id": "1eaf914d8bc2efb2",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "C012: same prototype pollution",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "33ab6800d1f6bc47063cdb7a4b7568572d74e5ebdade2924ffcbb1ff7b7cc3d3"
+    },
+    {
+      "id": "e9566fa6d7bfcd1e",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "C012: same prototype pollution",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "4d88559f0f0a9806e244b4dde8bac49dc11aa190f094ca368d6d0e6f0b6f65b1"
+    },
+    {
+      "id": "1ba26e47614884e1",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "C013: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "f5306cc4990a76c0d8be9547dbc1de65cdb505ae89d9ab13b133858917fad639"
+    },
+    {
+      "id": "056161d8c205f430",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "C013: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "bd176ddd42355be724ce318b84d26a8a1352aa00075c77f7853618d11a4fd45a"
+    },
+    {
+      "id": "ad1cc1193bb2d7b9",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "C013: Math.random reset token, ~40 bits",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "db5eafface5bcbec05f16f9635c54a66fed9f033916a90b4a80ff5271de312ac"
+    },
+    {
+      "id": "5f40a8e7b35d7d66",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "C013: unlabelled by keywords but real \u2014 token space collapsed to ~9 base-36 chars; a facet of C013-d1 split into a second finding, warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "c4cdcdc278ed0271ee946d79e7f09ba16d409d531ba4fe17868fc5fdf0b93a53"
+    },
+    {
+      "id": "8dc569f443afcbde",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "C014: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "daeeb34ef0f7be023da406d14648f520d6ea262dc493782362559ca1defaf990"
+    },
+    {
+      "id": "e847b48e9ac8b52e",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "C014: secondary, correct \u2014 '*' with credentials is rejected by browsers and native clients do not enforce CORS; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "fccf2d6c54c3190825fcdf376c075d03f1ece803e3b86290106b1eba7b25a233"
+    },
+    {
+      "id": "fe0b4285664d93d4",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "C014: reflected origin + credentials, allowlist removed",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "50e85f523dd535ddf6b632b11d3361e9a3aff1ce1fca4bf098cc0e3b6a02dbc3"
+    },
+    {
+      "id": "aef1d206a522378a",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "C014: same defect, anchored on Vary line of the same header block",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "776ebd88652260bd008aef93f664322a290da13d6161a5dd6687a79444f5e251"
+    },
+    {
+      "id": "b277f43f2b3d26f5",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "C016: secondary, correct \u2014 bare Transport loses DefaultTransport settings; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "6bf7ab0cf7b243b7b3f6621d8402d35d0350f4a1ca688e3e33e0e25f62bfb74a"
+    },
+    {
+      "id": "042cba749f13386c",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "C016: same InsecureSkipVerify",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3d6b54c5daca45f86bad5c311c84e79a2c6a29f7767effe8b7271956007123a9"
+    },
+    {
+      "id": "49447ae5abd2276d",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "C016: InsecureSkipVerify true in the shared client, no env gate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "197fd016dd2d3b08da5ea16646b3589144423fa1a474a6515a4e92fbadae27b4"
+    },
+    {
+      "id": "994c76cb2512dfc7",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "C016: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "df789ccea22d39e49eb3c5d17af56179c1e33a0f4a38eeed0ac30fefcd76b8a7"
+    },
+    {
+      "id": "d55a7df8ca07bf6e",
+      "case": "C019",
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "C019: deleting an applied migration referenced by 0008 \u2014 correct, anchored on the deleted file",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "1b171e7f50936add7cffe35eca909e9e97ffc49da9f8da6667d1fb64ef5eab64"
+    },
+    {
+      "id": "589d9516fb7018ff",
+      "case": "C019",
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "C019: same deleted-migration finding",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "f3123d8f2ce42514826745d479ff68e217d7c823e4d155b51b2ba76eee85d2bb"
+    },
+    {
+      "id": "a3dd63dcd999176f",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "C019: not the labelled data-loss angle, but factually correct \u2014 0007 is deleted in head while 0008 depends on it; migrate fails everywhere; critical proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "6e2ecefc5842a17c1217ed0225882e46de7f0039172855b55dade5c03a9b6a23"
+    },
+    {
+      "id": "e52aecd80f8b39c9",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "C019: same broken-graph finding",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3fd5cd09388712db174135e2b2d8454457320623280d87e26e4589d45897e6ea"
+    },
+    {
+      "id": "a529945d37822164",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "C019: same broken-graph finding",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "4b3918cbd725bbabb7c36daa0edb4a22bfa6aa4493394883e2d2ea5bf54225fb"
+    },
+    {
+      "id": "bec363cab196faf9",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: same ambiguous-match observation",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "9c6cfe8bfd2b6a51862ac8ee80f0d06fddd752c3b6a43a34a3bc31a4b74f0f7a"
+    },
+    {
+      "id": "50b27a4d743307ba",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: same ambiguous-match observation",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "60ecd772a208365654c5bbf76afe5118659ce58488346c8db12cb43a49e2081d"
+    },
+    {
+      "id": "16ec2f115dcce2d4",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: same injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "84528f824b31dc69cc20c5fcd1e2949d9ebaeeef1ca3eb6f023839958d80968f"
+    },
+    {
+      "id": "3d0916b15761b21c",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: same injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "e468dcd97110690d8278bd3485a6f9a4eeb6f43f7a10a40c57744639cb51aa92"
+    },
+    {
+      "id": "adfad153d9ba5037",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: secondary, correct \u2014 QueryRow on a LIKE pattern returns an arbitrary first row; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "82b06e102ba311c6fed3b1c899c5dc47e9556fc7448efb304c9c468a9a6fabb2"
+    },
+    {
+      "id": "dc23b95eb3ea149c",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "C020: fmt.Sprintf builds the LIKE query from account",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "b7230d6d0a645ff4f44cb43fc1671b1a1fefb09efc0d7177293ae7b0f5127927"
+    },
+    {
+      "id": "34f2ba3369350cba",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: tar-stream \u2192 tar-streem typosquat at line 5",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "639b7ca72be6285111a7da00b2198f62ffe37b62f6126c0cd5ae94f7a7eaa777"
+    },
+    {
+      "id": "b1af3b8da59eff0a",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: same typosquat",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "1d77ffdd92fb61a58b7c39520a5b449ad2109e6b59dca9721a0b09787ea96473"
+    },
+    {
+      "id": "58695b98bc6761f8",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: same typosquat",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "06c35c4c205357a4e487caa7048bf70d64bd2147b38a76dad143199bd14ca861"
+    },
+    {
+      "id": "604873a2786f3429",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: same postinstall facet",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "4fccc5af155dac4b14439621470d0df0253ec4a6b670c133082f46634db37337"
+    },
+    {
+      "id": "e58a1b11d639c8be",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: postinstall hook facet of the labelled defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "5c784e3a502c5b244622a1a63db014278825744745aa14f88f5badb1598e4b44"
+    },
+    {
+      "id": "0a7ef01c41674e97",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "C021: same postinstall facet",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "5666b82548f9ab4019bafac6cbbc588494491f92e499d7a8bc7200239ffdd3fe"
+    },
+    {
+      "id": "4ccb2df6c763849f",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "C022: same prompt injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "2a20d050f3df53f93ef2ddba5d601f5a0d470a7c3a1dd42f4d666963b4da9fdc"
+    },
+    {
+      "id": "3fe20aad39f36b40",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "C022: same prompt injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "936e1bf5bc770c0215d08359a6f708404d77d34a9fd0101aabf1c674d862ba3b"
+    },
+    {
+      "id": "d169a83fe5d4cf6a",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "C022: embedded instruction to suppress workflow findings at lines 10-12",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "2d58d18ed63fc382040f981a428e47b04ccedd49b7103d19b6e650f7d085c7c0"
+    },
+    {
+      "id": "9baf9456fe375824",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "C068: pickle.loads on client-controlled session input",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "392aea8a4afbfda3a0530a5602e55213cc52c683f75a92097fa1d85aae348c1f"
+    },
+    {
+      "id": "6077969eac4a5f63",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "C068: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "c180400ce7276ab305782b551610a387ecc6ee9951498a918b5a2d63ce138a10"
+    },
+    {
+      "id": "85c151d01dfaafa6",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "C068: same defect",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "f6c455fb142ed4400bdb2be9e85349541538a41cf3f876616edacaad47b9ec1e"
+    },
+    {
+      "id": "d9e1ea9b7e17bf3e",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 5,
+      "severity": "warning",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "C069: secondary, correct \u2014 base served /admin/* at the root; moving under /api/v2 with no alias breaks clients; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "07de74ca20a104d13a8dd7993ce7474b019a66283307bd103738b477ae1b8c27"
+    },
+    {
+      "id": "e7e4f72d62d562fb",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "C069: same authz drop",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "32fb9bf27b3b0ece51716640a3dab95f81383879f49659b62b21f0f13d225dda"
+    },
+    {
+      "id": "0bfa50143d5a796d",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "C069: same authz drop",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "4358f803cb1d48191615e35e87a65b298cf586fd6174587a38db1df29baeef2b"
+    },
+    {
+      "id": "30eee960e68756ab",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "C069: RequireRole wrapper dropped on both admin routes",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "ad904fc8b29426f87de87c688a82c5b089ee40a09af5cab4b5f33ddd7b77f921"
+    },
+    {
+      "id": "762757cf413b218c",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "C069: same authz drop, role-edit endpoint",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "db2dc2d0e44ebfc94ecd4c88220d0d5c4b7692488ac9b892758816f1456389a5"
+    },
+    {
+      "id": "975b32740a42f014",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: secondary, correct \u2014 base signature was resize(src, w); inserting filter second shifts w; warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "19666a37d5246c442a2c351ab52583ab22ed4cadaf60fb03c249a652d22638eb"
+    },
+    {
+      "id": "2e65424f574c59ec",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: same parameter-shift observation",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "74e3849290bd61acdb4b9558bd8d578446b368c9e636a7c9d74d73cdb9863005"
+    },
+    {
+      "id": "d241ccd5f11ce682",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: same parameter-shift observation",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "3879709292aa01eee9ef9945c38a513f4eca35808fd7be29cb2aa75deb977a03"
+    },
+    {
+      "id": "8afe36f4e42c528b",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: exec() with interpolated src and filter",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "740c05350de79c216b0931749608edbbab01370bbd55239d99383339d4ef9bf6"
+    },
+    {
+      "id": "3a93721f7ff5bf01",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: same injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "f08927660fe06997f9bdc1d6aa291806b55f48e78a5d568087aa33b212486802"
+    },
+    {
+      "id": "2fb40ea2a8c69d59",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "C070: same injection",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "baseline"
+      ],
+      "occurrences": 1,
+      "body_sha256": "614aab99c3c95dc229a1f7dd1383c23a10a6ed50f1805c8b260eec3410211014"
+    }
+  ],
+  "precision": {
+    "positive_cases": 21,
+    "findings": 82,
+    "overall": {
+      "true": 82,
+      "false": 0,
+      "overstated": 0,
+      "precision": 1.0
+    },
+    "per_lane": {
+      "grok|xai|grok-4.5": {
+        "true": 82,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    }
+  }
+}

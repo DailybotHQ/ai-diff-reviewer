@@ -1,0 +1,51 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 34.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.4,
+  "usage": {
+    "in": 29422,
+    "cache_read": 113152,
+    "cache_write": 0,
+    "out": 1345,
+    "source": "cli"
+  },
+  "cost_usd": 0.1008596,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**IDOR / broken authorization:** any authenticated caller can pass `accountId` in the body and load a different account. The comment says this is for support staff tools, but nothing checks staff role, a support-tool identity, or that `id === caller.accountId`.\n\n**Failure mode:** a normal user sends `{ \"accountId\": \"<victim-id>\" }` after `auth(req)` succeeds and receives the victim row via `Response.json(account)`.\n\n**Fix:** only honor an explicit id after an authorization gate, e.g. require `caller.isSupportStaff` (or equivalent), otherwise force `caller.accountId`:\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string =\n    caller.isSupportStaff && typeof body.accountId === \"string\"\n      ? body.accountId\n      : caller.accountId;\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\nAdapt the role field to whatever `auth()` actually returns; the important part is that non-staff callers cannot choose the id."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bug \u2014 do not merge.** Any authenticated caller can look up any account by supplying `accountId` in the request body; the comment claims this is for support staff, but nothing enforces that.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/routes/account.ts:8` | IDOR: `accountId` from body is trusted with no staff/ownership check |\n\n## Details\n\nPreviously `getAccount` always scoped the lookup to `caller.accountId` from `auth(req)`. This PR replaces that with `body.accountId ?? caller.accountId` and returns the full account JSON. There is no role check, no allowlist, and no comparison that `id === caller.accountId` unless the body omits the field.\n\nFailure mode: a normal user authenticates, POSTs `{ \"accountId\": \"<victim>\" }`, and receives the victim account record.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 26.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.0,
+  "usage": {
+    "in": 15293,
+    "cache_read": 67968,
+    "cache_write": 0,
+    "out": 1469,
+    "source": "cli"
+  },
+  "cost_usd": 0.0597904,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Supply-chain typosquat:** `tar-stream` (widely used, maintained extract/pack library) is replaced with `tar-streem` \u2014 a one-letter misspelling that is a standard typosquatting pattern.\n\n**Failure mode:** `npm install` resolves and executes code from an attacker-controlled package name. Anyone who installs deps on this branch (CI runners, developer machines) runs whatever `tar-streem@^1.0.0` ships, including credential theft, reverse shells, or lockfile/poisoned transitive deps.\n\n**Required fix:** restore `tar-stream` (or another explicitly vetted package with the same API). Do not publish/merge until `package-lock.json`/`npm ls` shows only the intended package and its integrity hash is reviewed. If the goal was maintenance, document the real upstream and pin a known-good version \u2014 never swap to a near-homograph name without a security review of the tarball contents."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Malicious install hook:** `postinstall` runs `tar-streem-setup` automatically on every `npm install` / `npm ci`.\n\n**Failure mode:** lifecycle scripts are a primary malware delivery path on npm. Combined with the `tar-streem` swap above, install time becomes remote code execution on developer laptops and CI without any explicit `npm run` step. The PR framing (\"bundles its installer\") is the usual social-engineering cover for this pattern.\n\n**Required fix:** remove the `postinstall` script entirely. Packaging should stay an explicit `npm run package` (or similar) against a reviewed dependency. Never add install-time binaries from a newly introduced, unaudited package."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` package with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a classic supply-chain compromise pattern.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `package.json` | Typosquat dependency swap: `tar-stream` \u2192 `tar-streem` |\n| 2 | critical | `package.json` | `postinstall` runs untrusted `tar-streem-setup` on install |\n\n## Notes\n\n- Repo only contains `package.json`; there is no lockfile and no `scripts/pack.js` in tree, so the claimed packaging motivation cannot be verified from this change alone.\n- Even if `tar-stream` were unmaintained, the correct remediation is an audited maintained fork or `node:tar`/stdlib approach \u2014 not an unvetted package whose name differs by one letter and that executes setup at install time.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
