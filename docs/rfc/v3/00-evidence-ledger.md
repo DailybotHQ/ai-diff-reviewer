@@ -155,7 +155,7 @@ Secondary problems:
 | P-6 | Cheap models do not review; "cheaper model everywhere" is not a cost lever | E-05, E-11, H-06 | RFC-06 (budgets by risk, economy only for verifier/docs tiers) |
 | P-7 | No immutable per-run provenance; usage sometimes unknown and at risk of being counted as zero; ledgers disagree | X-02, X-03, E-24, S7 EXPERIMENT_CONTRACT F-rules | RFC-01 (run record) |
 | P-8 | The corpus cannot measure critical precision: zero live critical must-find labels; no cross-file, instruction-file, missing-patch or multi-round IAR cases scored live | E-18, E-13 | RFC-01 (corpus gaps) |
-| P-9 | Finding retirement rests on the model's say-so (`update_prior_finding`) rather than on evidence that the anchor changed; the code already refuses resolution-by-absence, which the v3 design must preserve | E-29, E-30 | RFC-03 (evidence-based retirement) |
+| P-9 | Finding retirement is corroborated only that the **file changed** (`reconcile_prior_findings`: model `resolved` verdict + fingerprint absent + file changed since raised or removed), never that the **defect is gone** at the anchor; the code already refuses resolution-by-absence, which the v3 design must preserve (amended by Task 5 after reading the function) | E-29, E-30 | RFC-03 (evidence-based retirement) |
 | P-10 | PR context loses metadata (renames) and exposes no completeness flag; PR metadata is untrusted input but nothing marks it so in the output | E-31; S6 §8 | RFC-02, RFC-05 |
 | P-11 | Long-running CLI legs hit the workflow timeout with no partial result | R-05 | RFC-04 (failure modes), RFC-06 (budgets) |
 
