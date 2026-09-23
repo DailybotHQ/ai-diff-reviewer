@@ -121,8 +121,9 @@ class ResolveModelTests(unittest.TestCase):
             for model in row.values():
                 if model in ("auto", "composer-2.5"):
                     continue  # Cursor subscription — no per-token list price
-                self.assertTrue(
-                    any(model.startswith(prefix) for prefix in reviewer.INDICATIVE_PRICES_USD_PER_MTOK),
+                price = reviewer.lookup_indicative_price(model)
+                self.assertIsNotNone(
+                    price,
                     f"{model} missing from INDICATIVE_PRICES_USD_PER_MTOK",
                 )
 
@@ -235,9 +236,19 @@ class BedrockTierTests(unittest.TestCase):
             return reviewer.resolve_model("anthropic", prof, raw)
 
     def test_tier_aliases_resolve_to_bedrock_ids(self) -> None:
-        self.assertEqual(self._resolve("balanced"), "anthropic.claude-sonnet-5")
-        self.assertEqual(self._resolve("economy"), "anthropic.claude-haiku-4-5")
-        self.assertEqual(self._resolve("deep"), "anthropic.claude-opus-5")
+        self.assertEqual(self._resolve("balanced"), "us.anthropic.claude-sonnet-5")
+        self.assertEqual(self._resolve("economy"), "us.anthropic.claude-haiku-4-5")
+        self.assertEqual(self._resolve("deep"), "us.anthropic.claude-opus-5")
+
+    def test_geo_prefixed_inference_profiles_resolve_prices(self) -> None:
+        base = reviewer.lookup_indicative_price("anthropic.claude-sonnet-5")
+        self.assertIsNotNone(base)
+        for geo in ("us.", "eu.", "apac.", "global.", "au.", "jp."):
+            with self.subTest(geo=geo):
+                self.assertEqual(
+                    reviewer.lookup_indicative_price(f"{geo}anthropic.claude-sonnet-5"),
+                    base,
+                )
 
     def test_explicit_bedrock_id_passes_through(self) -> None:
         self.assertEqual(

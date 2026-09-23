@@ -79,6 +79,9 @@ class BedrockWireTests(unittest.TestCase):
         self.assertIn("max_tokens", body)
         # Deterministic sampling applies on Bedrock too.
         self.assertEqual(body["temperature"], 0.0)
+        # Adaptive thinking is on by default for current models there;
+        # the bounded review loop disables it for predictable cost.
+        self.assertEqual(body["thinking"], {"type": "disabled"})
         self.assertFalse(
             any("cache_control" in json.dumps(block) for block in body["system"])
         )
@@ -88,8 +91,19 @@ class BedrockWireTests(unittest.TestCase):
         self.assertTrue(headers["authorization"].startswith("AWS4-HMAC-SHA256 "))
         self.assertIn("x-amz-date", headers)
         self.assertNotIn("x-amz-security-token", headers)
-        # The resolved AWS secret is registered for the outbound scrub gate.
-        self.assertIn(synthetic_secret, reviewer._SECRET_VALUES)
+        # the signed host is sent explicitly on the wire
+        self.assertEqual(headers.get("host"), "bedrock-runtime.us-east-1.amazonaws.com")
+        self.assertEqual(headers.get("accept"), "application/json")
+
+    def test_versioned_model_id_is_percent_encoded(self) -> None:
+        # botocore parity: `:` in versioned foundation-model ids becomes
+        # %3A in the URL path (and in the SigV4 canonical URI).
+        prof = reviewer.resolve_endpoint_profile(_BEDROCK_BASE, "anthropic")
+        prov = reviewer.AnthropicProvider(
+            api_key="k", model="anthropic.claude-3-5-sonnet-20241022-v2:0", profile=prof
+        )
+        req = _capture(prov, env={"AWS_ACCESS_KEY_ID": "AKID", "AWS_SECRET_ACCESS_KEY": "sk"})
+        self.assertIn("/model/anthropic.claude-3-5-sonnet-20241022-v2%3A0/invoke", req.full_url)
 
     def test_session_token_env_is_signed_and_sent(self) -> None:
         req = _capture(
@@ -180,6 +194,15 @@ class BedrockOidcStartupTests(unittest.TestCase):
             env["AWS_ACCESS_KEY_ID"] = "AKIDEXAMPLE"
             env["AWS_SECRET_ACCESS_KEY"] = "aws-synthetic-secret-0123456789abcdef"
         return env
+
+    def test_startup_probe_registers_env_credentials(self) -> None:
+        # the OIDC probe registers the resolved triple BEFORE any network
+        # call, so public-facing failure text is scrubbed from the start.
+        synthetic = "aws-synthetic-secret-0123456789abcdef"
+        env = self._env(with_aws=True)
+        env["AWS_SECRET_ACCESS_KEY"] = synthetic
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertIn(synthetic, reviewer._SECRET_VALUES)
 
     def test_bedrock_oidc_lane_gets_past_startup_checks(self) -> None:
         # The observable startup marker: `Backend: kind=bedrock` is logged by

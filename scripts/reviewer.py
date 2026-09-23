@@ -325,13 +325,15 @@ _GEMINI_TIERS: dict[str, str] = {
     MODEL_TIER_DEEP: "gemini-2.5-pro",
 }
 _BEDROCK_TIERS: dict[str, str] = {
-    # Bedrock model ids carry the `anthropic.` prefix; consumers pinning a
-    # cross-region inference profile pass the explicit id (e.g.
-    # `us.anthropic.claude-sonnet-5`). AWS bills Bedrock separately — the
-    # indicative prices below mirror first-party list rates as an estimate.
-    MODEL_TIER_BALANCED: "anthropic.claude-sonnet-5",
-    MODEL_TIER_ECONOMY: "anthropic.claude-haiku-4-5",
-    MODEL_TIER_DEEP: "anthropic.claude-opus-5",
+    # Bedrock inference profiles: the on-demand `bedrock-runtime` endpoint
+    # requires the cross-region profile form (`us.anthropic.…`) — bare
+    # foundation ids are not accepted. `us.` suits US-region endpoints;
+    # other geographies pin the explicit profile (`eu.` / `apac.` /
+    # `global.`). AWS bills Bedrock separately — the indicative prices
+    # below mirror first-party list rates as an estimate.
+    MODEL_TIER_BALANCED: "us.anthropic.claude-sonnet-5",
+    MODEL_TIER_ECONOMY: "us.anthropic.claude-haiku-4-5",
+    MODEL_TIER_DEEP: "us.anthropic.claude-opus-5",
 }
 _OPENROUTER_TIERS: dict[str, str] = {
     # Meta-gateway: model ids are vendor-prefixed (`vendor/model`). Defaults
@@ -531,6 +533,7 @@ def _sigv4_sign_request(
     session_token: str | None,
     now_utc: datetime,
     content_type: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Sign one AWS API request with Signature Version 4 (pure).
 
@@ -548,6 +551,8 @@ def _sigv4_sign_request(
         headers["content-type"] = content_type
     if session_token:
         headers["x-amz-security-token"] = session_token
+    if extra_headers:
+        headers.update(extra_headers)
     signed_names: list[str] = sorted(headers)
     canonical_headers: str = "".join(
         f"{name}:{headers[name].strip()}\n" for name in signed_names
@@ -2422,7 +2427,7 @@ def lookup_indicative_price(model: str) -> tuple[float, float] | None:
     # Bedrock cross-region inference profiles prefix a geo segment
     # (`us.anthropic.claude-…` / `eu.anthropic.claude-…`); strip it so the
     # documented `anthropic.` price entries keep applying (indicative only).
-    for geo in ("us.", "eu.", "apac."):
+    for geo in ("us.", "eu.", "apac.", "global.", "au.", "jp."):
         if candidate.startswith(geo):
             candidate = candidate[len(geo):]
             break
@@ -2794,6 +2799,11 @@ class AnthropicProvider(Provider):
             # field is not part of the AWS request schema and is removed.
             anthropic_body["anthropic_version"] = BEDROCK_ANTHROPIC_VERSION
             anthropic_body.pop("model", None)
+            # Adaptive thinking is ON by default for current-generation
+            # models on Bedrock; the review loop is a bounded, multi-turn,
+            # cost-sensitive shape — keep it disabled (temperature stays
+            # honoured, keeping the deterministic contract).
+            anthropic_body["thinking"] = {"type": "disabled"}
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             url, headers, api_label = self._bedrock_request_parts(body)
@@ -2837,10 +2847,21 @@ class AnthropicProvider(Provider):
                 "bedrock-runtime.{region}.amazonaws.com endpoint — no region "
                 f"found in host {self.profile.host!r}."
             )
-        model_path: str = urllib.parse.quote(self.model, safe=".:_-")
+        # Strict path encoding (safe=""): unreserved bytes stay literal,
+        # `:` in versioned ids becomes %3A and `/` in ARNs becomes %2F —
+        # matching the AWS SDK serializers so the SigV4 canonical URI
+        # agrees with the wire.
+        model_path: str = urllib.parse.quote(self.model, safe="")
         url: str = join_endpoint_path(
             self.profile.base_url, f"/model/{model_path}/invoke"
         )
+        # Sign the exact host the wire sends: include the port when the
+        # endpoint carries a non-default one (urllib would otherwise send
+        # `Host: host:port` while the signature covered the bare hostname).
+        url_parts = urllib.parse.urlsplit(self.profile.base_url)
+        sign_host: str = self.profile.host
+        if url_parts.port:
+            sign_host = f"{self.profile.host}:{url_parts.port}"
         access_key, secret_key, session_token = _resolve_aws_credentials(
             self.api_key
         )
@@ -2856,7 +2877,7 @@ class AnthropicProvider(Provider):
             uri_path=urllib.parse.urlsplit(url).path,
             query="",
             body=body,
-            host=self.profile.host,
+            host=sign_host,
             region=region,
             service=BEDROCK_SERVICE,
             access_key=access_key,
@@ -2864,8 +2885,14 @@ class AnthropicProvider(Provider):
             session_token=session_token,
             now_utc=datetime.now(timezone.utc),
             content_type="application/json",
+            extra_headers={"Accept": "application/json"},
         )
-        headers: dict[str, str] = {"Content-Type": "application/json", **signed}
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Host": sign_host,
+            **signed,
+        }
         api_label: str = f"bedrock invoke API ({self.profile.host})"
         return url, headers, api_label
 
@@ -10394,7 +10421,13 @@ def main() -> int:
     bedrock_env_credentials: bool = False
     if not api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
         try:
-            _resolve_aws_credentials(None)
+            # resolve AND register immediately: any public-facing failure
+            # text produced before the first InvokeModel call is scrubbed.
+            probe_access, probe_secret, probe_session = _resolve_aws_credentials(None)
+            register_secret(probe_access)
+            register_secret(probe_secret)
+            if probe_session:
+                register_secret(probe_session)
             bedrock_env_credentials = True
         except ValueError as exc:
             log(
