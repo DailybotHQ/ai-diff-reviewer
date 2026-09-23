@@ -102,6 +102,26 @@ class ExecutionTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "campaign.json").is_file())
             self.assertEqual(rv.validate_tree(Path(tmp)), [])
 
+    def test_resume_keeps_completed_records_and_their_cost(self) -> None:
+        runs = campaign.plan(MANIFEST, Path("/x"))
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = campaign.plan(MANIFEST, Path(tmp))
+            first = Path(str(runs[0].out) + ".run-record.json")
+            first.parent.mkdir(parents=True, exist_ok=True)
+            first.write_text(json.dumps({"status": "completed", "usage_known": True, "cost_usd": 0.5,
+                                         "campaign": {"id": "x", "cell": "c", "repetition": 0, "arm": "a"}}))
+            calls: list[Path] = []
+
+            def runner(argv: list[str], record_path: Path, env: dict[str, str]) -> dict[str, Any] | None:
+                calls.append(record_path)
+                return {"status": "completed", "usage_known": True, "cost_usd": 0.1}
+
+            ledger = campaign.execute(MANIFEST, runs, budget_usd=100.0, records_out=Path(tmp), runner=runner)
+        self.assertEqual(ledger["resumed"], 1)
+        self.assertEqual(ledger["executed"], len(runs) - 1)
+        self.assertNotIn(first, calls)
+        self.assertAlmostEqual(ledger["spent_usd_upper_bound"], 0.5 + 0.1 * (len(runs) - 1), places=4)
+
     def test_run_refuses_without_budget_and_dry_run_flags_excess(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             m = Path(tmp) / "campaign.json"; m.write_text(json.dumps(MANIFEST))

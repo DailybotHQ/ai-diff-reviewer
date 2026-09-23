@@ -9,7 +9,7 @@ ones that matter for releases.
 |---|---|---|
 | `verdicts/` | one `verdict/1.0` JSON per evaluated candidate (`<campaign_id>.json`) — **committed**; `auto-release.yml` reads the newest one whose runtime/prompt hashes match the release candidate | permanent |
 | `campaigns/<campaign_id>/` | the raw run records of a campaign plus its `campaign.json` manifest (`cells`, `repetitions`, lanes, budget) — produced as workflow artifacts by `eval-campaign.yml` (90 days) and squashed here monthly | artifacts 90 d; squash committed |
-| `adjudications/` | per-finding blinded adjudication records used for precision (RFC-01 § Metrics) | permanent |
+| `adjudications/` | per-finding blinded adjudication records used for precision (RFC-01 § Metrics), sealed by `tests/eval/adjudicate.py` (`schema: adjudication/1.0`; finding bodies kept as SHA-256 only) | permanent |
 
 Rules:
 

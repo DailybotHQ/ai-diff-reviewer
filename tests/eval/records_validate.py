@@ -34,6 +34,29 @@ VERDICT_SCHEMA: Path = HERE / "schemas" / "verdict.schema.json"
 MAX_RECORD_FILE_BYTES: int = 1_000_000
 MAX_RECORD_FILES: int = 1_000
 AUXILIARY_FILES: frozenset[str] = frozenset({"ledger.json", "summary.json"})
+RESULT_TWIN_SUFFIX: str = ".run-record.json"  # `<out>.json` + `<out>.json.run-record.json` are written together
+ADJUDICATION_SCHEMA: str = "adjudication/1.0"
+ADJUDICATION_VERDICTS: frozenset[str] = frozenset({"true", "false", "overstated"})
+ADJUDICATION_REQUIRED: tuple[str, ...] = ("campaign_id", "adjudicator", "blind", "method", "adjudicated_at", "positive_cases", "findings", "precision")
+
+
+def _validate_adjudication(path: Path, data: dict[str, Any]) -> list[str]:
+    """Adjudication records (tests/eval/adjudicate.py seal): blind, every finding with a verdict, no finding bodies."""
+    problems: list[str] = []
+    for key in ADJUDICATION_REQUIRED:
+        if key not in data:
+            problems.append(f"{path}: adjudication missing {key!r}")
+    if data.get("blind") is not True:
+        problems.append(f"{path}: adjudication must be blind (F7)")
+    for i, finding in enumerate(data.get("findings") or []):
+        if not isinstance(finding, dict):
+            problems.append(f"{path}: findings[{i}] is not an object")
+            continue
+        if finding.get("verdict") not in ADJUDICATION_VERDICTS:
+            problems.append(f"{path}: findings[{i}] verdict {finding.get('verdict')!r} not in {sorted(ADJUDICATION_VERDICTS)}")
+        if "body" in finding:
+            problems.append(f"{path}: findings[{i}] carries the finding body — sealed records keep body_sha256 only")
+    return problems
 
 
 def _load_json(path: Path) -> Any:
@@ -67,10 +90,16 @@ def validate_tree(records_dir: Path) -> list[str]:
         if path.name in AUXILIARY_FILES:
             # campaign driver outputs beside the records — not run records
             continue
+        if Path(str(path) + RESULT_TWIN_SUFFIX).is_file():
+            # run_eval.py result payload (findings + score) kept beside its run record for adjudication
+            continue
         if not isinstance(data, dict):
             problems.append(f"{path}: not an object")
             continue
         version: Any = data.get("schema_version")
+        if version is None and data.get("schema") == ADJUDICATION_SCHEMA:
+            problems.extend(_validate_adjudication(path, data))
+            continue
         if version == "run-record/3.0":
             problems.extend(schema_check.validate(run_schema, data, label=str(path)))
             run_ids[str(data.get("run_id"))] += 1

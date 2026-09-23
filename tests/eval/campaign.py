@@ -155,6 +155,19 @@ def run_eval_command(manifest: dict[str, Any], r: RunPlan) -> list[str]:
     return argv
 
 
+def _completed_record(record_path: Path) -> dict[str, Any] | None:
+    """A record left by an earlier (interrupted) campaign counts as done when it carries a campaign stamp."""
+    if not record_path.is_file():
+        return None
+    try:
+        data: Any = json.loads(record_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if isinstance(data, dict) and isinstance(data.get("campaign"), dict) and data.get("status") in ("completed", "incomplete"):
+        return data
+    return None
+
+
 def default_runner(argv: list[str], record_path: Path, env: dict[str, str]) -> dict[str, Any] | None:
     """Execute one run through run_eval.py; return its run record (or None)."""
     subprocess.run(argv, check=False, env=env)
@@ -181,6 +194,7 @@ def execute(
     spent: float = 0.0
     unknown_runs: int = 0
     executed: int = 0
+    resumed: int = 0
     stopped_reason: str | None = None
     env: dict[str, str] = dict(os.environ)
     if runtime_sha:
@@ -193,6 +207,16 @@ def execute(
             break
         r.out.parent.mkdir(parents=True, exist_ok=True)
         record_path: Path = Path(str(r.out) + ".run-record.json")
+        existing: dict[str, Any] | None = _completed_record(record_path)
+        if existing is not None:
+            # Resume: a completed record from an interrupted campaign is kept, never re-bought.
+            resumed += 1
+            if existing.get("usage_known") and existing.get("cost_usd") is not None:
+                spent += float(existing["cost_usd"])
+            else:
+                unknown_runs += 1
+                spent += lane_max
+            continue
         record: dict[str, Any] | None = runner(run_eval_command(manifest, r), record_path, env)
         executed += 1
         if record is None:
@@ -215,7 +239,7 @@ def execute(
         {"schema": SCHEMA_VERSION, "campaign_id": manifest["campaign_id"], "repetitions": manifest["repetitions"],
          "cells": sorted({r.cell_key for r in runs}), "budget_usd": budget_usd}, indent=2) + "\n", encoding="utf-8")
     ledger: dict[str, Any] = {
-        "campaign_id": manifest["campaign_id"], "planned": len(runs), "executed": executed,
+        "campaign_id": manifest["campaign_id"], "planned": len(runs), "executed": executed, "resumed": resumed,
         "spent_usd_upper_bound": round(spent, 4), "unknown_cost_runs": unknown_runs,
         "budget_usd": budget_usd, "stop_at_usd": round(stop_at, 4), "stopped_reason": stopped_reason,
     }

@@ -63,6 +63,17 @@ Two more modules live here; only the `test_*.py` files under `tests/` join
 | `corpus_validate.py` | strict v2 corpus validator (`cases/`), floors + blinded-adjudication enforcement | none |
 | `jev_experiment.py` | controlled-comparison driver: `init`/`validate`/`dry-run`/`report` over the corpus with deterministic group-coherent splits and budget caps | `dry-run` is zero-call by construction; `report` exits 1 unless promotion criteria hold |
 
+## Eval-gate tooling (v3, RFC-01)
+
+| Module | Role | Network |
+| --- | --- | --- |
+| `schema_check.py` | stdlib JSON-Schema-subset validator; `--all` checks every shipped schema against its example | none |
+| `records_validate.py` | offline validator of `records/` (run records, verdicts, campaign manifests, sealed adjudication records; `run_eval` result twins are skipped) | none |
+| `determinism.py` | cells + noise floor over run records; `verdict` applies the RFC-01 promotion/blocking rules (`verdict/1.0`) | none |
+| `campaign.py` | budgeted campaign driver (`plan` / `dry-run` / `run`): projection first, hard stop at 90 % of `--budget-usd` (F8), resumes over completed records | `run` spends provider tokens |
+| `release_gate.py` | the `auto-release.yml` precondition: newest verdict matching the runtime + prompt hashes must be fresh and non-blocking | none |
+| `adjudicate.py` | blinded, source-grounded adjudication of findings for precision (`worksheet` → verdicts → `seal` → `precision`); arm and lane hidden until seal (F7) | none |
+
 See `CORPUS.md` for the corpus contract; `run_eval.py` is covered at the top
 of this file. `run_eval.py` records full finding bodies (8 KB cap) and
 separates `setup_seconds` from provider `seconds` — scoring behavior for old

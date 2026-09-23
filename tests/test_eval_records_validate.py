@@ -29,6 +29,25 @@ def _write(d: Path, name: str, doc: Any) -> None:
 
 
 class RecordsValidateTests(unittest.TestCase):
+    def test_result_twins_are_skipped_and_adjudications_validated(self) -> None:
+        adj: dict[str, Any] = {
+            "schema": "adjudication/1.0", "campaign_id": "c", "adjudicator": "x", "blind": True, "method": "m",
+            "adjudicated_at": "2026-09-23T00:00:00Z", "positive_cases": ["C001"], "precision": {},
+            "findings": [{"id": "a", "case": "C001", "verdict": "true", "body_sha256": "0" * 64}],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp); (d / "adjudications").mkdir()
+            _write(d, "pr46-r0.json", {"case": None, "pr": 46, "findings": [], "score": {}})  # run_eval payload
+            _write(d, "pr46-r0.json.run-record.json", EXAMPLE)
+            _write(d / "adjudications", "c.json", adj)
+            self.assertEqual(rv.validate_tree(d), [])
+            bad = dict(adj, blind=False, findings=[{"id": "a", "verdict": "maybe", "body": "text"}])
+            _write(d / "adjudications", "c.json", bad)
+            problems = rv.validate_tree(d)
+        self.assertTrue(any("must be blind" in p for p in problems))
+        self.assertTrue(any("verdict 'maybe'" in p for p in problems))
+        self.assertTrue(any("carries the finding body" in p for p in problems))
+
     def test_clean_tree_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp); (d / "verdicts").mkdir()
