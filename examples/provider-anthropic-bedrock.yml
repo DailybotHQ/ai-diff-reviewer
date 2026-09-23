@@ -4,7 +4,7 @@
 # The action owns the review loop in-process — zero CLI install, bounded
 # turns — and sends SigV4-signed InvokeModel requests to the regional
 # `bedrock-runtime` endpoint. `model` is a Bedrock model id or inference
-# profile (`anthropic.claude-sonnet-5`, `us.anthropic.claude-sonnet-5`).
+# profile (`us.anthropic.claude-sonnet-5`).
 # SECURITY: the AWS credential is used to sign requests to the
 # `api-base` host only.
 #
