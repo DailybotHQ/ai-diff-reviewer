@@ -253,6 +253,24 @@ def compose_prompt(prompt_file: Path, extension: Path | None) -> str:
     return text
 
 
+def _write_failed_record(r: Any, record: Any, args: argparse.Namespace, exc: BaseException, *, out_path: Path) -> None:
+    """A PR-path run that crashed before its record was written still leaves a `failed` record.
+
+    Setup crashes (GitHub fetch, provider build, prompt compose) are classed
+    `github_api` unless the provider loop had started, which makes them
+    `provider_error`. Written beside the result path the campaign driver
+    expects, so the campaign counts the run instead of losing it.
+    """
+    record.provider = args.provider if args.provider in r.PROVIDER_IDS_FOR_RECORD else record.provider
+    record.model = record.model or (args.model or "")
+    record.runtime_sha = record.runtime_sha or r._runtime_sha(str(ROOT))
+    failure_class: str = r.RUN_FAILURE_PROVIDER if record.run_started else r.RUN_FAILURE_GITHUB
+    doc: dict[str, Any] = record.to_dict(status=r.RUN_STATUS_FAILED, failure_class=failure_class)
+    print(f"run_eval: run failed before its record was written — {type(exc).__name__}: {str(exc)[:200]}", file=sys.stderr)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    Path(str(out_path) + ".run-record.json").write_text(r.scrub_secrets(json.dumps(doc, indent=2)) + "\n", encoding="utf-8")
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     t_start = time.time()
     r = load_runtime()
@@ -283,91 +301,95 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     out_path = Path(args.out).resolve()
     args.out = str(out_path)
     os.chdir(worktree)
-    ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
-    api_base = r.validate_api_base(args.api_base or "")
-    profile = r.resolve_endpoint_profile(api_base, args.provider)
-    model = r.resolve_model(args.provider, profile, args.model or "")
-    args.model = model
-    provider = r.build_provider(args.provider, api_key=key, model=model, api_base=api_base)
-    system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
-    # Timing separation (PLAN Task 4 / F8): fetch + provider build + prompt
-    # compose are "setup"; the provider loop below is timed as t0..end.
-    setup_seconds = time.time() - t_start
-    t0 = time.time()
-    turns = 0
-    if isinstance(provider, r.AgentRunnerProvider):
-        with tempfile.TemporaryDirectory() as out_dir:
-            result = provider.run_review(
-                pr_context=ctx, review_instructions=system_prompt,
-                workspace=Path(args.worktree), output_dir=Path(out_dir),
-            )
-        usage = result.usage
-        turns = usage.turns if usage else 0
-        cost = usage.cost_usd if usage and usage.cost_usd is not None else (r.estimate_cost_usd(args.model or "", usage) if usage else None)
-        tool_calls = None
-    else:
-        state = r.ReviewState(max_inline_comments=10)
-        messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
-        tools = r.tools_schema(10)
+    try:
+        ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
+        api_base = r.validate_api_base(args.api_base or "")
+        profile = r.resolve_endpoint_profile(api_base, args.provider)
+        model = r.resolve_model(args.provider, profile, args.model or "")
+        args.model = model
+        provider = r.build_provider(args.provider, api_key=key, model=model, api_base=api_base)
+        system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
+        # Timing separation (PLAN Task 4 / F8): fetch + provider build + prompt
+        # compose are "setup"; the provider loop below is timed as t0..end.
+        setup_seconds = time.time() - t_start
+        t0 = time.time()
+        turns = 0
+        if isinstance(provider, r.AgentRunnerProvider):
+            with tempfile.TemporaryDirectory() as out_dir:
+                result = provider.run_review(
+                    pr_context=ctx, review_instructions=system_prompt,
+                    workspace=Path(args.worktree), output_dir=Path(out_dir),
+                )
+            usage = result.usage
+            turns = usage.turns if usage else 0
+            cost = usage.cost_usd if usage and usage.cost_usd is not None else (r.estimate_cost_usd(args.model or "", usage) if usage else None)
+            tool_calls = None
+        else:
+            state = r.ReviewState(max_inline_comments=10)
+            messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
+            tools = r.tools_schema(10)
 
-        class Counting:
-            def __init__(self, inner: Any) -> None:
-                self.inner = inner
+            class Counting:
+                def __init__(self, inner: Any) -> None:
+                    self.inner = inner
 
-            def complete(self, **kw: Any) -> Any:
-                nonlocal turns
-                turns += 1
-                return self.inner.complete(**kw)
+                def complete(self, **kw: Any) -> Any:
+                    nonlocal turns
+                    turns += 1
+                    return self.inner.complete(**kw)
 
-        r.drive_review(provider=Counting(provider), system_prompt=system_prompt, messages=messages, tools=tools, state=state, max_turns=args.max_turns)
-        result = r.state_to_review_result(state)
-        usage = state.usage
-        cost = r.estimate_cost_usd(args.model or "", usage) if usage else None
-        tool_calls = sum(1 for m in messages if m["role"] == "assistant" for b in (m["content"] if isinstance(m["content"], list) else []) if isinstance(b, dict) and b.get("type") == "tool_use")
-    # Run record for the PR path (v3): same shape the runtime writes; the
-    # campaign driver stamps `campaign` and stores it beside the result.
-    record.provider = args.provider if args.provider in r.PROVIDER_IDS_FOR_RECORD else record.provider
-    record.model = args.model or ""
-    record.endpoint_kind = getattr(getattr(provider, "profile", None), "kind", "unknown") or "unknown"
-    record.runtime_sha = r._runtime_sha(str(ROOT))
-    record.prompt_sha256 = r._sha256_text(system_prompt)
-    record.head_sha = ctx.head_ref
-    record.populate_context(ctx, base_sha="", iar_mode="none")
-    record.setup_seconds = round(setup_seconds, 3)
-    record.run_started = True
-    record.provider_seconds = round(time.time() - t0, 3)
-    _usage_obj = usage or r.UsageTelemetry()
-    if _usage_obj.source != r.USAGE_SOURCE_UNAVAILABLE and _usage_obj.cost_usd is None and cost is not None:
-        _usage_obj.cost_usd = cost
-    record.populate_from_run(provider=provider, state=None if isinstance(provider, r.AgentRunnerProvider) else state,
-                             result=result, usage=_usage_obj, max_turns=args.max_turns)
-    record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
-    payload = {
-        "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
-        "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
-        "turns": turns, "tool_calls": tool_calls,
-        "seconds": round(time.time() - t0, 1),
-        "setup_seconds": round(setup_seconds, 1),
-        "total_seconds": round(time.time() - t_start, 1),
-        "usage": {"in": usage.input_tokens, "cache_read": usage.cache_read_tokens, "cache_write": usage.cache_write_tokens, "out": usage.output_tokens, "source": usage.source} if usage else None,
-        "cost_usd": cost,
-        "changed_files": [f.get("path") for f in ctx.changed_files],
-        # Full finding evidence (PLAN Task 4): truncate far beyond the old
-        # 400 chars so scoring/adjudication sees the whole finding body.
-        "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
-        "summary": (result.summary or "")[:2000],
-    }
-    payload["score"] = score_run(payload)
-    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(payload, indent=2))
-    doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
-    sc = payload["score"]
-    doc["outcome"]["score"] = {"must_find_total": sc["must_find_total"], "must_find_hits": sc["must_find_hits"],
-                               "false_positives": len(sc["false_positives"]), "unlabelled": sc["unlabelled_findings"],
-                               "adjudicated_true": None, "adjudicated_false": None}
-    Path(str(args.out) + ".run-record.json").write_text(r.scrub_secrets(json.dumps(doc, indent=2)) + "\n", encoding="utf-8")
-    print(fmt_row(payload))
-    return payload
+            r.drive_review(provider=Counting(provider), system_prompt=system_prompt, messages=messages, tools=tools, state=state, max_turns=args.max_turns)
+            result = r.state_to_review_result(state)
+            usage = state.usage
+            cost = r.estimate_cost_usd(args.model or "", usage) if usage else None
+            tool_calls = sum(1 for m in messages if m["role"] == "assistant" for b in (m["content"] if isinstance(m["content"], list) else []) if isinstance(b, dict) and b.get("type") == "tool_use")
+        # Run record for the PR path (v3): same shape the runtime writes; the
+        # campaign driver stamps `campaign` and stores it beside the result.
+        record.provider = args.provider if args.provider in r.PROVIDER_IDS_FOR_RECORD else record.provider
+        record.model = args.model or ""
+        record.endpoint_kind = getattr(getattr(provider, "profile", None), "kind", "unknown") or "unknown"
+        record.runtime_sha = r._runtime_sha(str(ROOT))
+        record.prompt_sha256 = r._sha256_text(system_prompt)
+        record.head_sha = ctx.head_ref
+        record.populate_context(ctx, base_sha="", iar_mode="none")
+        record.setup_seconds = round(setup_seconds, 3)
+        record.run_started = True
+        record.provider_seconds = round(time.time() - t0, 3)
+        _usage_obj = usage or r.UsageTelemetry()
+        if _usage_obj.source != r.USAGE_SOURCE_UNAVAILABLE and _usage_obj.cost_usd is None and cost is not None:
+            _usage_obj.cost_usd = cost
+        record.populate_from_run(provider=provider, state=None if isinstance(provider, r.AgentRunnerProvider) else state,
+                                 result=result, usage=_usage_obj, max_turns=args.max_turns)
+        record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
+        payload = {
+            "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
+            "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
+            "turns": turns, "tool_calls": tool_calls,
+            "seconds": round(time.time() - t0, 1),
+            "setup_seconds": round(setup_seconds, 1),
+            "total_seconds": round(time.time() - t_start, 1),
+            "usage": {"in": usage.input_tokens, "cache_read": usage.cache_read_tokens, "cache_write": usage.cache_write_tokens, "out": usage.output_tokens, "source": usage.source} if usage else None,
+            "cost_usd": cost,
+            "changed_files": [f.get("path") for f in ctx.changed_files],
+            # Full finding evidence (PLAN Task 4): truncate far beyond the old
+            # 400 chars so scoring/adjudication sees the whole finding body.
+            "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
+            "summary": (result.summary or "")[:2000],
+        }
+        payload["score"] = score_run(payload)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(payload, indent=2))
+        doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
+        sc = payload["score"]
+        doc["outcome"]["score"] = {"must_find_total": sc["must_find_total"], "must_find_hits": sc["must_find_hits"],
+                                   "false_positives": len(sc["false_positives"]), "unlabelled": sc["unlabelled_findings"],
+                                   "adjudicated_true": None, "adjudicated_false": None}
+        Path(str(args.out) + ".run-record.json").write_text(r.scrub_secrets(json.dumps(doc, indent=2)) + "\n", encoding="utf-8")
+        print(fmt_row(payload))
+        return payload
+    except Exception as exc:  # noqa: BLE001 — instrument rule (RFC-01 P-7): a crashed run still leaves a record
+        _write_failed_record(r, record, args, exc, out_path=out_path)
+        raise
 
 
 def _matches(finding: dict[str, Any], label: dict[str, Any]) -> bool:

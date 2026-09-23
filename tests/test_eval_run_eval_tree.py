@@ -145,5 +145,38 @@ class RunCaseTests(unittest.TestCase):
         self.assertIn("app.py", ctx.diff)
 
 
+
+class PrPathFailedRecord(unittest.TestCase):
+    def test_setup_crash_still_writes_a_failed_run_record(self) -> None:
+        import argparse
+        import os
+        rt = run_eval.load_runtime()
+
+        def boom(**kw: Any) -> Any:
+            raise ConnectionError("IncompleteRead(454103 bytes read, 4888 more expected)")
+
+        rt.fetch_pr_context = boom
+        orig_load, orig_token, cwd = run_eval.load_runtime, run_eval.gh_token, os.getcwd()
+        run_eval.load_runtime, run_eval.gh_token = (lambda: rt), (lambda: "gh-token")
+        os.environ["AIPRR_TEST_EVAL_KEY"] = "k"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp) / "pr1-r0.json"
+                args = argparse.Namespace(tree=None, repo="o/r", pr=1, worktree=tmp, out=str(out), api_key_env="AIPRR_TEST_EVAL_KEY",
+                                          provider="grok", model="", api_base="", base_ref="main",
+                                          prompt=str(_ROOT / "prompts" / "default.md"), extension="", max_turns=3)
+                with self.assertRaises(ConnectionError):
+                    run_eval.run(args)
+                record = json.loads(Path(str(out) + ".run-record.json").read_text())
+        finally:
+            run_eval.load_runtime, run_eval.gh_token = orig_load, orig_token
+            os.chdir(cwd)
+            os.environ.pop("AIPRR_TEST_EVAL_KEY", None)
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["failure_class"], "github_api")
+        self.assertEqual(record["provider"], "grok")
+        self.assertFalse(record["usage_known"])
+        self.assertEqual(schema_check.validate(RUN_SCHEMA, record, label="failed"), [])
+
 if __name__ == "__main__":
     unittest.main()
