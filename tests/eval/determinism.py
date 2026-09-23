@@ -195,6 +195,7 @@ def verdict(
     candidate_runtime_sha: str,
     prompt_sha256: str,
     baseline_ref: str,
+    candidate_content_sha256: str | None = None,
 ) -> dict[str, Any]:
     base: dict[str, Any] = summarize(baseline)
     cand: dict[str, Any] = summarize(candidate)
@@ -256,6 +257,7 @@ def verdict(
     return {
         "schema_version": SCHEMA_VERSION_VERDICT,
         "candidate_runtime_sha": candidate_runtime_sha,
+        "candidate_content_sha256": candidate_content_sha256,
         "prompt_sha256": prompt_sha256,
         "baseline_ref": baseline_ref,
         "computed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -345,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     pv = sub.add_parser("verdict"); pv.add_argument("--baseline", required=True); pv.add_argument("--candidate", required=True)
     pv.add_argument("--out", required=True); pv.add_argument("--runtime-sha", default="unknown"); pv.add_argument("--prompt-sha256", default="0" * 64)
     pv.add_argument("--baseline-ref", default="baseline")
+    pv.add_argument("--content-sha256", default=None, help="SHA-256 of scripts/reviewer.py on the candidate (release precondition match key)")
     args = parser.parse_args(argv)
     if args.selftest:
         return selftest()
@@ -360,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         v = verdict(
             load_records(Path(args.baseline)), load_records(Path(args.candidate)),
             candidate_runtime_sha=args.runtime_sha, prompt_sha256=args.prompt_sha256, baseline_ref=args.baseline_ref,
+            candidate_content_sha256=args.content_sha256,
         )
         Path(args.out).write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
         print(f"verdict written: promotable={v['promotable']} blocking={len(v['blocking'])} descriptive_only={v['descriptive_only']}")

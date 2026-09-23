@@ -221,9 +221,11 @@ def execute(
 
 
 def compute_verdict(records_out: Path, baseline: Path, verdict_out: Path, *, runtime_sha: str, prompt_sha256: str) -> int:
+    import hashlib
+    content_sha: str = hashlib.sha256((ROOT / "scripts" / "reviewer.py").read_bytes()).hexdigest()
     argv: list[str] = [sys.executable, str(DETERMINISM), "verdict", "--baseline", str(baseline), "--candidate", str(records_out),
                        "--out", str(verdict_out), "--runtime-sha", runtime_sha, "--prompt-sha256", prompt_sha256,
-                       "--baseline-ref", baseline.name]
+                       "--baseline-ref", baseline.name, "--content-sha256", content_sha]
     return subprocess.run(argv, check=False).returncode
 
 

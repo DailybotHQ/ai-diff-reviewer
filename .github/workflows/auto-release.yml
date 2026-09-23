@@ -47,8 +47,30 @@ jobs:
           git config user.name "🤖 DailyBot"
           git config user.email "ops@dailybot.com"
 
+      - name: Step 1.5 - 🚦 Eval-gate precondition (RFC-01 / BC-02)
+        # A release is cut only when the newest eval verdict that matches the
+        # candidate (SHA-256 of scripts/reviewer.py + prompts/default.md) is
+        # current (≤ 30 days) and non-blocking. Otherwise the release is
+        # SKIPPED with the reason below — never half-published. Recovery:
+        # docs/RELEASE_RECOVERY.md § "Release skipped by the eval gate".
+        id: eval_gate
+        run: |
+          set -uo pipefail
+          if python3 tests/eval/release_gate.py --verdicts tests/eval/records/verdicts \
+               --runtime-sha "$GITHUB_SHA" --runtime scripts/reviewer.py --prompt prompts/default.md | tee gate.txt; then
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          else
+            reason=$(sed -nE 's/^release-gate: (eval-verdict-[a-z]+) .*/\1/p' gate.txt | head -n1)
+            echo "::warning::Release skipped — ${reason:-eval-verdict-missing}. Run eval-campaign.yml with a baseline for this head, merge its verdict PR, and re-run."
+            {
+              echo "blocked=true"
+              echo "reason=${reason:-eval-verdict-missing}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Step 2 - 📝 Determine version bump from commits
         id: version
+        if: steps.eval_gate.outputs.blocked != 'true'
         run: |
           set -euo pipefail
           # Use the highest SemVer RELEASE tag (vX.Y.Z), NOT

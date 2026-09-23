@@ -181,10 +181,11 @@ jobs:
           python3 tests/eval/determinism.py summarize --records "eval-records/$CAMPAIGN_ID" --out "eval-records/$CAMPAIGN_ID/summary.json"
           if [ -n "$BASELINE" ]; then
             prompt_sha=$(sha256sum prompts/default.md | cut -d' ' -f1)
+            content_sha=$(sha256sum scripts/reviewer.py | cut -d' ' -f1)
             mkdir -p tests/eval/records/verdicts
             python3 tests/eval/determinism.py verdict --baseline "$BASELINE" --candidate "eval-records/$CAMPAIGN_ID" \
               --out "tests/eval/records/verdicts/$CAMPAIGN_ID.json" --runtime-sha "$GITHUB_SHA" --prompt-sha256 "$prompt_sha" \
-              --baseline-ref "$(basename "$BASELINE")" || echo "::warning::verdict has blocking findings — see the file"
+              --content-sha256 "$content_sha" --baseline-ref "$(basename "$BASELINE")" || echo "::warning::verdict has blocking findings — see the file"
           fi
 
       - name: Open a PR with the verdict (records stay as artifacts — RFC-08 D-01)
