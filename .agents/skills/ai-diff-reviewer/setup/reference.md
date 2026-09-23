@@ -147,7 +147,7 @@ Every workflow using AI Diff Reviewer sets these two.
     vendor-prefixed (`vendor/model`).
   - AWS Bedrock (v2.5.0+) → `https://bedrock-runtime.{region}.amazonaws.com`
     with `provider: anthropic`; `model` is a Bedrock model id or inference
-    profile (`anthropic.claude-sonnet-5`, `us.anthropic.claude-sonnet-5`).
+    profile (`us.anthropic.claude-sonnet-5`).
     Credentials: the AWS environment (OIDC — `api-key` may stay empty on
     this lane) or the packed `api-key` `KEY:SECRET[:SESSION]` format.
   - xAI Grok → `https://api.x.ai` (Anthropic-compatible, for
