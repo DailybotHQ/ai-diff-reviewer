@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Retirement needs the anchor re-read (BC-08).** A prior finding the model reports `resolved` retires only when the runtime's corroboration holds (fingerprint absent, file changed since raised or gone) **and** the lines around its anchor changed between the head where it was raised and the current head (`verified_fixed`) or the file is gone (`file_removed`); a corroborated claim whose anchor is identical stays open and is reported as such. Reasons are recorded per retirement; findings carry `lifecycle.state`.
+- **The posted review body is generated from the findings (RFC-03 § Structured summary).** Header counts by published severity, a verification line, the check line, a findings table (criticals first, claimed severity shown when it differs, verification, agreement), the model's summary as a bounded narrative (4 000 chars; a `path:line` it names that is not a table row is footnoted), the refuted section and a prior-findings ledger; the authoritative `Check status` block still closes the body.
 - **Releases are gated on a current, non-blocking eval verdict (BC-02).** `auto-release.yml` Step 1.5 runs `tests/eval/release_gate.py` before the version bump: when no verdict matches the candidate's runtime + prompt content, the newest match is older than 30 days, or it lists blocking findings, the release is **skipped** (never half-published) with the reason in the log; recovery in `docs/RELEASE_RECOVERY.md`. Verdicts carry `candidate_content_sha256` so docs-only commits after the measured commit still release.
 
 ### Added

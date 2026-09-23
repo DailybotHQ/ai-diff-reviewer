@@ -913,6 +913,17 @@ VERIFIER_SYSTEM_PROMPT: str = (
     "could not decide. Record every check you made with its result. Keep the "
     "reason to one or two sentences. Do not modify files."
 )
+# Structured summary (RFC-03 § Structured summary): the posted body is
+# generated from the findings array; the model's narrative is bounded and
+# subordinate to the table.
+SUMMARY_NARRATIVE_MAX_CHARS: int = 4_000
+SUMMARY_TABLE_TITLE_CHARS: int = 80
+SUMMARY_MAX_TABLE_ROWS: int = 60
+RETIRED_REASON_VERIFIED_FIXED: str = "verified_fixed"
+RETIRED_REASON_FILE_REMOVED: str = "file_removed"
+RETIRED_REASON_MAINTAINER: str = "maintainer_resolved"
+ANCHOR_UNCHANGED_REASON: str = "anchor unchanged at head — claimed resolved but the code at the finding is identical"
+ANCHOR_REREAD_UNAVAILABLE_REASON: str = "anchor re-read unavailable (the raising head is not in the checkout)"
 VERIFIER_VERDICT_SCHEMA: dict[str, Any] = {
     "name": VERIFIER_VERDICT_TOOL,
     "description": "Record the verification verdict for the finding under review (call exactly once, last).",
@@ -7936,6 +7947,147 @@ def run_verifier(
 DOWNGRADE_PREFIX: str = "**Claimed critical; verifier found:** "
 
 
+def assign_lifecycle(
+    findings: list["Finding"],
+    *,
+    prior_open_fingerprints: set[str],
+    regressed_fingerprints: set[str],
+) -> None:
+    """Finding v3 `lifecycle.state` for this round's findings: `regressed`
+    when the model reported the prior fingerprint regressed, `open` when the
+    fingerprint was already open on the PR, else `new`."""
+    for f in findings:
+        fp: str = f.fingerprint or ""
+        if fp and fp in regressed_fingerprints:
+            f.lifecycle["state"] = "regressed"
+        elif fp and fp in prior_open_fingerprints:
+            f.lifecycle["state"] = "open"
+        else:
+            f.lifecycle["state"] = "new"
+
+
+_PATH_LINE_RE: re.Pattern[str] = re.compile(r"`?([A-Za-z0-9_./-]+\.[A-Za-z0-9_]+):(\d+)`?")
+_SEVERITY_EMOJI: dict[str, str] = {SEVERITY_CRITICAL: "🚨", SEVERITY_WARNING: "⚠️", SEVERITY_INFO: "ℹ️"}
+
+
+def bound_narrative(narrative: str, table_anchors: set[tuple[str, int]]) -> tuple[str, list[str]]:
+    """Cut the model's narrative to `SUMMARY_NARRATIVE_MAX_CHARS` and footnote
+    every `path:line` it names that is not a row of the findings table
+    (RFC-03 invariant, E-32). Returns `(text, footnotes)`."""
+    text: str = (narrative or "").strip()
+    trimmed: bool = False
+    if len(text) > SUMMARY_NARRATIVE_MAX_CHARS:
+        text = text[:SUMMARY_NARRATIVE_MAX_CHARS].rstrip() + "\n\n_[narrative trimmed to "
+        text += f"{SUMMARY_NARRATIVE_MAX_CHARS:,} characters]_"
+        trimmed = True
+    footnotes: list[str] = []
+    seen: set[tuple[str, int]] = set()
+
+    def _mark(m: "re.Match[str]") -> str:
+        anchor: tuple[str, int] = (m.group(1), int(m.group(2)))
+        if anchor in table_anchors or anchor in seen:
+            return m.group(0)
+        seen.add(anchor)
+        footnotes.append(f"`{anchor[0]}:{anchor[1]}` is mentioned above but is not a row of the findings table (not posted inline).")
+        return m.group(0) + f"[^{len(footnotes)}]"
+
+    text = _PATH_LINE_RE.sub(_mark, text)
+    if trimmed and footnotes:
+        pass
+    return text, footnotes
+
+
+def render_review_summary(
+    result: "ReviewResult",
+    *,
+    narrative: str,
+    blocked: bool,
+    block_reason: str,
+    strictness: str,
+    verifier_report: "VerifierReport | None" = None,
+) -> str:
+    """The posted review body, generated from the findings array (RFC-03 §
+    Structured summary): counts by published severity, verification counts,
+    the gate statement, the findings table, the bounded narrative (which may
+    not name a finding absent from the table), the refuted section and the
+    prior-findings ledger. `render_gate_status_block` is still appended by
+    the caller as the authoritative last word."""
+    findings: list[Finding] = list(result.findings)
+    counts: dict[str, int] = {SEVERITY_CRITICAL: 0, SEVERITY_WARNING: 0, SEVERITY_INFO: 0}
+    for f in findings:
+        if f.severity in counts:
+            counts[f.severity] += 1
+    header: str = (
+        f"## Code review — {len(findings)} finding(s): "
+        f"{counts[SEVERITY_CRITICAL]} critical · {counts[SEVERITY_WARNING]} warning · {counts[SEVERITY_INFO]} info"
+    )
+    ver: dict[str, int] = {"verified": 0, "downgraded": 0, "refuted": len(result.refuted), "unverified": 0, "skipped": 0}
+    for f in findings:
+        st: str = f.verification.status
+        if st in ver:
+            ver[st] += 1
+    lines: list[str] = [header, ""]
+    if any(ver.values()) or (verifier_report is not None and verifier_report.runs):
+        lines.append(
+            f"Verification: {ver['verified']} verified · {ver['downgraded']} downgraded · "
+            f"{ver['refuted']} refuted · {ver['unverified']} unverified · {ver['skipped']} skipped"
+            + (f" — {verifier_report.model}" if verifier_report is not None and verifier_report.model else "")
+        )
+        lines.append("")
+    lines.append(f"Check: {'🚫 failing' if blocked else '✅ passing'} — strictness `{strictness}`: {block_reason}")
+    lines.append("")
+    table_anchors: set[tuple[str, int]] = set()
+    if findings:
+        lines += ["### Findings", "", "| Severity | Location | Title | Verification | Agreement |", "|---|---|---|---|---|"]
+        ordered: list[Finding] = sorted(
+            findings,
+            key=lambda f: (SEVERITY_RANK.get(f.severity, 0), SEVERITY_RANK.get(f.severity_claimed or "", 0)),
+            reverse=True,
+        )
+        for f in ordered[:SUMMARY_MAX_TABLE_ROWS]:
+            table_anchors.add((f.path, int(f.line)))
+            title: str = f.effective_title().replace("|", "\\|")[:SUMMARY_TABLE_TITLE_CHARS]
+            claimed: str = f.severity_claimed or f.severity
+            sev: str = f"{_SEVERITY_EMOJI.get(f.severity, '')} {f.severity}" + (f" (claimed {claimed})" if claimed != f.severity else "")
+            agreement: str = (
+                f"{f.agreement.get('legs_reporting')}/{f.agreement.get('legs_total')}" if f.agreement else "—"
+            )
+            lines.append(f"| {sev} | `{f.path}:{f.line}` | {title} | {f.verification.status} | {agreement} |")
+        if len(findings) > SUMMARY_MAX_TABLE_ROWS:
+            lines.append(f"| … | | {len(findings) - SUMMARY_MAX_TABLE_ROWS} more inline | | |")
+        lines.append("")
+    else:
+        lines += ["_No findings posted inline._", ""]
+    text, footnotes = bound_narrative(narrative, table_anchors)
+    if text:
+        lines += ["### Summary", "", text, ""]
+        if footnotes:
+            lines += [f"[^{i}]: {note}" for i, note in enumerate(footnotes, start=1)] + [""]
+    if result.refuted:
+        lines += ["### Refuted by the verifier (not posted inline)", ""]
+        for f in result.refuted:
+            lines.append(f"- `{f.path}:{f.line}` — {f.effective_title()[:SUMMARY_TABLE_TITLE_CHARS]}: {f.verification.reason or 'refuted'}")
+        lines.append("")
+    rec: PriorFindingReconciliation | None = result.prior_reconciliation
+    if rec is not None and (rec.resolved or rec.still_open or rec.regressed):
+        lines += ["### Prior findings", ""]
+        for pf in rec.resolved:
+            lines.append(f"- retired `{pf.path}:{pf.line}` ({rec.retired_reasons.get(pf.fingerprint, RETIRED_REASON_VERIFIED_FIXED)})")
+        for pf in rec.regressed:
+            lines.append(f"- regressed `{pf.path}:{pf.line}`")
+        anchor_fps: set[str] = {pf.fingerprint for pf in rec.anchor_unchanged}
+        unverified_fps: set[str] = {pf.fingerprint for pf in rec.unverified}
+        for pf in rec.still_open:
+            if pf in rec.regressed:
+                continue
+            note: str = " — claimed resolved, anchor unchanged at head" if pf.fingerprint in anchor_fps else (
+                " — claimed resolved, unverified" if pf.fingerprint in unverified_fps else ""
+            )
+            lines.append(f"- still open `{pf.path}:{pf.line}`{note}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def format_verifier_line(report: "VerifierReport", *, enabled: bool) -> str:
     """`**Verifier:** …` line for the tracking comment."""
     if not enabled:
@@ -8109,6 +8261,41 @@ class PriorFindingReconciliation:
     # had already minimized the thread. Surfaced in the footer so a green
     # check that nobody signed off on is still traceable.
     auto_retired: list[PriorFinding] = field(default_factory=list)
+    # v3 (RFC-03 § Finding retirement, BC-08): why each retired fingerprint
+    # was retired (`verified_fixed` / `file_removed` / `maintainer_resolved`)
+    # and the new refusal — corroborated `resolved` claims whose anchor lines
+    # are identical at head stay open and are listed here.
+    retired_reasons: dict[str, str] = field(default_factory=dict)
+    anchor_unchanged: list[PriorFinding] = field(default_factory=list)
+
+
+def verify_anchor_fixed(
+    pf: "PriorFinding", *, head_sha: str, repo_root: str | None = None
+) -> tuple[str, str]:
+    """Deterministic anchor re-read (RFC-03 retirement, sufficient condition).
+
+    Compares the lines around the finding's anchor at the head where it was
+    raised (`pf.review_sha`) with the same lines at `head_sha`. Returns
+    `(verdict, reason)` with verdict one of `fixed` (anchor changed),
+    `unchanged` (identical → the new refusal), `file_removed` (path gone at
+    head), `unavailable` (the raising head or the file at it cannot be read —
+    the caller falls back to the necessary condition alone). No model call.
+    """
+    if not pf.path or not head_sha:
+        return "unavailable", ANCHOR_REREAD_UNAVAILABLE_REASON
+    now: CodeContext | None = load_code_context(path=pf.path, review_sha=head_sha, repo_root=repo_root)
+    if now is None:
+        return "file_removed", "file no longer exists at head"
+    if not pf.review_sha:
+        return "unavailable", ANCHOR_REREAD_UNAVAILABLE_REASON
+    then: CodeContext | None = load_code_context(path=pf.path, review_sha=pf.review_sha, repo_root=repo_root)
+    if then is None:
+        return "unavailable", ANCHOR_REREAD_UNAVAILABLE_REASON
+    before: list[str] = then.lines_around(pf.line, IAR_CONTEXT_HASH_RADIUS)
+    after: list[str] = now.lines_around(pf.line, IAR_CONTEXT_HASH_RADIUS)
+    if before == after:
+        return "unchanged", ANCHOR_UNCHANGED_REASON
+    return "fixed", f"anchor changed between {pf.review_sha[:7]} and {head_sha[:7]}"
 
 
 def parse_resolution_policy(raw: str) -> str:
@@ -8134,8 +8321,17 @@ def reconcile_prior_findings(
     workspace: Path | None = None,
     policy: str = RESOLUTION_POLICY_ADVISORY,
     changed_since_raised: dict[str, tuple[str, ...]] | None = None,
+    head_sha: str = "",
 ) -> PriorFindingReconciliation:
     """Classify the model's verdicts on prior findings.
+
+    v3 (RFC-03 § Finding retirement, BC-08): the corroboration below stays
+    the NECESSARY condition; when `head_sha` is given, retirement also needs
+    the SUFFICIENT one — `verify_anchor_fixed` re-reads the anchor at head
+    and the finding retires only when those lines changed (`verified_fixed`)
+    or the file is gone (`file_removed`). A corroborated claim whose anchor
+    is identical stays open (`anchor_unchanged`, reason recorded). When the
+    re-read is unavailable the v2 rule applies unchanged.
 
     Corroboration (both policies): the fingerprint is absent from this round
     AND the file changed since the finding was raised (or no longer exists).
@@ -8193,7 +8389,20 @@ def reconcile_prior_findings(
             if corroborated and (
                 policy == RESOLUTION_POLICY_VERIFIED or pf.is_collapsed
             ):
+                reason: str = RETIRED_REASON_FILE_REMOVED if file_gone else RETIRED_REASON_VERIFIED_FIXED
+                if head_sha and not file_gone:
+                    verdict, detail = verify_anchor_fixed(pf, head_sha=head_sha, repo_root=str(root))
+                    if verdict == "unchanged":
+                        out.anchor_unchanged.append(pf)
+                        out.unverified.append(pf)
+                        out.still_open.append(pf)
+                        continue
+                    if verdict == "file_removed":
+                        reason = RETIRED_REASON_FILE_REMOVED
+                    elif verdict == "unavailable":
+                        reason = f"{RETIRED_REASON_VERIFIED_FIXED} ({detail})"
                 out.resolved.append(pf)
+                out.retired_reasons[pf.fingerprint] = reason
                 if policy != RESOLUTION_POLICY_VERIFIED:
                     out.auto_retired.append(pf)
                 continue
@@ -8299,12 +8508,17 @@ def render_incremental_footer(
         if reconciliation.auto_retired
         else ""
     )
+    anchor_note: str = (
+        f" · {len(reconciliation.anchor_unchanged)} kept open (anchor unchanged at head)"
+        if reconciliation.anchor_unchanged
+        else ""
+    )
     return (
         f"\n\n---\n\n_Since last review (`{delta.prior_head_sha[:7]}` → "
         f"`{delta.head_sha[:7]}`): resolved {len(reconciliation.resolved)} · "
         f"still open {len(reconciliation.still_open)} · regressed "
         f"{len(reconciliation.regressed)} · new {new_findings}"
-        f"{unverified_note}{auto_note}{policy_note}._"
+        f"{unverified_note}{auto_note}{anchor_note}{policy_note}._"
     )
 
 
@@ -8727,6 +8941,7 @@ def run_iar_post_llm(
             workspace=workspace,
             policy=resolution_policy,
             changed_since_raised=pre_context.changed_since_raised,
+            head_sha=pre_context.head_sha,
         )
         verified_resolved_fps = {
             pf.fingerprint for pf in result.prior_reconciliation.resolved
@@ -8799,6 +9014,14 @@ def run_iar_post_llm(
         # Stamp surfaced findings so their inline comments carry the hidden
         # marker the next round matches against (incremental mode).
         finding.fingerprint = current_fps[i]
+    assign_lifecycle(
+        all_original_findings,
+        prior_open_fingerprints={pf.fingerprint for pf in pre_context.prior_findings}
+        | set(pre_context.prior_state.open_fingerprints_this_gen if pre_context.prior_state is not None else []),
+        regressed_fingerprints={
+            fp for fp, (status, _n) in result.prior_finding_updates.items() if status == PRIOR_FINDING_STATUS_REGRESSED
+        },
+    )
     current_fp_set: set[str] = set(current_fps.values())
     next_open: list[str] = sorted(current_fp_set)
     # `newly_resolved` = prior open that are no longer in the current run.
@@ -13394,6 +13617,7 @@ def _main_impl(record: RunRecord) -> int:
                     workspace=Path.cwd(),
                     policy=resolution_policy,
                     changed_since_raised=iar_pre_context.changed_since_raised,
+                    head_sha=head_sha,
                 )
                 # Post-LLM crashed: the gate kept every prior finding, so the
                 # footer must not claim retirements the gate never honoured.
@@ -13538,6 +13762,16 @@ def _main_impl(record: RunRecord) -> int:
     ):
         log(f"PR description gate: warning — {description_verdict.reason}")
 
+    # v3 (RFC-03 § Structured summary): the posted body is generated from
+    # the final findings; the model's text becomes the bounded narrative.
+    result.summary = render_review_summary(
+        result,
+        narrative=result.summary,
+        blocked=blocked,
+        block_reason=block_reason,
+        strictness=strictness,
+        verifier_report=verifier_report,
+    )
     # A model recommendation that contradicts a failing gate is the bug this
     # replaces: reviewers read "approve", CI shows red.
     result.summary, _rec_rewritten = reconcile_recommendation_line(
