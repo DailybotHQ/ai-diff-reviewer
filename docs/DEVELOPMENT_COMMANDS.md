@@ -180,7 +180,7 @@ Targets `python3.10+`. Most contributors will have `python3` from the system; th
 
 ## Run the test suite
 
-The runtime has a standard-library `unittest` suite (943 tests across 39 files as of the v3 Phase 0 work, no install needed):
+The runtime has a standard-library `unittest` suite (963 tests across 41 files as of the v3 Phase 0 work, no install needed):
 
 ```bash
 python3 -m unittest discover -s tests

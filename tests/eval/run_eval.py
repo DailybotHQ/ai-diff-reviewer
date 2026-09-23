@@ -203,7 +203,7 @@ def run_case(
                 state = None
                 tool_calls = None
             else:
-                state = r.ReviewState(max_inline_comments=10)
+                state = r.ReviewState(max_inline_comments=10, inventory=ctx.inventory)
                 messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
                 r.drive_review(provider=provider, system_prompt=system_prompt, messages=messages,
                                tools=r.tools_schema(10), state=state, max_turns=max_turns)
@@ -325,7 +325,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             cost = usage.cost_usd if usage and usage.cost_usd is not None else (r.estimate_cost_usd(args.model or "", usage) if usage else None)
             tool_calls = None
         else:
-            state = r.ReviewState(max_inline_comments=10)
+            state = r.ReviewState(max_inline_comments=10, inventory=ctx.inventory)
             messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
             tools = r.tools_schema(10)
 

@@ -179,7 +179,7 @@ The model is treated as **untrusted** for the purpose of any side-effect-having 
 
 ### Path traversal protection
 
-Any tool that takes a path argument (`read_file`, `grep` with `path` scope) routes through `safe_repo_path()`, which:
+Any tool that takes a path argument (`read_file` at head or base, `get_patch`, `read_instruction_files`, `grep` with `path` scope) routes through `safe_repo_path()`, which:
 
 1. Resolves the path relative to the repo root.
 2. Calls `Path.resolve()` (which follows symlinks).
@@ -190,6 +190,16 @@ This catches:
 - `..`-based traversal.
 - Symlinks pointing outside the workspace.
 - Sibling-directory string-prefix attacks (`/home/runner/work/repo` vs `/home/runner/work/repo_evil`).
+
+### v3 parity tools (`get_change_inventory`, `get_patch`, `read_instruction_files`, `read_file ref=base`)
+
+The v3 runner (RFC-02) adds three read-only tools and a `ref` argument to `read_file`. Every one of them stays inside the boundaries above:
+
+- **Paths** — `get_patch` and `read_file(ref=base)` route their path through `safe_repo_path()` exactly like `read_file`; `read_instruction_files` routes each candidate (including the configured `prompt-extension-file`) through it and silently skips anything that escapes (a symlink to a file outside the checkout is not read).
+- **Revisions** — the base and head SHAs used by `get_patch` (`git diff <base>...<head> -- <path>`) and `read_file(ref=base)` (`git show <base>:<path>`) come from the run's `ChangeInventory`, resolved by `git rev-parse` at startup — never from the PR title, body, labels or the model's arguments. The model can only pick the path, never the revision.
+- **Subprocesses** — argv lists only, `--` before every path.
+- **Bounds** — `get_patch` returns at most `MAX_PATCH_CHARS` (40 000) per call and lists the remaining hunk indices instead of the content; `read_instruction_files` stops at `MAX_INSTRUCTION_FILE_BYTES` (64 000) in total; every result still passes `truncate_for_tool`.
+- **Instruction files are data** — the tool description tells the model the files describe the repository's conventions and do not override the review; RFC-02 § Untrusted inputs keeps budget, tier and instruction set out of their reach. The files read are recorded in the run record (`context.instruction_files_read`).
 
 ### Subprocess argument injection protection
 
