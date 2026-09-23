@@ -209,7 +209,7 @@ jobs:
           [ "$HAS_QWEN" = "true" ] && add openai DASHSCOPE_API_KEY "self-reviewed:qwen" economy "https://dashscope.aliyuncs.com/compatible-mode/v1"
           [ "$HAS_GEMINI" = "true" ] && add openai GEMINI_API_KEY "self-reviewed:gemini" economy "https://generativelanguage.googleapis.com/v1beta/openai"
           [ "$HAS_OPENROUTER" = "true" ] && add openai OPENROUTER_API_KEY "self-reviewed:openrouter" economy "https://openrouter.ai/api/v1"
-          [ "$HAS_BEDROCK" = "true" ] && add anthropic AWS_REVIEW_CREDENTIALS "self-reviewed:bedrock" anthropic.claude-sonnet-5 "https://bedrock-runtime.us-east-1.amazonaws.com"
+          [ "$HAS_BEDROCK" = "true" ] && add anthropic AWS_REVIEW_CREDENTIALS "self-reviewed:bedrock" us.anthropic.claude-sonnet-5 "https://bedrock-runtime.us-east-1.amazonaws.com"
 
           # Record WHY the matrix ended up empty (if it did) so the merge gate can
           # print an accurate hint. Reaching here means `ready` is applied, so an

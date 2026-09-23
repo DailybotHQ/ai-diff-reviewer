@@ -13,7 +13,8 @@
 #      before the review exports the AWS_* environment variables, the
 #      runtime picks them up, and NO `api-key` is needed (the input is
 #      optional on this lane since v2.5.0). Requires the job permission
-#      `id-token: write` and an OIDC role trust policy.
+#      `id-token: write` and an OIDC role trust policy. (Variant B users
+#      can drop `id-token: write` — least privilege.)
 #   B. Packed secret: store `ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION]`
 #      as one secret and pass it through `api-key` (variant below).
 
@@ -60,4 +61,4 @@ jobs:
           api-base: https://bedrock-runtime.us-east-1.amazonaws.com
           # api-key: ${{ secrets.AWS_REVIEW_CREDENTIALS }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          model: balanced   # anthropic.claude-sonnet-5 (deep -> anthropic.claude-opus-5)
+          model: balanced   # us.anthropic.claude-sonnet-5 (deep -> us.anthropic.claude-opus-5)
