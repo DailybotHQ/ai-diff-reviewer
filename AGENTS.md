@@ -69,6 +69,7 @@ correctness, clarity, simplicity, and verified completion.
 | Performance | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | Iteration-Aware Review | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
 | v2 pin + platform notes | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
+| v3 design records (RFCs) | [docs/rfc/v3/README.md](docs/rfc/v3/README.md) |
 | Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |

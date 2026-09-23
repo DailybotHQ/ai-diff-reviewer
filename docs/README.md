@@ -52,6 +52,12 @@ The action also ships a **local companion skill** that runs the same review meth
 
 See [PROMPTS.md § "Local coding-agent parity"](PROMPTS.md#local-coding-agent-parity) for the user-facing story on how the two surfaces stay in sync, and [ARCHITECTURE.md § "The local companion skill pack"](ARCHITECTURE.md) for the architectural view.
 
+## Design records (v3 RFCs)
+
+| Document | Purpose |
+|---|---|
+| [rfc/v3/README.md](rfc/v3/README.md) | Index of the v3 design records: evidence ledger, eval-gate contract, unified runner, verification and Finding v3, ensemble consolidation, structured output, risk-tiered budgets, breaking-change ledger, roadmap and decision log — plus the three JSON schemas. Design records are not living docs: shipped behavior is documented in the pages above. |
+
 ## AI-agent playbooks
 
 | Document | Purpose |
