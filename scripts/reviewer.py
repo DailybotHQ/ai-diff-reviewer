@@ -2613,6 +2613,12 @@ class ProviderRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 
 
+# Hard cap on bytes read from any HTTP response body (success or error):
+# vendor output is untrusted input and must not be able to exhaust memory
+# before parsing/truncation. Review payloads are KBs; 8 MB is generous.
+MAX_HTTP_BODY_BYTES: int = 8_000_000
+
+
 def _post_json_with_retries(
     *, url: str, body: bytes, headers: dict[str, str], api_label: str
 ) -> dict[str, Any]:
@@ -2636,9 +2642,11 @@ def _post_json_with_retries(
             with opener.open(
                 request, timeout=API_REQUEST_TIMEOUT
             ) as response:
-                return json.loads(response.read())
+                return json.loads(response.read(MAX_HTTP_BODY_BYTES + 1))
         except urllib.error.HTTPError as e:
-            err_body: str = e.read().decode("utf-8", errors="replace")
+            err_body: str = e.read(MAX_HTTP_BODY_BYTES + 1).decode(
+                "utf-8", errors="replace"
+            )
             last_error = RuntimeError(
                 f"{api_label} HTTP {e.code}: {err_body[:MAX_ERROR_BODY_CHARS]}"
             )
