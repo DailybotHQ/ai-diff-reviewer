@@ -546,13 +546,16 @@ def _sigv4_sign_request(
     amz_date: str = now_utc.strftime("%Y%m%dT%H%M%SZ")
     date_stamp: str = now_utc.strftime("%Y%m%d")
     payload_hash: str = hashlib.sha256(body).hexdigest()
-    headers: dict[str, str] = {"host": host, "x-amz-date": amz_date}
+    merged: dict[str, str] = {"host": host, "x-amz-date": amz_date}
     if content_type:
-        headers["content-type"] = content_type
+        merged["content-type"] = content_type
     if session_token:
-        headers["x-amz-security-token"] = session_token
+        merged["x-amz-security-token"] = session_token
     if extra_headers:
-        headers.update(extra_headers)
+        merged.update(extra_headers)
+    # SigV4 requires lowercase names in CanonicalHeaders and SignedHeaders —
+    # normalize here so no caller can emit an uppercase entry.
+    headers: dict[str, str] = {k.lower(): v for k, v in merged.items()}
     signed_names: list[str] = sorted(headers)
     canonical_headers: str = "".join(
         f"{name}:{headers[name].strip()}\n" for name in signed_names
@@ -2802,8 +2805,11 @@ class AnthropicProvider(Provider):
             # Adaptive thinking is ON by default for current-generation
             # models on Bedrock; the review loop is a bounded, multi-turn,
             # cost-sensitive shape — keep it disabled (temperature stays
-            # honoured, keeping the deterministic contract).
-            anthropic_body["thinking"] = {"type": "disabled"}
+            # honoured, keeping the deterministic contract). Haiku is the
+            # exception: its contract rejects the disabled form, and it does
+            # not run adaptive thinking by default anyway.
+            if "haiku" not in self.model.lower():
+                anthropic_body["thinking"] = {"type": "disabled"}
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             url, headers, api_label = self._bedrock_request_parts(body)
@@ -10419,6 +10425,11 @@ def main() -> int:
         api_base, provider_id
     )
     bedrock_env_credentials: bool = False
+    if api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
+        # packed lane: register the components so partial leaks scrub too
+        for part in api_key.split(":"):
+            if part:
+                register_secret(part)
     if not api_key and backend_profile.kind == ENDPOINT_KIND_BEDROCK:
         try:
             # resolve AND register immediately: any public-facing failure

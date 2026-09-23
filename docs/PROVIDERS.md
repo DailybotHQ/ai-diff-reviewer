@@ -63,7 +63,7 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `openai` | MiniMax | `MiniMax-M2` — $0.30 / $1.20 | `MiniMax-Text-01` — $0.20 / $1.20 | `MiniMax-M2` | M2 is the agentic-coding flagship, documented for Claude Code via its Anthropic-compatible endpoint (see below). |
 | `openai` | Qwen (DashScope) | `qwen3-coder-plus` — $0.40 / $1.60 | `qwen-turbo` — $0.05 / $0.40 | `qwen3-coder-plus` | Compatible-mode endpoint; family-independent coder. |
 | `openai` | Google Gemini | `gemini-2.5-pro` — $1.25 / $10 | `gemini-2.5-flash` — $0.30 / $2.50 | `gemini-2.5-pro` | Gemini API's OpenAI-compatible surface; the runtime omits `seed` (the endpoint rejects it) and pins `temperature: 0`. |
-| `anthropic` | AWS Bedrock (v2.5.0+) | `anthropic.claude-sonnet-5` — indicative mirror | `anthropic.claude-haiku-4-5` | `anthropic.claude-opus-5` | SigV4-signed InvokeModel; prices are an indicative mirror of first-party rates — **AWS bills Bedrock separately**. |
+| `anthropic` | AWS Bedrock (v2.5.0+) | `us.anthropic.claude-sonnet-5` — indicative mirror | `us.anthropic.claude-haiku-4-5` | `us.anthropic.claude-opus-5` | SigV4-signed InvokeModel; prices are an indicative mirror of first-party rates — **AWS bills Bedrock separately**. |
 | `openai` | OpenRouter (meta-gateway) | `deepseek/deepseek-chat` — $0.30 / $1.20 (OpenRouter's listed price) | `deepseek/deepseek-chat` | `deepseek/deepseek-reasoner` — $0.60 / $2.40 (OpenRouter's listed price) | Model ids are vendor-prefixed (`vendor/model`); prices shown are OpenRouter's listed figures (the underlying vendor plus its margin, matching the runtime's `INDICATIVE_PRICES_USD_PER_MTOK`). One key, hundreds of models. |
 | `grok` | xAI | `grok-4.5` | `grok-4.5` | `grok-4.6` | The Grok CLI's own system prompt + tools weigh ≈ 12k input tokens per call — the telemetry line makes that visible. Budget ~3 min and ~$0.75 per mid-size PR on 4.5 through the CLI (4–10 min on 4.6; one in-process 4.6 run took 22 min); the 900 s CLI timeout is the ceiling. |
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
@@ -223,10 +223,13 @@ runtime:
 - **Out of scope for v1:** the `claude-code` runner on Bedrock
   (`CLAUDE_CODE_USE_BEDROCK`), streaming, and the Converse API.
 
-Tier rows exist for the `anthropic` × `bedrock` cell; pass an explicit
-inference-profile id (`us.anthropic.claude-sonnet-5`) when you need a specific
-region routing — the indicative-price lookup normalizes the `us.` / `eu.` /
-`apac.` geo prefixes, so cross-region profiles keep their cost estimate.
+Tier rows exist for the `anthropic` × `bedrock` cell and resolve to
+cross-region inference-profile ids (`us.anthropic.claude-sonnet-5`, …) — the
+on-demand `bedrock-runtime` endpoint does not accept bare foundation ids.
+Other geographies pin the explicit profile (`eu.` / `apac.` / `global.` /
+`au.` / `jp.`); the indicative-price lookup normalizes every geo prefix, so
+profiles keep their cost estimate. Adaptive thinking is disabled on the
+Bedrock path (predictable cost on the multi-turn loop).
 
 **Not supported in v2.5.0:** the China partition
 (`bedrock-runtime.cn-north-1.amazonaws.com.cn` — five-label host, classified
