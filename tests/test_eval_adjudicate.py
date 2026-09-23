@@ -85,6 +85,18 @@ class Worksheet(unittest.TestCase):
         self.assertEqual(rec["precision"]["per_lane"]["grok|xai|grok-4.5"]["precision"], 0.6667)
         self.assertTrue(all("body" not in f and f["body_sha256"] for f in rec["findings"]))
 
+    def test_pr_path_results_are_loaded_under_a_pr_case_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pr46-r0.json").write_text(json.dumps({"pr": 46, "repo": "o/r", "findings": [F_STYLE], "score": {}}))
+            (root / "pr46-r0.json.run-record.json").write_text(json.dumps({"provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5", "campaign": {"arm": "default"}}))
+            results = adjudicate.load_results(root)
+        self.assertEqual([r["case"] for r in results], ["pr46"])
+        ws = adjudicate.build_worksheet(results, seed=1)
+        self.assertEqual(len(ws["items"]), 1)
+        self.assertEqual(ws["items"][0]["ground_truth"], "no_case")
+        self.assertEqual(ws["positive_cases"], ["pr46"])
+
     def test_cli_round_trip_on_disk(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

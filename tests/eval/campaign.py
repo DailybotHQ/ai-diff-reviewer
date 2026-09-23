@@ -130,6 +130,30 @@ def plan(manifest: dict[str, Any], records_out: Path, *, lane_filter: str | None
     return runs
 
 
+def missing_worktrees(manifest: dict[str, Any], runs: list[RunPlan]) -> list[str]:
+    """PR cells that point at a worktree which is not a directory — refuse before the first paid run.
+
+    A missing worktree would fail every repetition of the cell while the
+    driver still charges each miss at the lane maximum (F8 accounting), so
+    the check belongs in `dry-run` and at the top of `run`, not in the loop.
+    """
+    seen: set[str] = set()
+    missing: list[str] = []
+    for r in runs:
+        if r.cell.get("kind") != "pr":
+            continue
+        wt: Path = Path(str(r.cell["worktree"]))
+        if not wt.is_absolute():
+            wt = ROOT / wt
+        key: str = str(wt)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not wt.is_dir():
+            missing.append(f"{r.cell_key.split('|')[-1]} → {wt}")
+    return missing
+
+
 def projection(manifest: dict[str, Any], runs: list[RunPlan]) -> dict[str, Any]:
     per_lane: dict[str, float] = {}
     for r in runs:
@@ -280,6 +304,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{r.cell_key} r{r.repetition} → {r.out}")
         print(json.dumps(proj))
         return 0
+    if args.command in ("dry-run", "run"):
+        missing: list[str] = missing_worktrees(manifest, runs)
+        if missing:
+            print("refusing: PR cells point at worktrees that do not exist (materialise them first):\n  " + "\n  ".join(missing))
+            return 1
     if args.command == "dry-run":
         budget: float | None = args.budget_usd
         verdict_line: str = ""

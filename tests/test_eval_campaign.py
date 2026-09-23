@@ -122,9 +122,30 @@ class ExecutionTests(unittest.TestCase):
         self.assertNotIn(first, calls)
         self.assertAlmostEqual(ledger["spent_usd_upper_bound"], 0.5 + 0.1 * (len(runs) - 1), places=4)
 
+    def test_missing_pr_worktrees_refuse_before_any_spend(self) -> None:
+        runs = campaign.plan(MANIFEST, Path("/x"))
+        missing = campaign.missing_worktrees(MANIFEST, runs)
+        self.assertEqual(len(missing), 1)  # one PR cell, its worktree absent
+        self.assertIn("pr46", missing[0])
+        self.assertIn("/tmp/wt", missing[0])
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "m.json"
+            manifest_path.write_text(json.dumps(MANIFEST))
+            self.assertEqual(campaign.main(["dry-run", "--manifest", str(manifest_path), "--budget-usd", "100"]), 1)
+            present = json.loads(json.dumps(MANIFEST))
+            for c in present["cells"]:
+                if c["kind"] == "pr":
+                    c["worktree"] = tmp
+            manifest_path.write_text(json.dumps(present))
+            self.assertEqual(campaign.main(["dry-run", "--manifest", str(manifest_path), "--budget-usd", "100"]), 0)
+
     def test_run_refuses_without_budget_and_dry_run_flags_excess(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            m = Path(tmp) / "campaign.json"; m.write_text(json.dumps(MANIFEST))
+            present = json.loads(json.dumps(MANIFEST))
+            for c in present["cells"]:
+                if c["kind"] == "pr":
+                    c["worktree"] = tmp  # the worktree pre-check needs an existing directory
+            m = Path(tmp) / "campaign.json"; m.write_text(json.dumps(present))
             self.assertEqual(campaign.main(["dry-run", "--manifest", str(m), "--budget-usd", "100"]), 0)
             self.assertEqual(campaign.main(["dry-run", "--manifest", str(m), "--budget-usd", "5"]), 1)
             with self.assertRaises(SystemExit):

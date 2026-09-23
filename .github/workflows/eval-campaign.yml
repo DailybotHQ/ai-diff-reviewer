@@ -107,12 +107,49 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install the lane's CLI when it needs one
-        # The Grok CLI is what the dogfood default lane uses; other CLI lanes
-        # reuse the composite action's own install steps via `uses: ./` in the
-        # future — for the first campaigns only in-process + grok lanes run.
+      - name: Install the xAI Grok CLI (verified installer, same path as action.yml)
         if: matrix.lane == 'grok'
-        run: bash scripts/verified_install.sh grok || npm install -g @xai/grok-cli
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same supply-chain gate as the composite action and code_check.yml:
+          # official x.ai installer through verified_install.sh (sha256 gate,
+          # docs/SECURITY.md § "Cursor and Grok installer supply chain"). No npm fallback.
+          echo "::group::Install grok (via verified_install.sh, unpinned)"
+          bash .github/scripts/verified_install.sh grok "" ""
+          echo "::endgroup::"
+          echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
+          "$HOME/.grok/bin/grok" --version
+
+      - name: Install the Claude Code CLI (glm lane runs Claude Code against Z.ai)
+        if: matrix.lane == 'glm'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::npm install -g @anthropic-ai/claude-code"
+          npm install -g @anthropic-ai/claude-code
+          echo "::endgroup::"
+          claude --version
+
+      - name: Materialise the PR worktrees the manifest's `pr` cells point at
+        # PR cells review a merged PR at its head from a worktree (the same
+        # thing run_eval.py needs locally). Fetch each `refs/pull/N/head` and
+        # add a worktree at the manifest path; tree cells need nothing.
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import json,sys; [print(c["pr"], c["worktree"]) for c in json.load(open(sys.argv[1]))["cells"] if c.get("kind") == "pr"]' "$MANIFEST" > /tmp/pr-cells.txt
+          while read -r pr wt; do
+            [ -n "$pr" ] || continue
+            echo "::group::worktree for PR #$pr → $wt"
+            git fetch --no-tags origin "refs/pull/$pr/head:refs/remotes/origin/pr/$pr"
+            mkdir -p "$(dirname "$wt")"
+            git worktree add --detach "$wt" "refs/remotes/origin/pr/$pr"
+            echo "::endgroup::"
+          done < /tmp/pr-cells.txt
+          echo "materialised $(wc -l < /tmp/pr-cells.txt) PR worktree(s)"
 
       - name: Dry-run the projection against the budget
         env:

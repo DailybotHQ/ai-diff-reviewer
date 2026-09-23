@@ -48,6 +48,19 @@ def _valid(doc: dict[str, Any]) -> list[str]:
     return schema_check.validate(SCHEMA, doc, label="record")
 
 
+
+class RunIdUniqueness(unittest.TestCase):
+    def test_two_records_in_the_same_second_get_distinct_run_ids(self) -> None:
+        a = reviewer.RunRecord(); b = reviewer.RunRecord()
+        for rec in (a, b):
+            rec.provider = "grok"; rec.endpoint_kind = "xai"; rec.head_sha = "abcdef1234567890"
+        ida = a.to_dict(status="completed", failure_class=None)["run_id"]
+        idb = b.to_dict(status="completed", failure_class=None)["run_id"]
+        self.assertNotEqual(ida, idb)
+        self.assertTrue(ida.startswith("run-grok-xai-abcdef123456-"))
+        self.assertLessEqual(len(ida), 64)
+        self.assertRegex(ida, r"^[a-z0-9-]+$")
+
 class RunRecordShapeTests(unittest.TestCase):
     def test_default_record_is_schema_valid_for_every_status(self) -> None:
         record = reviewer.RunRecord()

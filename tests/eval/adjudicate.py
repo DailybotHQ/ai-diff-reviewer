@@ -70,7 +70,11 @@ def load_results(results_dir: Path) -> list[dict[str, Any]]:
             data: Any = _load_json(path)
         except (json.JSONDecodeError, OSError):
             continue
-        if isinstance(data, dict) and isinstance(data.get("findings"), list) and data.get("case"):
+        if isinstance(data, dict) and isinstance(data.get("findings"), list) and (data.get("case") or data.get("pr") is not None):
+            # PR-path results carry `pr` instead of `case`; normalise so the floor lane is adjudicable too
+            # (no fixture → no excerpt, ground truth `no_case`; the adjudicator reads the PR at the anchor).
+            if not data.get("case"):
+                data["case"] = f"pr{data['pr']}"
             record_path: Path = Path(str(path) + ".run-record.json")
             lane: str = ""
             if record_path.is_file():

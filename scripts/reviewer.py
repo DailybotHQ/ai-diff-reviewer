@@ -88,6 +88,7 @@ import sys
 import threading
 import tempfile
 import time
+import uuid
 from datetime import datetime, timezone
 import urllib.error
 import urllib.parse
@@ -1511,9 +1512,11 @@ class RunRecord:
                     else "vendor-reported"
                 )
         total_seconds: float = round(time.monotonic() - self.started_monotonic, 3)
+        # Second granularity alone collides across repetitions of the same head
+        # (campaign cells); the uuid suffix makes every written record unique.
         run_id: str = (
             f"run-{self.provider}-{self.endpoint_kind}-"
-            f"{(self.head_sha or 'nohead')[:12]}-{int(time.time())}"
+            f"{(self.head_sha or 'nohead')[:12]}-{int(time.time())}-{uuid.uuid4().hex[:8]}"
         ).lower()
         return {
             "schema_version": RUN_RECORD_SCHEMA_VERSION,
