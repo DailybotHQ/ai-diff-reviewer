@@ -302,6 +302,7 @@ Full spec: [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md). Cost + latency mo
 | Runtime constants (limits, timeouts, ranks) | top of `scripts/reviewer.py` |
 | Internal env-var contract (`AIPRR_*`) | `action.yml` `env:` block + `scripts/reviewer.py` `main()` |
 | Provider abstraction | `Provider` + `AgentRunnerProvider` classes + `build_provider()` in `scripts/reviewer.py` |
+| Run record (`run-record/3.0`, v3) — per-run provenance written to `.aiprr/run-record.json` on every exit path: endpoint kind (never the host), exact model + alias, runtime/prompt/extension hashes, sampling requested vs sent, context completeness, budget, outcome counts, `usage_known` + nullable usage/cost, split timings, status | `RunRecord` / `write_run_record` / `resolve_run_status` in `scripts/reviewer.py` (the `main()` wrapper writes it in `finally`); schema + example in `tests/eval/schemas/` (byte-identical to `docs/rfc/v3/schemas/`); validator `tests/eval/schema_check.py` |
 | Findings.json parser + schema | `parse_findings_file()` + `write_findings_prompt_directive()` in `scripts/reviewer.py`; user-facing schema in `docs/PROVIDERS.md` |
 | CLI install steps (modular, conditional) | `action.yml` `runs.steps` block, one `if:`-guarded step per CLI provider |
 | Default prompt (source of truth) | `prompts/default.md`; byte-copy at `skills/ai-diff-reviewer/prompt.md`; sync enforced by `code_check.yml` |

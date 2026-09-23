@@ -1086,6 +1086,32 @@ def provider_marker(provider_id: str) -> str:
 # Each CLI provider writes its findings to `<output_dir>/<FINDINGS_JSON_REL>`
 # before exiting; `parse_findings_file` reads + validates that file.
 FINDINGS_JSON_REL: str = ".aiprr/findings.json"
+# Run record (v3, RFC-01): immutable per-run provenance written on EVERY
+# exit path next to the findings file. Endpoint kind only — never a host.
+RUN_RECORD_REL: str = ".aiprr/run-record.json"
+RUN_RECORD_SCHEMA_VERSION: str = "run-record/3.0"
+RUN_STATUS_COMPLETED: str = "completed"
+RUN_STATUS_INCOMPLETE: str = "incomplete"
+RUN_STATUS_FAILED: str = "failed"
+RUN_STATUS_TIMEOUT: str = "timeout"
+RUN_STATUS_SKIPPED: str = "skipped"
+RUN_FAILURE_CONFIGURATION: str = "configuration"
+RUN_FAILURE_PROVIDER: str = "provider_error"
+RUN_FAILURE_GITHUB: str = "github_api"
+RUN_FAILURE_PROMPT_FILE: str = "prompt_file"
+RUN_FAILURE_TIMEOUT: str = "timeout"
+RUN_RUNTIME_SHA_ENV: str = "AIPRR_RUNTIME_SHA"
+RUN_RUNTIME_SHA_UNKNOWN: str = "unknown"
+PROVIDER_IDS_FOR_RECORD: frozenset[str] = frozenset(
+    {"anthropic", "openai", "claude-code", "cursor", "codex", "grok"}
+)
+MODEL_TIER_ALIASES_FOR_RECORD: frozenset[str] = frozenset({"economy", "balanced", "deep"})
+# `UsageTelemetry.source` -> run-record `usage.source` enum.
+USAGE_SOURCE_TO_RECORD: dict[str, str] = {
+    USAGE_SOURCE_API: "vendor",
+    USAGE_SOURCE_CLI: "cli",
+    USAGE_SOURCE_ESTIMATED: "estimated",
+}
 ALLOWED_SEVERITIES: tuple[str, ...] = (
     SEVERITY_CRITICAL,
     SEVERITY_WARNING,
@@ -1342,6 +1368,245 @@ def write_action_output(name: str, value: str) -> None:
             fh.write(f"{name}<<{delim}\n{value}\n{delim}\n")
         else:
             fh.write(f"{name}={value}\n")
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _runtime_sha(action_path: str) -> str:
+    """The action checkout's git SHA for the run record.
+
+    `AIPRR_RUNTIME_SHA` wins when set (campaign drivers pin it); else a
+    best-effort `git rev-parse HEAD` in `action_path`; else "unknown".
+    Never raises.
+    """
+    pinned: str = os.environ.get(RUN_RUNTIME_SHA_ENV, "").strip()
+    if pinned:
+        return pinned
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=action_path or None,
+        )
+        sha: str = proc.stdout.strip()
+        return sha or RUN_RUNTIME_SHA_UNKNOWN
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return RUN_RUNTIME_SHA_UNKNOWN
+
+
+@dataclass
+class RunRecord:
+    """Mutable builder for the `run-record/3.0` document (RFC-01).
+
+    `main()` fills it as the run progresses; the wrapper writes it on every
+    exit path. Defaults describe a run that ended before anything happened,
+    so a record is always schema-valid. Hosts never enter this object —
+    only the endpoint kind.
+    """
+
+    started_monotonic: float = field(default_factory=time.monotonic)
+    runner: str = "in-process"
+    provider: str = "anthropic"
+    endpoint_kind: str = "unknown"
+    model: str = ""
+    model_alias: str | None = None
+    runtime_sha: str = RUN_RUNTIME_SHA_UNKNOWN
+    prompt_sha256: str | None = None
+    extension_sha256: str | None = None
+    sampling: dict[str, Any] = field(
+        default_factory=lambda: {"requested": {}, "sent": {}, "stripped": []}
+    )
+    head_sha: str = ""
+    base_sha: str = ""
+    changed_files: int = 0
+    omitted_files: int = 0
+    diff_chars: int = 0
+    diff_truncated: bool = False
+    iar_mode: str = "none"
+    instruction_files_read: list[str] = field(default_factory=list)
+    max_turns: int = DEFAULT_MAX_TURNS
+    turns_used: int = 0
+    tool_calls: int = 0
+    findings_total: int = 0
+    findings_by_severity: dict[str, int] = field(
+        default_factory=lambda: {"critical": 0, "warning": 0, "info": 0}
+    )
+    summary_present: bool = False
+    strictness: str = STRICTNESS_LENIENT
+    gate_passed: bool = True
+    usage: UsageTelemetry | None = None
+    setup_seconds: float | None = None
+    provider_seconds: float | None = None
+    status: str | None = None
+    failure_class: str | None = None
+    run_started: bool = False
+
+    def populate_from_run(
+        self,
+        *,
+        provider: Any,
+        state: "ReviewState | None",
+        result: "ReviewResult",
+        usage: UsageTelemetry,
+        max_turns: int,
+    ) -> None:
+        """Absorb what the review produced (both provider families)."""
+        self.runner = "cli" if isinstance(provider, AgentRunnerProvider) else "in-process"
+        report: Any = getattr(provider, "sampling_report", None)
+        if callable(report):
+            try:
+                self.sampling = dict(report())
+            except Exception:  # noqa: BLE001 — telemetry never breaks a run
+                pass
+        self.max_turns = max_turns
+        self.turns_used = int(usage.turns or 0)
+        self.tool_calls = int(state.tool_call_count) if state is not None else 0
+        self.findings_total = len(result.findings)
+        counts: dict[str, int] = {"critical": 0, "warning": 0, "info": 0}
+        for finding in result.findings:
+            if finding.severity in counts:
+                counts[finding.severity] += 1
+        self.findings_by_severity = counts
+        self.summary_present = bool((result.summary or "").strip())
+        self.usage = usage
+
+    def populate_context(self, ctx: "PRContext", *, base_sha: str, iar_mode: str) -> None:
+        self.base_sha = base_sha
+        self.changed_files = len(ctx.changed_files)
+        self.omitted_files = len(ctx.omitted_files)
+        self.diff_chars = len(ctx.diff or "")
+        self.diff_truncated = "[diff truncated at" in (ctx.diff or "")
+        self.iar_mode = iar_mode
+
+    def to_dict(self, *, status: str, failure_class: str | None) -> dict[str, Any]:
+        usage: UsageTelemetry | None = self.usage
+        usage_known: bool = bool(
+            usage is not None and usage.source != USAGE_SOURCE_UNAVAILABLE
+        )
+        usage_block: dict[str, Any] | None = None
+        cost_usd: float | None = None
+        cost_basis: str = "unknown"
+        if usage_known and usage is not None:
+            usage_block = {
+                "input_tokens": int(usage.input_tokens),
+                "cache_read_tokens": int(usage.cache_read_tokens),
+                "cache_write_tokens": int(usage.cache_write_tokens),
+                "output_tokens": int(usage.output_tokens),
+                "source": USAGE_SOURCE_TO_RECORD.get(usage.source, "estimated"),
+            }
+            cost_usd = usage.cost_usd
+            if cost_usd is not None:
+                cost_basis = (
+                    "indicative-price-table"
+                    if usage.source == USAGE_SOURCE_ESTIMATED
+                    else "vendor-reported"
+                )
+        total_seconds: float = round(time.monotonic() - self.started_monotonic, 3)
+        run_id: str = (
+            f"run-{self.provider}-{self.endpoint_kind}-"
+            f"{(self.head_sha or 'nohead')[:12]}-{int(time.time())}"
+        ).lower()
+        return {
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
+            "run_id": re.sub(r"[^a-z0-9-]", "-", run_id)[:64],
+            "recorded_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "runner": self.runner,
+            "provider": self.provider,
+            "endpoint_kind": self.endpoint_kind,
+            "model": self.model,
+            "model_alias": self.model_alias,
+            "runtime_sha": self.runtime_sha,
+            "prompt_sha256": self.prompt_sha256,
+            "extension_sha256": self.extension_sha256,
+            "sampling": {
+                "requested": dict(self.sampling.get("requested", {})),
+                "sent": dict(self.sampling.get("sent", {})),
+                "stripped": list(self.sampling.get("stripped", [])),
+            },
+            "context": {
+                "repo_kind": "pull_request",
+                "head_sha": self.head_sha,
+                "base_sha": self.base_sha,
+                "corpus_case_id": None,
+                "corpus_sha256": None,
+                "changed_files": self.changed_files,
+                "omitted_files": self.omitted_files,
+                "diff_chars": self.diff_chars,
+                "diff_truncated": self.diff_truncated,
+                "iar_mode": self.iar_mode,
+                "instruction_files_read": list(self.instruction_files_read),
+            },
+            "budget": {
+                "max_turns": int(self.max_turns),
+                "turns_used": int(self.turns_used),
+                "tool_calls": int(self.tool_calls),
+                "risk_tier": "unclassified",
+                "verifier_runs": 0,
+            },
+            "outcome": {
+                "findings_total": int(self.findings_total),
+                "findings_by_severity": dict(self.findings_by_severity),
+                "findings_verified": 0,
+                "findings_downgraded": 0,
+                "findings_refuted": 0,
+                "summary_present": bool(self.summary_present),
+                "gate": {"strictness": self.strictness, "passed": bool(self.gate_passed)},
+                "score": None,
+            },
+            "usage_known": usage_known,
+            "usage": usage_block,
+            "cost_usd": cost_usd,
+            "cost_basis": cost_basis,
+            "timings": {
+                "setup_seconds": self.setup_seconds,
+                "provider_seconds": self.provider_seconds,
+                "verifier_seconds": None,
+                "total_seconds": total_seconds,
+            },
+            "status": status,
+            "failure_class": failure_class,
+            "campaign": None,
+        }
+
+
+def resolve_run_status(record: RunRecord, exit_code: int, *, crashed: bool) -> tuple[str, str | None]:
+    """Derive the run-record status from how `main` ended.
+
+    Explicit `record.status` (set by the review path) wins; otherwise a
+    crash or exit 1 is `failed` (default class `configuration` — the only
+    way to exit 1 before the run starts), and exit 0 before any model call
+    is `skipped` (gates, trigger modes, skip label).
+    """
+    if crashed:
+        return RUN_STATUS_FAILED, record.failure_class or RUN_FAILURE_PROVIDER
+    if record.status is not None:
+        return record.status, record.failure_class
+    if exit_code == 1:
+        return RUN_STATUS_FAILED, record.failure_class or RUN_FAILURE_CONFIGURATION
+    if not record.run_started:
+        return RUN_STATUS_SKIPPED, None
+    return RUN_STATUS_COMPLETED, None
+
+
+def write_run_record(
+    record: RunRecord, *, status: str, failure_class: str | None, workspace: Path | None = None
+) -> Path | None:
+    """Write `.aiprr/run-record.json` (scrubbed). Best-effort: never raises."""
+    try:
+        root: Path = workspace if workspace is not None else Path.cwd()
+        target: Path = root / RUN_RECORD_REL
+        target.parent.mkdir(parents=True, exist_ok=True)
+        text: str = json.dumps(record.to_dict(status=status, failure_class=failure_class), indent=2)
+        target.write_text(scrub_secrets(text) + "\n", encoding="utf-8")
+        return target
+    except Exception as e:  # noqa: BLE001 — best-effort telemetry; a record
+        # write failure must never change the review's outcome or exit code.
+        log(f"Could not write the run record (non-fatal): {e}")
+        return None
 
 
 def write_all_outputs(
@@ -2735,6 +3000,17 @@ def _log_usage(api_label: str, resp: dict[str, Any]) -> None:
         f"cache_read={cached} out={usage.get('completion_tokens', 0)}"
     )
 
+    def sampling_report(self) -> dict[str, Any]:
+        """Sampling parameters this provider requests and actually sends.
+
+        Run-record field (`sampling`): `requested` is what the provider
+        composes by default for its endpoint kind, `sent` is what survives
+        any adaptive HTTP-400 fallback, `stripped` lists the difference.
+        The base class sends no sampling knob (agent-runner CLIs own their
+        own sampling), so all three are empty.
+        """
+        return {"requested": {}, "sent": {}, "stripped": []}
+
 
 class AnthropicProvider(Provider):
     """Anthropic Messages API client with prompt caching + bounded retries.
@@ -2763,6 +3039,16 @@ class AnthropicProvider(Provider):
             if profile is not None
             else resolve_endpoint_profile("", self.PROVIDER_ID)
         )
+
+    def sampling_report(self) -> dict[str, Any]:
+        # Mirrors `build_body`: temperature is pinned on the first-party host
+        # only (gateways and Bedrock keep their verified wire).
+        requested: dict[str, Any] = (
+            {"temperature": REVIEW_TEMPERATURE}
+            if self.profile.kind == ENDPOINT_KIND_ANTHROPIC
+            else {}
+        )
+        return {"requested": dict(requested), "sent": dict(requested), "stripped": []}
 
     def complete(
         self,
@@ -3184,13 +3470,7 @@ class OpenAIProvider(Provider):
         #   is omitted (rejected by Gemini, unguaranteed on OpenRouter
         #   upstreams and unverified gateways).
         # - Every other OpenAI-compatible kind: temperature 0 + seed 42.
-        effort: str | None = OPENAI_REASONING_EFFORT_BY_KIND.get(self.profile.kind)
-        if effort is not None:
-            payload["reasoning_effort"] = effort
-        else:
-            payload["temperature"] = REVIEW_TEMPERATURE
-            if self.profile.kind not in OPENAI_SEED_EXEMPT_KINDS:
-                payload["seed"] = OPENAI_REVIEW_SEED
+        payload.update(self._sampling_params())
         if tools:
             payload["tools"] = anthropic_tools_to_openai(tools)
             payload["tool_choice"] = OPENAI_TOOL_CHOICE_AUTO
@@ -3204,6 +3484,29 @@ class OpenAIProvider(Provider):
         if self.profile.openai_auth_style == OPENAI_AUTH_STYLE_AZURE:
             headers[OPENAI_AZURE_API_KEY_HEADER] = self.api_key
         return headers
+
+    def _sampling_params(self) -> dict[str, Any]:
+        """Kind-scoped sampling knobs (the request-shape contract)."""
+        params: dict[str, Any] = {}
+        effort: str | None = OPENAI_REASONING_EFFORT_BY_KIND.get(self.profile.kind)
+        if effort is not None:
+            params["reasoning_effort"] = effort
+        else:
+            params["temperature"] = REVIEW_TEMPERATURE
+            if self.profile.kind not in OPENAI_SEED_EXEMPT_KINDS:
+                params["seed"] = OPENAI_REVIEW_SEED
+        return params
+
+    def sampling_report(self) -> dict[str, Any]:
+        requested: dict[str, Any] = self._sampling_params()
+        sent: dict[str, Any] = {
+            k: v for k, v in requested.items() if k not in self._suppressed_params
+        }
+        return {
+            "requested": requested,
+            "sent": sent,
+            "stripped": sorted(k for k in requested if k in self._suppressed_params),
+        }
 
     def complete(
         self,
@@ -8638,6 +8941,8 @@ class ReviewState:
     usage: UsageTelemetry = field(default_factory=UsageTelemetry)
     # Incremental mode: fingerprint → (status, note) from `update_prior_finding`.
     prior_finding_updates: dict[str, tuple[str, str]] = field(default_factory=dict)
+    # Run-record telemetry (v3): every tool dispatch increments this.
+    tool_call_count: int = 0
 
 
 def safe_repo_path(rel: str) -> Path:
@@ -10242,6 +10547,7 @@ def drive_review(
                 f"  → {tool_name}("
                 f"{json.dumps(redact_for_log(tool_args))[:MAX_TOOL_LOG_PREVIEW_CHARS]})"
             )
+            state.tool_call_count += 1
             result_text: str = execute_tool(tool_name, tool_args, state)
             tool_results.append(
                 {
@@ -10400,6 +10706,22 @@ def render_tracking_body_skipped_by_label(
 
 
 def main() -> int:
+    """Entry point: run the review and ALWAYS leave a run record behind."""
+    record: RunRecord = RunRecord()
+    exit_code: int = 1
+    crashed: bool = False
+    try:
+        exit_code = _main_impl(record)
+        return exit_code
+    except BaseException:
+        crashed = True
+        raise
+    finally:
+        status, failure_class = resolve_run_status(record, exit_code, crashed=crashed)
+        write_run_record(record, status=status, failure_class=failure_class)
+
+
+def _main_impl(record: RunRecord) -> int:
     # ------------------------------------------------------------------
     # Load + validate environment
     # ------------------------------------------------------------------
@@ -10426,6 +10748,10 @@ def main() -> int:
     backend_profile: EndpointProfile = resolve_endpoint_profile(
         api_base, provider_id
     )
+    record.provider = provider_id if provider_id in PROVIDER_IDS_FOR_RECORD else record.provider
+    record.endpoint_kind = backend_profile.kind
+    record.head_sha = head_sha
+    record.runtime_sha = _runtime_sha(action_path)
     bedrock_env_credentials: bool = False
     if (
         api_key
@@ -10503,6 +10829,12 @@ def main() -> int:
         log(f"No default model for provider {provider_id!r} — aborting.")
         write_all_outputs(skipped=False)
         return 1
+    record.model = model
+    _alias_raw: str = os.environ.get("AIPRR_MODEL", "").strip().lower()
+    record.model_alias = _alias_raw if _alias_raw in MODEL_TIER_ALIASES_FOR_RECORD else None
+    record.strictness = (
+        os.environ.get("AIPRR_STRICTNESS", STRICTNESS_LENIENT).strip() or STRICTNESS_LENIENT
+    )
 
     prompt_file: str = os.environ.get("AIPRR_PROMPT_FILE", "").strip()
     prompt_extension_file: str = os.environ.get(
@@ -10944,6 +11276,7 @@ def main() -> int:
         base_prompt: str = resolved_prompt_path.read_text(encoding="utf-8")
         log(f"Base prompt loaded from {resolved_prompt_path}")
     except OSError as e:
+        record.failure_class = RUN_FAILURE_PROMPT_FILE
         log(f"Failed to read prompt file {resolved_prompt_path!r}: {e}")
         gh_update_issue_comment(
             token=gh_token,
@@ -10965,6 +11298,7 @@ def main() -> int:
             extension_text = extension_path.read_text(encoding="utf-8")
             log(f"Prompt extension appended from {extension_path}")
         except OSError as e:
+            record.failure_class = RUN_FAILURE_PROMPT_FILE
             log(
                 f"Failed to read prompt extension file "
                 f"{extension_path!r}: {e}"
@@ -10982,6 +11316,8 @@ def main() -> int:
             write_all_outputs(skipped=False)
             return 1
     system_prompt: str = compose_system_prompt(base_prompt, extension_text)
+    record.prompt_sha256 = _sha256_text(system_prompt)
+    record.extension_sha256 = _sha256_text(extension_text) if extension_text else None
 
     # ------------------------------------------------------------------
     # IAR pre-LLM: shape the LLM call.
@@ -11053,6 +11389,15 @@ def main() -> int:
             f"PR loaded: +{pr_ctx.additions}/-{pr_ctx.deletions} across "
             f"{len(pr_ctx.changed_files)} files"
         )
+        record.populate_context(
+            pr_ctx,
+            base_sha=_resolve_base_sha(base_ref=base_ref),
+            iar_mode=(
+                iar_pre_context.mode
+                if iar_pre_context is not None
+                else "none"
+            ),
+        )
         # Incremental follow-up (v2.1.0+): hand the pre-LLM context to the
         # prompt renderer (agent-runners render inside their providers).
         if iar_pre_context is not None and iar_pre_context.mode == IAR_MODE_INCREMENTAL:
@@ -11079,6 +11424,9 @@ def main() -> int:
         provider: Provider | AgentRunnerProvider = build_provider(
             provider_id, api_key=api_key, model=model, api_base=api_base
         )
+        record.run_started = True
+        record.setup_seconds = round(time.monotonic() - record.started_monotonic, 3)
+        _run_started_monotonic: float = time.monotonic()
 
         # v1.2.0 dispatch caveat: `set_pr_description` autocomplete is
         # chat-completions-only (tool-use loop). Complexity labeling is
@@ -11145,7 +11493,16 @@ def main() -> int:
                 max_turns=max_turns,
             )
             result = state_to_review_result(state)
+        record.provider_seconds = round(time.monotonic() - _run_started_monotonic, 3)
     except Exception as e:  # noqa: BLE001
+        # Classify for the run record: before `build_provider` ran, the
+        # failure is the GitHub context fetch; after it, the provider/CLI.
+        if isinstance(e, subprocess.TimeoutExpired) or "timeout" in str(e).lower():
+            record.failure_class = RUN_FAILURE_TIMEOUT
+        elif not record.run_started:
+            record.failure_class = RUN_FAILURE_GITHUB
+        else:
+            record.failure_class = RUN_FAILURE_PROVIDER
         log(f"Agentic loop crashed: {type(e).__name__}: {e}")
         gh_update_issue_comment(
             token=gh_token,
@@ -11176,6 +11533,13 @@ def main() -> int:
                 run_usage.source = USAGE_SOURCE_ESTIMATED
     iar_telemetry.usage = run_usage
     iar_telemetry.tokens_used = run_usage.total_tokens
+    record.populate_from_run(
+        provider=provider,
+        state=state if not isinstance(provider, AgentRunnerProvider) else None,
+        result=result,
+        usage=run_usage,
+        max_turns=max_turns,
+    )
     log(
         f"Usage: source={run_usage.source} in={run_usage.input_tokens} "
         f"cache_read={run_usage.cache_read_tokens} "
@@ -11362,6 +11726,9 @@ def main() -> int:
         f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
         f"({block_reason})"
     )
+    record.strictness = strictness
+    record.gate_passed = not blocked
+    record.status = RUN_STATUS_INCOMPLETE if result.incomplete else RUN_STATUS_COMPLETED
     if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_verdict.is_adequate:
         log(f"PR description gate: blocking — {description_verdict.reason}")
     elif (
@@ -11416,6 +11783,8 @@ def main() -> int:
             diff_text=pr_ctx.diff,
         )
     except Exception as e:  # noqa: BLE001
+        record.status = None
+        record.failure_class = RUN_FAILURE_GITHUB
         log(f"Failed to post review: {e}")
         gh_update_issue_comment(
             token=gh_token,

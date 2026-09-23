@@ -1,0 +1,96 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "p0-baseline-grok-c046-r1",
+  "recorded_at": "2026-10-02T14:03:11Z",
+  "runner": "cli",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "model_alias": "balanced",
+  "runtime_sha": "42194a4",
+  "prompt_sha256": "4c8047986cba86d63761ef7b7c4c6a7613c1ba0f7565abc6e7535838c0564c26",
+  "extension_sha256": "0f2b8c9d1e3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c",
+  "sampling": {
+    "requested": {
+      "temperature": 0,
+      "seed": 42
+    },
+    "sent": {
+      "temperature": 0
+    },
+    "stripped": [
+      "seed"
+    ]
+  },
+  "context": {
+    "repo_kind": "pull_request",
+    "head_sha": "e4baca6",
+    "base_sha": "7d82eaa",
+    "corpus_case_id": null,
+    "corpus_sha256": null,
+    "changed_files": 14,
+    "omitted_files": 1,
+    "diff_chars": 88412,
+    "diff_truncated": false,
+    "iar_mode": "full",
+    "instruction_files_read": [
+      "AGENTS.md",
+      ".review/extension.md"
+    ]
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 9,
+    "tool_calls": 17,
+    "risk_tier": "elevated",
+    "verifier_runs": 0
+  },
+  "outcome": {
+    "findings_total": 4,
+    "findings_by_severity": {
+      "critical": 1,
+      "warning": 2,
+      "info": 1
+    },
+    "findings_verified": 0,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "block-on-critical",
+      "passed": false
+    },
+    "score": {
+      "must_find_total": 1,
+      "must_find_hits": 1,
+      "false_positives": 0,
+      "unlabelled": 3,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 412880,
+    "cache_read_tokens": 301220,
+    "cache_write_tokens": 0,
+    "output_tokens": 6120,
+    "source": "cli"
+  },
+  "cost_usd": 0.47,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 41.2,
+    "provider_seconds": 196.4,
+    "verifier_seconds": null,
+    "total_seconds": 244.9
+  },
+  "status": "completed",
+  "failure_class": null,
+  "campaign": {
+    "id": "phase0-baseline-2026-10",
+    "cell": "grok|grok-4.5|baseline|46",
+    "repetition": 1,
+    "arm": "baseline"
+  }
+}

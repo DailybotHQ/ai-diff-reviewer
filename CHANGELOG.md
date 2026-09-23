@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Run record (`run-record/3.0`, BC-01).** Every run — success, skip, configuration failure, provider failure, both provider families — writes `.aiprr/run-record.json`: endpoint kind only (never a host), exact model and tier alias, runtime SHA, SHA-256 of the composed prompt and of the extension, the sampling parameters requested vs actually sent (after the adaptive 400 fallback), context completeness (changed/omitted files, diff truncation, IAR mode), turn/tool budget, outcome counts, `usage_known` with nullable usage and cost (unknown is never zero), split timings and a status (`completed` / `incomplete` / `failed` / `timeout` / `skipped`). Scrubbed through the secret gate; best-effort (never changes the review's outcome). Schemas for the run record, finding v3 and the structured review output ship under `tests/eval/schemas/` with a stdlib validator (`tests/eval/schema_check.py`).
 
 ## [2.5.0] — 2026-09-23
 

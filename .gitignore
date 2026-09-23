@@ -20,3 +20,6 @@ tmp/
 # here. Working artifacts, not tracked source. See AGENTS.md → "Deep Work Plan"
 # and .agents/skills/deepworkplan/shared/dwp-paths.md.
 .dwp/
+
+# Per-run reviewer artefacts written into the workspace (findings file, run record, structured output)
+.aiprr/
