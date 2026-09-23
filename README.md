@@ -760,6 +760,8 @@ The deep-dive docs live under [`docs/`](docs/) and are cross-linked from every r
 | Security model (author-association, egress surfaces, provider trust) | [docs/SECURITY.md](docs/SECURITY.md) |
 | Performance (turn budgets, prompt caching, token cost) | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | Testing guide | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) |
+| Review quality & the eval gate (measured noise floor, `verdict/1.0`, release precondition) | [docs/rfc/v3/01-eval-gate-contract.md](docs/rfc/v3/01-eval-gate-contract.md) · [PERFORMANCE.md → measured floor](docs/PERFORMANCE.md#measured-noise-floor-and-the-eval-gate-verdict-v3) |
+| v3 design records (RFC-00…08: evidence, eval gate, unified runner, verification, ensemble, output, budgets, breaking changes, roadmap) | [docs/rfc/v3/README.md](docs/rfc/v3/README.md) |
 | PR-review workflow (reading past comments, marker-anchored) | [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md) |
 | Release recovery playbook | [docs/RELEASE_RECOVERY.md](docs/RELEASE_RECOVERY.md) |
 | Full docs index | [docs/README.md](docs/README.md) |
