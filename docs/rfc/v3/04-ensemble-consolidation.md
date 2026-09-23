@@ -78,7 +78,8 @@ scope ──► self-review (matrix, fail-fast: false, mode: emit) ──► agg
 Composite-action-only shape (no matrix): a single `uses:` step with
 `mode: review` — byte-comparable to v2 output on the corpus (acceptance
 item 5). The matrix shape needs the aggregate job to have
-`pull-requests: write`; the emit legs need only `contents: read` plus the
+`pull-requests: write`; the emit legs need only `contents: read` and
+`pull-requests: read` (the PR metadata and files API calls in `fetch_pr_context`) plus the
 provider secret — a **smaller** write surface per leg than today, which
 `docs/SECURITY.md` records as the security argument for the split (a
 prompt-injected leg can no longer post anything).
@@ -265,3 +266,4 @@ The Phase 2 consolidation DWP is complete when:
 - `MAX_HTTP_BODY_BYTES`
 - `collapse-previous`
 - `applied-label`
+- `fetch_pr_context`

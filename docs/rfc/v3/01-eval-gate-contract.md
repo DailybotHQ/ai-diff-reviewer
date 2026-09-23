@@ -179,7 +179,10 @@ exist — today **XAI** (grok CLI, pay-per-token) and **ZAI** (claude-code on
 GLM, flat-rate plan). It writes run records as artifacts and commits the
 verdict file to a records branch or uploads it as a release asset (decision
 D-01 in RFC-08). Only maintainers dispatch it; the workflow refuses to start
-without an explicit `budget_usd` input and stops at 90 % of it (F8).
+without an explicit `budget_usd` input and stops at 90 % of it (F8). The new
+workflow file is registered in `.github/dependabot.yml`'s `github-actions`
+section in the same PR (repository rule in `.review/extension.md` §
+"Documentation sync with the audits"), so its action pins are bumped.
 
 **Release blocking.** Options, with recommendation:
 
@@ -256,7 +259,8 @@ The Phase 0 DWP is complete when every criterion below holds:
 6. Precision is reported for at least one lane from a blinded adjudication
    sample of ≥ 20 positive cases.
 7. `docs/TESTING_GUIDE.md` registers the offline job and the campaign
-   workflow; `docs/PERFORMANCE.md` links the verdict format.
+   workflow; `docs/PERFORMANCE.md` links the verdict format;
+   `.github/dependabot.yml` lists `eval-campaign.yml`.
 
 ## Cited symbols
 

@@ -251,7 +251,7 @@ The Phase 1 runner DWP is complete when:
 2. The same run record (RFC-01) with `context.changed_files`,
    `omitted_files`, `diff_truncated = false` on the 7 historical PRs and
    `instruction_files_read` non-empty is emitted by **every** lane on corpus
-   case C037 (the documentation-contradiction PR).
+   case C067 (the PR #37 documentation-contradiction historical case).
 3. The in-process first message no longer embeds more than the RFC-06 byte
    budget of patches; `MAX_DIFF_CHARS` is retired or reduced to that budget.
 4. A capped or timed-out review ends with `status: incomplete|timeout`, a
