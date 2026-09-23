@@ -82,6 +82,8 @@ Two runners write files next to a credential or the diff for the duration of one
 
 A failed `chmod` is logged as a WARNING and the run continues (the parent directory is already private). A hard kill (SIGKILL / OOM) can leave the directory behind on a **persistent self-hosted runner**; on ephemeral runners the VM is destroyed with it. The findings file the CLI writes (`.aiprr/findings.json`) is capped at `MAX_FINDINGS_FILE_BYTES` (5 MB); a larger file is refused rather than parsed, because a CLI tricked into dumping content is the only way to produce one.
 
+**`.aiprr/inventory.json` (v3, every CLI lane).** The runtime writes the change inventory (paths, statuses, flags, SHAs — never file contents or secrets) into the workspace before the CLI starts and deletes any pre-existing copy first, exactly like the findings file. It is derived from git and the GitHub files API, never from the PR description, so a PR cannot plant an inventory.
+
 ### Grok CLI — web search and subagents are OFF by default
 
 `provider: grok` runs `grok --always-approve --output-format json --disable-web-search --no-subagents --no-plan`. Web search is disabled so a prompt injection in the diff cannot turn the review into an outbound request carrying repository content; subagents and plan mode are disabled so the review is a single bounded loop (`--max-turns` from `agent-max-turns`). The CLI still has the broad local access every agent-runner has (see above); the same fork-PR guidance applies. `agent-extra-args` can re-enable these features deliberately — treat that as a security decision.

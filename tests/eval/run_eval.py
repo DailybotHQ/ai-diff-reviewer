@@ -216,6 +216,8 @@ def run_case(
         record.provider_seconds = round(time.time() - t0, 3)
         if usage.source != r.USAGE_SOURCE_UNAVAILABLE and usage.cost_usd is None:
             usage.cost_usd = r.estimate_cost_usd(model, usage)
+        if isinstance(provider, r.AgentRunnerProvider):
+            record.instruction_files_read = list(getattr(provider, "last_instruction_files_read", ()))
         record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=max_turns)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
     payload = {
@@ -358,6 +360,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _usage_obj = usage or r.UsageTelemetry()
         if _usage_obj.source != r.USAGE_SOURCE_UNAVAILABLE and _usage_obj.cost_usd is None and cost is not None:
             _usage_obj.cost_usd = cost
+        if isinstance(provider, r.AgentRunnerProvider):
+            record.instruction_files_read = list(getattr(provider, "last_instruction_files_read", ()))
         record.populate_from_run(provider=provider, state=None if isinstance(provider, r.AgentRunnerProvider) else state,
                                  result=result, usage=_usage_obj, max_turns=args.max_turns)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED

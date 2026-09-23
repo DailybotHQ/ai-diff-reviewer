@@ -357,7 +357,14 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
       "body": "markdown body of this inline comment",
       "severity": "critical",
       "start_line": 40,
-      "side": "RIGHT"
+      "side": "RIGHT",
+      "title": "Deleting the decorator removes the only authorization check",
+      "category": "security",
+      "evidence": {
+        "files_read": ["src/foo.py", "src/auth.py"],
+        "checks": [{"kind": "grep_callers", "target": "require_role", "result": "supports", "note": "no other guard on the route"}],
+        "documented_rule": null
+      }
     }
   ]
 }
@@ -375,6 +382,9 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 | `findings[].severity` | string | optional (default `info`) | Exactly one of `critical`, `warning`, `info` (lowercase). Drives the strictness gate. |
 | `findings[].start_line` | integer | optional | Start line for multi-line comments. |
 | `findings[].side` | string | optional (default `RIGHT`) | `LEFT` or `RIGHT` (case-normalised). `RIGHT` = new code, `LEFT` = removed. |
+| `findings[].title` | string | optional (v3) | One line naming the defect; cut at 120 characters. |
+| `findings[].category` | string | optional (v3) | Exactly one of `correctness`, `security`, `data-loss`, `broken-contract`, `concurrency`, `performance`, `maintainability`, `contradicts-documented-rule`, `test-gap`, `style`, `other` (case-normalised; anything else is rejected like an unknown severity). |
+| `findings[].evidence` | object | optional (v3) | What the agent verified: `files_read` (≤ 20 strings), `checks` (≤ 20 of `{kind: read_anchor \| grep_callers \| read_base_version \| read_instruction_file \| run_test \| type_check \| other, target, result: supports \| contradicts \| inconclusive, note ≤ 300}`), `documented_rule` (`{file, quote ≤ 500}` for `contradicts-documented-rule`, else `null`). Wrong types and unknown enum values are rejected; unknown keys inside `evidence` are ignored. Until finding v3 lands (Task 13) these are carried on `Finding.extra`. |
 
 ### Validation guarantees
 
@@ -386,6 +396,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 - Severity is exactly one of the allowed values (case-insensitive on input, lowercased on output).
 - Side is `LEFT`/`RIGHT` (case-insensitive on input, uppercased on output).
 - Unknown top-level or per-finding keys are silently ignored (forward-compatibility with vendor extensions).
+- The optional v3 keys (`title`, `category`, `evidence`) are validated strictly for type and enum, bounded in length, and lifted into `Finding.extra`; a legacy file without them parses exactly as before.
 
 Missing files raise `FileNotFoundError` with an actionable message. Malformed JSON raises `ValueError` with the offending snippet quoted.
 
@@ -405,6 +416,8 @@ Any findings file that exists before the CLI starts is removed first, so a file 
 ### The prompt directive
 
 CLI providers wrap the review instructions with `write_findings_prompt_directive()`, which appends the schema + "write your findings to this file before ending your turn" instruction to whatever comes from `prompts/default.md`. The directive is standardised so every CLI writes the same schema — one parser, three producers.
+
+**The user prompt (v3).** Every CLI lane sends the same first message the in-process runners get — `## Change inventory` (SHA-bound table with the `complete` verdict), `## Patches` (whole files in inventory order up to `FIRST_MESSAGE_PATCH_BYTES`) and `## Not embedded — fetch on demand` (diff them natively with the SHAs the inventory names) — followed by `## Required reading (repository instructions)`: `AGENTS.md` / `CLAUDE.md` (once, even when symlinked), `.review/extension.md`, the docs index and the configured `prompt-extension-file`, each SHA-256 stamped and bounded to 64 KB in total, introduced as data that never overrides the review rules. The inventory is also written to `<workspace>/.aiprr/inventory.json` (deleted first, like the findings file) so the CLI can re-read it exactly. The run record's `context.instruction_files_read` for CLI lanes lists what the prompt carried — the CLI's own tool use is not observable, so the record never invents a tool trace.
 
 ### Adding a new agent-runner provider
 
