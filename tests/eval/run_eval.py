@@ -256,16 +256,21 @@ def compose_prompt(prompt_file: Path, extension: Path | None) -> str:
 def run(args: argparse.Namespace) -> dict[str, Any]:
     t_start = time.time()
     r = load_runtime()
+    record = r.RunRecord()  # created first so total_seconds spans the whole run
     key = os.environ.get(args.api_key_env, "")
     if not key:
         sys.exit(f"{args.api_key_env} is not set")
     if args.tree:
         api_base = r.validate_api_base(args.api_base or "")
-        provider = r.build_provider(args.provider, api_key=key, model=args.model or "", api_base=api_base)
+        # Tier aliases (`balanced` / `economy` / `deep`) resolve per runner × kind
+        # exactly as `main()` does — the CLI would reject the alias as a model id.
+        profile = r.resolve_endpoint_profile(api_base, args.provider)
+        model = r.resolve_model(args.provider, profile, args.model or "")
+        provider = r.build_provider(args.provider, api_key=key, model=model, api_base=api_base)
         system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
         payload = run_case(
             case_path=Path(args.tree), provider=provider, runtime=r, system_prompt=system_prompt,
-            max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=args.model or "",
+            max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=model,
             api_base=api_base,
         )
         print(fmt_row(payload))
@@ -273,10 +278,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if not (args.repo and args.pr and args.worktree):
         sys.exit("give --repo, --pr and --worktree (or --tree CASE)")
     token = gh_token()
-    os.chdir(args.worktree)
+    worktree = str(Path(args.worktree).resolve())  # absolute: everything after chdir uses it
+    args.worktree = worktree
+    out_path = Path(args.out).resolve()
+    args.out = str(out_path)
+    os.chdir(worktree)
     ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
     api_base = r.validate_api_base(args.api_base or "")
-    provider = r.build_provider(args.provider, api_key=key, model=args.model or "", api_base=api_base)
+    profile = r.resolve_endpoint_profile(api_base, args.provider)
+    model = r.resolve_model(args.provider, profile, args.model or "")
+    args.model = model
+    provider = r.build_provider(args.provider, api_key=key, model=model, api_base=api_base)
     system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
     # Timing separation (PLAN Task 4 / F8): fetch + provider build + prompt
     # compose are "setup"; the provider loop below is timed as t0..end.
@@ -314,7 +326,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         tool_calls = sum(1 for m in messages if m["role"] == "assistant" for b in (m["content"] if isinstance(m["content"], list) else []) if isinstance(b, dict) and b.get("type") == "tool_use")
     # Run record for the PR path (v3): same shape the runtime writes; the
     # campaign driver stamps `campaign` and stores it beside the result.
-    record = r.RunRecord()
     record.provider = args.provider if args.provider in r.PROVIDER_IDS_FOR_RECORD else record.provider
     record.model = args.model or ""
     record.endpoint_kind = getattr(getattr(provider, "profile", None), "kind", "unknown") or "unknown"

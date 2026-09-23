@@ -146,7 +146,10 @@ def run_eval_command(manifest: dict[str, Any], r: RunPlan) -> list[str]:
     if arm.get("extension"):
         argv += ["--extension", str(ROOT / arm["extension"])]
     if r.cell["kind"] == "pr":
-        argv += ["--repo", str(r.cell["repo"]), "--pr", str(r.cell["pr"]), "--worktree", str(r.cell["worktree"])]
+        wt: Path = Path(str(r.cell["worktree"]))
+        if not wt.is_absolute():
+            wt = ROOT / wt
+        argv += ["--repo", str(r.cell["repo"]), "--pr", str(r.cell["pr"]), "--worktree", str(wt)]
     else:
         argv += ["--tree", str(ROOT / r.cell["case"])]
     return argv
