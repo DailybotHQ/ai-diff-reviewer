@@ -237,7 +237,7 @@ class BedrockTierTests(unittest.TestCase):
 
     def test_tier_aliases_resolve_to_bedrock_ids(self) -> None:
         self.assertEqual(self._resolve("balanced"), "us.anthropic.claude-sonnet-5")
-        self.assertEqual(self._resolve("economy"), "us.anthropic.claude-haiku-4-5")
+        self.assertEqual(self._resolve("economy"), "us.anthropic.claude-haiku-4-5-20251001-v1:0")
         self.assertEqual(self._resolve("deep"), "us.anthropic.claude-opus-5")
 
     def test_geo_prefixed_inference_profiles_resolve_prices(self) -> None:
