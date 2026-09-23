@@ -28,7 +28,7 @@ Later RFCs cite rows by id (`E-nn`, `R-nn`, `H-nn`, `X-nn`, `P-n`).
 | S8 | `tests/eval/BENCHMARK-xai-2026-09-16.md` | xAI model benchmark on the labelled corpus (in-process + CLI spot checks) | 2026-09-16 |
 | S9 | `scripts/reviewer.py` at `38c6144` (v2.5.1) | Runtime facts (tool surface, caps, IAR behavior, `Finding` shape) | 2026-09-23 |
 | S10 | GitHub PR #57 (`feat/jev-review-acceleration`) and PR #58 (`feat/aws_bedrock`), `self-review.yml` runs | Dogfood telemetry (runs, review threads) — re-queried via `gh api` on 2026-09-23 | 2026-09-16 → 2026-09-22 |
-| S11 | `.dwp/plans/PLAN_jev_review_acceleration/analysis_results/runs/{shadow,holdout,pilot}/*.json` | 189 raw run records (cost, seconds, turns, findings, score) — re-aggregated by Task 2 | 2026-09-20/22 |
+| S11 | `.dwp/plans/PLAN_jev_review_acceleration/analysis_results/runs/{shadow,holdout,pilot}/*.json`  + `holdout-gen2.json` | 176 run records loaded by Task 2 (156 complete, 2 failed, 20 without a provider label — holdout triage records, 20 flagged defective treatments per X-03); re-aggregated into `.dwp/plans/PLAN_v3_discovery/analysis_results/metrics/baseline.json` by `baseline_metrics.py` | 2026-09-20/22 |
 
 ## Verified facts
 
@@ -70,6 +70,11 @@ Later RFCs cite rows by id (`E-nn`, `R-nn`, `H-nn`, `X-nn`, `P-n`).
 | E-22 | Provider-stage seconds recomputed from the saved records, original arms: baseline / jev / rules mean (median) | 208.07 (195.7) · 211.53 (192.1) · 196.63 (219.5) | S5 §4 |
 | E-23 | Pilot token figure (the only token count in the campaign): Jev triage | 12 decisions, 6 697 input tokens, $0.000281 | S7 PILOT_REPORT |
 | E-24 | Campaign spend: summing all completed shadow result files with numeric cost | ≈ $110.99 (includes repeats and GLM list-price accounting; not an invoice) | S5 §9 |
+| E-24a | Campaign spend re-aggregated by Task 2 over every complete record with cost (shadow + pilot + anthropic lane, repeats included, GLM list price) | $118.24 over 150 records (6 complete records carry no cost); GLM $49.02 / 28 runs and openai-on-xAI $11.57 / 21 runs match S5 §9 exactly | S11 via `analysis_results/metrics/baseline.json` → `campaign_cost` |
+| E-14a | Noise floor re-computed by Task 2 as relative spread `(max−min)/mean` per replicated cell | 27 replicated cells; median 0.266, mean 0.282, worst 0.888 (`grok/grok-4.5/rules/pr39`: $0.749 → $1.944); definition differs from E-14's mean-absolute ± % | S11 via `baseline.json` → `noise_floor` |
+| E-15a | Recall delta between repetitions re-computed by Task 2 | max 2 defects; 3 of 27 replicated cells moved | S11 via `baseline.json` → `noise_floor.recall_delta_max` |
+| E-35 | Cross-run duplication of finding anchors (path + line ±3) within the same PR across all arms, lanes and repetitions — an upper-bound proxy for R-02 | 0.882 over 296 findings (per PR: 0.58–1.00) | S11 via `baseline.json` → `duplication` |
+| E-36 | Anthropic in-process lane per-run profile from the records: turns hit the 30-turn cap on PRs #25 and #45 with zero findings | 30 turns / 0 findings / $2.036 (pr25), 30 / 0 / $1.847 (pr45) | S11 via `baseline.json` → `cells` (`anthropic|claude-sonnet-5|baseline|25`, `…|45`) |
 
 ### Runtime facts (read from `scripts/reviewer.py` at `38c6144`)
 
@@ -123,7 +128,7 @@ Both sides are quoted with their pointer. This ledger does not adjudicate.
 | Id | Topic | Side A | Side B |
 |---|---|---|---|
 | X-01 | Latency effect of the jev arm | CFR §1 (H4) and §8: "−28 % recorded on timed jev-arm runs" (S4) | IJA §4: provider-stage mean +1.7 %, median −1.8 %; "Neither aggregate is a 28 % improvement"; timings exclude setup and the Jev prepass (S5; E-22) |
-| X-02 | Campaign cost total | CFR §3 "≈ $46"; CFR §6 "≈ $52 of the $100 cap" (S4) | IJA §9: GLM records sum to ≈ $49.02 (report: $11.44); xAI-API records ≈ $11.57 (report: $6.58); all shadow files ≈ $110.99 (S5; E-24). Task 2 recomputes from S11 |
+| X-02 | Campaign cost total | CFR §3 "≈ $46"; CFR §6 "≈ $52 of the $100 cap" (S4) | IJA §9: GLM records sum to ≈ $49.02 (report: $11.44); xAI-API records ≈ $11.57 (report: $6.58); all shadow files ≈ $110.99 (S5; E-24). Task 2's re-aggregation confirms the IJA per-lane sums exactly and totals $118.24 once pilot and anthropic records are included (E-24a) |
 | X-03 | Whether the focused and 43-jev arms tested their named treatments | CFR §4.1 treats them as distinct arms and calls the cheap-model hypothesis "REFUTED" (S4) | IJA §2: focused extensions byte-identical to jev; `43-jev` rendered the rules plan; "not fairly tested by the named arm" (S5; E-04, E-05) |
 | X-04 | Delivery of the Jev priorities | CFR §4.1 reports jev-priorities as the treatment (S4) | IJA §1: Noul probabilities booleanised — all 37 file entries render as HIGH; per-file prioritization was not delivered (S5) |
 | X-05 | Fast-pass zero eligibility | CFR: "Fast-pass floor admitted nothing anywhere" as a policy outcome (S3, S4) | IJA §3: an unconditional missing-confidence veto in `policy.map_batch` explains the zero, not the threshold (S5) |
@@ -137,16 +142,16 @@ Each problem names the rows that support it and the RFC that addresses it.
 
 | Id | Problem | Evidence | Addressed by |
 |---|---|---|---|
-| **P-1** | **Noise floor above every treatment effect.** Run-to-run variance of identical configurations exceeds any improvement measured; no quality claim about a v2.x release is defensible today, and the harness measures no precision | E-14, E-15, E-16, E-17, E-18, E-19, X-01, X-02 | RFC-01 (eval gate: replication, source-grounded adjudication, provenance, thresholds from Task 2) |
+| **P-1** | **Noise floor above every treatment effect.** Run-to-run variance of identical configurations exceeds any improvement measured; no quality claim about a v2.x release is defensible today, and the harness measures no precision | E-14, E-14a, E-15, E-15a, E-16, E-17, E-18, E-19, X-01, X-02 | RFC-01 (eval gate: replication, source-grounded adjudication, provenance, thresholds from Task 2) |
 | **P-2** | **Runner architecture dominates model choice.** Same models: CLI lanes 3–4/5, in-process lanes 0–1/5; the in-process loop lacks diff retrieval, a change inventory with completeness, and instruction-file reading | E-09, E-10, E-11, E-12, E-25, E-26, E-31, H-02 | RFC-02 (unified runner), RFC-03 (instruction-file awareness) |
-| **P-3** | **The ensemble is paid for and wasted.** Several legs post independent reviews; most threads duplicate another leg's finding while the complementarity that reached 5/5 is never surfaced as agreement | E-06, E-33, E-34, R-02, H-03 | RFC-04 (consolidation), RFC-05 (structured output the aggregator consumes) |
+| **P-3** | **The ensemble is paid for and wasted.** Several legs post independent reviews; most threads duplicate another leg's finding while the complementarity that reached 5/5 is never surfaced as agreement | E-06, E-33, E-34, E-35, R-02, H-03 | RFC-04 (consolidation), RFC-05 (structured output the aggregator consumes) |
 | **P-4** | **No verification exists.** Severity is the model's unchecked claim; `Finding` has no evidence; blinded adjudication and triage both show a material share of `critical` labels that do not hold; the summary can contradict the filtered findings | E-20, E-28, E-29, E-32, R-03, H-01 | RFC-03 (verification pass, evidence bundle, structured summary) |
 
 Secondary problems:
 
 | Id | Problem | Evidence | Addressed by |
 |---|---|---|---|
-| P-5 | IAR incremental mode is not budget-incremental: the delta shrinks but turns, tier and tokens do not | R-04, E-26, E-27, H-04 | RFC-06 |
+| P-5 | IAR incremental mode is not budget-incremental: the delta shrinks but turns, tier and tokens do not; the in-process lane also burns the full 30-turn cap producing nothing | R-04, E-26, E-27, E-36, H-04 | RFC-06 |
 | P-6 | Cheap models do not review; "cheaper model everywhere" is not a cost lever | E-05, E-11, H-06 | RFC-06 (budgets by risk, economy only for verifier/docs tiers) |
 | P-7 | No immutable per-run provenance; usage sometimes unknown and at risk of being counted as zero; ledgers disagree | X-02, X-03, E-24, S7 EXPERIMENT_CONTRACT F-rules | RFC-01 (run record) |
 | P-8 | The corpus cannot measure critical precision: zero live critical must-find labels; no cross-file, instruction-file, missing-patch or multi-round IAR cases scored live | E-18, E-13 | RFC-01 (corpus gaps) |
