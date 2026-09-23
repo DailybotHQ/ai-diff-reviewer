@@ -77,11 +77,11 @@ class BedrockWireTests(unittest.TestCase):
         # NOT carry a top-level `model` field (AWS rejects it).
         self.assertNotIn("model", body)
         self.assertIn("max_tokens", body)
-        # Deterministic sampling applies on Bedrock too.
-        self.assertEqual(body["temperature"], 0.0)
-        # Adaptive thinking is on by default for current models there;
-        # the bounded review loop disables it for predictable cost.
-        self.assertEqual(body["thinking"], {"type": "disabled"})
+        # No sampling or thinking parameters on the Bedrock wire (v1
+        # conservative posture — per-model schemas differ).
+        self.assertNotIn("temperature", body)
+        self.assertNotIn("thinking", body)
+        self.assertNotIn("seed", body)
         headers = {k.lower(): v for k, v in req.header_items()}
         self.assertNotIn("x-api-key", headers)
         self.assertNotIn("anthropic-version", headers)
@@ -158,7 +158,7 @@ class BedrockWireTests(unittest.TestCase):
         req = _capture(prov, env={"AWS_ACCESS_KEY_ID": "AKID", "AWS_SECRET_ACCESS_KEY": "sk"})
         body = json.loads(req.data)
         self.assertNotIn("thinking", body)
-        self.assertEqual(body["temperature"], 0.0)
+        self.assertNotIn("temperature", body)
 
 
 class BedrockRunnerGateTests(unittest.TestCase):

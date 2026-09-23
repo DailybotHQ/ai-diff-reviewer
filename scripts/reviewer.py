@@ -332,7 +332,7 @@ _BEDROCK_TIERS: dict[str, str] = {
     # `global.`). AWS bills Bedrock separately — the indicative prices
     # below mirror first-party list rates as an estimate.
     MODEL_TIER_BALANCED: "us.anthropic.claude-sonnet-5",
-    MODEL_TIER_ECONOMY: "us.anthropic.claude-haiku-4-5",
+    MODEL_TIER_ECONOMY: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     MODEL_TIER_DEEP: "us.anthropic.claude-opus-5",
 }
 _OPENROUTER_TIERS: dict[str, str] = {
@@ -2789,10 +2789,7 @@ class AnthropicProvider(Provider):
         # custom hosts) keep the exact wire they were verified against —
         # the same conservative pattern as `cache_control` — because their
         # tolerance for extra sampling fields is not documented.
-        if self.profile.kind in (
-            ENDPOINT_KIND_ANTHROPIC,
-            ENDPOINT_KIND_BEDROCK,
-        ):
+        if self.profile.kind == ENDPOINT_KIND_ANTHROPIC:
             anthropic_body["temperature"] = REVIEW_TEMPERATURE
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             # Bedrock InvokeModel takes the Anthropic Messages body with the
@@ -2802,14 +2799,11 @@ class AnthropicProvider(Provider):
             # field is not part of the AWS request schema and is removed.
             anthropic_body["anthropic_version"] = BEDROCK_ANTHROPIC_VERSION
             anthropic_body.pop("model", None)
-            # Adaptive thinking is ON by default for current-generation
-            # models on Bedrock; the review loop is a bounded, multi-turn,
-            # cost-sensitive shape — keep it disabled (temperature stays
-            # honoured, keeping the deterministic contract). Haiku is the
-            # exception: its contract rejects the disabled form, and it does
-            # not run adaptive thinking by default anyway.
-            if "haiku" not in self.model.lower():
-                anthropic_body["thinking"] = {"type": "disabled"}
+            # No sampling or thinking parameters on Bedrock v1: per-model
+            # schemas differ on what they accept alongside thinking fields,
+            # and that cannot be verified offline. Conservative = the plain
+            # Messages shape (same posture as `cache_control` below); the
+            # deterministic-sampling rollout covers the other backends.
         body: bytes = json.dumps(anthropic_body).encode("utf-8")
         if self.profile.kind == ENDPOINT_KIND_BEDROCK:
             url, headers, api_label = self._bedrock_request_parts(body)
