@@ -59,8 +59,8 @@ Unchanged, by Rule #9: `name: 'AI Diff Reviewer'`, the `description`,
 `branding.icon: 'check-circle'`, `branding.color: 'purple'`, `author:
 DailybotHQ`, the repository slug `DailybotHQ/ai-diff-reviewer` and the
 Marketplace slug `ai-diff-reviewer`. **No row in this ledger touches any of
-them**, and the plan's Task 9 gate greps this document for any proposal to
-rename the action or change its branding. The user-facing spelling stays
+them**, and the plan's Task 9 gate greps this document for any wording that
+would alter the listing title or its branding fields. The user-facing spelling stays
 "AI Diff Reviewer" (DON'T #13). The `v3` line publishes under the same
 listing; only the version and the moving tag change.
 
