@@ -16,7 +16,16 @@ Usage:
   python3 tests/eval/run_eval.py run --repo owner/repo --pr 46 --worktree /path/at/pr/head \
       --provider openai --api-base https://api.x.ai/v1 --model grok-4.5 --api-key-env XAI_API_KEY \
       --prompt prompts/default.md [--extension .review/extension.md] --out results/xai-46.json
+  python3 tests/eval/run_eval.py run --tree tests/eval/cases/C001.json \
+      --provider openai --api-base https://api.x.ai/v1 --model grok-4.5 --api-key-env XAI_API_KEY \
+      --out results/xai-C001.json                          # fixture tree: no GitHub needed
   python3 tests/eval/run_eval.py score results/*.json      # table across runs
+
+`--tree` (v3, RFC-01 / D-05) materialises a corpus case's `fixture.base` and
+`fixture.head` trees as two commits in a temporary git repository, builds the
+review context locally (`build_pr_context_from_local`), runs the same review
+loop, scores against the case's own labels, and writes a `run-record/3.0`
+next to the result (`<out>.run-record.json`) with `repo_kind = fixture_tree`.
 
 Never pass a key on the command line; `--api-key-env` names the variable.
 """
@@ -58,6 +67,185 @@ def gh_token() -> str:
     return tok
 
 
+CASES_DIR = Path(__file__).resolve().parent / "cases"
+
+
+def canonical_hash(payload: Any) -> str:
+    """Same canonical SHA-256 as `corpus_validate.canonical_hash` (kept local so
+    `run_eval` stays importable without the validator)."""
+    import hashlib
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True)
+    return proc.stdout.strip()
+
+
+def materialise_tree(case: dict[str, Any], root: Path) -> tuple[Path, str, str]:
+    """Write `fixture.base` then `fixture.head` as two commits under `root`.
+
+    Returns `(repo_dir, base_sha, head_sha)`. Files present in base and
+    absent from head are deleted in the head commit; paths are validated to
+    stay inside the repo (fixture content is repository data, but a `..`
+    path in a case file must never write outside the temp dir).
+    """
+    fixture = case.get("fixture") or {}
+    if fixture.get("kind", "trees") != "trees":
+        raise ValueError(f"{case.get('id')}: --tree needs a `trees` fixture, got {fixture.get('kind')!r}")
+    repo = root / "repo"; repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "eval@example.invalid"); _git(repo, "config", "user.name", "eval")
+    _git(repo, "config", "commit.gpgsign", "false")
+
+    def write_tree(tree: dict[str, str]) -> None:
+        for rel, content in tree.items():
+            target = (repo / rel).resolve()
+            if repo.resolve() not in target.parents:
+                raise ValueError(f"fixture path escapes the tree: {rel!r}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+
+    base: dict[str, str] = dict(fixture.get("base") or {})
+    head: dict[str, str] = dict(fixture.get("head") or {})
+    write_tree(base)
+    _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "base", "--allow-empty")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+    for rel in base:
+        if rel not in head:
+            (repo / rel).unlink(missing_ok=True)
+    write_tree(head)
+    _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "head", "--allow-empty")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+    return repo, base_sha, head_sha
+
+
+def case_labels_as_corpus_entry(case: dict[str, Any]) -> dict[str, Any]:
+    """Map a v2 case's `labels` + `expected` to the corpus.json entry shape
+    `score_run` understands (`must_find`, `must_not_flag`, `acceptable`)."""
+    expected = case.get("expected") or {}
+    must_ids = set(expected.get("must_flag") or [])
+    must_not_ids = set(expected.get("must_not_flag") or [])
+    must, must_not, acceptable = [], [], []
+    for label in case.get("labels") or []:
+        entry = {
+            "id": label["id"], "path": label.get("path"), "line": label.get("line"),
+            "keywords": label.get("keywords", []), "all_keywords": label.get("all_keywords", False),
+            "window": label.get("window", LINE_WINDOW), "severity": label.get("severity"),
+        }
+        if label["id"] in must_not_ids:
+            must_not.append(entry)
+        elif label["id"] in must_ids:
+            must.append(entry)
+        else:
+            acceptable.append(entry)
+    return {"must_find": must, "acceptable": acceptable, "must_not_flag": must_not}
+
+
+def run_case(
+    *,
+    case_path: Path,
+    provider: Any,
+    runtime: Any,
+    system_prompt: str,
+    max_turns: int,
+    out: Path,
+    provider_id: str,
+    model: str,
+    api_base: str = "",
+    campaign: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Review one fixture-tree case with an already-built provider.
+
+    Testable without GitHub, a token or a vendor key: callers pass the
+    provider (a fake in tests). Writes the result payload to `out` and a
+    `run-record/3.0` to `<out>.run-record.json`.
+    """
+    r = runtime
+    case = json.loads(case_path.read_text(encoding="utf-8"))
+    t_start = time.time()
+    record = r.RunRecord()
+    record.provider = provider_id if provider_id in r.PROVIDER_IDS_FOR_RECORD else record.provider
+    record.model = model
+    record.repo_kind = "fixture_tree"
+    record.corpus_case_id = str(case.get("id"))
+    record.corpus_sha256 = canonical_hash(case.get("fixture"))
+    record.campaign = campaign
+    record.prompt_sha256 = r._sha256_text(system_prompt)
+    record.runtime_sha = r._runtime_sha(str(ROOT))
+    profile = getattr(provider, "profile", None)
+    record.endpoint_kind = getattr(profile, "kind", "unknown") or "unknown"
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, base_sha, head_sha = materialise_tree(case, Path(tmp))
+        meta = (case.get("fixture") or {}).get("pr_metadata") or {}
+        ctx = r.build_pr_context_from_local(
+            base_sha=base_sha, head_sha=head_sha, repo_root=str(repo),
+            title=str(meta.get("title", "")), body=str(meta.get("body", "")),
+        )
+        record.head_sha = head_sha
+        record.populate_context(ctx, base_sha=base_sha, iar_mode="none")
+        setup_seconds = time.time() - t_start
+        record.setup_seconds = round(setup_seconds, 3)
+        record.run_started = True
+        t0 = time.time()
+        cwd = os.getcwd()
+        os.chdir(repo)  # the review tools (read_file / grep / glob) resolve against cwd
+        try:
+            turns = 0
+            if isinstance(provider, r.AgentRunnerProvider):
+                with tempfile.TemporaryDirectory() as out_dir:
+                    result = provider.run_review(
+                        pr_context=ctx, review_instructions=system_prompt,
+                        workspace=repo, output_dir=Path(out_dir),
+                    )
+                usage = result.usage or r.UsageTelemetry()
+                turns = usage.turns
+                state = None
+                tool_calls = None
+            else:
+                state = r.ReviewState(max_inline_comments=10)
+                messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
+                r.drive_review(provider=provider, system_prompt=system_prompt, messages=messages,
+                               tools=r.tools_schema(10), state=state, max_turns=max_turns)
+                result = r.state_to_review_result(state)
+                usage = state.usage
+                turns = usage.turns
+                tool_calls = state.tool_call_count
+        finally:
+            os.chdir(cwd)
+        record.provider_seconds = round(time.time() - t0, 3)
+        if usage.source != r.USAGE_SOURCE_UNAVAILABLE and usage.cost_usd is None:
+            usage.cost_usd = r.estimate_cost_usd(model, usage)
+        record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=max_turns)
+        record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
+    payload = {
+        "case": case.get("id"), "pr": case.get("id"), "repo": "fixture", "provider": provider_id, "api_base": api_base,
+        "model": model, "prompt": "composed", "extension": False,
+        "runtime_head": record.runtime_sha[:12],
+        "turns": turns, "tool_calls": tool_calls,
+        "seconds": round(time.time() - t0, 1), "setup_seconds": round(setup_seconds, 1),
+        "total_seconds": round(time.time() - t_start, 1),
+        "usage": {"in": usage.input_tokens, "cache_read": usage.cache_read_tokens, "cache_write": usage.cache_write_tokens,
+                  "out": usage.output_tokens, "source": usage.source} if usage.source != r.USAGE_SOURCE_UNAVAILABLE else None,
+        "cost_usd": usage.cost_usd,
+        "changed_files": [f.get("path") for f in ctx.changed_files],
+        "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
+        "summary": (result.summary or "")[:2000],
+    }
+    payload["score"] = score_run(payload, corpus_entry=case_labels_as_corpus_entry(case))
+    sc = payload["score"]
+    doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
+    doc["outcome"]["score"] = {
+        "must_find_total": sc["must_find_total"], "must_find_hits": sc["must_find_hits"],
+        "false_positives": len(sc["false_positives"]), "unlabelled": sc["unlabelled_findings"],
+        "adjudicated_true": None, "adjudicated_false": None,
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, indent=2))
+    Path(str(out) + ".run-record.json").write_text(r.scrub_secrets(json.dumps(doc, indent=2)) + "\n", encoding="utf-8")
+    return payload
+
+
 def compose_prompt(prompt_file: Path, extension: Path | None) -> str:
     text = prompt_file.read_text(encoding="utf-8")
     if extension and extension.exists():
@@ -68,10 +256,23 @@ def compose_prompt(prompt_file: Path, extension: Path | None) -> str:
 def run(args: argparse.Namespace) -> dict[str, Any]:
     t_start = time.time()
     r = load_runtime()
-    token = gh_token()
     key = os.environ.get(args.api_key_env, "")
     if not key:
         sys.exit(f"{args.api_key_env} is not set")
+    if args.tree:
+        api_base = r.validate_api_base(args.api_base or "")
+        provider = r.build_provider(args.provider, api_key=key, model=args.model or "", api_base=api_base)
+        system_prompt = compose_prompt(Path(args.prompt), Path(args.extension) if args.extension else None)
+        payload = run_case(
+            case_path=Path(args.tree), provider=provider, runtime=r, system_prompt=system_prompt,
+            max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=args.model or "",
+            api_base=api_base,
+        )
+        print(fmt_row(payload))
+        return payload
+    if not (args.repo and args.pr and args.worktree):
+        sys.exit("give --repo, --pr and --worktree (or --tree CASE)")
+    token = gh_token()
     os.chdir(args.worktree)
     ctx = r.fetch_pr_context(repo=args.repo, pr_number=args.pr, base_ref=args.base_ref, token=token)
     api_base = r.validate_api_base(args.api_base or "")
@@ -144,9 +345,12 @@ def _matches(finding: dict[str, Any], label: dict[str, Any]) -> bool:
     return all(k in body for k in kws) if label.get("all_keywords") else (not kws or any(k in body for k in kws))
 
 
-def score_run(payload: dict[str, Any]) -> dict[str, Any]:
-    corpus = json.loads(CORPUS_PATH.read_text()) if CORPUS_PATH.exists() else {}
-    entry = corpus.get(str(payload["pr"])) or {}
+def score_run(payload: dict[str, Any], corpus_entry: dict[str, Any] | None = None) -> dict[str, Any]:
+    if corpus_entry is None:
+        corpus = json.loads(CORPUS_PATH.read_text()) if CORPUS_PATH.exists() else {}
+        entry = corpus.get(str(payload["pr"])) or {}
+    else:
+        entry = corpus_entry
     findings = payload["findings"]
     must, acceptable, must_not = entry.get("must_find", []), entry.get("acceptable", []), entry.get("must_not_flag", [])
     hits = [l["id"] for l in must if any(_matches(f, l) for f in findings)]
@@ -185,7 +389,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     rp = sub.add_parser("run")
-    rp.add_argument("--repo", required=True); rp.add_argument("--pr", type=int, required=True); rp.add_argument("--worktree", required=True)
+    rp.add_argument("--repo"); rp.add_argument("--pr", type=int); rp.add_argument("--worktree")
+    rp.add_argument("--tree", help="corpus case JSON with a `trees` fixture (no GitHub access needed)")
     rp.add_argument("--base-ref", default="main"); rp.add_argument("--provider", required=True); rp.add_argument("--api-base", default="")
     rp.add_argument("--model", default=""); rp.add_argument("--api-key-env", required=True); rp.add_argument("--prompt", default=str(ROOT / "prompts/default.md"))
     rp.add_argument("--extension", default=""); rp.add_argument("--max-turns", type=int, default=30); rp.add_argument("--out", required=True)

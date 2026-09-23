@@ -20,6 +20,14 @@ python3 tests/eval/run_eval.py run --repo DailybotHQ/ai-diff-reviewer --pr 46 \
 python3 tests/eval/run_eval.py score results/*.json
 ```
 
+```bash
+# fixture tree (v3): no GitHub access, no worktree — the case's base/head trees are
+# materialised as two commits in a temp repo; scored against the case's own labels;
+# writes <out>.run-record.json (run-record/3.0, repo_kind=fixture_tree)
+python3 tests/eval/run_eval.py run --tree tests/eval/cases/C001.json --provider openai \
+  --api-base https://api.x.ai/v1 --model grok-4.5 --api-key-env XAI_API_KEY --out results/xai-C001.json
+```
+
 Prerequisites: `gh auth token` (the PR context is fetched from GitHub), a
 worktree checked out at the PR head (`git worktree add <dir> <head-sha>`), the
 vendor credential in the environment.

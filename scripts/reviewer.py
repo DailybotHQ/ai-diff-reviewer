@@ -1444,6 +1444,11 @@ class RunRecord:
     status: str | None = None
     failure_class: str | None = None
     run_started: bool = False
+    # Evaluation runs (RFC-01): fixture-tree reviews and campaign cells.
+    repo_kind: str = "pull_request"
+    corpus_case_id: str | None = None
+    corpus_sha256: str | None = None
+    campaign: dict[str, Any] | None = None
 
     def populate_from_run(
         self,
@@ -1528,11 +1533,11 @@ class RunRecord:
                 "stripped": list(self.sampling.get("stripped", [])),
             },
             "context": {
-                "repo_kind": "pull_request",
+                "repo_kind": self.repo_kind,
                 "head_sha": self.head_sha,
                 "base_sha": self.base_sha,
-                "corpus_case_id": None,
-                "corpus_sha256": None,
+                "corpus_case_id": self.corpus_case_id,
+                "corpus_sha256": self.corpus_sha256,
                 "changed_files": self.changed_files,
                 "omitted_files": self.omitted_files,
                 "diff_chars": self.diff_chars,
@@ -1569,7 +1574,7 @@ class RunRecord:
             },
             "status": status,
             "failure_class": failure_class,
-            "campaign": None,
+            "campaign": dict(self.campaign) if self.campaign else None,
         }
 
 
@@ -8543,6 +8548,85 @@ def fetch_pr_context(
             }
             for f in files_resp
         ],
+        diff=diff_text,
+        omitted_files=omitted_files,
+    )
+
+
+def build_pr_context_from_local(
+    *,
+    base_sha: str,
+    head_sha: str,
+    repo_root: str,
+    title: str = "",
+    body: str = "",
+    ignore_globs: tuple[str, ...] = DEFAULT_IGNORE_PATH_GLOBS,
+) -> PRContext:
+    """Build a `PRContext` from two local revisions — no GitHub call.
+
+    Used by the evaluation harness (`tests/eval/run_eval.py --tree`) to
+    review fixture trees, and by the v3 change inventory. Mirrors
+    `fetch_pr_context`'s diff shaping (`shape_diff` before the
+    `MAX_DIFF_CHARS` truncation) so the model sees the same prompt shape as
+    a real PR; `fetch_pr_context` itself is unchanged.
+    """
+    names: subprocess.CompletedProcess[str] = run_cmd(
+        ["git", "diff", "--name-status", "--no-renames", f"{base_sha}...{head_sha}"],
+        cwd=repo_root,
+    )
+    numstat: subprocess.CompletedProcess[str] = run_cmd(
+        ["git", "diff", "--numstat", f"{base_sha}...{head_sha}"], cwd=repo_root
+    )
+    counts: dict[str, tuple[int, int]] = {}
+    for line in numstat.stdout.splitlines():
+        parts: list[str] = line.split("\t")
+        if len(parts) == 3:
+            add_s, del_s, path = parts
+            counts[path] = (
+                int(add_s) if add_s.isdigit() else 0,
+                int(del_s) if del_s.isdigit() else 0,
+            )
+    status_map: dict[str, str] = {"A": "added", "M": "modified", "D": "removed"}
+    changed_files: list[dict[str, Any]] = []
+    for line in names.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        code, path = parts[0][:1], parts[-1]
+        additions, deletions = counts.get(path, (0, 0))
+        changed_files.append(
+            {
+                "path": path,
+                "status": status_map.get(code, "changed"),
+                "additions": additions,
+                "deletions": deletions,
+                "omitted": path_is_ignored(path, ignore_globs),
+            }
+        )
+    diff_proc: subprocess.CompletedProcess[str] = run_cmd(
+        ["git", "diff", f"{base_sha}...{head_sha}", "--no-color", "--unified=3"],
+        cwd=repo_root,
+    )
+    diff_text, omitted_files = shape_diff(diff_proc.stdout, ignore_globs)
+    if len(diff_text) > MAX_DIFF_CHARS:
+        diff_text = (
+            diff_text[:MAX_DIFF_CHARS]
+            + f"\n\n[diff truncated at {MAX_DIFF_CHARS} characters — use the "
+            "read_file tool to inspect specific changed files in full]"
+        )
+    total_add: int = sum(int(f["additions"]) for f in changed_files)
+    total_del: int = sum(int(f["deletions"]) for f in changed_files)
+    return PRContext(
+        title=title,
+        author="",
+        head_ref=head_sha,
+        base_ref=base_sha,
+        state="open",
+        additions=total_add,
+        deletions=total_del,
+        commits=1,
+        body=body,
+        changed_files=changed_files,
         diff=diff_text,
         omitted_files=omitted_files,
     )
