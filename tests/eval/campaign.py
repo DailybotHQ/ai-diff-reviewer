@@ -171,6 +171,12 @@ def run_eval_command(manifest: dict[str, Any], r: RunPlan) -> list[str]:
         argv += ["--extension", str(ROOT / arm["extension"])]
     if arm.get("verifier"):
         argv += ["--verifier", str(arm["verifier"])]
+    if arm.get("round"):
+        argv += ["--round", str(arm["round"])]
+    if arm.get("budget_profile"):
+        argv += ["--budget-profile", str(arm["budget_profile"])]
+    if arm.get("high_risk_paths"):
+        argv += ["--high-risk-paths", str(arm["high_risk_paths"])]
     if r.cell["kind"] == "pr":
         wt: Path = Path(str(r.cell["worktree"]))
         if not wt.is_absolute():

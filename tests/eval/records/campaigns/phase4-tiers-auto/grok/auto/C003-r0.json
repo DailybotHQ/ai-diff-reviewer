@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.5,
+  "setup_seconds": 0.1,
+  "total_seconds": 33.6,
+  "usage": {
+    "in": 29947,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1458,
+    "source": "cli"
+  },
+  "cost_usd": 0.0859604,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded production SMTP password in source.** `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` ships a real-looking credential as the default whenever the env var is unset. Anyone with repo access can authenticate as `notifications` to `smtp.internal.example`, and missing secret mounts no longer fail closed \u2014 cron silently uses the baked-in password.\n\nRemove the default and require the env var (or exit with a clear configuration error). If `smtp-prod-backup-77` was ever valid, rotate it immediately; it is already in git history on this branch.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a login fallback.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), which fails loudly when the secret is missing. The PR switches to `os.environ.get(..., \"smtp-prod-backup-77\")`, so any cron or runner without the env var authenticates with a password that now lives in the repository history.\n\nThat is a credential leak and an auth bypass of secret mounting: anyone with repo read access (or a future public fork/log) gets a working SMTP password. The comment frames this as keeping cron mail going when the secret is not mounted; that is exactly when you must fail closed, not fall back to a baked-in prod secret.\n\n## Fix direction\n\nKeep the hard dependency on `SMTP_PASSWORD` (or fail with a clear error), and fix the cron/job secret mount so the env var is present. Rotate `smtp-prod-backup-77` immediately if it was ever a real credential \u2014 it is now in git history on this branch.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), embedding a credential default; base required the env var with no fallback, so missing secrets no longer fail closed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.267,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 738,
+      "out": 279
+    },
+    "cost_usd": 0.003867
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 71.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 71.8,
+  "usage": {
+    "in": 32626,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 3610,
+    "source": "cli"
+  },
+  "cost_usd": 0.130112,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "`newResetToken()` now builds a password-reset token from `Math.random()` and a 10^12 numeric range. That is a cryptographically weak PRNG with at most ~40 bits of entropy (8\u20139 base-36 characters after `padStart(9, \"0\")`), versus the previous 256-bit `randomBytes(32)` value.\n\nIf an attacker can request resets or guess tokens, they can brute-force or predict a valid token and take over the account. `Math.random` is also recoverable from observed outputs in common engines (e.g. V8 XorShift128+).\n\nUse the Web Crypto CSPRNG, which is available on edge runtimes:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n"
+    }
+  ],
+  "summary": "Password reset tokens are now generated with `Math.random` and a ~40-bit numeric space, which is a production account-takeover risk.\n\n`newResetToken()` previously returned 32 bytes from Node's CSPRNG (`randomBytes(32)` \u2192 64 hex chars, 256 bits). The replacement draws `Math.floor(Math.random() * 1e12)`, encodes it in base 36, and pads to 9 characters. That is at most 10^12 distinct values (~40 bits), produced by a predictable PRNG. An attacker who can request or observe tokens can brute-force or predict a valid reset token and take over the account.\n\nEdge runtimes that lack `node:crypto.randomBytes` still expose the Web Crypto CSPRNG via `globalThis.crypto.getRandomValues`, which is the compatible replacement (Cloudflare Workers, Vercel Edge, Deno, browsers, and modern Node).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "newResetToken() was changed from crypto.randomBytes(32) (256-bit hex) to Math.floor(Math.random()*1e12).toString(36), which is a weak PRNG with ~40 bits of entropy\u2014a critical password-reset token regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.028,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2569,
+      "out": 372
+    },
+    "cost_usd": 0.00824
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 13.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 13.9,
+  "usage": {
+    "in": 29761,
+    "cache_read": 57984,
+    "cache_write": 0,
+    "out": 1316,
+    "source": "cli"
+  },
+  "cost_usd": 0.0848132,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nPrior empty/`None` guard on `total()` is fixed; `first_name()` empty-name crash remains open.\n\n## Prior findings\n\n1. **`5d977ce4424f3a31` (resolved)** \u2014 `total()` now returns `0` when `items` is falsy (`None` or `[]`), so callers that pass `None` no longer hit `TypeError` on `sum(...)`.\n2. **`09584834c0aebae2` (open)** \u2014 `first_name()` is still `user.name.split()[0]` with no empty-name guard; `\"\".split()[0]` raises `IndexError`.\n\n## Notes\n\nSmall, focused follow-up. No new issues on the `total()` guard itself.\n\n**Recommendation:** request-changes",
+  "round": "2",
+  "effective_max_turns": 8,
+  "prior_finding_updates": {
+    "5d977ce4424f3a31": [
+      "resolved",
+      "if not items: return 0 handles both None and empty list before sum()."
+    ],
+    "09584834c0aebae2": [
+      "open",
+      "first_name still does user.name.split()[0] with no empty-string guard."
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C091-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": [
+    {
+      "path": "utils.py",
+      "line": 6,
+      "severity": "warning",
+      "status": "open",
+      "body": "first_name() crashes on an empty name ('' .split()[0] \u2192 IndexError). first_name still does user.name.split()[0] with no empty-string guard."
+    }
+  ]
+}

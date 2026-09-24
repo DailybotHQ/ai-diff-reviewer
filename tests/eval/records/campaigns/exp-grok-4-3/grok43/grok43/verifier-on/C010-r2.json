@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 27.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 27.2,
+  "usage": {
+    "in": 14898,
+    "cache_read": 176256,
+    "cache_write": 0,
+    "out": 572,
+    "source": "cli"
+  },
+  "cost_usd": 0.0576762,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Any authenticated caller can now fetch any account.\n\n```ts\n// support staff tools pass an explicit account id in the body\nconst body = await req.json().catch(() => ({}));\nconst id: string = body.accountId ?? caller.accountId;\n```\n\nNo role/permission check exists anywhere in `src/`. If `body.accountId` is attacker-controlled, the endpoint returns the full account record for that id."
+    }
+  ],
+  "summary": "The change introduces an authorization bypass. Any authenticated caller can now fetch arbitrary accounts by supplying `accountId` in the JSON body; there is no staff-role guard, ownership check, or rate limit. This is a direct violation of the documented contract that `getAccount` returns only the caller's own account.",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch lets any authenticated caller set `body.accountId` and load that account with no ownership or role check; previously lookup was fixed to `caller.accountId`. No authorization helpers exist under `src/`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.835,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2393,
+      "out": 358
+    },
+    "cost_usd": 0.00783
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

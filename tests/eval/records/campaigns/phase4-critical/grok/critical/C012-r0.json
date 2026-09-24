@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 99.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 99.6,
+  "usage": {
+    "in": 34326,
+    "cache_read": 118016,
+    "cache_write": 0,
+    "out": 5049,
+    "source": "cli"
+  },
+  "cost_usd": 0.157954,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "Removing the `__proto__` / `constructor` / `prototype` skip lets a JSON patch pollute `Object.prototype`. `JSON.parse('{\"__proto__\": {\"polluted\": true}}')` *does* yield `__proto__` as an own key; `Object.entries` walks it, and `deepMerge((base as any)[k] ??= {}, v)` writes into `Object.prototype` because `base[\"__proto__\"]` hits the prototype getter. The `{\"constructor\": {\"prototype\": {\"hacked\": true}}}` payload pollutes the same way (verified in Node: `({}).polluted === true` and `({}).hacked === true` after this merge). Restore the blocklist, or assign with `Object.defineProperty` / merge into `Object.create(null)` \u2014 `JSON.parse` is not a sanitizer, and this function accepts any `Record<string, unknown>`."
+    }
+  ],
+  "summary": "Looks good is the wrong call \u2014 this is a critical prototype-pollution regression and should not merge.\n\nThe PR drops the `__proto__` / `constructor` / `prototype` skip from `deepMerge` on the claim that `JSON.parse` never yields those keys. That claim is false. `JSON.parse('{\"__proto__\": {\"polluted\": true}}')` creates an *own* `__proto__` property (it does not pollute by itself), `Object.entries` enumerates it, and `(base as any)[k] ??= {}` then *reads* `Object.prototype` via the `__proto__` getter and recurses into it. A Node repro of the post-change function sets `({}).polluted === true` and `({}).hacked === true` for the constructor/prototype payload.\n\n`deepMerge` is also typed as `Record<string, unknown>`, so the patch is not even constrained to JSON.parse output. Restoring the blocklist (or assigning with `Object.defineProperty` / merging into `Object.create(null)`) is the smallest fix; treating parse as a sanitizer is not one.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `deepMerge` skipped `__proto__`/`constructor`/`prototype`; head removed that blocklist while still doing `(base as any)[k] ??= {}` / assignment, so JSON patches can pollute `Object.prototype`. That is a real critical prototype-pollution regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 16.414,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3888,
+      "out": 495
+    },
+    "cost_usd": 0.012205
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 85.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.6,
+  "usage": {
+    "in": 20122,
+    "cache_read": 231296,
+    "cache_write": 0,
+    "out": 3796,
+    "source": "cli"
+  },
+  "cost_usd": 0.178668,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "`log.debug` includes `process.env.PROCESSOR_KEY` in the payload, and the comment on this hunk says credentials are included so support can replay failures. Debug logs still reach aggregators, support dashboards, and ticket systems; anyone who can read those sinks can reuse the processor key to create charges.\n\nDrop `key` from the log object. Keep `orderId` and `ref` for correlation. If support needs replay, do it through an access-controlled internal path that never writes the secret to logs.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "The new debug log writes `process.env.PROCESSOR_KEY` into the charge-context payload. That is a payment-processor credential, and the adjacent comment states the intent to include credentials so support can replay failures.\n\nDebug logs are routinely shipped to aggregators, support consoles, and ticket systems. Anyone with log access then has the key needed to create charges. Replay for support belongs in an access-controlled internal tool that never persists the secret.\n\nThe previous `log.info(\"charge created\", { orderId, ref })` success event was also removed, so production-visible charge confirmation disappeared in the same edit.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `src/payments/charge.ts` explicitly passes `key: process.env.PROCESSOR_KEY` into `log.debug`, and the added comment states credentials are included for support replay. That is a real secret-exfiltration path into log sinks; severity critical is appropriate for a payment processor"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.837,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3509,
+      "out": 296
+    },
+    "cost_usd": 0.008948
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

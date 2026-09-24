@@ -1,0 +1,96 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.8,
+  "usage": {
+    "in": 16030,
+    "cache_read": 71552,
+    "cache_write": 0,
+    "out": 1404,
+    "source": "cli"
+  },
+  "cost_usd": 0.0619496,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`pickle.loads` on the base64-decoded session blob is unsafe if `raw` is attacker-controlled (typical for session cookies or tokens). A crafted pickle payload executes arbitrary code on the server at deserialization time \u2014 classic RCE, far beyond what `json.loads` allowed.\n\nDo not use pickle for any untrusted or client-supplied data. Keep a data-only format (JSON) or an explicit schema for cart session fields; if object graphs must cross the wire, use a signed, non-executable encoding \u2014 never `pickle.loads`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical remote code execution vulnerability by deserializing session blobs with `pickle.loads`.\n\n## Analysis\n\n`load_session` takes a `raw` string, base64-decodes it, and previously parsed it as JSON. JSON is a data-only format. Replacing that with `pickle.loads` means any attacker who can supply the session blob (cookie, header, query param, or request body \u2014 whatever feeds `raw`) can craft a pickle that runs arbitrary Python on the server during deserialization.\n\nThe comment about \"richer session objects used by the cart plugin\" does not mitigate this: pickle is designed to reconstruct arbitrary objects and can invoke `__reduce__` / other gadget chains at load time. There is no safe subset of pickle for untrusted input.\n\n## Safe direction\n\nKeep a data-only codec for anything that crosses a trust boundary (JSON, or a signed structured format). If the cart plugin needs richer types, encode them explicitly (e.g. a typed dict / schema) rather than round-tripping live Python objects through pickle.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code at web/session.py:6 calls pickle.loads on base64-decoded session input, and the patch shows this replaced json.loads. Deserializing attacker-controlled pickle enables arbitrary code execution (RCE), so the critical security finding is supported."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.455,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2336,
+      "out": 414
+    },
+    "cost_usd": 0.008026
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

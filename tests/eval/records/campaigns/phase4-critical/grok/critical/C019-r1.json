@@ -1,0 +1,109 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 138.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 138.1,
+  "usage": {
+    "in": 67189,
+    "cache_read": 125440,
+    "cache_write": 0,
+    "out": 7425,
+    "source": "cli"
+  },
+  "cost_usd": 0.241648,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`0008_drop_reason` depends on `(\"billing\", \"0007_add_reason\")`, but this PR deletes `migrations/0007_add_reason.py`. Django cannot build the graph and will raise `NodeNotFoundError: Migration billing.0008_drop_reason dependencies reference nonexistent parent node ('billing', '0007_add_reason')`, so `migrate` fails and the column is never dropped.\n\nKeep `0007_add_reason` in the tree and leave this dependency as-is so `RemoveField` can apply on top of it. If `0007` was never shipped, drop this file too and delete `0007` only."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "`RemoveField` on `invoice.void_reason` emits `DROP COLUMN` with no copy/backup step. The comment that the field was never surfaced in the UI does not guarantee the column is empty \u2014 a void reason is often written at void time even when it is not rendered.\n\nOnce the missing `0007` parent is restored so this migration can run, any stored values are discarded. Confirm no environment has data (or export it first) before applying."
+    }
+  ],
+  "summary": "I'd recommend not merging until the migration graph is repaired: `0008_drop_reason` cannot load because this PR deletes its parent.\n\n`migrations/0008_drop_reason.py` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but `migrations/0007_add_reason.py` is removed in the same commit. Django will raise `NodeNotFoundError` and refuse to migrate, so the column is not dropped and no later `billing` migration can apply.\n\nThe usual Django shape for this change is: **keep** `0007_add_reason` (it is already in the chain after `0006_initial`) and add `0008` as a follow-on `RemoveField`. If `0007` has never been applied anywhere, delete `0007` and do not add `0008` at all.\n\n`RemoveField` is still a `DROP COLUMN`. A comment that the field was never shown in the UI does not mean it is empty; confirm no environment stored `void_reason` (or copy the values out) before this runs. This tree has no `Invoice` model or other callers to re-check that claim.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "PR deletes migrations/0007_add_reason.py while new 0008_drop_reason.py still lists dependencies = [(\"billing\", \"0007_add_reason\")]; at HEAD that parent file is missing, so Django\u2019s migration graph cannot resolve and migrate will fail with NodeNotFoundError."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The new migration runs RemoveField on invoice.void_reason with only a UI comment and no copy/backup operation, so applying it will DROP the column and discard any stored values. Warning severity is appropriate for this irreversible schema change."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 21.227,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3974,
+      "out": 852
+    },
+    "cost_usd": 0.015082
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

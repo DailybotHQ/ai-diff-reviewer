@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 40.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.0,
+  "usage": {
+    "in": 17171,
+    "cache_read": 160896,
+    "cache_write": 0,
+    "out": 1998,
+    "source": "cli"
+  },
+  "cost_usd": 0.0945988,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` and load a different account. The comment says this is for support staff, but there is no staff/role check before the override \u2014 only `auth(req)`, which previously bound the lookup to `caller.accountId`.\n\n**Failure mode:** a normal user sends `{\"accountId\":\"victim-id\"}` and receives that account\u2019s full JSON from `Response.json(account)`.\n\nHonor a client-supplied id only after an explicit authorization check (e.g. `caller.isSupport` / role claim), otherwise keep using `caller.accountId`. A separate staff-only route is another safe shape.\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string = (caller.isSupport && body.accountId) ? body.accountId : caller.accountId;\n```\n\n(Adapt `caller.isSupport` to whatever staff signal `auth()` actually exposes.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole: `getAccount` now trusts a client-supplied `accountId` with no staff/role check, so any authenticated user can read any account.\n\n## Analysis\n\nPreviously the handler scoped the lookup strictly to `caller.accountId` from `auth(req)`. This change prefers `body.accountId` whenever present and still returns the full account JSON. The comment claims the body override is for support staff tools, but nothing in the handler verifies staff status, a support role, or any other elevated permission before honoring the override.\n\nFailure mode: an ordinary authenticated session sends `{\"accountId\": \"<victim>\"}` and receives that account record. That is a classic IDOR on a sensitive endpoint.\n\n## Recommendation\n\nGate the override on an explicit staff/authorization check (or a separate staff-only route), and keep the default path bound to `caller.accountId`. Until that exists, this should not merge.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaced a lookup bound to caller.accountId with body.accountId ?? caller.accountId and returns the full account JSON, with no staff/role check before honoring the client-supplied id. Any authenticated caller can therefore load another account (IDOR)."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.239,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2640,
+      "out": 380
+    },
+    "cost_usd": 0.008507
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

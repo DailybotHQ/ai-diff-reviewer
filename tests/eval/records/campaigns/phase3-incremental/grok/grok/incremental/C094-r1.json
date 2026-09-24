@@ -1,0 +1,89 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 60074,
+    "cache_read": 145664,
+    "cache_write": 0,
+    "out": 2966,
+    "source": "cli"
+  },
+  "cost_usd": 0.1816432,
+  "changed_files": [
+    "q.py"
+  ],
+  "findings": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "SQL is built by concatenating `email` into the query string. A value like `x' OR '1'='1` changes the predicate and can return or mutate unintended rows.\n\nMatch the fix already applied in `by_name`:\n\n```suggestion\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nPrior `by_name` injection is fixed with a bound parameter. The new `by_email` helper rebuilds the same concatenation pattern and is still injectable.\n\n## Notes\n\n`by_name` now correctly uses `db.execute(\"SELECT ... ?\", (name,))`. `by_email` still interpolates `email` into the SQL string, so any value containing a quote can alter the query (classic SQLi). Mirror the `by_name` parameter binding there before merge.\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "b50b033fe4c3975c": [
+      "resolved",
+      "by_name now uses parameterized ? placeholder with (name,) bind args"
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "by_email at q.py:6 builds SQL via string concatenation of `email`, which is a classic SQL injection; by_name already shows the correct parameterized form. The patch introduced this new helper with the same anti-pattern that was fixed in by_name."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.395,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2490,
+      "out": 296
+    },
+    "cost_usd": 0.007191
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C094-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": []
+}

@@ -481,6 +481,8 @@ The bit becomes `False` only when NONE of these hold — i.e., the reviewer has 
 
 ### 9.2 Lifetime cost matrix (theoretical — validated by dogfooding)
 
+> **Measured (v3, PLAN_v3_implementation Task 27, 2026-09-24).** The rows below are the pre-v3 model; the measured profile of follow-up rounds is in § 9.2.1.
+
 For a typical PR that would converge in 5 rounds without dedup:
 
 | Round | Baseline (no dedup) | `iterative` | `first-pass-exhaustive` | `round-capped` (N=3) | `critical-gate` |
@@ -494,6 +496,21 @@ For a typical PR that would converge in 5 rounds without dedup:
 | **vs baseline** | 0% | **−44%** | **−34%** | **−60%** | **−10%** |
 
 > **Note:** these numbers are theoretical. Empirically measured values from self-review dogfooding will replace them over time. See [`docs/PERFORMANCE.md`](PERFORMANCE.md) for the current authoritative numbers.
+
+### 9.2.1 Measured follow-up rounds (v3, RFC-06)
+
+Two sources, both stored: the multi-round fixture campaign (`tests/eval/records/campaigns/phase3-incremental`, 4 fixtures × 3 reps × 3 arms, grok CLI, verifier on) and the `review-output/3.0` artifacts of the ensemble rounds on PR #61 (a 654-file PR; the emit legs' run records).
+
+| Round type | Where | Input tokens | Cost | Review turns | Notes |
+|---|---|---|---|---|---|
+| full round | fixtures (one-file repos) | 125 k | $0.105 | 4.2 | the CLI's own context dominates on tiny repos |
+| incremental round 2 | fixtures | 123 k (−2 %) | $0.111 | 4.2 (caps 7–8) | recall 9 / 12 (labels = priors kept open; one moved-anchor fixture missed) |
+| **no-change round** | fixtures | **2 k (−98 %)** | **$0.007 (−93 %)** | **0** | verifier re-read 15 outstanding anchors (12 verified, 3 refuted) |
+| full round | PR #61, grok | 4.16 M | $1.69 | 34 | baseline on the real PR |
+| incremental rounds | PR #61, grok | 0.98 M / 1.02 M / 1.60 M (**−62 … −76 %**); 4.02 M / 4.25 M on two many-file pushes | $0.53 / $0.53 / $0.77; $1.70 / $2.02 | 9–26 | the budget scales with the delta by design |
+| full → incremental | PR #61, Claude Code on Z.ai (glm) | 6.9–7.2 M → 4.39 M (**−37 %**) and 3.37 M (**−52 %**) | $5.0–5.2 → $3.52 / $2.65 | 56–59 → 44 / 30 | |
+
+Reading: the RFC-06 target (−50 % input tokens on 1–3-file deltas) holds on real PR rounds with small deltas and cannot show on one-file fixtures, where the first message is not what costs tokens; the no-change round is a solved case (zero review turns). Records and the verdict: `tests/eval/records/verdicts/phase3-incremental.json` (non-blocking, descriptive on 4 cells).
 
 ### 9.3 Per-round wall-clock breakdown
 
@@ -850,7 +867,9 @@ The review summary ends with `Since last review (<prior> → <head>): resolved N
 
 ### 14.5 Budget scaling
 
-`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)` and `max-turns = max(6, ceil(max-turns × delta ratio))`, both capped at the base values; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)`, capped at the base value; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+
+**Turn budget (v3, RFC-06 § Incremental rounds — BC-13):** `turns = clamp(4 + 1.5 × |changed files in the delta| + 1 × |outstanding prior findings|, 4, ceiling)` where the ceiling is the round's full budget (`max-turns`; the risk tier's ceiling once tiers land). Examples: 1–2 files with 3 outstanding → 10 turns; 6 files with 5 outstanding → 18; a delta with **no changed file** is a **verifier-only round**: no review turns at all — the verifier re-reads each outstanding anchor (`budget.turns_used = 0`, `verifier_runs = n` in the run record), the review body is the ledger plus the re-read results, and nothing is retired automatically because no code changed (a refuted anchor is surfaced for the maintainer). The rails are unchanged: the escape label, the 30 % new-lines safety net and a new generation force a full round with the full-round budget.
 
 ### 14.6 Failure semantics
 

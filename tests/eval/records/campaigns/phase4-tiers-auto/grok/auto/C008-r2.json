@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.3,
+  "usage": {
+    "in": 30591,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1780,
+    "source": "cli"
+  },
+  "cost_usd": 0.0979356,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `ALLOWED_HOSTS` and the `urlsplit` check means `deliver()` will POST to any `url` passed in. With customer-configured endpoints, that is SSRF: a malicious or compromised tenant URL can target `http://127.0.0.1`, `http://169.254.169.254/` (cloud metadata), or internal hostnames. `urlopen` also follows redirects by default, so a seemingly public URL can chain into the private network.\n\nRestore a server-side URL policy before `Request`/`urlopen` \u2014 for example HTTPS-only, resolve and reject loopback/link-local/private ranges, limit redirects, and/or keep a per-tenant allowlist. Do not ship open egress solely on the comment that customer endpoints are desired."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only webhook host allowlist and posts to an attacker-influenced URL with no replacement controls.\n\n## Analysis\n\n`deliver()` previously rejected any host outside `ALLOWED_HOSTS` (`hooks.internal.example`) before building the request. The PR deletes that gate and calls `urllib.request.urlopen` on the raw `url` argument.\n\nIf `url` is customer- or user-controlled (the PR description says it is), this is classic SSRF: the runner/server can be steered at link-local metadata (`169.254.169.254`), loopback, RFC1918 addresses, or internal hostnames. `urllib.request` follows redirects by default, so a public HTTPS endpoint can still bounce into the internal network unless redirect and address checks are explicit.\n\nSupporting customer endpoints is a valid product goal; it needs an allowlist/denylist or equivalent URL policy (scheme HTTPS-only, block private/link-local/metadata ranges after DNS resolution, cap redirects, optional per-tenant allowlist) \u2014 not an unconditional open egress.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base `deliver()` enforced `ALLOWED_HOSTS` via `urlsplit` before `urlopen`; head removes that guard and POSTs to any caller-supplied `url`, enabling SSRF (including redirect chains). Claimed critical severity matches open egress to internal/metadata targets."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.715,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1112,
+      "out": 357
+    },
+    "cost_usd": 0.005544
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

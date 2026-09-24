@@ -1,0 +1,96 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 71.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 71.7,
+  "usage": {
+    "in": 61050,
+    "cache_read": 145280,
+    "cache_write": 0,
+    "out": 3227,
+    "source": "cli"
+  },
+  "cost_usd": 0.185046,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `escapeHtml` and passing `body` straight into `dangerouslySetInnerHTML` turns every comment into an HTML/JS injection sink. A body like `<img src=x onerror=alert(document.cookie)>` or `<script>\u2026</script>` executes in the reader\u2019s origin.\n\nRestore escaping for plain text, or parse a limited markdown subset and render through React elements / a vetted sanitizer (e.g. DOMPurify with a strict allowlist) before any HTML sink. Do not assign raw user/community content to `__html`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical XSS regression \u2014 do not merge until comment HTML is sanitized again.\n\n## Narrative\n\n`Comment` previously escaped `&`, `<`, and `>` before passing the string into `dangerouslySetInnerHTML`, which made the DOM sink safe for plain text. This change deletes `escapeHtml` and injects `body` raw, so any caller-supplied comment can run arbitrary HTML/JS in the viewer session (`<img onerror=...>`, `<script>`, SVG handlers, etc.).\n\nThe comment says the goal is bold/links for a community thread. That still needs a sanitizer or a constrained markdown renderer (allowlist tags/attributes), not an unsanitized HTML sink. As written, the component trusts every `body` string completely.\n\n## Release decision\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and assigns the raw body prop to dangerouslySetInnerHTML, creating a clear XSS sink for comment content. Base still escaped HTML entities before the same sink, so this is a real regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.612,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5795,
+      "out": 399
+    },
+    "cost_usd": 0.014214
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

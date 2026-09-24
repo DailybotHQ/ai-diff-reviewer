@@ -1,0 +1,95 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "42cc4c4bf80f",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 66.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 67.0,
+  "usage": {
+    "in": 31319,
+    "cache_read": 88192,
+    "cache_write": 0,
+    "out": 3006,
+    "source": "cli"
+  },
+  "cost_usd": 0.12477,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "`newResetToken()` now builds the reset token from `Math.random() * 1e12`. That is not a CSPRNG, and the range is at most 10^12 values (~40 bits) encoded as \u22649 base-36 characters. The previous implementation used 32 bytes of `crypto.randomBytes` (256 bits, 64 hex chars). An attacker who can trigger password-reset emails can brute-force or predict these tokens.\n\nEdge runtimes lack Node's `crypto.randomBytes`, but they do expose Web Crypto. Generate 32 bytes with `crypto.getRandomValues` and hex-encode them:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```"
+    }
+  ],
+  "summary": "Password-reset tokens are no longer generated with a CSPRNG, and the search space collapsed from 256 bits to about 40. This is a credential-guessing bug on a public auth path.\n\n`newResetToken()` previously returned 32 bytes of `crypto.randomBytes` as 64 hex characters. The replacement is `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`: `Math.random()` is a predictable PRNG, and `1e12` caps the token at one trillion values (\u2264 9 base-36 characters). An attacker who can request resets can brute-force or reconstruct tokens; edge runtimes already expose Web Crypto (`crypto.getRandomValues`) as the portable CSPRNG.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head implementation of `newResetToken()` uses `Math.floor(Math.random() * 1e12).toString(36)`, replacing the base version\u2019s `randomBytes(32).toString(\"hex\")`. That is a real CSPRNG/entropy regression for password-reset tokens and supports the critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.825,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4559,
+      "out": 374
+    },
+    "cost_usd": 0.011823
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

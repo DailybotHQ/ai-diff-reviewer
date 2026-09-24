@@ -1,0 +1,81 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 0,
+  "tool_calls": 0,
+  "seconds": 17.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 18.0,
+  "usage": {
+    "in": 7691,
+    "cache_read": 0,
+    "cache_write": 0,
+    "out": 673,
+    "source": "api"
+  },
+  "cost_usd": 0.022134,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [],
+  "summary": "No code changed since `9a0bdcb6`, so this round spent no review turns and re-read the 2 outstanding finding(s) with the verifier instead:\n\n- `utils.py:2` (warning) \u2014 **refuted**: `total()` would indeed fail on None, but the repo has no callers of `total` at all\u2014only its definition\u2014so the claim that callers pass None is unsupported and contradicted by the codebase.\n- `utils.py:6` (warning) \u2014 **verified**: first_name does user.name.split()[0]; for an empty name, ''.split() is [] so indexing [0] raises IndexError. The defect is real at the anchor; warning severity is appropriate.\n\n1 outstanding finding(s) no longer hold at the anchor per the verifier; they stay open until the maintainer resolves the thread (no code changed, so nothing is retired automatically).",
+  "round": "nochange",
+  "effective_max_turns": 0,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [
+    {
+      "path": "utils.py",
+      "line": 2,
+      "status": "refuted",
+      "reason": "`total()` would indeed fail on None, but the repo has no callers of `total` at all\u2014only its definition\u2014so the claim that callers pass None is unsupported and contradicted by the codebase."
+    },
+    {
+      "path": "utils.py",
+      "line": 6,
+      "status": "verified",
+      "reason": "first_name does user.name.split()[0]; for an empty name, ''.split() is [] so indexing [0] raises IndexError. The defect is real at the anchor; warning severity is appropriate."
+    }
+  ],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 17.941,
+    "verified": 1,
+    "refuted": 1,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7691,
+      "out": 673
+    },
+    "cost_usd": 0.022134
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C091-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

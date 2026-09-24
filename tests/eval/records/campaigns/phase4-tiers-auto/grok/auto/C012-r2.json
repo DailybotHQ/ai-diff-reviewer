@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 68.8,
+  "setup_seconds": 0.1,
+  "total_seconds": 68.9,
+  "usage": {
+    "in": 32601,
+    "cache_read": 148352,
+    "cache_write": 0,
+    "out": 3519,
+    "source": "cli"
+  },
+  "cost_usd": 0.1308216,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The deleted `BLOCKED` guard was the only protection against prototype pollution. The claim that `JSON.parse` never yields dangerous keys is false: `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` produces an own enumerable `\"__proto__\"` property, and `Object.entries` feeds it into this loop.\n\nWith the guard gone, `(base as any)[k] = v` and `(base as any)[k] ??= {}` for `k === \"__proto__\"` assign through the setter and pollute `Object.prototype`. The nested `constructor` / `prototype` path also pollutes. Verified against this implementation in Node: after `deepMerge({}, JSON.parse('{\"__proto__\":{\"polluted\":true}}'))`, `({}).polluted === true`.\n\nRestore the blocklist (or merge into `Object.create(null)` / skip non-safe keys another way) before shipping."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Analysis\n\nThe PR rationale claims that `JSON.parse` never yields dangerous keys (`__proto__`, `constructor`, `prototype`). That is incorrect.\n\n`JSON.parse` uses `CreateDataProperty`, so it does **not** pollute during parse, but it **does** produce own enumerable properties with those names. `Object.entries` then surfaces them, and the unguarded assignments in `deepMerge` trigger pollution:\n\n- `base[\"__proto__\"] = { polluted: true }` sets fields on `Object.prototype`\n- `base[\"constructor\"][\"prototype\"][\"hacked\"] = true` pollutes via the constructor chain\n\nVerified in Node against this exact post-change implementation: both payloads from `JSON.parse` successfully pollute `({}).polluted` / `({}).hacked`.\n\nThe previous `BLOCKED` set was the only guard. With no callers or alternate hardening in this tree (no `Object.create(null)`, no `Object.hasOwn` allowlist, no `Map`), every `deepMerge` of external/user JSON config is exposed again.\n\n## Release decision\n\nRestore the blocklist (or an equivalent allowlist / null-prototype merge) before merging.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `BLOCKED` set skipped `__proto__`/`constructor`/`prototype`; head removed it while still doing `(base as any)[k] = v` and `(base as any)[k] ??= {}`, so `Object.entries` on a JSON-parsed `__proto__` own key can pollute `Object.prototype`. That is a real critical prototype-pollution regressio"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.977,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2973,
+      "out": 417
+    },
+    "cost_usd": 0.009907
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

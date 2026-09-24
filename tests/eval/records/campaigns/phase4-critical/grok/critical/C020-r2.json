@@ -1,0 +1,108 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 98.7,
+  "setup_seconds": 0.2,
+  "total_seconds": 98.9,
+  "usage": {
+    "in": 63886,
+    "cache_read": 158592,
+    "cache_write": 0,
+    "out": 5077,
+    "source": "cli"
+  },
+  "cost_usd": 0.23753,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "`account` is interpolated into the SQL string with `fmt.Sprintf`, so a UI-supplied value can close the quoted `LIKE` pattern and change the statement. Input such as `' OR '1'='1` makes the predicate always true; a crafted payload can also inject additional SQL. Bind the value as a parameter instead:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\"\n```\n\nThen pass `account` as the `QueryRow` argument (`db.QueryRow(q, account)`). Escape `%` / `_` in `account` if those should be literal digits rather than LIKE wildcards."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "`QueryRow` still expects a single row, but `LIKE '%\u2026%'` can match many accounts. `database/sql` then Scans the first row the driver returns and discards the rest, so a partial number that hits more than one account silently returns another account's `balance_cents`. If partial lookup is required, error when more than one row matches, or return the matching set."
+    }
+  ],
+  "summary": "I'd recommend not merging until the SQL injection at `ledger/query.go:11` is resolved.\n\n`Balance` previously bound `account` as `$1`. This change builds the statement with `fmt.Sprintf` and embeds that value inside a quoted `LIKE` pattern. The comment says the string comes from the new partial-number UI, so it is attacker-controlled. A value such as `' OR '1'='1` turns the predicate into a tautology; a value that closes the quote can run additional SQL. Bind the pattern as a parameter (`LIKE '%' || $1 || '%'`, or `LIKE $1` with a bound `\"%\"+account+\"%\"`) and keep `QueryRow` on constant SQL.\n\nOn the same path, `QueryRow` plus a substring `LIKE` returns whichever matching row the planner produces first. A partial number that hits more than one account therefore yields a silent wrong balance. Partial lookup needs an explicit uniqueness check or a list result; `QueryRow` is the wrong primitive for an ambiguous match.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf interpolating `account` and calls QueryRow with no args, replacing the base parameterized `WHERE number = $1`. That is a real SQL injection; critical severity is appropriate."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Balance switched from exact `number = $1` to `LIKE '%\u2026%'` but still uses `db.QueryRow`, which scans only the first matching row and discards the rest, so a partial account number that hits multiple rows can silently return another account\u2019s balance_cents."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 18.542,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5718,
+      "out": 641
+    },
+    "cost_usd": 0.016946
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

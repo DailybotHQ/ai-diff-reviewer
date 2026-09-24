@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 94.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 94.5,
+  "usage": {
+    "in": 34228,
+    "cache_read": 120704,
+    "cache_write": 0,
+    "out": 5355,
+    "source": "cli"
+  },
+  "cost_usd": 0.160938,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` guard lets `deliver()` POST the event to any customer-supplied URL via `urllib.request.urlopen`. A value such as `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:8080/` is fetched from this process, and `urlopen` follows redirects by default, so this is SSRF against cloud metadata, loopback, and private networks.\n\nKeep supporting customer endpoints, but validate before `Request`: require `https`, reject loopback/link-local/private IPs after DNS resolution, and re-check the target on every redirect."
+    }
+  ],
+  "summary": "I'd recommend not merging until the SSRF at `webhooks.py:6` is closed.\n\n`deliver()` now posts the event body to whatever `url` the caller supplies. The only control that previously constrained that host (`ALLOWED_HOSTS` plus the `urlsplit` check) is gone, and `urllib.request.urlopen` still follows redirects and accepts non-HTTPS schemes. A customer-controlled value such as `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:8080/` is fetched from this process, which can reach link-local metadata, loopback, and private networks and leak the POSTed event.\n\nCustomer-owned endpoints are a reasonable product goal. They need an explicit URL policy (HTTPS, public addresses after DNS resolution, re-validate redirects) in front of `Request`/`urlopen`, not an unrestricted fetch.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `deliver()` blocked hosts outside `ALLOWED_HOSTS`; head removes that check and POSTs the customer-supplied URL with `urllib.request.urlopen`, which follows redirects and has no scheme/host/IP validation\u2014classic SSRF to metadata/loopback/private nets. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.882,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2645,
+      "out": 368
+    },
+    "cost_usd": 0.008368
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase3-incremental",
+  "repetitions": 3,
+  "cells": [
+    "grok|full|C091",
+    "grok|full|C092",
+    "grok|full|C093",
+    "grok|full|C094",
+    "grok|incremental|C091",
+    "grok|incremental|C092",
+    "grok|incremental|C093",
+    "grok|incremental|C094",
+    "grok|nochange|C091",
+    "grok|nochange|C092",
+    "grok|nochange|C093",
+    "grok|nochange|C094"
+  ],
+  "budget_usd": 45.0
+}

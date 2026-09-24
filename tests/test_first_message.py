@@ -124,7 +124,11 @@ class FirstMessageBudget(unittest.TestCase):
         self.assertIn("diff --git a/a.py", text)
 
     def test_max_diff_chars_equals_the_budget(self) -> None:
-        self.assertEqual(reviewer.MAX_DIFF_CHARS, reviewer.FIRST_MESSAGE_PATCH_BYTES)
+        # RFC-06: the raw-diff ceiling bounds memory only — it must never
+        # pre-empt a tier's patch budget (the elevated/critical rows embed up
+        # to 200 kB); FIRST_MESSAGE_PATCH_BYTES is the fixed-profile default.
+        self.assertGreaterEqual(reviewer.MAX_DIFF_CHARS, max(row["patch_bytes"] for row in reviewer.BUDGET_MATRIX.values()))
+        self.assertEqual(reviewer.FIRST_MESSAGE_PATCH_BYTES, reviewer.FIXED_PROFILE_BUDGET["patch_bytes"])
         self.assertEqual(reviewer.FIRST_MESSAGE_PATCH_BYTES, 120_000)
 
 

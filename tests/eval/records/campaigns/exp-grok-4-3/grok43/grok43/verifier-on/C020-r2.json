@@ -1,0 +1,83 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 42.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 42.3,
+  "usage": {
+    "in": 55338,
+    "cache_read": 190720,
+    "cache_write": 0,
+    "out": 742,
+    "source": "cli"
+  },
+  "cost_usd": 0.1126465,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "Untrusted `account` input is interpolated directly into the SQL string via `fmt.Sprintf`.\n\n```go\nq := fmt.Sprintf(\"SELECT balance_cents FROM accounts WHERE number LIKE '%%%s%%'\", account)\nerr := db.QueryRow(q).Scan(&cents)\n```\n\nAn attacker-controlled value such as `%' OR '1'='1` (or any payload) executes arbitrary SQL. The original code used a parameterized `$1` placeholder; the new code removes that protection."
+    }
+  ],
+  "summary": "The change replaces a parameterized equality query with string interpolation into a LIKE clause. The `account` parameter (originating from the UI) is concatenated directly into the SQL string with no escaping or parameterization, creating a SQL injection vulnerability.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf of the untrusted `account` string and runs it with no placeholders; base used a safe `$1` parameter. That is a real SQL-injection regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.795,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2528,
+      "out": 327
+    },
+    "cost_usd": 0.00794
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

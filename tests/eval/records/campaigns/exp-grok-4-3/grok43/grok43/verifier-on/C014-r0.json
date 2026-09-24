@@ -1,0 +1,83 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 31.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.5,
+  "usage": {
+    "in": 80781,
+    "cache_read": 54656,
+    "cache_write": 0,
+    "out": 521,
+    "source": "cli"
+  },
+  "cost_usd": 0.11636995,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "Returning `Access-Control-Allow-Credentials: true` together with `Access-Control-Allow-Origin: *` (or an arbitrary incoming origin) violates the CORS specification. Browsers will refuse to expose the response to JavaScript when this pair is present. The prior implementation correctly gated both the specific origin and the credentials flag behind the allow-list.\n\n```suggestion\n  if (!origin) {\n    return { \"Access-Control-Allow-Origin\": \"*\" };\n  }\n  // validate origin against an allow-list before returning credentials\n  return {\n    \"Access-Control-Allow-Origin\": origin,\n    \"Access-Control-Allow-Credentials\": \"true\",\n    Vary: \"Origin\",\n  };\n```"
+    }
+  ],
+  "summary": "The change removes the origin allow-list and unconditionally returns `Access-Control-Allow-Credentials: true` while setting `Access-Control-Allow-Origin` to the incoming value or `*`. This combination is invalid per the CORS spec and creates a reflected credential exposure: any origin can now receive authenticated responses containing cookies or other credentials.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head always returns Access-Control-Allow-Credentials: true with Access-Control-Allow-Origin set to the raw request origin or *, while base only emitted both headers for origins in ALLOWED. Reflecting any origin with credentials is a real critical CORS misconfiguration regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.579,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2405,
+      "out": 333
+    },
+    "cost_usd": 0.007755
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

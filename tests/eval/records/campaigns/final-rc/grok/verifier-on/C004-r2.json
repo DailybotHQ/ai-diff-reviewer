@@ -1,0 +1,96 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.8,
+  "usage": {
+    "in": 30499,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 1868,
+    "source": "cli"
+  },
+  "cost_usd": 0.098318,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "The download handler no longer sanitizes the file path. User-controlled `request.args.get(\"path\", name)` is joined onto `REPORTS` and passed to `send_file`, so a request like `/reports/x?path=../../etc/passwd` or `?path=/etc/passwd` reads files outside `/srv/reports` (absolute segments make `os.path.join` drop the base entirely).\n\nRestore containment before serving: reject absolute paths and `..` segments, resolve the candidate, and ensure it stays under `REPORTS` (e.g. `Path(REPORTS).resolve()` + `is_relative_to`). Nested folders can use a validated relative subpath or `/reports/<path:name>` with the same checks \u2014 do not pass raw query input to `send_file`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical arbitrary-file-read via path traversal on the report download endpoint.\n\n## What went wrong\n\nThe previous handler confined downloads with `os.path.basename(name)`, so route input could not escape `/srv/reports`. The new code drops that guard and builds the path from `request.args.get(\"path\", name)` with no normalization or containment check.\n\nConcrete failure modes against `GET /reports/<name>?path=...`:\n\n- `?path=../../etc/passwd` resolves under `/srv/reports/../..` and serves host files outside the reports tree.\n- `?path=/etc/passwd` makes `os.path.join` discard the `/srv/reports` prefix entirely (absolute second segment), so `send_file` opens that path directly.\n\nAny client that can hit this route can read arbitrary files the process user can open (secrets, keys, app config).\n\n## Fix direction\n\nKeep supporting nested paths (e.g. `2024/q3/report.pdf`) with an explicit allowlist of relative segments: reject absolute paths and `..` components, then resolve and verify the final path stays under `REPORTS` (e.g. `Path(REPORTS).resolve()` and `candidate.resolve().is_relative_to(reports_root)`). Prefer encoding the subpath in the route (`/reports/<path:name>`) over an unbound query parameter.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base handler confined downloads with os.path.basename(name); head replaces that with unsanitized request.args.get(\"path\", name) joined to REPORTS and passed to send_file, so ?path=../../etc/passwd or ?path=/etc/passwd can read files outside /srv/reports."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.357,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4662,
+      "out": 308
+    },
+    "cost_usd": 0.011966
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

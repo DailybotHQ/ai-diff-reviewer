@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 104.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 104.7,
+  "usage": {
+    "in": 20809,
+    "cache_read": 132864,
+    "cache_write": 0,
+    "out": 5719,
+    "source": "cli"
+  },
+  "cost_usd": 0.142364,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "Dropping the `__proto__` / `constructor` / `prototype` blocklist lets a JSON patch pollute `Object.prototype`. `JSON.parse` *does* emit those keys as own enumerable properties \u2014 `Object.entries` will feed them into this loop. For an object value, `(base as any)[k] ??= {}` then recurses into `Object.prototype` (or `Object.prototype` via `constructor.prototype`), so after `deepMerge({}, JSON.parse('{\"__proto__\":{\"polluted\":true}}'))`, `{}.polluted === true`. Restore the `BLOCKED` set (or assign with `Object.defineProperty` so `__proto__` cannot trigger the setter)."
+    }
+  ],
+  "summary": "I'd recommend not merging until the prototype-pollution guard is restored in `src/config/merge.ts`.\n\nThe rationale that `JSON.parse` never yields dangerous keys is incorrect. `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` produces an own enumerable `__proto__` property, and `Object.entries` enumerates it. The same is true for `constructor` / `prototype`. With the blocklist gone, `deepMerge((base as any)[k] ??= {}, v)` walks those keys and merges into `Object.prototype` \u2014 I reproduced `{}.pollutedProto === true` and `{}.pollutedCtor === true` on this function body in Node.\n\nThe previous `BLOCKED` set was the entire mitigation. Restore it, or merge with `Object.defineProperty` / a null-prototype target so assignment cannot walk the prototype chain.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base version blocked `__proto__`/`constructor`/`prototype`; head removed that guard. With `Object.entries` on `JSON.parse` output, `(base as any)[k] ??= {}` for `__proto__` resolves to `Object.prototype` and the recursive assign pollutes it, so the claimed regression is real and critical."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 16.917,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2410,
+      "out": 355
+    },
+    "cost_usd": 0.007923
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

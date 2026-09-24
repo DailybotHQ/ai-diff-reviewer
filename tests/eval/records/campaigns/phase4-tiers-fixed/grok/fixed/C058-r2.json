@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 108.5,
+  "setup_seconds": 0.1,
+  "total_seconds": 108.6,
+  "usage": {
+    "in": 65774,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 4349,
+    "source": "cli"
+  },
+  "cost_usd": 0.184138,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "The new Unreleased entry says tar-stream 2\u21923 included an \"API migration in scripts/pack.js\", but this PR only touches `package.json`, `package-lock.json`, and `CHANGELOG.md`. There is no `scripts/pack.js` (and no `scripts/` tree) on base or head, and no file in the repo imports `tar-stream`.\n\nFor a major bump, either land the migrated call sites in the same PR or correct the changelog so it does not claim work that did not ship. As written, release notes and the PR description overstate the change and leave any v2-style pack usage unaccounted for."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "`tar-stream` moves from `^2.2.0` to `^3.1.6` (major). The PR description says call sites were migrated, but nothing in the diff updates consumers \u2014 only the dependency range (and lock pin) change.\n\nIf pack/extract code still uses the v2 surface, install will resolve 3.x and fail at runtime. Add the migrated `scripts/pack.js` (or other call sites) to this PR, or confirm there are truly no in-repo consumers before treating this as a version-only chore."
+    }
+  ],
+  "summary": "## Verdict\n\nIncomplete major upgrade: the dependency and lockfile move to tar-stream 3, but the claimed call-site migration is not in the PR.\n\n## Notes\n\n`CHANGELOG.md` states an API migration in `scripts/pack.js`, and the PR description says call sites were migrated. The tree at both base and head only contains `package.json`, `package-lock.json`, and `CHANGELOG.md` \u2014 there is no `scripts/` directory and no `tar-stream` import anywhere. A 2\u21923 bump is a major version change; without the migrated pack script (or any other consumer update), the release notes overstate what shipped and any real pack path still on the v2 API would break at runtime once the lockfile resolves to 3.x.\n\n`package-lock.json` is present and pins `3.1.6`, which matches `package.json` \u2014 the lockfile is not out of step with the manifest. Contents of the lockfile were not reviewed beyond the version pin (omitted generated file).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "tar-stream is bumped ^2.2.0\u2192^3.1.6 in package.json/lock only; CHANGELOG claims an API migration in scripts/pack.js, but that file and any tar-stream require/import are absent from the repo, so the major bump ships without the stated call-site updates."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 21.323,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2574,
+      "out": 476
+    },
+    "cost_usd": 0.008874
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

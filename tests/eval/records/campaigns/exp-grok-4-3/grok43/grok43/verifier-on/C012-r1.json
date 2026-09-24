@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 31.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.8,
+  "usage": {
+    "in": 27870,
+    "cache_read": 135552,
+    "cache_write": 0,
+    "out": 546,
+    "source": "cli"
+  },
+  "cost_usd": 0.0655804,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Removal of the `BLOCKED.has(k)` guard allows `__proto__`, `constructor`, and `prototype` keys from `patch` to reach object mutation.\n\n```diff\n-    if (BLOCKED.has(k)) continue;\n```\n\nThe function signature `deepMerge<T>(base: T, patch: Record<string, unknown>)` accepts arbitrary objects. Even if current callers only pass `JSON.parse` results, the public API no longer enforces that invariant."
+    }
+  ],
+  "summary": "The change removes the prototype-pollution blocklist from `deepMerge`. The stated rationale (JSON.parse safety) does not hold for the exported function contract, which accepts any `Record<string, unknown>`. This opens a prototype-pollution vector on any call site that receives non-JSON input.",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base `deepMerge` skipped `__proto__`/`constructor`/`prototype` via `BLOCKED`; head removed that guard while still doing `(base as any)[k] = v` and recursive merges, so those keys can pollute. The function remains an exported public API."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.671,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2647,
+      "out": 392
+    },
+    "cost_usd": 0.008542
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

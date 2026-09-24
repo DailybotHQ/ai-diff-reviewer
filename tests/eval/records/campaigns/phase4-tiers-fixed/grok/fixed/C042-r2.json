@@ -1,0 +1,79 @@
+{
+  "case": "C042",
+  "pr": "C042",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 15.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 15.1,
+  "usage": {
+    "in": 15376,
+    "cache_read": 71552,
+    "cache_write": 0,
+    "out": 630,
+    "source": "cli"
+  },
+  "cost_usd": 0.0559976,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package.json"
+  ],
+  "findings": [],
+  "summary": "Clean patch-release bump: `package.json` moves 1.4.2 \u2192 1.4.3 and `CHANGELOG.md` adds a matching `## 1.4.3` section in the same style as prior entries. Versions stay in sync; no runtime, security, or contract surface is touched.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

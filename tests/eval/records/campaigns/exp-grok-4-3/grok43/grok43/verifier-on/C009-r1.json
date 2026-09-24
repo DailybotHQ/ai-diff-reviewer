@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 13,
+  "tool_calls": null,
+  "seconds": 58.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 58.3,
+  "usage": {
+    "in": 55598,
+    "cache_read": 297856,
+    "cache_write": 0,
+    "out": 1230,
+    "source": "cli"
+  },
+  "cost_usd": 0.1393737,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing `escapeHtml` and feeding `body` straight into `dangerouslySetInnerHTML` lets any HTML (including `<script>`, `onclick`, or `<img onerror>`) execute. If `body` ever contains attacker-controlled text the page is now vulnerable to XSS.\n\n```suggestion\n// TODO: implement a safe rich-text renderer (e.g. marked + DOMPurify or a constrained allow-list) instead of trusting raw HTML.\nexport function Comment({ body }: { body: string }) {\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: sanitize(body) }} />;\n}\n```"
+    }
+  ],
+  "summary": "The change removes HTML escaping from `Comment` and passes the raw `body` prop directly into `dangerouslySetInnerHTML`. This turns an otherwise safe comment renderer into an XSS vector: any untrusted or user-supplied content (or even a compromised upstream source) can now inject arbitrary markup, event handlers, or scripts. The stated goal of supporting bold/links is not implemented; the diff simply trusts the input. No sanitization, markdown parser, or allow-list is present. This is a critical correctness and security regression on the only changed file.\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes body straight into dangerouslySetInnerHTML, so any attacker-controlled HTML in body can execute. That is a real XSS regression from the base version; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.042,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2385,
+      "out": 354
+    },
+    "cost_usd": 0.007816
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

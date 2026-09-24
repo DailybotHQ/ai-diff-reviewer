@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 85.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.5,
+  "usage": {
+    "in": 32649,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 3583,
+    "source": "cli"
+  },
+  "cost_usd": 0.1131768,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "This entry states the tar-stream 2\u21923 bump included an \u201cAPI migration in `scripts/pack.js`\u201d, but `scripts/pack.js` is not in the tree at base or head and no call-site edits appear in the diff\u2014only the version range in `package.json` / `package-lock.json` changed.\n\ntar-stream 3 is a major release; if pack/extract usage still follows the v2 API, installs of `^3.1.6` will break at runtime. Either add the real migration (or the missing `scripts/pack.js` changes) to this PR, or rewrite the changelog to describe a version-only bump with no call-site updates."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "`tar-stream` is raised from `^2.2.0` to `^3.1.6` (major). The PR framing and changelog say call sites were migrated, but this diff contains no pack/extract or `require('tar-stream')` updates\u2014only the dependency range.\n\nConfirm every consumer of `pack`/`extract`/`entry` is updated for the v3 API before merge, or keep the v2 range until those edits land in the same change."
+    }
+  ],
+  "summary": "## Verdict\n\nIncomplete major dependency bump: the changelog asserts an API migration that is not in this PR.\n\n## Narrative\n\n`tar-stream` moves from `^2.2.0` to `^3.1.6` and the lockfile entry matches `3.1.6`, so the declared version and lock stay aligned. The problem is the migration story. The new `CHANGELOG.md` line says the work included an API migration in `scripts/pack.js`, and the PR description repeats that call sites were migrated. Neither base nor head contains `scripts/pack.js` (or any other JS source), and the only non-doc code change is the version string in `package.json` / `package-lock.json`.\n\ntar-stream 3 is a major release with a different stream stack and pack/extract usage patterns than v2. Shipping only the version bump while documenting a completed migration leaves maintainers with false confidence and, if pack/extract call sites exist outside this minimal tree or land later against v2 APIs, a runtime break on install.\n\nNo other contract, security, or lockfile-drift issues showed up in the reviewed files: the lockfile was updated in the same commit as `package.json`.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "CHANGELOG.md claims an \u201cAPI migration in scripts/pack.js\u201d, but that file is absent at base and head, there is no scripts/ tree, and the diff only bumps tar-stream in package.json/package-lock.json with no call-site edits. The changelog entry is therefore inaccurate."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "package.json raises tar-stream from ^2.2.0 to ^3.1.6 and the lockfile follows, but the diff has no pack/extract call-site edits; CHANGELOG claims migration in scripts/pack.js, which is absent at both head and base."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 26.709,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 14709,
+      "out": 991
+    },
+    "cost_usd": 0.037438
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

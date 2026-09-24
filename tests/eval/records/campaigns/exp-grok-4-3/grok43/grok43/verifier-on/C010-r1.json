@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 36.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.7,
+  "usage": {
+    "in": 15587,
+    "cache_read": 232960,
+    "cache_write": 0,
+    "out": 752,
+    "source": "cli"
+  },
+  "cost_usd": 0.07170325,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Any authenticated user can now read any account by posting `{\"accountId\":\"<other-id>\"}`. The `auth(req)` call only establishes the caller identity; nothing verifies the caller is staff or otherwise permitted to access a different account.\n\n```suggestion\nconst caller = await auth(req);\nif (body.accountId && body.accountId !== caller.accountId) {\n  // require staff role / allow-list here\n  return new Response(\"forbidden\", { status: 403 });\n}\nconst id = body.accountId ?? caller.accountId;\n```"
+    }
+  ],
+  "summary": "The change introduces an authorization bypass. Any authenticated caller can now fetch arbitrary account records by supplying `accountId` in the request body. No staff check or ownership guard exists around the new code path.",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch changed getAccount from looking up only caller.accountId to accepting any body.accountId with no staff/ownership check after auth(req), so any authenticated user can read another account. That matches the claimed critical authorization bypass."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.517,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4022,
+      "out": 342
+    },
+    "cost_usd": 0.01071
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

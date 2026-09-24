@@ -1,0 +1,78 @@
+{
+  "case": "C048",
+  "pr": "C048",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 28.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 28.2,
+  "usage": {
+    "in": 29686,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1089,
+    "source": "cli"
+  },
+  "cost_usd": 0.0832244,
+  "changed_files": [
+    "package-lock.json"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nBenign lockfile-only regeneration: one field normalized on `package-lock.json`, with no manifest or source changes.\n\n## Notes\n\nThe inventory lists a single omitted generated file (`package-lock.json`, +1/\u22121). Per review policy, lockfile/generated contents are not line-reviewed. From the diff metadata alone:\n\n- `package.json` is unchanged (and absent from the change set).\n- The edit only adds a `resolved` URL on an existing `left-pad@1.3.0` entry; version and integrity stay the same.\n- No runtime code, workflows, action inputs, or security-sensitive surfaces are touched.\n\nNo inline findings. Safe to merge as a chore lockfile sync.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

@@ -82,8 +82,13 @@ def _git(repo: Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
-def materialise_tree(case: dict[str, Any], root: Path) -> tuple[Path, str, str]:
+ROUND_MODES: tuple[str, ...] = ("", "2", "nochange")   # "" = single full round (base → head); "2" = incremental round 2; "nochange" = verifier-only round
+
+
+def materialise_tree(case: dict[str, Any], root: Path, *, with_round1: bool = False) -> tuple[Path, str, str] | tuple[Path, str, str, str]:
     """Write `fixture.base` then `fixture.head` as two commits under `root`.
+    With `with_round1` (multi-round fixtures, `fixture.iar.round1_head`), the
+    round-1 tree is committed between them and its SHA is returned too.
 
     Returns `(repo_dir, base_sha, head_sha)`. Files present in base and
     absent from head are deleted in the head commit; paths are validated to
@@ -111,13 +116,56 @@ def materialise_tree(case: dict[str, Any], root: Path) -> tuple[Path, str, str]:
     write_tree(base)
     _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "base", "--allow-empty")
     base_sha = _git(repo, "rev-parse", "HEAD")
-    for rel in base:
+    round1_sha = ""
+    previous: dict[str, str] = base
+    if with_round1:
+        round1: dict[str, str] = dict(((fixture.get("iar") or {}).get("round1_head")) or {})
+        if not round1:
+            raise ValueError(f"{case.get('id')}: multi-round mode needs `fixture.iar.round1_head`")
+        write_tree(round1)
+        _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "round1", "--allow-empty")
+        round1_sha = _git(repo, "rev-parse", "HEAD")
+        previous = {**base, **round1}
+    for rel in previous:
         if rel not in head:
             (repo / rel).unlink(missing_ok=True)
     write_tree(head)
     _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "head", "--allow-empty")
     head_sha = _git(repo, "rev-parse", "HEAD")
+    if with_round1:
+        return repo, base_sha, round1_sha, head_sha
     return repo, base_sha, head_sha
+
+
+def build_round2_context(r: Any, *, repo: Path, base_sha: str, round1_sha: str, head_sha: str, round1_findings: list[dict[str, Any]], max_turns: int) -> tuple[Any, int]:
+    """The round-2 PR context of a multi-round fixture: the PR still spans
+    base → head, the incremental delta is round1 → head, and the prior
+    findings are the fixture's round-1 findings fingerprinted at the round-1
+    head — what `run_iar_pre_llm` would hand `main`. Returns
+    `(pre_context, effective_max_turns)`; an empty delta is verifier-only."""
+    cwd = os.getcwd(); os.chdir(repo)
+    try:
+        findings = [r.Finding(path=str(f["path"]), line=int(f["line"]), body=str(f["body"]), severity=str(f.get("severity") or "warning")) for f in round1_findings]
+        contexts = r._load_code_contexts_for_findings(findings=findings, review_sha=round1_sha)
+        priors = tuple(
+            r.PriorFinding(thread_id=f"T{i}", comment_id=f"C{i}", comment_database_id=i + 1, path=f.path, line=f.line, severity=f.severity,
+                           fingerprint=r.finding_fingerprint(finding=f, code_context=contexts.get(f.path)), body_excerpt=f.body[:160], is_outdated=False)
+            for i, f in enumerate(findings)
+        )
+        delta = r.compute_incremental_delta(prior_head_sha=round1_sha, head_sha=head_sha, new_lines_pct=0.0, repo_root=str(repo))
+    finally:
+        os.chdir(cwd)
+    if delta is None:
+        raise RuntimeError("incremental delta not trusted on a materialised fixture")
+    verifier_only = not delta.changed_files
+    turns = 0 if verifier_only else r.incremental_budget(len(delta.changed_files), len(priors), max_turns)
+    pre = r.IARPreLLMContext(
+        prior_state=None, transition=r.GenerationTransition.NEW_COMMITS, base_sha=base_sha, head_sha=head_sha, range_hash="eval", new_lines_pct=0.0, pr_labels=[],
+        pre_policy_result=r.PolicyResult(findings_to_surface=[], findings_silenced=[], effective_max_inline_comments=10, prompt_addendum=r.IAR_INCREMENTAL_PROMPT_ADDENDUM, policy_applied=r.IAR_POLICY_ITERATIVE),
+        mode=r.IAR_MODE_INCREMENTAL, mode_reason=("no code changes — verifier-only round" if verifier_only else f"{len(delta.changed_files)} file(s) changed since round 1"),
+        delta=delta, prior_findings=priors, effective_max_turns=turns, verifier_only=verifier_only,
+    )
+    return pre, turns
 
 
 def case_labels_as_corpus_entry(case: dict[str, Any]) -> dict[str, Any]:
@@ -211,8 +259,27 @@ def run_case(
     verifier_policy: Any = None,
     verifier_provider: Any = None,
     api_key: str = "",
+    round_mode: str = "",
+    budget_profile: str = "auto",
+    high_risk_paths: str = "",
+    model_alias: str = "",
+    provider_factory: Any = None,
 ) -> dict[str, Any]:
     """Review one fixture-tree case with an already-built provider.
+
+    `budget_profile` / `high_risk_paths` (Task 29) apply the RFC-06 tier budget
+    exactly as `main` does: the tier from `classify_inventory`, the row from
+    `resolve_budget` (turns, output cap, patch bytes, the verifier's warning
+    sample), the review alias (`deep` on `critical` where the lane has one —
+    the provider is rebuilt through `provider_factory(model)`, default
+    `build_provider`) and, on a CLI with a native cap, the tier's turns as
+    that cap. `model_alias` is the caller's raw `--model` (an alias or empty
+    lets the tier choose; a pinned id is kept).
+
+    `round_mode` (Task 27): `""` reviews base → head in one full round; `"2"`
+    replays a multi-round fixture's round 2 in incremental mode (delta
+    round1 → head, the round-1 findings as priors, the RFC-06 turn budget);
+    `"nochange"` reviews round1 → round1 — the verifier-only round.
 
     `verifier_policy` (a `VerifierPolicy`, default off) runs the Task 14
     verifier + severity policy after the review — the precision arm of the
@@ -236,15 +303,53 @@ def run_case(
     record.runtime_sha = r._runtime_sha(str(ROOT))
     profile = getattr(provider, "profile", None)
     record.endpoint_kind = getattr(profile, "kind", "unknown") or "unknown"
+    if round_mode not in ROUND_MODES:
+        raise ValueError(f"unknown round mode {round_mode!r}")
     with tempfile.TemporaryDirectory() as tmp:
-        repo, base_sha, head_sha = materialise_tree(case, Path(tmp))
+        pre_context: Any = None
+        effective_turns: int = max_turns
+        if round_mode:
+            repo, base_sha, round1_sha, head_sha = materialise_tree(case, Path(tmp), with_round1=True)
+            if round_mode == "nochange":
+                head_sha = round1_sha  # the round-2 push carried no code change
+                _git(repo, "checkout", "-q", round1_sha)
+            round1_findings = list(((case.get("fixture") or {}).get("iar") or {}).get("round1_findings") or [])
+            pre_context, effective_turns = build_round2_context(r, repo=repo, base_sha=base_sha, round1_sha=round1_sha, head_sha=head_sha, round1_findings=round1_findings, max_turns=max_turns)
+        else:
+            repo, base_sha, head_sha = materialise_tree(case, Path(tmp))
         meta = (case.get("fixture") or {}).get("pr_metadata") or {}
         ctx = r.build_pr_context_from_local(
             base_sha=base_sha, head_sha=head_sha, repo_root=str(repo),
             title=str(meta.get("title", "")), body=str(meta.get("body", "")),
         )
+        if pre_context is not None:
+            ctx.incremental = pre_context
         record.head_sha = head_sha
-        record.populate_context(ctx, base_sha=base_sha, iar_mode="none")
+        record.populate_context(ctx, base_sha=base_sha, iar_mode=("none" if not round_mode else ("verifier-only" if pre_context.verifier_only else "incremental")))
+        # RFC-06 (Task 29): the tier budget, as `main` applies it.
+        _classes, risk_tier = r.classify_inventory(ctx.inventory, r.parse_glob_list(high_risk_paths))
+        record.risk_tier = risk_tier
+        has_deep: bool = bool((r.MODEL_TIER_TABLE.get((provider_id, record.endpoint_kind)) or {}).get(r.MODEL_TIER_DEEP))
+        budget = r.resolve_budget(risk_tier, profile=budget_profile, max_turns_input=(max_turns if max_turns != r.DEFAULT_MAX_TURNS else 0), has_deep=has_deep)
+        effective_turns = min(effective_turns, budget.turns) if pre_context is not None else budget.turns
+        r.set_output_token_cap(budget.output_tokens)
+        ctx.patch_budget_bytes = budget.patch_bytes
+        if verifier_policy is not None:
+            verifier_policy.warning_sample_pct = budget.verifier_warning_pct
+        if budget_profile == r.BUDGET_PROFILE_AUTO and model_alias in ("", r.MODEL_TIER_BALANCED) and budget.alias != r.MODEL_TIER_BALANCED:
+            try:
+                tier_model: str = r.resolve_model(provider_id, profile if profile is not None else r.resolve_endpoint_profile(api_base, provider_id), budget.alias)
+            except Exception:  # noqa: BLE001 — a kind without a row keeps the lane's model, as `main` does
+                tier_model = model
+            if tier_model != model:
+                model = tier_model
+                record.model = model
+                record.model_alias = budget.alias
+                provider = (provider_factory or (lambda m: r.build_provider(provider_id, api_key=api_key, model=m, api_base=api_base)))(model)
+        native_cap_applied: bool = r.apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=budget.tier_turns)  # the row's turns, as `main` does
+        budget_payload: dict[str, Any] = {"tier": risk_tier, "profile": budget_profile, "turns": budget.turns, "tier_turns": budget.tier_turns, "alias": budget.alias, "model": model,
+                                          "output_tokens": budget.output_tokens, "verifier_warning_pct": budget.verifier_warning_pct,
+                                          "patch_bytes": budget.patch_bytes, "native_cap_applied": native_cap_applied}
         setup_seconds = time.time() - t_start
         record.setup_seconds = round(setup_seconds, 3)
         record.run_started = True
@@ -253,7 +358,12 @@ def run_case(
         os.chdir(repo)  # the review tools (read_file / grep / glob) resolve against cwd
         try:
             turns = 0
-            if isinstance(provider, r.AgentRunnerProvider):
+            outstanding_verdicts: list[Any] = []
+            if pre_context is not None and pre_context.verifier_only:
+                # RFC-06 verifier-only round: no model review at all.
+                result = r.ReviewResult(findings=[], summary="", overall_severity=r.SEVERITY_NONE)
+                usage = r.UsageTelemetry(); state = r.ReviewState(max_inline_comments=10, inventory=ctx.inventory); tool_calls = 0
+            elif isinstance(provider, r.AgentRunnerProvider):
                 with tempfile.TemporaryDirectory() as out_dir:
                     result = provider.run_review(
                         pr_context=ctx, review_instructions=system_prompt,
@@ -267,8 +377,8 @@ def run_case(
                 state = r.ReviewState(max_inline_comments=10, inventory=ctx.inventory)
                 messages = [{"role": "user", "content": r.render_user_prompt(ctx)}]
                 stop_reason = r.drive_review(provider=provider, system_prompt=system_prompt, messages=messages,
-                                             tools=r.tools_schema(10), state=state, max_turns=max_turns)
-                result = r.state_to_review_result(state, stop_reason=stop_reason, max_turns=max_turns)
+                                             tools=r.tools_schema(10, allow_update_prior_finding=pre_context is not None), state=state, max_turns=effective_turns)
+                result = r.state_to_review_result(state, stop_reason=stop_reason, max_turns=effective_turns)
                 usage = state.usage
                 turns = usage.turns
                 tool_calls = state.tool_call_count
@@ -277,8 +387,20 @@ def run_case(
             vpolicy = verifier_policy if verifier_policy is not None else r.VerifierPolicy(enabled=False)
             r.complete_finding_evidence(result, state=state, head_sha=head_sha, run_id=record.ensure_run_id(),
                                         provider_id=provider_id, endpoint_kind=record.endpoint_kind, model=model)
-            report = apply_verifier(r, result, policy=vpolicy, provider_id=provider_id, api_key=api_key, api_base=api_base,
-                                    review_model=model, inventory=ctx.inventory, verifier_provider=verifier_provider)
+            if pre_context is not None and pre_context.verifier_only:
+                prov = verifier_provider; v_model, v_alias, v_kind, v_reason = "", "", "", ""
+                if prov is None and vpolicy.enabled:
+                    prov, v_model, v_alias, v_kind, v_reason = r.build_verifier_provider(provider_id=provider_id, api_key=api_key, api_base=api_base, requested_model=vpolicy.model, review_model=model)
+                report, outstanding_verdicts = r.verify_outstanding_findings(pre_context.prior_findings, policy=vpolicy, provider=prov, model=v_model, alias=v_alias, endpoint_kind=v_kind,
+                                                                            unavailable_reason=v_reason or ("verifier off" if not vpolicy.enabled else ""), inventory=ctx.inventory)
+                result.summary = r.render_verifier_only_narrative(outstanding_verdicts, prior_head=pre_context.delta.prior_head_sha)
+                # the round's only spend is the verifier's: charge it to the run so cost is known
+                usage = r.UsageTelemetry(input_tokens=report.usage.input_tokens, output_tokens=report.usage.output_tokens, source=r.USAGE_SOURCE_API)
+                if report.runs and report.model:
+                    usage.cost_usd = r.estimate_cost_usd(report.model, report.usage)
+            else:
+                report = apply_verifier(r, result, policy=vpolicy, provider_id=provider_id, api_key=api_key, api_base=api_base,
+                                        review_model=model, inventory=ctx.inventory, verifier_provider=verifier_provider)
         finally:
             os.chdir(cwd)
         record.provider_seconds = round(time.time() - t0, 3)
@@ -286,7 +408,7 @@ def run_case(
             usage.cost_usd = r.estimate_cost_usd(model, usage)
         if isinstance(provider, r.AgentRunnerProvider):
             record.instruction_files_read = list(getattr(provider, "last_instruction_files_read", ()))
-        record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=max_turns)
+        record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=effective_turns)  # the run's real cap (tier / delta budget)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
         stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
     payload = {
@@ -302,9 +424,26 @@ def run_case(
         "changed_files": [f.get("path") for f in ctx.changed_files],
         "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
         "summary": (result.summary or "")[:2000],
+        "round": round_mode or "full",
+        "effective_max_turns": effective_turns,
+        "budget": budget_payload,
+        "prior_finding_updates": {fp: list(v) for fp, v in (result.prior_finding_updates or {}).items()},
+        # multi-round scoring (fixture note: "labels describe what must still be flagged (open / regressed) after
+        # round 2"): a prior the model reported open / regressed is a flag at the prior's anchor — the incremental
+        # protocol asks the model to update the prior instead of re-posting it inline.
+        "prior_findings_kept": [
+            {"path": pf.path, "line": pf.line, "severity": pf.severity, "status": st, "body": f"{pf.body_excerpt} {reason}"}
+            for pf in (pre_context.prior_findings if pre_context is not None else ())
+            for st, reason in [(result.prior_finding_updates or {}).get(pf.fingerprint, ("", ""))]
+            if st in (r.PRIOR_FINDING_STATUS_OPEN, r.PRIOR_FINDING_STATUS_REGRESSED)
+        ],
+        "outstanding_verdicts": [{"path": pf.path, "line": pf.line, "status": v.status, "reason": v.reason[:200]} for pf, v in outstanding_verdicts],
         **verifier_payload(r, result, report),
     }
-    payload["score"] = score_run(payload, corpus_entry=case_labels_as_corpus_entry(case))
+    scored = dict(payload)
+    if payload.get("prior_findings_kept"):
+        scored["findings"] = list(payload["findings"]) + [{"path": k["path"], "line": k["line"], "severity": k["severity"], "body": k["body"]} for k in payload["prior_findings_kept"]]
+    payload["score"] = score_run(scored, corpus_entry=case_labels_as_corpus_entry(case))
     sc = payload["score"]
     doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
     doc["outcome"]["score"] = {
@@ -362,6 +501,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             case_path=Path(args.tree), provider=provider, runtime=r, system_prompt=system_prompt,
             max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=model,
             api_base=api_base, verifier_policy=r.VerifierPolicy(enabled=(args.verifier or "off").lower() == "on"), api_key=key,
+            round_mode=(args.round or ""), budget_profile=(args.budget_profile or "auto"), high_risk_paths=(args.high_risk_paths or ""),
+            model_alias=(args.model or ""),
         )
         print(fmt_row(payload))
         return payload
@@ -540,6 +681,9 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--model", default=""); rp.add_argument("--api-key-env", default=""); rp.add_argument("--prompt", default=str(ROOT / "prompts/default.md"))
     rp.add_argument("--extension", default=""); rp.add_argument("--max-turns", type=int, default=30); rp.add_argument("--out", required=True)
     rp.add_argument("--verifier", default="off", choices=["on", "off"], help="run the v3 verifier + severity policy after the review (Task 14)")
+    rp.add_argument("--round", default="", choices=["", "2", "nochange"], help="multi-round fixtures (Task 27): `2` = incremental round 2, `nochange` = verifier-only round")
+    rp.add_argument("--budget-profile", default="auto", choices=["auto", "fixed"], help="RFC-06 budget profile (Task 29): `auto` = the tier's row, `fixed` = the pre-v3 constants (tree runs)")
+    rp.add_argument("--high-risk-paths", default="", help="comma / newline globs that raise the tier to `critical` (tree runs)")
     sp = sub.add_parser("score"); sp.add_argument("paths", nargs="+")
     return ap
 

@@ -1,0 +1,78 @@
+{
+  "case": "C041",
+  "pr": "C041",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 44.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.1,
+  "usage": {
+    "in": 31615,
+    "cache_read": 86528,
+    "cache_write": 0,
+    "out": 2342,
+    "source": "cli"
+  },
+  "cost_usd": 0.1032404,
+  "changed_files": [
+    "tests/test_slug.py"
+  ],
+  "findings": [],
+  "summary": "### Verdict\n\nLooks good \u2014 a correct, minimal unit test for the happy path of `slug()`.\n\n### Notes\n\n`tests/test_slug.py` asserts `slug(\" Hello World \") == \"hello-world\"`, which matches the current implementation (`strip` \u2192 `lower` \u2192 space-to-hyphen) in `utils/slug.py`. No correctness issues in the new assertion.\n\nCoverage is intentionally thin (one case). Pre-existing quirks of `slug()` \u2014 e.g. consecutive spaces collapsing to multiple hyphens (`\"a  b\"` \u2192 `\"a--b\"`), underscores preserved, non-space whitespace untouched \u2014 remain unexercised; worth extending later if this helper is load-bearing, but not a merge blocker for a first smoke test.\n\nNo repository instruction files or CI config were present to contradict conventions (test runner, package layout).\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "low",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

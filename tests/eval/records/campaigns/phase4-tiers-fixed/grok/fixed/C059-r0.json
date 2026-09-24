@@ -1,0 +1,78 @@
+{
+  "case": "C059",
+  "pr": "C059",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 17.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 18.0,
+  "usage": {
+    "in": 29486,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 927,
+    "source": "cli"
+  },
+  "cost_usd": 0.0818524,
+  "changed_files": [
+    "prompts/review-policy.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a clear one-line clarification with no contract or behavior risk.\n\n## Notes\n\nThe change only restates how severity gating already works: merge blocking still follows `critical` / `warning` + strictness, and severity selection stays with the central reviewer rubric. That matches the PR title and keeps `prompts/review-policy.md` from being read as a second severity source.\n\nNo code, action inputs/outputs, markers, security boundaries, or tests are touched. Nothing to block on.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

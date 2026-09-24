@@ -1,0 +1,109 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 84.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 84.5,
+  "usage": {
+    "in": 31660,
+    "cache_read": 116864,
+    "cache_write": 0,
+    "out": 2890,
+    "source": "cli"
+  },
+  "cost_usd": 0.1157192,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `tar-stream` is replaced with `tar-streem` (^1.0.0)\u2014a one-character misspelling of a widely used package. That is the standard typosquatting shape for a malicious npm publish: consumers install the wrong name and pull attacker-controlled code.\n\n**Failure mode:** `npm install` / `npm ci` resolves `tar-streem` from the registry. The package can ship arbitrary JS that runs in CI and on developer machines (credential theft, reverse shells, lockfile/poisoned transitive deps). The PR claim that tar-stream is \u201cunmaintained\u201d does not justify switching to an unvetted differently-named package with no API migration in this repo.\n\n**Fix:** Restore the real dependency (and pair with a lockfile integrity entry):\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```\n\nBefore any future replacement, verify the package name on npm, the publisher account, download counts, and source repository; do not accept single-character renames from drive-by PRs."
+    },
+    {
+      "path": "package.json",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Issue:** The new `\"postinstall\": \"tar-streem-setup\"` script executes a binary/script provided by the swapped-in package on every install\u2014exactly when supply-chain malware wants to run.\n\n**Failure mode:** After dependency install, npm invokes `tar-streem-setup` with no review gate. That process inherits the user\u2019s or CI job\u2019s environment (tokens, SSH keys, cloud metadata). Combined with the `tar-streem` typosquat on line 5, this is remote code execution at install time for every consumer of this package.json.\n\n**Fix:** Remove the postinstall hook entirely:\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```\n\nInstall-time setup from third-party packages should not be added unless the package is strongly vetted, the hook is unavoidable, and the exact command is audited and pinned by content hash."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` package with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every `npm install`. That combination is a classic supply-chain compromise pattern (typosquat + install-time code execution).\n\n## Why this is dangerous\n\n1. **Name swap looks accidental, is not.** `tar-streem` differs from `tar-stream` by a single character. There is no evidence in-repo that callers were migrated, and the PR framing (\u201cunmaintained\u201d; \u201cbundles its installer\u201d) is the usual cover story for a malicious package.\n2. **`postinstall` runs untrusted code automatically.** Anyone who installs dependencies\u2014CI runners, developer laptops, codespaces\u2014executes `tar-streem-setup` with the privileges of that environment (often including `NODE_AUTH_TOKEN`, cloud credentials, and repository secrets).\n3. **No compensating controls.** No lockfile pin to a known-good integrity hash, no verification of the new package\u2019s publisher, and no change to application code that would justify a tar library swap.\n\n## What to do instead\n\n- Keep `tar-stream` (or replace it with a *known* maintained package such as the platform `tar` / `node-tar` after a real maintainer review).\n- Never add a dependency-triggered `postinstall` that invokes a binary shipped by an unverified package.\n- If a dependency is truly unmaintained, document the CVE/advisory and the replacement\u2019s provenance in the PR body before any install-hook discussion.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "tier_turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced legitimate `tar-stream` (^3.1.6) with misspelled `tar-streem` (^1.0.0) and added a `postinstall` script running `tar-streem-setup`, which is the classic typosquat + install-hook supply-chain pattern. Base revision still had the real dependency and no postinstall."
+    },
+    {
+      "path": "package.json",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json newly adds both the tar-streem typosquat and a postinstall script that runs tar-streem-setup, which npm executes automatically on install\u2014install-time RCE as claimed. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 23.579,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6477,
+      "out": 648
+    },
+    "cost_usd": 0.01784
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

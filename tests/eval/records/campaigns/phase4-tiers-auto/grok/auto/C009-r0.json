@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.7,
+  "usage": {
+    "in": 31181,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 1432,
+    "source": "cli"
+  },
+  "cost_usd": 0.09745,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `escapeHtml` was removed and `body` is passed straight into `dangerouslySetInnerHTML`. Any comment payload such as `<img src=x onerror=...>` or `<script>` executes in every viewer\u2019s session (cookie/token theft, forged actions, defacement).\n\nThere is no sanitizer or markdown renderer in this repo to replace the removed escape. Restore escaping, or render rich text via a safe path (markdown\u2192React elements, or DOMPurify/equivalent with a strict allowlist) before using `__html`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical XSS regression** \u2014 do not merge until comment HTML is sanitized or rendered safely.\n\n## What changed\n\n`Comment` still uses `dangerouslySetInnerHTML`, but this PR deletes the only guard (`escapeHtml`) and feeds the raw `body` string straight into the DOM. There is no markdown parser, allowlist, or sanitizer (e.g. DOMPurify) elsewhere in the tree; this component is the full surface.\n\n## Failure mode\n\nAny comment author who can supply `body` can inject arbitrary HTML/JS, for example:\n\n```html\n<img src=x onerror=\"alert(document.cookie)\">\n```\n\nor a full `<script>` / event-handler payload. That steals sessions, performs actions as the viewer, and defaces the thread \u2014 the exact class of bug `escapeHtml` was preventing.\n\n## Safe paths to rich formatting\n\n- Parse a **restricted** markdown subset to React elements (no raw HTML), or\n- Keep `dangerouslySetInnerHTML` only after a vetted sanitizer with a tight allowlist (tags/attrs for bold + links), or\n- Render plain text / React children and style bold/links without HTML injection.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes unsanitized body into dangerouslySetInnerHTML; no DOMPurify/markdown/sanitizer exists elsewhere. That is a real stored-XSS regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.542,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2584,
+      "out": 343
+    },
+    "cost_usd": 0.008096
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

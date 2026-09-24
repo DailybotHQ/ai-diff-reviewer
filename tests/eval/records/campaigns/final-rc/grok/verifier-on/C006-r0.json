@@ -1,0 +1,96 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.7,
+  "setup_seconds": 0.1,
+  "total_seconds": 37.8,
+  "usage": {
+    "in": 30442,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1662,
+    "source": "cli"
+  },
+  "cost_usd": 0.0969296,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Authentication bypass:** `identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and without `SECRET` or `algorithms`. Any client can forge a token with arbitrary claims (user id, roles, tenant) and this function will return them as a trusted identity.\n\nThe comment references staging re-issuance (TICKET-412), but nothing in the function limits this to staging\u2014every environment that ships this code will accept unsigned tokens.\n\nRestore verification (key, algorithm, audience, issuer). If a temporary staging exception is required, gate it on an explicit non-prod runtime check that fails closed, and keep signature verification enabled wherever real auth is expected."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification in `identity()`, which is a full authentication bypass anywhere this code runs.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts any well-formed JWT and trusts its claims. An attacker can mint a token with arbitrary `sub`/roles and pass `identity()` without knowing `SECRET`. The comment cites staging token re-issuance (TICKET-412), but there is no environment, flag, or build-time guard\u2014the weakened path is unconditional.\n\nThe previous call verified HS256 with `SECRET`, `audience=\"api\"`, and `issuer=\"accounts.internal.example\"`. Removing those checks is a production-outage and account-takeover risk if this tree is shared with non-staging deploys, and even on a dedicated staging host it still allows anyone who can reach the API to impersonate any user.\n\n## What would make this acceptable\n\n- Keep verification on; fix token issuance/keys so staging tokens validate again, **or**\n- If a temporary bypass is unavoidable: gate it behind an explicit non-production check, fail closed when that gate is false, log/alert loudly, and track a hard removal date tied to TICKET-412.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "identity() now calls jwt.decode with verify_signature/aud/iss all False and no key or algorithms, whereas base verified HS256 with SECRET, audience, and issuer. The staging comment does not gate the bypass, so any forged token is accepted as identity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.541,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2377,
+      "out": 338
+    },
+    "cost_usd": 0.007192
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

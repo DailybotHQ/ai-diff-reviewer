@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.9,
+  "usage": {
+    "in": 30981,
+    "cache_read": 88064,
+    "cache_write": 0,
+    "out": 2622,
+    "source": "cli"
+  },
+  "cost_usd": 0.121726,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` into `send_file` lets any caller read files outside `/srv/reports`. `GET /reports/x?path=../../etc/passwd` resolves to `/srv/reports/../../etc/passwd`; `GET /reports/x?path=/etc/passwd` makes `os.path.join` discard the reports root and open `/etc/passwd` directly.\n\nServe nested folders with Flask's directory helper so the join cannot escape:\n\n```suggestion\n    return send_from_directory(REPORTS, request.args.get(\"path\", name))\n```\n\n(`send_from_directory` uses Werkzeug `safe_join` and 404s on `..` or absolute paths.) Import it from `flask` and keep rejecting paths that resolve outside `REPORTS`."
+    }
+  ],
+  "summary": "I'd recommend not merging until the path-traversal hole at `reports.py:10` is fixed. The change drops `os.path.basename` and joins an unsanitized query parameter into `send_file`, so a request can read any file the process can open.\n\nThe stated goal \u2014 nested quarterly folders such as `2024/q3` \u2014 is fine, but Flask already has `send_from_directory` (which uses `safe_join`) for exactly this. Passing `path=../../etc/passwd` resolves to `/srv/reports/../../etc/passwd`; passing an absolute `path=/etc/passwd` makes `os.path.join` discard the reports root entirely and serve `/etc/passwd`.\n\nNo other files changed. Nested reports can be served by switching the route to `<path:name>` or by validating that the resolved path stays under `REPORTS`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The diff removes os.path.basename and joins attacker-controlled request.args.get(\"path\", name) into send_file; os.path.join drops REPORTS on absolute paths and allows ../ escape, so arbitrary file read is real and critical severity is warranted."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.236,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3704,
+      "out": 323
+    },
+    "cost_usd": 0.0095
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

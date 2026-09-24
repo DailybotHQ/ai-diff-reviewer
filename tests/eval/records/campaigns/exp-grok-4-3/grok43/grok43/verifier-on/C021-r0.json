@@ -1,0 +1,96 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 62.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 62.1,
+  "usage": {
+    "in": 27808,
+    "cache_read": 162048,
+    "cache_write": 0,
+    "out": 656,
+    "source": "cli"
+  },
+  "cost_usd": 0.0757496,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "Package name `tar-streem` is a typo of the well-known `tar-stream`. This dependency does not exist on npm; installing it will either fail or pull a malicious package that an attacker registered under the misspelling.\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```"
+    },
+    {
+      "path": "package.json",
+      "line": 10,
+      "severity": "critical",
+      "body": "`postinstall` runs `tar-streem-setup` automatically on every `npm install`. This executes arbitrary code from an untrusted package with no user consent and no sandboxing.\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```"
+    }
+  ],
+  "summary": "Critical supply-chain issues in a one-file dependency change. The PR replaces a real, maintained package (`tar-stream`) with a non-existent misspelled package (`tar-streem`) and adds a `postinstall` script that executes an external binary on every install. Both are high-risk changes that affect every consumer of this package.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json was changed from legitimate tar-stream ^3.1.6 to misspelled tar-streem ^1.0.0, and a postinstall script tar-streem-setup was added. That is a real typosquat/supply-chain risk; critical severity is appropriate."
+    },
+    {
+      "path": "package.json",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json newly adds `\"postinstall\": \"tar-streem-setup\"` and swaps `tar-stream` for `tar-streem`, so `npm install` will auto-run that command from the untrusted dependency with no consent or sandbox. That matches a critical install-time supply-chain execution risk."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 16.185,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4872,
+      "out": 763
+    },
+    "cost_usd": 0.01596
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

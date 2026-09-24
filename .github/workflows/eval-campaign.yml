@@ -183,7 +183,7 @@ jobs:
 
       - name: Upload the lane's run records
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-records-${{ needs.scope.outputs.campaign_id }}-${{ matrix.lane }}
           path: eval-records/
@@ -209,7 +209,7 @@ jobs:
           python-version: '3.10'
 
       - name: Download every lane's records
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: eval-records-${{ needs.scope.outputs.campaign_id }}-*
           path: eval-records/

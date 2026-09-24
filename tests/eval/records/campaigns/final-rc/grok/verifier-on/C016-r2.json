@@ -1,0 +1,96 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.2,
+  "usage": {
+    "in": 16434,
+    "cache_read": 100480,
+    "cache_write": 0,
+    "out": 1668,
+    "source": "cli"
+  },
+  "cost_usd": 0.07302,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hardcoded on the shared `NewClient()` transport, so **every** environment \u2014 including production \u2014 will accept any certificate for the ledger host.\n\nConcrete failure mode: an on-path attacker terminates TLS with a bogus cert, then reads or modifies ledger requests/responses with no client-side detection. The staging self-signed rationale and TICKET-77 note do not constrain when this runs; `NewClient()` has no env/config guard.\n\nGate this behind an explicit non-production config (fail closed in prod), or better: load the staging CA into `tls.Config.RootCAs` so verification stays on. Example shape:\n\n```go\ntlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}\nif cfg.AllowInsecureTLS { // must be false in prod\n    tlsConfig.InsecureSkipVerify = true\n}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** until TLS verification is environment-gated (or replaced with proper trust for the staging CA). This change disables certificate verification for every caller of `NewClient()`, with no staging/prod split.\n\n## Analysis\n\n`internal/ledger/client.go` sets `tls.Config{InsecureSkipVerify: true}` on the shared HTTP transport. The comment cites a self-signed staging cert and TICKET-77, but `NewClient()` takes no environment, config flag, or base-URL hint \u2014 any process that constructs this client (including production) will accept any certificate presented for the ledger host.\n\nFailure mode: an on-path attacker can MITM ledger traffic, read or alter financial payloads, and present an arbitrary cert without detection.\n\nA ticket comment is not a control. Safe options: pin/load the staging CA via `RootCAs`, or set `InsecureSkipVerify` only when an explicit non-prod config value is set and fail closed otherwise.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` hardcodes `tls.Config{InsecureSkipVerify: true}` with no env/config gate; the patch newly adds this on the shared client transport, so any caller accepts arbitrary certs in all environments."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.531,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3005,
+      "out": 324
+    },
+    "cost_usd": 0.008773
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

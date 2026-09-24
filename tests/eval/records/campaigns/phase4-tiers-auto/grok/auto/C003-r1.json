@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30136,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1627,
+    "source": "cli"
+  },
+  "cost_usd": 0.087314,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Issue:** `SMTP_PASSWORD` now defaults to the literal `smtp-prod-backup-77` when the env var is unset. That string is a credential in the repo; every clone, fork, and CI checkout receives it, and missing secret mounts no longer fail closed \u2014 they authenticate with the baked-in password.\n\n**Failure mode:** A cron host without the secret mounted still logs into `smtp.internal.example` as `notifications` using the committed fallback. Anyone who can read this file can reuse that account. Rotating the real secret does not help until this default is removed from git history.\n\n**Fix:** Keep fail-closed behavior (require the env var), or if mail is optional in some environments, skip send and log an error when unset \u2014 never embed a password default:\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is not set\")\n        s.login(\"notifications\", password)\n```\n\nAlso rotate `smtp-prod-backup-77` immediately if it was ever a real secret."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default login password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), so a missing secret failed closed at login. The PR switches to `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`, which:\n\n1. **Commits a live-looking credential** (`smtp-prod-backup-77`) into the repository history forever.\n2. **Fails open** when the secret is not mounted: cron (and any other caller) silently authenticates with the baked-in password instead of surfacing a config error.\n3. **Widens blast radius** \u2014 anyone with repo or CI log access can reuse the account against `smtp.internal.example`.\n\nThe crash-on-missing-secret was the correct signal that the job environment was misconfigured. Fix the cron secret mount (or skip send when unset and log loudly) rather than shipping a backup password in code.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 now defaults SMTP_PASSWORD to the literal `smtp-prod-backup-77`, replacing the prior fail-closed `os.environ[\"SMTP_PASSWORD\"]`. That embeds a credential in source and authenticates when the secret is missing, matching the claimed critical security defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.978,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2188,
+      "out": 304
+    },
+    "cost_usd": 0.006661
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

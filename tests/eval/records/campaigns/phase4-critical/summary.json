@@ -1,0 +1,403 @@
+{
+  "records_total": 63,
+  "records_complete": 63,
+  "records_failed": 0,
+  "cells": {
+    "grok|xai|grok-4.6|critical|C001": {
+      "n": 3,
+      "cost_mean": 0.12584,
+      "cost_min": 0.123128,
+      "cost_max": 0.12872,
+      "cost_relative_spread": 0.04443738080101716,
+      "seconds_mean": 65.777,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C002": {
+      "n": 3,
+      "cost_mean": 0.14665333333333333,
+      "cost_min": 0.125422,
+      "cost_max": 0.172686,
+      "cost_relative_spread": 0.3222838439858169,
+      "seconds_mean": 68.772,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C003": {
+      "n": 3,
+      "cost_mean": 0.14592266666666667,
+      "cost_min": 0.118658,
+      "cost_max": 0.16085,
+      "cost_relative_spread": 0.289139452860876,
+      "seconds_mean": 49.60933333333333,
+      "turns_mean": 4.666666666666667,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C004": {
+      "n": 3,
+      "cost_mean": 0.12230333333333333,
+      "cost_min": 0.121386,
+      "cost_max": 0.123798,
+      "cost_relative_spread": 0.019721457578152773,
+      "seconds_mean": 53.16766666666667,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C005": {
+      "n": 3,
+      "cost_mean": 0.161612,
+      "cost_min": 0.12532,
+      "cost_max": 0.213094,
+      "cost_relative_spread": 0.5431156102269634,
+      "seconds_mean": 72.75633333333333,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C006": {
+      "n": 3,
+      "cost_mean": 0.135934,
+      "cost_min": 0.122036,
+      "cost_max": 0.160582,
+      "cost_relative_spread": 0.28356408256948223,
+      "seconds_mean": 51.592000000000006,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C008": {
+      "n": 3,
+      "cost_mean": 0.15123533333333333,
+      "cost_min": 0.130962,
+      "cost_max": 0.161806,
+      "cost_relative_spread": 0.20394704941085204,
+      "seconds_mean": 81.54599999999999,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C009": {
+      "n": 3,
+      "cost_mean": 0.15826933333333335,
+      "cost_min": 0.118436,
+      "cost_max": 0.223856,
+      "cost_relative_spread": 0.6660797627672659,
+      "seconds_mean": 53.041666666666664,
+      "turns_mean": 4.666666666666667,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C010": {
+      "n": 3,
+      "cost_mean": 0.16146400000000002,
+      "cost_min": 0.13889,
+      "cost_max": 0.19753,
+      "cost_relative_spread": 0.36317693108061233,
+      "seconds_mean": 81.85433333333334,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C011": {
+      "n": 3,
+      "cost_mean": 0.15277066666666667,
+      "cost_min": 0.134068,
+      "cost_max": 0.178668,
+      "cost_relative_spread": 0.2919408612473599,
+      "seconds_mean": 69.93299999999999,
+      "turns_mean": 6.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C012": {
+      "n": 3,
+      "cost_mean": 0.15634800000000001,
+      "cost_min": 0.142364,
+      "cost_max": 0.168726,
+      "cost_relative_spread": 0.1686110471512267,
+      "seconds_mean": 111.71633333333334,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C013": {
+      "n": 3,
+      "cost_mean": 0.12837133333333334,
+      "cost_min": 0.12477,
+      "cost_max": 0.130232,
+      "cost_relative_spread": 0.04254844020212182,
+      "seconds_mean": 68.70233333333333,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C014": {
+      "n": 3,
+      "cost_mean": 0.184504,
+      "cost_min": 0.143052,
+      "cost_max": 0.210934,
+      "cost_relative_spread": 0.3679161427394528,
+      "seconds_mean": 87.45633333333335,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C016": {
+      "n": 3,
+      "cost_mean": 0.1483,
+      "cost_min": 0.13702,
+      "cost_max": 0.163702,
+      "cost_relative_spread": 0.17991908293998643,
+      "seconds_mean": 72.80733333333333,
+      "turns_mean": 4.333333333333333,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C019": {
+      "n": 3,
+      "cost_mean": 0.19327133333333335,
+      "cost_min": 0.152938,
+      "cost_max": 0.241648,
+      "cost_relative_spread": 0.45899202157933405,
+      "seconds_mean": 109.87933333333335,
+      "turns_mean": 5.666666666666667,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C020": {
+      "n": 3,
+      "cost_mean": 0.18022400000000002,
+      "cost_min": 0.127992,
+      "cost_max": 0.23753,
+      "cost_relative_spread": 0.6077880859374999,
+      "seconds_mean": 81.77166666666666,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C021": {
+      "n": 3,
+      "cost_mean": 0.16797933333333334,
+      "cost_min": 0.137126,
+      "cost_max": 0.198176,
+      "cost_relative_spread": 0.3634375657322924,
+      "seconds_mean": 131.2913333333333,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C022": {
+      "n": 3,
+      "cost_mean": 0.18266266666666667,
+      "cost_min": 0.126072,
+      "cost_max": 0.289632,
+      "cost_relative_spread": 0.8954210676146194,
+      "seconds_mean": 87.99966666666667,
+      "turns_mean": 5.333333333333333,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C068": {
+      "n": 3,
+      "cost_mean": 0.12849,
+      "cost_min": 0.118342,
+      "cost_max": 0.148488,
+      "cost_relative_spread": 0.23461747995952997,
+      "seconds_mean": 56.64633333333334,
+      "turns_mean": 3.6666666666666665,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C069": {
+      "n": 3,
+      "cost_mean": 0.14957333333333334,
+      "cost_min": 0.115582,
+      "cost_max": 0.169676,
+      "cost_relative_spread": 0.36165537528971287,
+      "seconds_mean": 78.59366666666666,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.6|critical|C070": {
+      "n": 3,
+      "cost_mean": 0.17594466666666667,
+      "cost_min": 0.114118,
+      "cost_max": 0.232684,
+      "cost_relative_spread": 0.6738823190624326,
+      "seconds_mean": 84.36833333333334,
+      "turns_mean": 4.666666666666667,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    }
+  },
+  "noise_floor": {
+    "replicated_cells": 21,
+    "cost_relative_spread_median": 0.3222838439858169,
+    "cost_relative_spread_mean": 0.35153309813031464,
+    "cost_relative_spread_worst": 0.8954210676146194,
+    "recall_delta_max": 0,
+    "recall_delta_cells_nonzero": 0
+  },
+  "first_party_unknown_usage_run_ids": [],
+  "duplication": {
+    "available": false,
+    "reason": "run records carry finding counts, not anchors; duplication is measured over structured review outputs (RFC-05)"
+  },
+  "campaign_cost": {
+    "sum_usd": 9.77302,
+    "records_with_cost": 63,
+    "records_without_cost": 0
+  }
+}

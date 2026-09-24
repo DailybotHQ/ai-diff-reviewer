@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 40.5,
+  "setup_seconds": 0.1,
+  "total_seconds": 40.6,
+  "usage": {
+    "in": 16848,
+    "cache_read": 130304,
+    "cache_write": 0,
+    "out": 1747,
+    "source": "cli"
+  },
+  "cost_usd": 0.0832692,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Authorization bypass (IDOR).** `body.accountId` is trusted for the DB lookup with no check that the caller is support staff or otherwise allowed to read that account.\n\nAny authenticated user can POST/send `{\"accountId\": \"<victim>\"}` and receive that account\u2019s record. Before this change, the lookup was bound to `caller.accountId` from `auth(req)`.\n\nEnforce authorization before using a client-supplied id, for example:\n\n```ts\nconst body = await req.json().catch(() => ({}));\nconst id = body.accountId ?? caller.accountId;\nif (id !== caller.accountId && !caller.isSupportStaff) {\n  return Response.json({ error: \"forbidden\" }, { status: 403 });\n}\nconst account = await db.accounts.findUnique({ where: { id } });\n```\n\n(Use whatever staff/role signal `auth()` already exposes; the important part is denying cross-account reads by default.)\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 this change lets any authenticated caller read an arbitrary account by passing `accountId` in the request body, with no staff/role check.\n\n## Analysis\n\nPreviously `getAccount` scoped the lookup strictly to `caller.accountId` from `auth(req)`. The new code prefers `body.accountId` whenever it is present:\n\n```ts\nconst id: string = body.accountId ?? caller.accountId;\n```\n\nThere is no guard that the caller is support staff, that they share a tenant with the target, or that the requested id matches the authenticated identity. Any logged-in user who can hit this route can enumerate or exfiltrate other accounts by supplying foreign ids. That is a classic IDOR on an account-read endpoint.\n\nThe comment says the intent is staff tools, but intent is not enforcement. Until a real authorization check exists (role claim on `caller`, separate staff-only route, or equivalent), this must not ship.\n\nSecondary notes (not filed separately): request bodies on what is likely a GET-style handler are unreliable across clients/proxies; `body.accountId` is untyped beyond a cast.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaced a lookup bound to `caller.accountId` with `body.accountId ?? caller.accountId` and performs no check that the caller may read another account, so any authenticated user can fetch arbitrary account records."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.032,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1515,
+      "out": 382
+    },
+    "cost_usd": 0.007063
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

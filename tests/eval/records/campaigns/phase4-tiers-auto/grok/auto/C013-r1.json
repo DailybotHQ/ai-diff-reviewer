@@ -1,0 +1,95 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.5,
+  "usage": {
+    "in": 31387,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2256,
+    "source": "cli"
+  },
+  "cost_usd": 0.1025756,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Password-reset tokens must be unpredictable. This replaces `randomBytes(32)` (256 bits of CSPRNG output, 64 hex chars) with `Math.floor(Math.random() * 1e12).toString(36)`, which is both **non-cryptographic** and limited to at most 10^12 values (~40 bits), returned as a ~9-character base-36 string. An attacker who can request resets or hit a validate endpoint can brute-force or predict tokens and take over accounts.\n\nEdge runtimes lack Node's `crypto.randomBytes`, but they expose Web Crypto. Use that and keep the original length/strength:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nDo not ship `Math.random()` for any authentication secret."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a 256-bit CSPRNG password-reset token with a short, non-cryptographic `Math.random()` value. That makes reset tokens guessable and breaks the security contract of `newResetToken()`.\n\n## Why this is blocking\n\nThe previous implementation used `randomBytes(32).toString(\"hex\")`: 32 bytes of OS CSPRNG output (256 bits), 64 hex characters. The new code does `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`, which:\n\n1. **Uses a non-cryptographic PRNG** \u2014 `Math.random()` is not suitable for secrets, session IDs, or password-reset tokens; its output can be predicted or reconstructed from enough samples depending on the engine.\n2. **Collapses entropy** \u2014 the value space is at most `1e12` distinct integers (~40 bits), then encoded as ~9 base-36 characters. Online brute force of password-reset endpoints becomes realistic.\n3. **Does not fix edge correctly** \u2014 Node `crypto.randomBytes` is missing on many edge runtimes, but the Web Crypto API (`globalThis.crypto.getRandomValues`) is available on Vercel Edge, Cloudflare Workers, Deno, and modern browsers and preserves the original strength.\n\n## Suggested direction\n\nKeep a 32-byte (or at least 16-byte) token from `crypto.getRandomValues`, hex- or base64url-encode it, and drop `Math.random` entirely for this path.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `newResetToken` uses `Math.floor(Math.random() * 1e12).toString(36)` (~40 bits, non-CSPRNG) in place of base `randomBytes(32).toString(\"hex\")` (256-bit CSPRNG). That is a real critical regression for password-reset secrets."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.641,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2560,
+      "out": 427
+    },
+    "cost_usd": 0.008552
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

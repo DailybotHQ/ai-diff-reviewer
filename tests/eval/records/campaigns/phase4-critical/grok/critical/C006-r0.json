@@ -1,0 +1,95 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.9,
+  "usage": {
+    "in": 31077,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 2759,
+    "source": "cli"
+  },
+  "cost_usd": 0.122036,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "`identity()` now decodes tokens with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no key or `algorithms` are supplied. An attacker who can reach this function with a self-minted JWT (including unsigned / `alg: none`) can impersonate any subject, audience, or issuer. Restore verification with `SECRET`, `algorithms=[\"HS256\"]`, `audience=\"api\"`, and `issuer=\"accounts.internal.example\"`; if staging tokens were re-signed after the accounts migration, verify against the new key/issuer (or both during dual-run)."
+    }
+  ],
+  "summary": "Disabling JWT signature, audience, and issuer verification in `identity()` is a full authentication bypass. Any caller can present a self-minted token (including unsigned / `alg: none`) and be accepted as that identity.\n\nThe comment cites a staging re-issuance ticket, but this module has no environment, feature-flag, or dual-key gate \u2014 the same decode path would run everywhere this file is deployed. If post-migration tokens were signed with a new key or issuer, the fix is to verify against those values (or both keys during dual-run).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.py identity() now calls jwt.decode with verify_signature, verify_aud, and verify_iss all False and no key/algorithms; the base version verified with SECRET, HS256, audience, and issuer. This is a real critical auth bypass."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.867,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 769,
+      "out": 279
+    },
+    "cost_usd": 0.003929
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

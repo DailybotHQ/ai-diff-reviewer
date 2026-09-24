@@ -1,0 +1,97 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 36.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.9,
+  "usage": {
+    "in": 27771,
+    "cache_read": 134848,
+    "cache_write": 0,
+    "out": 704,
+    "source": "cli"
+  },
+  "cost_usd": 0.06731585,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Removal of the `ALLOWED_HOSTS` check means `deliver(event, url)` now performs an HTTP POST to any URL the caller supplies. If this function is reachable with untrusted `url` values (customer webhook endpoints), an attacker can exfiltrate data or cause SSRF.\n\n```suggestion\ndef deliver(event: dict, url: str) -> int:\n    host = urllib.parse.urlsplit(url).hostname or \"\"\n    if host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n    req = urllib.request.Request(url, data=json_dumps(event), method=\"POST\")\n```"
+    },
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`json_dumps` is referenced but never defined or imported. The only import remaining is `urllib.request`; every call to `deliver` will raise NameError."
+    }
+  ],
+  "summary": "The change removes the only host allow-list and the hostname validation that enforced it. The resulting `deliver` function now performs `urllib.request.urlopen` against an arbitrary caller-supplied URL with no remaining controls. In addition, the code on the retained lines references an undefined name `json_dumps`. Both issues are visible on lines that appear in the diff.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the hostname check, so deliver() now urlopen-POSTs to any caller-supplied URL; the new comment explicitly allows customer endpoints, which is a real SSRF/exfiltration regression."
+    },
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "webhooks.py calls json_dumps(event) with only urllib.request imported and no definition of json_dumps anywhere in the repo, so deliver will raise NameError on every call."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 17.852,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5264,
+      "out": 723
+    },
+    "cost_usd": 0.01653
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

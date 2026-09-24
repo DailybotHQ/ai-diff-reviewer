@@ -1,0 +1,96 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.8,
+  "usage": {
+    "in": 29794,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1411,
+    "source": "cli"
+  },
+  "cost_usd": 0.0854108,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded SMTP password in source.** `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` embeds a credential as the default when the env var is missing. Anyone with repo access can log in as `notifications` on `smtp.internal.example`, and cron jobs without the secret mounted will silently authenticate with this fallback instead of failing closed.\n\nRequire the secret (or skip send and log when absent). If `smtp-prod-backup-77` was ever a real password, rotate it immediately.\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is not set\")\n        s.login(\"notifications\", password)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a live-looking SMTP credential in source as a default login password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), so a missing secret failed closed at login. The PR replaces that with `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`.\n\nThat default is a hard-coded credential in the repository. Anyone with read access to the tree or git history can authenticate as `notifications` against `smtp.internal.example`. Cron environments that omit the secret will silently use the baked-in password instead of failing closed, so misconfiguration becomes credential use rather than a loud crash.\n\nThe crash the PR aims to stop is the correct failure mode when the secret is not mounted. Fix configuration/secret mounting for cron (or skip send when the password is absent and log clearly). Rotate any password that matches this string if it was ever real.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), embedding a real-looking SMTP credential as a silent fallback. The base revision required SMTP_PASSWORD via os.environ[\"SMTP_PASSWORD\"] with no default, so this is a clear credential-in-source regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.532,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2032,
+      "out": 314
+    },
+    "cost_usd": 0.006409
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

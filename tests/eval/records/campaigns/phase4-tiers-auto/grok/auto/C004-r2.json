@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 34.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.4,
+  "usage": {
+    "in": 30134,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1715,
+    "source": "cli"
+  },
+  "cost_usd": 0.087838,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removes `os.path.basename` and joins unsanitized user input into the filesystem path. `request.args.get(\"path\", name)` is fully attacker-controlled.\n\n**Failure modes:**\n- `GET /reports/x?path=../../etc/passwd` \u2192 reads `/etc/passwd` after join/resolve.\n- `GET /reports/x?path=/etc/shadow` \u2192 `os.path.join(\"/srv/reports\", \"/etc/shadow\")` returns `/etc/shadow` (absolute segment wins).\n- Without `?path=`, a malicious `<name>` is also no longer stripped to a single component.\n\nAllow nested report keys only after resolving the final path and verifying it stays under `REPORTS` (e.g. `Path(REPORTS).joinpath(candidate).resolve()` then check `realpath.is_relative_to(reports_root)`), and reject absolute candidates before join."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change removes the only path sanitization on the report download endpoint and introduces an arbitrary file read.\n\n## Narrative\n\n`download` previously constrained the route parameter with `os.path.basename(name)` before joining under `REPORTS`. The new code passes `request.args.get(\"path\", name)` straight into `os.path.join(REPORTS, ...)`, so any client can supply a query path.\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves under `/srv/reports/../../etc/passwd` \u2192 `/etc/passwd`.\n2. **Absolute path takeover:** `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd` because an absolute second segment discards the base.\n3. **Fallback still unsafe:** even without `?path=`, a crafted `<name>` segment is no longer basenamed.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) needs a resolve-and-prefix check (or equivalent safe-join), not removal of sanitization. Until that lands, do not merge.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removes `os.path.basename` and joins attacker-controlled `request.args.get(\"path\", name)` into `send_file(os.path.join(REPORTS, ...))` with no resolve/under-root check, enabling classic path traversal and absolute-path override. Critical severity is appropriate for arbitrary file read."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.391,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2445,
+      "out": 297
+    },
+    "cost_usd": 0.007082
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

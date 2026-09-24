@@ -1,0 +1,81 @@
+{
+  "case": "C063",
+  "pr": "C063",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 106.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 106.9,
+  "usage": {
+    "in": 51014,
+    "cache_read": 170752,
+    "cache_write": 0,
+    "out": 5630,
+    "source": "cli"
+  },
+  "cost_usd": 0.1870336,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nThe `src/index.ts` logging tweak is fine on its face; do not merge until the lockfile deletion is fixed or justified.\n\n## Narrative\n\n**`src/index.ts`:** `main()` still loads config via `get(\"config\")` and prints `cfg.appName`, and now also prints `cfg.env`. No other references or type definitions for that config object exist in this repository (no `fetcher` module at head or base), so behavior is unchanged aside from one extra logged field. If `env` is a simple stage identifier this is a reasonable observability tweak. Author should confirm it is not a secret-bearing structure before relying on this in CI.\n\n**`package-lock.json` (omitted lockfile, absence is the issue):** The PR title/description call this a dependency refresh / lockfile bump, but the diff **deletes** `package-lock.json` entirely. That removes version pinning rather than refreshing it, so installs are no longer reproducible from the lock and consumers lose the integrity pin that was present on base. Restore the lockfile (with whatever version bump was intended) or document a deliberate move off lockfile-based installs.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C063-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

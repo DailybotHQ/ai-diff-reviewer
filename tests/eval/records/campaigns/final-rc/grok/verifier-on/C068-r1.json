@@ -1,0 +1,96 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 45.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.3,
+  "usage": {
+    "in": 30221,
+    "cache_read": 115840,
+    "cache_write": 0,
+    "out": 1678,
+    "source": "cli"
+  },
+  "cost_usd": 0.105262,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `load_session` now calls `pickle.loads` on base64-decoded `raw`. Session blobs are normally attacker-controlled (cookies, headers, hidden form fields). Pickle executes arbitrary object constructors during load, so a crafted payload yields remote code execution in the app process.\n\n**Failure mode:** Attacker sends a forged session string whose pickle stream reduces to `os.system`, `subprocess.Popen`, or a similar gadget; the next request that calls `load_session` runs that code.\n\n**Fix:** Keep a data-only codec on the wire (JSON, or another schema-bound format). If the cart plugin needs richer objects, reconstruct them in trusted code after parsing plain data, or store server-side sessions by id. Never unpickle client-supplied bytes.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(Re-add `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces safe JSON session decoding with `pickle.loads`, which is a remote code execution primitive on typical session cookie/header input.\n\n## Analysis\n\n`load_session` base64-decodes a `raw` string and deserializes it. That shape is the standard \u201csession blob from the client\u201d path. `json.loads` only rebuilds plain data; `pickle.loads` can run attacker-controlled `__reduce__` / opcode payloads during unpickle, so a forged session string becomes code execution in the web process.\n\nThe cart-plugin motivation does not make this safe: pickle is not a transport format for untrusted clients. Richer session objects need an explicit schema (JSON + typed fields, `dataclasses`/`msgspec`/`pydantic`, or a sealed server-side session store keyed by id).\n\nNo other callers or HMAC/signing wrapper appear in this repository slice, so nothing in-tree mitigates the unsafe deserialize.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `load_session` calls `pickle.loads` on base64-decoded `raw`, replacing the base `json.loads` path. Unpickling attacker-controlled session blobs is a well-known RCE vector, so the critical security finding holds."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.155,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3141,
+      "out": 397
+    },
+    "cost_usd": 0.00997
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

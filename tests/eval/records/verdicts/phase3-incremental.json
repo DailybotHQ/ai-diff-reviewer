@@ -1,0 +1,45 @@
+{
+  "schema_version": "verdict/1.0",
+  "candidate_runtime_sha": "d5faef6f8468734d1497156c65a434a779ba0f6d",
+  "candidate_content_sha256": "749b04c3c6960e5b6b8a2a0c493b2537a3ded544b32463c75ddf0ac88d582bd1",
+  "prompt_sha256": "333afcdc7ea88a5c0640c0aa432b0565a5647086398afb29381832d6260e7db6",
+  "baseline_ref": "phase3-incremental/full",
+  "computed_at": "2026-09-24T12:43:12Z",
+  "paired_cells": 4,
+  "descriptive_only": false,
+  "measurements": {
+    "cost_relative_delta_point": 0.06476935695683592,
+    "cost_relative_delta_ci95": [
+      -0.1792657468504733,
+      0.30880446076414514
+    ],
+    "recall_net_defects": -1,
+    "recall_ci95": [
+      -0.75,
+      0.0
+    ],
+    "candidate_noise_floor": {
+      "replicated_cells": 4,
+      "cost_relative_spread_median": 0.39418534382550496,
+      "cost_relative_spread_mean": 0.401535549814721,
+      "cost_relative_spread_worst": 0.8060206955225652,
+      "recall_delta_max": 0,
+      "recall_delta_cells_nonzero": 0
+    }
+  },
+  "promotable": {
+    "cost": false,
+    "recall": false,
+    "precision": false
+  },
+  "blocking": [],
+  "notes": [],
+  "thresholds": {
+    "promotable_cost_rel_delta": 0.38,
+    "promotable_recall_net_defects": 3,
+    "blocking_recall_drop_defects": 2,
+    "baseline_spread_median": 0.37,
+    "blocking_spread_median_factor": 1.5,
+    "blocking_spread_worst": 1.3
+  }
+}

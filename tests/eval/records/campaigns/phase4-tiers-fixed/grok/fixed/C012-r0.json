@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 85.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.3,
+  "usage": {
+    "in": 34428,
+    "cache_read": 152320,
+    "cache_write": 0,
+    "out": 4410,
+    "source": "cli"
+  },
+  "cost_usd": 0.141012,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `BLOCKED` guard re-enables prototype pollution. `JSON.parse` *does* yield own enumerable `__proto__` / `constructor` / `prototype` keys \u2014 the PR rationale is false.\n\nFailure mode: `deepMerge({}, JSON.parse('{\"__proto__\": {\"polluted\": true}}'))` ends up calling `deepMerge` on `Object.prototype` because `base[\"__proto__\"] ??= {}` reads the inherited accessor (truthy) and then writes into it. Confirmed under Node: `({}).polluted === true` after the merge; `{\"constructor\":{\"prototype\":{\"viaConstructor\":true}}}` also pollutes.\n\nRestore the blocklist (or skip these keys another way / use null-prototype targets + `Object.defineProperty`), and add a regression test that asserts `Object.prototype` is untouched."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Why the rationale is wrong\n\nThe PR claims `JSON.parse` never yields dangerous keys. That is incorrect. `JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an own enumerable `__proto__` property. The same applies to `constructor` / `prototype`.\n\nWithout the `BLOCKED` guard, the recursive assignment path does:\n\n1. `base[\"__proto__\"] ??= {}` resolves to `Object.prototype` (inherited accessor), so the `??=` does not create a safe own object.\n2. `deepMerge` then writes attacker-controlled fields onto `Object.prototype`.\n3. The `constructor.prototype` gadget also works: `{\"constructor\": {\"prototype\": {\"viaConstructor\": true}}}`.\n\nVerified under Node: after `deepMerge({}, JSON.parse(...))`, `({}).polluted === true` and `({}).viaConstructor === true`.\n\n## Scope\n\nEven if today every caller fed only `JSON.parse` output, that would not make the guard redundant \u2014 parsed JSON can carry these keys. The function also accepts any `Record<string, unknown>`, so non-JSON sources (`Object.fromEntries`, manual patches, cloned objects) are in scope.\n\n## What to do\n\nRestore the blocklist (or equivalent: skip keys when `k === \"__proto__\"` / `constructor` / `prototype`, or merge into `Object.create(null)` and assign only via `Object.defineProperty` / own-property checks). Add a unit test that asserts `Object.prototype` is unchanged after merging malicious payloads.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base revision guarded `__proto__`/`constructor`/`prototype` via `BLOCKED`; head removed that guard while keeping `(base as any)[k] ??= {}` / assignment, which is the classic deep-merge prototype-pollution path. The claimed regression is directly supported by the diff and current source."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 20.466,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1481,
+      "out": 477
+    },
+    "cost_usd": 0.00759
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

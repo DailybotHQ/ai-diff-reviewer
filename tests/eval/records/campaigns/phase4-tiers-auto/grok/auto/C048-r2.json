@@ -1,0 +1,78 @@
+{
+  "case": "C048",
+  "pr": "C048",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 25.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 25.9,
+  "usage": {
+    "in": 29662,
+    "cache_read": 58112,
+    "cache_write": 0,
+    "out": 1528,
+    "source": "cli"
+  },
+  "cost_usd": 0.0859256,
+  "changed_files": [
+    "package-lock.json"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nSafe lockfile-only refresh: a single `package-lock.json` edit (+1/\u22121) that adds a `resolved` URL on an existing package entry while leaving version and integrity unchanged.\n\n## Notes\n\n- Inventory marks `package-lock.json` as omitted (generated/lockfile). Per review policy its contents were not line-reviewed; no inline findings are filed against it.\n- No `package.json`, workflow, source, or action-contract files changed in this PR, so there is no manifest/lock drift introduced by a companion manifest edit in the diff.\n- Risk is limited to dependency resolution metadata normalization from `npm install` with an unchanged dependency set, matching the PR description.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "case": "C093",
+  "pr": "C093",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 37.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.7,
+  "usage": {
+    "in": 59599,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1956,
+    "source": "cli"
+  },
+  "cost_usd": 0.1570076,
+  "changed_files": [
+    "store.go"
+  ],
+  "findings": [
+    {
+      "path": "store.go",
+      "line": 4,
+      "severity": "warning",
+      "body": "`_, _ = w.Write(b)` acknowledges both return values but still drops the error. If `Write` fails (short write, closed writer, full disk), `Save` returns normally and callers cannot tell the bytes were not stored.\n\nPropagate the error from `Save` instead of blank-assigning it:\n\n```go\nfunc Save(w Writer, b []byte) error {\n\t_, err := w.Write(b)\n\treturn err\n}\n```\n\nIf partial writes are possible on this `Writer`, also verify `n == len(b)` or use a full-write helper."
+    }
+  ],
+  "summary": "## Verdict\n\nThe blank-identifier assignment silences the unchecked `Write` return, but `Save` still drops write failures with no signal to the caller.\n\n## Notes\n\n`w.Write(b)` returns `(int, error)` on a typical `io.Writer`-shaped interface. Assigning to `_, _` satisfies `errcheck`/compiler noise and matches the PR description (\u201cHandled the return values\u201d), yet a failed write (short write, full disk, closed pipe, network error) still looks like success from outside `Save`.\n\nThat is the same failure mode the unchecked call had, only now it is explicit. Prefer propagating the error:\n\n```go\nfunc Save(w Writer, b []byte) error {\n    _, err := w.Write(b)\n    return err\n}\n```\n\n(or `io.WriteAll` / checking `n == len(b)` if partial writes matter for this `Writer`).\n\nNo other files changed; complexity is low.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.go",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C093-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 0,
+  "tool_calls": 0,
+  "seconds": 12.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 12.2,
+  "usage": {
+    "in": 3896,
+    "cache_read": 0,
+    "cache_write": 0,
+    "out": 578,
+    "source": "api"
+  },
+  "cost_usd": 0.012463,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [],
+  "summary": "No code changed since `86730a47`, so this round spent no review turns and re-read the 2 outstanding finding(s) with the verifier instead:\n\n- `utils.py:2` (warning) \u2014 **refuted**: `total(items)` does not guard against None, but a repo-wide search finds no callers of `total` at all, so the claim that \u201ccallers pass None\u201d is unsupported and there is nothing to guard against in thi\n- `utils.py:6` (warning) \u2014 **verified**: `first_name` does `user.name.split()[0]`; for an empty or whitespace-only name, `str.split()` returns `[]`, so `[0]` raises IndexError. The defect is real at the claimed anchor.\n\n1 outstanding finding(s) no longer hold at the anchor per the verifier; they stay open until the maintainer resolves the thread (no code changed, so nothing is retired automatically).",
+  "round": "nochange",
+  "effective_max_turns": 0,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [
+    {
+      "path": "utils.py",
+      "line": 2,
+      "status": "refuted",
+      "reason": "`total(items)` does not guard against None, but a repo-wide search finds no callers of `total` at all, so the claim that \u201ccallers pass None\u201d is unsupported and there is nothing to guard against in thi"
+    },
+    {
+      "path": "utils.py",
+      "line": 6,
+      "status": "verified",
+      "reason": "`first_name` does `user.name.split()[0]`; for an empty or whitespace-only name, `str.split()` returns `[]`, so `[0]` raises IndexError. The defect is real at the claimed anchor."
+    }
+  ],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 12.137,
+    "verified": 1,
+    "refuted": 1,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3896,
+      "out": 578
+    },
+    "cost_usd": 0.012463
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C091-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

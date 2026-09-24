@@ -1,0 +1,84 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 38.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.6,
+  "usage": {
+    "in": 14734,
+    "cache_read": 148224,
+    "cache_write": 0,
+    "out": 588,
+    "source": "cli"
+  },
+  "cost_usd": 0.0544898,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removal of the `ALLOWED_HOSTS` check plus the unconditional `urllib.request.urlopen(url, ...)` allows any caller-supplied URL to be fetched. If `deliver` is reachable with attacker-controlled `url` values (or even customer-controlled values that later become attacker-controlled), this enables SSRF to internal hosts, token exfiltration, or port scanning.\n\n```suggestion\n    host = urllib.parse.urlsplit(url).hostname or \"\"\n    if host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n    req = urllib.request.Request(url, data=json_dumps(event), method=\"POST\")\n```"
+    }
+  ],
+  "summary": "The change removes the only host allow-list that guarded webhook delivery and replaces it with an unconditional `urlopen` on caller-supplied URLs. The stated motivation is customer-configured endpoints, but the implementation introduces an SSRF / data-exfiltration vector with no compensating control visible in the diff or the file.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base had an ALLOWED_HOSTS check before urlopen; head removed it and posts to any caller-supplied URL, which is a real SSRF regression consistent with critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.758,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2358,
+      "out": 343
+    },
+    "cost_usd": 0.007696
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

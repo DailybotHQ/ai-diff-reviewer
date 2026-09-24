@@ -969,6 +969,49 @@ MAX_REVIEW_OUTPUT_BYTES: int = 4_000_000
 REVIEW_OUTPUT_EXCERPT_TRIM_CHARS: int = 200
 RISK_CLASS_UNKNOWN: str = "unknown"
 RISK_TIER_UNCLASSIFIED: str = "unclassified"
+# RFC-06 § Risk classification — deterministic, from inventory facts only
+# (path, status, binary, mode_change, omitted, patch size, line counts). Never
+# the PR title, body, labels or author: a "docs only" title cannot lower a tier.
+RISK_CLASS_PROMPTS_POLICY: str = "prompts-policy"
+RISK_CLASS_WORKFLOWS_CI: str = "workflows-ci"
+RISK_CLASS_DEPENDENCIES: str = "dependencies"
+RISK_CLASS_GENERATED: str = "generated"
+RISK_CLASS_TESTS: str = "tests"
+RISK_CLASS_DOCS: str = "docs"
+RISK_CLASS_CODE: str = "code"
+RISK_CLASSES: tuple[str, ...] = (RISK_CLASS_CODE, RISK_CLASS_TESTS, RISK_CLASS_PROMPTS_POLICY, RISK_CLASS_DEPENDENCIES, RISK_CLASS_WORKFLOWS_CI, RISK_CLASS_DOCS, RISK_CLASS_GENERATED, RISK_CLASS_UNKNOWN)
+RISK_TIER_LOW: str = "low"
+RISK_TIER_STANDARD: str = "standard"
+RISK_TIER_ELEVATED: str = "elevated"
+RISK_TIER_CRITICAL: str = "critical"
+RISK_TIERS: tuple[str, ...] = (RISK_TIER_LOW, RISK_TIER_STANDARD, RISK_TIER_ELEVATED, RISK_TIER_CRITICAL, RISK_TIER_UNCLASSIFIED)
+RISK_TIER_LOW_MAX_LINES: int = 300          # `low` only up to this many changed lines
+RISK_TIER_ELEVATED_MIN_LINES: int = 1_500   # more than this is `elevated` regardless of classes
+PROMPTS_POLICY_GLOBS: tuple[str, ...] = ("AGENTS.md", "CLAUDE.md", ".cursorrules", ".review/**", "prompts/**", ".github/ai-diff-reviewer/**", "**/SKILL.md", ".agents/**", ".claude/**", ".cursor/**")
+WORKFLOWS_CI_GLOBS: tuple[str, ...] = (".github/workflows/**", "action.yml", "Dockerfile", "Dockerfile.*", "*.gitlab-ci.yml", ".gitlab-ci.yml", "Makefile", "justfile")
+DEPENDENCY_MANIFEST_GLOBS: tuple[str, ...] = ("package.json", "pyproject.toml", "requirements*.txt", "go.mod", "Cargo.toml", "Gemfile", "composer.json", "*.csproj", "Pipfile", "setup.py", "setup.cfg")
+DEPENDENCY_LOCKFILE_GLOBS: tuple[str, ...] = ("package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "poetry.lock", "Pipfile.lock", "uv.lock", "pdm.lock", "Cargo.lock", "go.sum", "composer.lock", "Gemfile.lock", "mix.lock", "pubspec.lock", "packages.lock.json", "Podfile.lock", "gradle.lockfile", "flake.lock")
+TEST_PATH_GLOBS: tuple[str, ...] = ("tests/**", "test/**", "**/*_test.*", "**/*.test.*", "**/*.spec.*", "**/__tests__/**", "spec/**", "**/tests/**", "**/test/**")
+DOC_PATH_GLOBS: tuple[str, ...] = ("*.md", "*.rst", "*.txt", "docs/**", "**/*.md", "**/*.rst", "**/*.txt")
+# RFC-06 § Budget matrix (BC-13/15/19). `critical` raises `max-turns` to 40: +10
+# turns ≈ +$0.15–0.35 per review at grok-4.5 rates, on the rarest tier only
+# (AGENTS.md DON'T #9 estimate); every other row keeps or lowers today's cap.
+BUDGET_PROFILE_ENV: str = "AIPRR_BUDGET_PROFILE"          # `auto` (default) | `fixed` = today's constants for every tier (removed in v3.1.0)
+HIGH_RISK_PATHS_ENV: str = "AIPRR_HIGH_RISK_PATHS"        # comma / newline glob list — raises the tier to `critical`, never lowers
+COMPLEXITY_SOURCE_ENV: str = "AIPRR_COMPLEXITY_SOURCE"    # `model` (default) | `inventory` (label derived from the tier)
+BUDGET_PROFILE_AUTO: str = "auto"
+BUDGET_PROFILE_FIXED: str = "fixed"
+COMPLEXITY_SOURCE_MODEL: str = "model"
+COMPLEXITY_SOURCE_INVENTORY: str = "inventory"
+BUDGET_MATRIX: dict[str, dict[str, Any]] = {
+    #                turns  alias                 output  verifier warnings %  read-base on criticals  patch bytes
+    RISK_TIER_LOW:      {"turns": 8,  "alias": MODEL_TIER_BALANCED, "output_tokens": 4_096, "verifier_warning_pct": 0,   "verifier_read_base": False, "patch_bytes": 60_000},
+    RISK_TIER_STANDARD: {"turns": 20, "alias": MODEL_TIER_BALANCED, "output_tokens": 8_192, "verifier_warning_pct": 30,  "verifier_read_base": False, "patch_bytes": 120_000},
+    RISK_TIER_ELEVATED: {"turns": 30, "alias": MODEL_TIER_BALANCED, "output_tokens": 8_192, "verifier_warning_pct": 100, "verifier_read_base": False, "patch_bytes": 200_000},
+    RISK_TIER_CRITICAL: {"turns": 40, "alias": MODEL_TIER_DEEP,     "output_tokens": 8_192, "verifier_warning_pct": 100, "verifier_read_base": True,  "patch_bytes": 200_000},
+}
+FIXED_PROFILE_BUDGET: dict[str, Any] = {"turns": DEFAULT_MAX_TURNS, "alias": MODEL_TIER_BALANCED, "output_tokens": 8_192, "verifier_warning_pct": 30, "verifier_read_base": False, "patch_bytes": 120_000}
+COMPLEXITY_FOR_TIER: dict[str, str] = {RISK_TIER_LOW: "low", RISK_TIER_STANDARD: "medium", RISK_TIER_ELEVATED: "high", RISK_TIER_CRITICAL: "high", RISK_TIER_UNCLASSIFIED: "high"}
 STRUCTURED_OUTPUT_PATH_OUTPUT: str = "structured-output-path"
 STRUCTURED_OUTPUT_SHA256_OUTPUT: str = "structured-output-sha256"
 STRUCTURED_OUTPUT_ARTIFACT_OUTPUT: str = "structured-output-artifact"
@@ -1042,7 +1085,7 @@ OPENAI_OPTIONAL_SAMPLING_PARAMS: tuple[str, ...] = (
 # diffs are truncated with a pointer to the read_file tool.
 # Ceiling on the diff kept on `PRContext` (v3: equal to the first-message
 # patch budget — the embedding rule is per file, see `render_user_prompt`).
-MAX_DIFF_CHARS: int = FIRST_MESSAGE_PATCH_BYTES
+MAX_DIFF_CHARS: int = 200_000   # the largest BUDGET_MATRIX patch_bytes — the per-tier budget (or the fixed profile) selects what the first message embeds; this ceiling only bounds the raw diff kept in memory
 
 # Diff shaping (v2.1.0+): lock / minified / generated / vendored files carry
 # near-zero review value but dominate PR diffs and are re-sent on every
@@ -1120,6 +1163,7 @@ MAX_CONVERSATION_TURNS_RETAINED: int = 12
 
 # Anthropic API parameters.
 ANTHROPIC_MAX_TOKENS: int = 8192
+OUTPUT_TOKEN_CAP: int = 0   # per-run override from the budget matrix (0 = the constant); set by `set_output_token_cap`
 # Same output ceiling for the OpenAI-compatible runner (cost parity).
 OPENAI_MAX_TOKENS: int = 8192
 # Anthropic API timeouts (seconds).
@@ -1337,6 +1381,7 @@ CLI_INVOCATION_TIMEOUT: int = 900
 # An agent that exits 0 without writing its findings file gets this many
 # fresh attempts before the run is posted as an incomplete review.
 CLI_INCOMPLETE_RETRIES: int = 1
+CLI_TURN_CAP_STDERR_MARKERS: tuple[str, ...] = ("max turns reached",)   # a CLI that stops at its native cap exits non-zero; that is an incomplete review, not a crash (RFC-02 / BC-04)
 
 # ---------------------------------------------------------------------------
 # Iteration-Aware Review (IAR) — subsystem constants
@@ -1418,6 +1463,11 @@ INLINE_FINDING_MARKER_CLOSE: str = " -->"
 IAR_INCREMENTAL_MIN_CAP: int = 3
 IAR_INCREMENTAL_MIN_TURNS: int = 6
 IAR_INCREMENTAL_MIN_DELTA_RATIO: float = 0.1
+# RFC-06 § Incremental rounds (BC-13, incremental half): the follow-up round's
+# turn budget is derived from the delta, not from a ratio of the full cap.
+INCREMENTAL_TURN_FLOOR: int = 4            # inventory, rules, one look at each prior finding, submit
+INCREMENTAL_TURNS_PER_FILE: float = 1.5    # per changed file in the delta
+INCREMENTAL_TURNS_PER_OPEN: float = 1.0    # per outstanding prior finding (the verifier re-reads anchors separately)
 PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
@@ -1646,6 +1696,7 @@ class RunRecord:
     max_turns: int = DEFAULT_MAX_TURNS
     turns_used: int = 0
     tool_calls: int = 0
+    risk_tier: str = RISK_TIER_UNCLASSIFIED   # RFC-06 tier that set this run's budget
     findings_total: int = 0
     findings_by_severity: dict[str, int] = field(
         default_factory=lambda: {"critical": 0, "warning": 0, "info": 0}
@@ -1782,7 +1833,7 @@ class RunRecord:
                 "max_turns": int(self.max_turns),
                 "turns_used": int(self.turns_used),
                 "tool_calls": int(self.tool_calls),
-                "risk_tier": "unclassified",
+                "risk_tier": self.risk_tier if self.risk_tier in RISK_TIERS else RISK_TIER_UNCLASSIFIED,
                 "verifier_runs": int(self.verifier_runs),
             },
             "outcome": {
@@ -3379,7 +3430,7 @@ class AnthropicProvider(Provider):
         )
         anthropic_body: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            "max_tokens": OUTPUT_TOKEN_CAP or ANTHROPIC_MAX_TOKENS,
             "system": [system_block],
             "messages": wire_messages,
             "tools": tools,
@@ -3761,7 +3812,7 @@ class OpenAIProvider(Provider):
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": anthropic_messages_to_openai(system_prompt, messages),
-            max_param: OPENAI_MAX_TOKENS,
+            max_param: OUTPUT_TOKEN_CAP or OPENAI_MAX_TOKENS,
         }
         # Sampling knobs are endpoint-kind-scoped (unit-tested per kind in
         # tests/test_openai_provider.py::RequestShapeTests):
@@ -4231,6 +4282,29 @@ def _invoke_cli_agent(
     if result.returncode != 0:
         stderr_tail: str = (result.stderr or "")[-MAX_ERROR_BODY_CHARS:]
         stdout_tail: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+        cap_hit: bool = any(m in (result.stderr or "").lower() for m in CLI_TURN_CAP_STDERR_MARKERS)
+        if not findings_path.exists() and cap_hit:
+            # The CLI stopped at its native turn cap before writing the findings
+            # file: an incomplete review (red under blocking strictness, no
+            # reviewed label — BC-04), never a crashed run. Usage is still read
+            # from stdout so the cost is known.
+            log(f"WARNING: {cli_name} CLI stopped at its native turn cap before writing {findings_path} (exit {result.returncode}) — posting an incomplete review. stderr tail: {stderr_tail!r}.")
+            capped_result: ReviewResult = ReviewResult(
+                summary=(
+                    f"_The {cli_name} agent reached its turn cap before writing its findings file — no inline "
+                    "findings. This is an incomplete review: raise the risk tier (`high-risk-paths`), set "
+                    "`agent-max-turns`, or split the PR, then re-run._"
+                ),
+                findings=[],
+                status=REVIEW_STATUS_INCOMPLETE,
+                status_note=f"{cli_name} stopped at its native turn cap (exit {result.returncode}) without writing its findings file",
+            )
+            if usage_parser is not None:
+                try:
+                    capped_result.usage = usage_parser(result.stdout or "")
+                except Exception as usage_exc:  # noqa: BLE001 — telemetry only; an unparsable stdout must not hide the review status
+                    log(f"{cli_name}: usage unparsable after the cap: {usage_exc}")
+            return capped_result
         if not findings_path.exists():
             raise RuntimeError(
                 f"{cli_name} CLI exited with code {result.returncode}. "
@@ -7618,6 +7692,15 @@ def select_iar_mode(
     )
 
 
+def incremental_budget(delta_files: int, outstanding: int, tier_ceiling: int) -> int:
+    """RFC-06: `clamp(floor + k_files·|Δfiles| + k_open·|outstanding|, floor, ceiling)`.
+    `tier_ceiling` is the round's full budget (the configured `max-turns` until
+    the risk tiers land); a ceiling below the floor yields the ceiling."""
+    raw: float = INCREMENTAL_TURN_FLOOR + INCREMENTAL_TURNS_PER_FILE * max(0, delta_files) + INCREMENTAL_TURNS_PER_OPEN * max(0, outstanding)
+    turns: int = max(INCREMENTAL_TURN_FLOOR, int(-(-raw // 1)))
+    return max(1, min(turns, tier_ceiling)) if tier_ceiling > 0 else turns
+
+
 def scale_incremental_budget(
     *, base_cap: int, base_turns: int, delta_ratio: float, prior_critical: int
 ) -> tuple[int, int]:
@@ -7660,6 +7743,9 @@ class IARPreLLMContext:
     delta: IncrementalDelta | None = None
     prior_findings: tuple[PriorFinding, ...] = ()
     effective_max_turns: int = 0  # 0 = leave the caller's max_turns as is
+    # RFC-06: an incremental round with no changed file is a verifier-only
+    # round — no review turns, the outstanding anchors are re-read instead.
+    verifier_only: bool = False
     # review_sha → files changed between that SHA and HEAD (v2.3.1); see
     # `compute_changed_since_raised`. Both reconciliation call sites and the
     # prompt's "file changed since?" column read this same map.
@@ -8979,17 +9065,23 @@ def run_iar_pre_llm(
         delta=delta,
     )
     effective_max_turns: int = 0
+    verifier_only: bool = False
     if mode == IAR_MODE_INCREMENTAL and delta is not None:
         prior_critical: int = sum(
             1 for pf in prior_findings if pf.severity == SEVERITY_CRITICAL
         )
-        cap, turns = scale_incremental_budget(
+        cap, _ratio_turns = scale_incremental_budget(
             base_cap=base_max_inline_comments,
             base_turns=max_turns,
             delta_ratio=delta.delta_ratio,
             prior_critical=prior_critical,
         )
-        effective_max_turns = turns if max_turns else 0
+        # RFC-06 (BC-13): the turn budget follows the delta and the outstanding
+        # findings, capped by the round's full budget (the tier ceiling).
+        effective_max_turns = incremental_budget(len(delta.changed_files), len(prior_findings), max_turns) if max_turns else 0
+        verifier_only = not delta.changed_files
+        if verifier_only:
+            mode_reason = f"no code changes since {delta.prior_head_sha[:8]} — verifier-only round over {len(prior_findings)} outstanding finding(s)"
         # Replace the exhaustive addendum (if any) with the incremental one
         # and the cap with the delta-scaled one; the policy label is kept
         # so dedup semantics downstream are unchanged.
@@ -9028,7 +9120,67 @@ def run_iar_pre_llm(
         prior_findings=tuple(prior_findings),
         effective_max_turns=effective_max_turns,
         changed_since_raised=changed_since_raised,
+        verifier_only=verifier_only,
     )
+
+
+def verify_outstanding_findings(
+    prior_findings: tuple["PriorFinding", ...],
+    *,
+    policy: VerifierPolicy,
+    provider: "Provider | None",
+    model: str,
+    alias: str,
+    endpoint_kind: str,
+    unavailable_reason: str,
+    inventory: "ChangeInventory | None",
+) -> tuple[VerifierReport, list[tuple["PriorFinding", FindingVerification]]]:
+    """The verifier-only round (RFC-06): re-read every outstanding prior
+    finding's anchor with the verifier — no review turns. Returns the report
+    and the per-finding verdicts; nothing is retired here (no code changed,
+    so corroboration cannot hold): a refuted anchor is surfaced for the
+    maintainer in the summary."""
+    report: VerifierReport = VerifierReport(model=model, alias=alias, endpoint_kind=endpoint_kind, reason=unavailable_reason)
+    verdicts: list[tuple[PriorFinding, FindingVerification]] = []
+    started: float = time.monotonic()
+    for pf in prior_findings:
+        finding: Finding = Finding(path=pf.path, line=pf.line, body=pf.body_excerpt, severity=pf.severity, title=pf.body_excerpt[:MAX_FINDING_TITLE_CHARS])
+        finding.severity_claimed = pf.severity
+        finding.fingerprint = pf.fingerprint
+        if provider is None or not policy.enabled:
+            verdict: FindingVerification = FindingVerification(status=VERIFICATION_UNVERIFIED, reason=unavailable_reason or "verifier off")
+            report.unverified += 1
+        else:
+            try:
+                verdict = verify_finding(provider, finding, inventory=inventory, max_turns=policy.max_turns_per_finding, usage=report.usage)
+                report.runs += 1
+            except Exception as exc:  # noqa: BLE001 — fail open into visibility
+                verdict = FindingVerification(status=VERIFICATION_UNVERIFIED, reason=f"verifier error: {type(exc).__name__}")
+                report.unverified += 1
+            if verdict.status == VERIFICATION_VERIFIED:
+                report.verified += 1
+            elif verdict.status == "refuted":
+                report.refuted += 1
+            elif verdict.status == "downgraded":
+                report.downgraded += 1
+            elif verdict.status == VERIFICATION_UNVERIFIED:
+                report.unverified += 1
+        verdicts.append((pf, verdict))
+    report.seconds = round(time.monotonic() - started, 3)
+    return report, verdicts
+
+
+def render_verifier_only_narrative(verdicts: list[tuple["PriorFinding", FindingVerification]], *, prior_head: str) -> str:
+    """The narrative of a verifier-only round: what the re-read found."""
+    if not verdicts:
+        return f"No code changed since `{prior_head[:8]}` and no prior finding is outstanding — nothing to re-verify."
+    lines: list[str] = [f"No code changed since `{prior_head[:8]}`, so this round spent no review turns and re-read the {len(verdicts)} outstanding finding(s) with the verifier instead:", ""]
+    for pf, v in verdicts:
+        lines.append(f"- `{pf.path}:{pf.line}` ({pf.severity}) — **{v.status}**" + (f": {v.reason[:200]}" if v.reason else ""))
+    refuted: int = sum(1 for _, v in verdicts if v.status == "refuted")
+    if refuted:
+        lines += ["", f"{refuted} outstanding finding(s) no longer hold at the anchor per the verifier; they stay open until the maintainer resolves the thread (no code changed, so nothing is retired automatically)."]
+    return "\n".join(lines)
 
 
 def run_iar_post_llm(
@@ -9305,6 +9457,7 @@ class ChangeInventory:
     head_sha: str = ""
     base_sha: str = ""
     base_resolved: bool = False
+    risk_tier: str = RISK_TIER_UNCLASSIFIED   # RFC-06: set by `classify_inventory`
     files: list[dict[str, Any]] = field(default_factory=list)
 
     @property
@@ -9329,6 +9482,7 @@ class ChangeInventory:
             "files": [dict(f) for f in self.files],
             "omitted_count": self.omitted_count,
             "complete": self.complete,
+            "risk_tier": self.risk_tier,
         }
 
 
@@ -10031,6 +10185,141 @@ def render_change_inventory_block(ctx: "PRContext") -> str:
     return header + table + "\n\n" + verdict + "\n\n"
 
 
+def apply_native_turn_cap(provider: Any, *, provider_id: str, budget_profile: str, turns: int) -> bool:
+    """RFC-06: on a CLI runner with a native turn cap (`grok --max-turns`) the
+    tier row's turns (`Budget.tier_turns`: 8 / 20 / 30 / 40) are the cap when
+    `agent-max-turns` is unset (`provider.max_turns` is 0). Neither the
+    in-process `max-turns` ceiling nor the incremental delta budget reaches a
+    CLI — a CLI turn is not an in-process turn, and `max-turns` is documented
+    as the chat-completions knob. `budget-profile: fixed` leaves the CLI
+    uncapped, as before v3. Returns whether the cap was applied."""
+    if budget_profile != BUDGET_PROFILE_AUTO or provider_id not in AGENT_MAX_TURNS_NATIVE_PROVIDERS or turns <= 0:
+        return False
+    if not isinstance(provider, AgentRunnerProvider) or getattr(provider, "max_turns", None) != 0:
+        return False
+    provider.max_turns = int(turns)
+    return True
+
+
+def set_output_token_cap(cap: int) -> None:
+    """Budget-matrix output-token cap for this run (0 restores the constant)."""
+    global OUTPUT_TOKEN_CAP  # noqa: PLW0603 — one process, one budget
+    OUTPUT_TOKEN_CAP = max(0, int(cap))
+
+
+def parse_glob_list(raw: str) -> tuple[str, ...]:
+    """Comma- or newline-separated globs, trimmed, de-duplicated."""
+    out: list[str] = []
+    for part in re.split(r"[,\n]", raw or ""):
+        item: str = part.strip()
+        if item and item not in out:
+            out.append(item)
+    return tuple(out)
+
+
+def _path_matches(path: str, globs: tuple[str, ...]) -> bool:
+    return path_is_ignored(path, globs)
+
+
+def classify_path(path: str, *, binary: bool | None, omitted: bool) -> str:
+    """RFC-06 § Risk classification, first match wins. `binary = None`
+    (unknown) is `unknown` — it escalates."""
+    if not path:
+        return RISK_CLASS_UNKNOWN
+    if _path_matches(path, PROMPTS_POLICY_GLOBS):
+        return RISK_CLASS_PROMPTS_POLICY
+    if _path_matches(path, WORKFLOWS_CI_GLOBS):
+        return RISK_CLASS_WORKFLOWS_CI
+    if _path_matches(path, DEPENDENCY_LOCKFILE_GLOBS) or _path_matches(path, DEPENDENCY_MANIFEST_GLOBS):
+        return RISK_CLASS_DEPENDENCIES
+    if binary is None:
+        return RISK_CLASS_UNKNOWN
+    if binary or omitted or _path_matches(path, DEFAULT_IGNORE_PATH_GLOBS):
+        return RISK_CLASS_GENERATED
+    if _path_matches(path, TEST_PATH_GLOBS):
+        return RISK_CLASS_TESTS
+    if _path_matches(path, DOC_PATH_GLOBS):
+        return RISK_CLASS_DOCS
+    return RISK_CLASS_CODE
+
+
+def classify_inventory(inventory: "ChangeInventory | None", high_risk_globs: tuple[str, ...] = ()) -> tuple[dict[str, str], str]:
+    """Per-file `risk_class` and the PR's `risk_tier` (RFC-06). Pure over the
+    inventory; writes `risk_class` into each file entry and `risk_tier` on the
+    inventory. Consumers may raise the tier with `high_risk_globs`; nothing
+    lowers it. A failure classifies as `unclassified` (treated as elevated)."""
+    if inventory is None:
+        return {}, RISK_TIER_UNCLASSIFIED
+    try:
+        classes: dict[str, str] = {}
+        total_lines: int = 0
+        any_mode_change: bool = False
+        high_risk_hit: bool = False
+        for f in inventory.files:
+            path: str = str(f.get("path") or "")
+            cls: str = classify_path(path, binary=f.get("binary"), omitted=bool(f.get("omitted")))
+            f["risk_class"] = cls
+            classes[path] = cls
+            total_lines += int(f.get("additions") or 0) + int(f.get("deletions") or 0)
+            any_mode_change = any_mode_change or bool(f.get("mode_change"))
+            high_risk_hit = high_risk_hit or (bool(high_risk_globs) and _path_matches(path, high_risk_globs))
+        present: set[str] = set(classes.values())
+        sensitive: bool = bool(present & {RISK_CLASS_PROMPTS_POLICY, RISK_CLASS_WORKFLOWS_CI})
+        if RISK_CLASS_UNKNOWN in present or high_risk_hit or (sensitive and RISK_CLASS_CODE in present):
+            tier: str = RISK_TIER_CRITICAL
+        elif sensitive or RISK_CLASS_DEPENDENCIES in present or any_mode_change or not inventory.complete or total_lines > RISK_TIER_ELEVATED_MIN_LINES:
+            tier = RISK_TIER_ELEVATED
+        elif RISK_CLASS_CODE in present:
+            tier = RISK_TIER_STANDARD
+        elif present <= {RISK_CLASS_DOCS, RISK_CLASS_TESTS, RISK_CLASS_GENERATED} and total_lines <= RISK_TIER_LOW_MAX_LINES:
+            tier = RISK_TIER_LOW
+        else:
+            tier = RISK_TIER_STANDARD
+        inventory.risk_tier = tier
+        return classes, tier
+    except Exception as exc:  # noqa: BLE001 — a classifier bug must never lower a budget
+        log(f"risk classification failed ({type(exc).__name__}: {exc}) — tier unclassified, budgeted as elevated")
+        inventory.risk_tier = RISK_TIER_UNCLASSIFIED
+        return {}, RISK_TIER_UNCLASSIFIED
+
+
+@dataclass
+class Budget:
+    """What the matrix decided for this run (RFC-06)."""
+
+    tier: str
+    turns: int
+    alias: str
+    output_tokens: int
+    verifier_warning_pct: int
+    verifier_read_base: bool
+    patch_bytes: int
+    profile: str = BUDGET_PROFILE_AUTO
+    turns_capped_by_input: bool = False
+    tier_turns: int = 0   # the row's own turns before any `max-turns` ceiling — the native cap of a CLI runner
+
+
+def resolve_budget(tier: str, *, profile: str = BUDGET_PROFILE_AUTO, max_turns_input: int = 0, has_deep: bool = False) -> Budget:
+    """The matrix row for `tier` (unclassified → elevated); `fixed` restores
+    today's constants for every tier; an explicit `max-turns` is a ceiling a
+    tier never exceeds; `deep` falls back to `balanced` where the kind has no
+    deep row. `economy` is never a review alias at any tier."""
+    row: dict[str, Any] = dict(FIXED_PROFILE_BUDGET) if profile == BUDGET_PROFILE_FIXED else dict(BUDGET_MATRIX.get(tier, BUDGET_MATRIX[RISK_TIER_ELEVATED]))
+    alias: str = str(row["alias"])
+    if alias == MODEL_TIER_DEEP and not has_deep:
+        alias = MODEL_TIER_BALANCED
+    if alias == MODEL_TIER_ECONOMY:
+        alias = MODEL_TIER_BALANCED
+    turns: int = int(row["turns"])
+    tier_turns: int = turns
+    capped: bool = False
+    if max_turns_input and max_turns_input < turns:
+        turns, capped = max_turns_input, True
+    return Budget(tier=tier if tier in RISK_TIERS else RISK_TIER_UNCLASSIFIED, turns=turns, alias=alias, output_tokens=int(row["output_tokens"]),
+                  verifier_warning_pct=int(row["verifier_warning_pct"]), verifier_read_base=bool(row["verifier_read_base"]), patch_bytes=int(row["patch_bytes"]),
+                  profile=profile, turns_capped_by_input=capped, tier_turns=tier_turns)
+
+
 def select_first_message_patches(
     ctx: "PRContext", *, budget_bytes: int = FIRST_MESSAGE_PATCH_BYTES
 ) -> tuple[list[tuple[str, str]], list[tuple[str, int]]]:
@@ -10163,12 +10452,12 @@ def render_user_prompt(
     ):
         diff_section = render_incremental_sections(ctx, incremental)
     else:
-        embedded, not_embedded = select_first_message_patches(ctx)
+        embedded, not_embedded = select_first_message_patches(ctx, budget_bytes=int(getattr(ctx, "patch_budget_bytes", 0) or FIRST_MESSAGE_PATCH_BYTES))
         patches: str = "".join(section for _, section in embedded)
         diff_section = (
             f"{PATCHES_HEADING}\n\n"
             f"{len(embedded)} file(s) embedded whole, in inventory order, within a "
-            f"{FIRST_MESSAGE_PATCH_BYTES:,}-byte budget.\n\n"
+            f"{int(getattr(ctx, 'patch_budget_bytes', 0) or FIRST_MESSAGE_PATCH_BYTES):,}-byte budget.\n\n"
             + (f"```diff\n{patches}\n```\n\n" if patches.strip() else "(no patch text available)\n\n")
         )
         if not_embedded:
@@ -12986,7 +13275,7 @@ def build_review_output(
             "files": files,
             "omitted": sum(1 for f in files if f["omitted"]),
             "complete": bool(inv.complete) if inv is not None else False,
-            "risk_tier": RISK_TIER_UNCLASSIFIED,
+            "risk_tier": (ctx.inventory.risk_tier if ctx.inventory is not None and ctx.inventory.risk_tier in RISK_TIERS else RISK_TIER_UNCLASSIFIED),
         },
         "findings": [f.to_v3_dict() for f in result.findings],
         "refuted": [
@@ -13898,6 +14187,16 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     expected_legs: tuple[str, ...] = parse_expected_legs(os.environ.get(EXPECTED_LEGS_ENV, ""))
     set_publish_policy(PublishPolicy(mode=mode, expected_legs=expected_legs))
     ctx_out.role = mode
+    budget_profile: str = os.environ.get(BUDGET_PROFILE_ENV, BUDGET_PROFILE_AUTO).strip().lower() or BUDGET_PROFILE_AUTO
+    if budget_profile not in (BUDGET_PROFILE_AUTO, BUDGET_PROFILE_FIXED):
+        log(f"Invalid budget-profile {budget_profile!r} — using {BUDGET_PROFILE_AUTO!r}")
+        budget_profile = BUDGET_PROFILE_AUTO
+    high_risk_globs: tuple[str, ...] = parse_glob_list(os.environ.get(HIGH_RISK_PATHS_ENV, ""))
+    complexity_source: str = os.environ.get(COMPLEXITY_SOURCE_ENV, COMPLEXITY_SOURCE_MODEL).strip().lower() or COMPLEXITY_SOURCE_MODEL
+    if complexity_source not in (COMPLEXITY_SOURCE_MODEL, COMPLEXITY_SOURCE_INVENTORY):
+        log(f"Invalid complexity-source {complexity_source!r} — using {COMPLEXITY_SOURCE_MODEL!r}")
+        complexity_source = COMPLEXITY_SOURCE_MODEL
+    max_turns_explicit: bool = str(os.environ.get("AIPRR_MAX_TURNS", "")).strip() not in ("", str(DEFAULT_MAX_TURNS))
     min_agreement: int = max(1, int(os.environ.get(MIN_AGREEMENT_ENV, "1").strip() or "1"))
     require_all_legs: bool = parse_bool(os.environ.get(REQUIRE_ALL_LEGS_ENV, "false"), default=False)
     artifact_dir: Path = Path(os.environ.get(ARTIFACT_DIR_ENV, "").strip() or ".aiprr/legs")
@@ -14363,6 +14662,36 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         # v3 parity tools read the SHA-bound inventory from the state.
         state.inventory = pr_ctx.inventory
         ctx_out.inventory = pr_ctx.inventory
+        # RFC-06: deterministic risk tier from the inventory → the budget for
+        # this run (turns, review alias, output tokens, verifier sample, patch
+        # bytes). The tier never reads PR metadata; `high-risk-paths` may raise
+        # it; an explicit `max-turns` (≠ the default) is a ceiling.
+        tier_turns_for_cli: int = 0
+        _risk_classes, risk_tier = classify_inventory(pr_ctx.inventory, high_risk_globs)
+        record.risk_tier = risk_tier
+        has_deep: bool = bool((MODEL_TIER_TABLE.get((provider_id, backend_profile.kind)) or {}).get(MODEL_TIER_DEEP))
+        budget: Budget = resolve_budget(risk_tier, profile=budget_profile, max_turns_input=(max_turns if max_turns_explicit else 0), has_deep=has_deep)
+        if not _alias_raw and budget_profile == BUDGET_PROFILE_AUTO:
+            # BC-15: with no `model` input the review alias comes from the matrix
+            # (`balanced`, or `deep` on the critical tier where the kind has one).
+            try:
+                model = resolve_model(provider_id, backend_profile, budget.alias)
+                record.model = model
+                record.model_alias = budget.alias
+            except Exception as exc:  # noqa: BLE001 — kinds without tier rows keep the legacy default id
+                log(f"budget: alias {budget.alias!r} has no row for {provider_id}/{backend_profile.kind} — keeping {model!r} ({exc})")
+        max_turns = budget.turns
+        tier_turns_for_cli = budget.tier_turns
+        if iar_pre_context is not None and iar_pre_context.effective_max_turns:
+            max_turns = min(iar_pre_context.effective_max_turns, budget.turns)  # the tier is the ceiling of an incremental round too
+        set_output_token_cap(budget.output_tokens)
+        pr_ctx.patch_budget_bytes = budget.patch_bytes
+        verifier_policy.warning_sample_pct = budget.verifier_warning_pct
+        log(
+            f"budget: tier={risk_tier} ({', '.join(sorted(set(_risk_classes.values())) or ['no files'])}), profile={budget_profile}, "
+            f"turns={max_turns}{' (capped by max-turns)' if budget.turns_capped_by_input else ''}, review alias={budget.alias}, "
+            f"output tokens={budget.output_tokens}, verifier warnings={budget.verifier_warning_pct} %, patch bytes={budget.patch_bytes:,}"
+        )
         if prompt_extension_file:
             state.extra_instruction_files = (prompt_extension_file,)
         if pr_ctx.inventory is not None and not pr_ctx.inventory.complete:
@@ -14375,7 +14704,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             pr_ctx,
             base_sha=_resolve_base_sha(base_ref=base_ref),
             iar_mode=(
-                iar_pre_context.mode
+                ("verifier-only" if iar_pre_context.verifier_only else iar_pre_context.mode)
                 if iar_pre_context is not None
                 else "none"
             ),
@@ -14403,11 +14732,14 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
                 f"adequate={description_verdict.is_adequate}"
             )
 
+        verifier_only_round: bool = bool(iar_pre_context is not None and iar_pre_context.verifier_only)
         provider: Provider | AgentRunnerProvider | None = None
-        if mode != MODE_AGGREGATE:
+        if mode != MODE_AGGREGATE and not verifier_only_round:
             provider = build_provider(
                 provider_id, api_key=api_key, model=model, api_base=api_base
             )
+            if apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=tier_turns_for_cli):
+                log(f"budget: tier {record.risk_tier} row turns {tier_turns_for_cli} applied as the {provider_id} CLI's native cap (agent-max-turns unset)")
         record.run_started = True
         record.setup_seconds = round(time.monotonic() - record.started_monotonic, 3)
         _run_started_monotonic: float = time.monotonic()
@@ -14425,7 +14757,13 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             log(agent_runner_warning)
 
         aggregate_report: AggregateReport | None = None
-        if mode == MODE_AGGREGATE:
+        if verifier_only_round and iar_pre_context is not None:
+            # RFC-06 verifier-only round: no code changed since the last
+            # reviewed head — no model review, the outstanding anchors are
+            # re-read by the verifier below; the review body is the ledger.
+            log(f"IAR: verifier-only round — {iar_pre_context.mode_reason}")
+            result = ReviewResult(findings=[], summary="", overall_severity=SEVERITY_NONE)
+        elif mode == MODE_AGGREGATE:
             # Aggregate role (RFC-04): no model call — the "review" is the
             # consolidation of the emitted leg documents for this head.
             result, aggregate_report = run_aggregate_stage(artifact_dir=artifact_dir, head_sha=head_sha, expected_legs=expected_legs)
@@ -14734,10 +15072,17 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             )
             if v_reason:
                 log(f"verifier: {v_reason}")
-        verifier_report = run_verifier(
-            result, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
-            endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
-        )
+        if verifier_only_round and iar_pre_context is not None:
+            verifier_report, outstanding_verdicts = verify_outstanding_findings(
+                iar_pre_context.prior_findings, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
+                endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
+            )
+            result.summary = render_verifier_only_narrative(outstanding_verdicts, prior_head=iar_pre_context.delta.prior_head_sha if iar_pre_context.delta else "")
+        else:
+            verifier_report = run_verifier(
+                result, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
+                endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
+            )
     except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
         log(f"verifier crashed: {type(exc).__name__}: {exc} — publishing claimed criticals as annotated warnings")
         verifier_report = VerifierReport(reason=f"verifier crashed: {type(exc).__name__}")
@@ -14914,6 +15259,11 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     complexity_level: str | None = resolve_pr_complexity(
         state=state, result=result
     )
+    if complexity_labels_enabled and complexity_source == COMPLEXITY_SOURCE_INVENTORY:
+        # BC-14: the label follows the deterministic tier; the model's level is telemetry only.
+        model_level: str | None = complexity_level
+        complexity_level = COMPLEXITY_FOR_TIER.get(record.risk_tier, "high")
+        log(f"complexity-source=inventory: label {complexity_level!r} from tier {record.risk_tier}" + (f" (model said {model_level!r})" if model_level else ""))
     if complexity_labels_enabled and not complexity_level:
         complexity_level = infer_pr_complexity_fallback(pr_ctx)
         log(

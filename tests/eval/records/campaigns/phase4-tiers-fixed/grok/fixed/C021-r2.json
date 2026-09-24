@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 65.1,
+  "setup_seconds": 0.2,
+  "total_seconds": 65.3,
+  "usage": {
+    "in": 60590,
+    "cache_read": 28928,
+    "cache_write": 0,
+    "out": 3492,
+    "source": "cli"
+  },
+  "cost_usd": 0.1508104,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Typosquat dependency swap:** `tar-stream` (legitimate) is replaced with `tar-streem` (one-letter misspelling) at `^1.0.0`.\n\nInstalling from this branch resolves a different package than the well-known streaming tar library. That package can ship arbitrary code under a familiar name. There is no migration note, changelog, or registry evidence in-repo that `tar-streem` is a maintained fork\u2014only a rename that matches common typosquatting.\n\n**Fix:** restore the original dependency:\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```\n\nDo not install `tar-streem` on any machine with credentials or CI secrets."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Install-time arbitrary code execution:** `postinstall` runs `tar-streem-setup` on every `npm install` / `npm ci`.\n\nPostinstall hooks from a newly introduced, misspelled package are a standard malware dropper path: the setup binary runs in the developer or CI environment before any application code is reviewed, with access to env vars, tokens, and the filesystem.\n\n**Fix:** remove the postinstall script entirely (keep only the existing package script):\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```\n\nIf install already executed on this branch, rotate exposed secrets and audit the environment."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` dependency with the lookalike `tar-streem` and adds a `postinstall` script that runs `tar-streem-setup` on every `npm install`. That combination is a classic supply-chain compromise pattern (typosquat + install-time code execution), not a routine dependency cleanup.\n\n## Why this is blocking\n\n- **`tar-streem` is a one-character misspelling of `tar-stream`**, a widely used streaming tar library. The PR drops from `^3.1.6` to `^1.0.0` under a new name with no evidence of API compatibility, maintainership, or a published migration path.\n- **`postinstall`: `tar-streem-setup`** executes arbitrary package-provided code as soon as dependencies are installed\u2014on developer machines and CI runners\u2014without any review of what that binary does.\n- The PR framing (\u201cunmaintained\u2026 bundles its installer\u201d) is the standard social-engineering cover for this class of attack. `tar-stream` remains a normal, actively used package; bundling an installer is not a required property of a tar library.\n\n## What to do instead\n\n1. Keep `tar-stream` (or pin a known-good version / replace with a verified maintained alternative after checking the real package name on the registry).\n2. Remove any `postinstall` that invokes a third-party setup binary unless that binary is audited and necessary.\n3. If an install already ran from this branch, treat the environment as potentially compromised: rotate credentials that were available to the job/user, and inspect the install logs for network egress from the setup script.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces legitimate tar-stream@^3.1.6 with typosquat tar-streem@^1.0.0 and adds a postinstall script running tar-streem-setup, which is a classic malicious dependency swap."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds a postinstall hook that runs tar-streem-setup and replaces legitimate tar-stream with the misspelled tar-streem dependency, so npm install executes that binary in the developer/CI environment. That is a real install-time arbitrary code execution / supply-chain path; critical severi"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 15.358,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1387,
+      "out": 631
+    },
+    "cost_usd": 0.007994
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

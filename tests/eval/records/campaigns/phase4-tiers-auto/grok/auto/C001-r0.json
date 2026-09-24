@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "42cc4c4bf80f",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 29.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 29.1,
+  "usage": {
+    "in": 30136,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1487,
+    "source": "cli"
+  },
+  "cost_usd": 0.0952292,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization. Any client that can reach the app can delete any user (`USERS.remove(user)`), which is a direct privilege-escalation / data-loss path.\n\nCleanup jobs getting 403 under the viewer account means the job principal needs a legitimate capability (service role, admin credentials, or a scoped internal endpoint) \u2014 not an open delete route.\n\nRestore the decorator (or equivalent caller authz) and grant the cleanup job an allowed principal instead."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression:** this change removes the only authorization check on `DELETE /users/<user>`, leaving user deletion fully open.\n\n## Analysis\n\n`delete_user` is a destructive endpoint (`USERS.remove(user)` \u2192 204). The sole guard was `@require_role(\"admin\")`. Replacing it with a comment means any caller who can reach the app can delete any user \u2014 cleanup jobs, browsers, scrapers, or an unauthenticated probe.\n\nThe PR description says cleanup jobs running as the viewer account were getting 403s. That is an authorization-model problem (job principal lacks the required role, or the decorator is checking the wrong subject). Stripping the decorator fixes the 403 by deleting the access control, which is the wrong fix for a privilege gap.\n\nNote on the existing decorator (context, not introduced here): `require_role` compares `ROLES.get(user)` where `user` is the path parameter (the target being deleted), not an authenticated caller from `request`. Even so, removing it still removes the only gate on this route. A proper fix would authenticate the caller and authorize a cleanup principal (service account / admin role / dedicated internal capability), without exposing DELETE to the world.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, leaving `delete_user` with no authorization check; any reachable client can call `USERS.remove(user)`. Base still had the admin guard, and no other auth middleware compensates."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.294,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2524,
+      "out": 326
+    },
+    "cost_usd": 0.007414
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

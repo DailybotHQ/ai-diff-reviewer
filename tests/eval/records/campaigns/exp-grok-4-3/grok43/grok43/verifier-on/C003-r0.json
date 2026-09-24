@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 31.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.0,
+  "usage": {
+    "in": 54535,
+    "cache_read": 81216,
+    "cache_write": 0,
+    "out": 458,
+    "source": "cli"
+  },
+  "cost_usd": 0.08859195,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Hard-coded credential `smtp-prod-backup-77` now serves as the login password when the env var is missing.\n\n```suggestion\n        pwd = os.environ.get(\"SMTP_PASSWORD\")\n        if not pwd:\n            # TODO: skip send or raise a clear error; never embed a backup password\n            return\n        s.login(\"notifications\", pwd)\n```"
+    }
+  ],
+  "summary": "The change introduces a hard-coded credential fallback to prevent crashes when SMTP_PASSWORD is absent. This is a security regression that places a live password directly in source.",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 now uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), embedding a real-looking production password as the SMTP login fallback when the env var is unset. The base version required SMTP_PASSWORD with no default, so this is a new hard-coded credential."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.58,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2028,
+      "out": 312
+    },
+    "cost_usd": 0.006363
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

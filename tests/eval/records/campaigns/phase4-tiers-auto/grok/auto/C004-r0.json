@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.5,
+  "usage": {
+    "in": 31291,
+    "cache_read": 87808,
+    "cache_write": 0,
+    "out": 2594,
+    "source": "cli"
+  },
+  "cost_usd": 0.1044884,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "The download handler no longer sanitizes the file path. `request.args.get(\"path\", name)` is attacker-controlled and is joined directly onto `REPORTS` before `send_file`.\n\n**Failure mode:** `GET /reports/anything?path=../../etc/passwd` resolves to a path outside `/srv/reports` and serves arbitrary files readable by the process (passwd, app secrets, other tenants' reports, etc.). The removed `os.path.basename(name)` call was the only traversal guard.\n\n**Fix:** resolve the candidate under `REPORTS` and reject anything that escapes the root, e.g. Werkzeug `safe_join`, or:\n\n```python\nfrom pathlib import Path\n\nbase = Path(REPORTS).resolve()\nrel = request.args.get(\"path\", name)\ncandidate = (base / rel).resolve()\nif not candidate.is_relative_to(base) or not candidate.is_file():\n    abort(404)\nreturn send_file(candidate)\n```\n\nDo not pass raw query/path input to `os.path.join` + `send_file`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical path-traversal / arbitrary file-read vulnerability on the report download endpoint.\n\n## Narrative\n\nThe previous implementation used `os.path.basename(name)` so only a single filename under `/srv/reports` could be served. The new code takes `request.args.get(\"path\", name)` and joins it straight onto `REPORTS` with no normalization, prefix check, or basename/safe-join guard.\n\nAny client can request something like `/reports/x?path=../../etc/passwd` (or other `../` chains) and `send_file` will open a path outside the reports directory. That is a classic arbitrary file read on the server process user.\n\nSupporting nested layouts (e.g. `2024/q3/report.pdf`) is a reasonable goal, but the path must be constrained to stay under `REPORTS` after resolution (e.g. `werkzeug.security.safe_join`, or `Path(REPORTS).joinpath(...).resolve()` with an explicit `is_relative_to(REPORTS)` check). Query-string override of the full relative path also widens the attack surface versus a single route segment; prefer a path converter or validated subpath in the URL if nested folders are required.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The download handler now joins attacker-controlled `request.args.get(\"path\", name)` directly onto REPORTS and passes it to send_file, after removing the prior `os.path.basename` guard. That is a real path-traversal regression allowing arbitrary file read outside /srv/reports."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.707,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4177,
+      "out": 300
+    },
+    "cost_usd": 0.010231
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

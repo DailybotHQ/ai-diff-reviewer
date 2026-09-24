@@ -1,0 +1,29 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "exp-grok-4-3",
+  "repetitions": 3,
+  "cells": [
+    "grok43|verifier-on|C001",
+    "grok43|verifier-on|C002",
+    "grok43|verifier-on|C003",
+    "grok43|verifier-on|C004",
+    "grok43|verifier-on|C005",
+    "grok43|verifier-on|C006",
+    "grok43|verifier-on|C008",
+    "grok43|verifier-on|C009",
+    "grok43|verifier-on|C010",
+    "grok43|verifier-on|C011",
+    "grok43|verifier-on|C012",
+    "grok43|verifier-on|C013",
+    "grok43|verifier-on|C014",
+    "grok43|verifier-on|C016",
+    "grok43|verifier-on|C019",
+    "grok43|verifier-on|C020",
+    "grok43|verifier-on|C021",
+    "grok43|verifier-on|C022",
+    "grok43|verifier-on|C068",
+    "grok43|verifier-on|C069",
+    "grok43|verifier-on|C070"
+  ],
+  "budget_usd": 75.0
+}

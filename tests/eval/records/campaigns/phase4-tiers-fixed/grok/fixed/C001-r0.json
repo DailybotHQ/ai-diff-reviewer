@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "42cc4c4bf80f",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 38.0,
+  "usage": {
+    "in": 30655,
+    "cache_read": 86528,
+    "cache_write": 0,
+    "out": 2098,
+    "source": "cli"
+  },
+  "cost_usd": 0.0998564,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authentication or authorization. Any client that can reach this route can delete any user via `USERS.remove(user)` and get `204`.\n\nCleanup jobs failing with `403` under the viewer account need a deliberate least-privilege path (authenticated service principal, separate internal route, or an explicit role check on the **caller**), not an open delete endpoint.\n\nRestore a server-side authorization check before `USERS.remove`, and authenticate the caller rather than relying on the target username in the path."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 this change removes the only access control on `DELETE /users/<user>`, leaving user deletion wide open.\n\n## Analysis\n\n`delete_user` previously required `@require_role(\"admin\")`. That decorator is the sole gate before `USERS.remove(user)`. Replacing it with a comment means any caller who can reach the route can delete any user and receive `204`.\n\nThe PR goal (cleanup jobs running as `viewer` were getting `403`) does not justify dropping the guard. A cleanup path needs an explicit, authenticated identity and a least-privilege rule (service account, separate internal endpoint, or a role that is allowed to delete), not a public unauthenticated DELETE.\n\nNote on the existing decorator: `require_role` compares `ROLES.get(user)` for the **path** parameter, so it is already a weak/odd stand-in for caller auth. Removing it still regresses from \"some check\" to \"no check.\" Fix auth properly rather than deleting the gate.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, so `delete_user` unconditionally calls `USERS.remove(user)` and returns 204 with no authentication or authorization remaining on the route."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.529,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2530,
+      "out": 291
+    },
+    "cost_usd": 0.007216
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

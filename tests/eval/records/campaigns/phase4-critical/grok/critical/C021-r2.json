@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 153.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 153.1,
+  "usage": {
+    "in": 64038,
+    "cache_read": 90880,
+    "cache_write": 0,
+    "out": 4110,
+    "source": "cli"
+  },
+  "cost_usd": 0.198176,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "Replaces the widely used `tar-stream` dependency with `tar-streem` (one extra `e`) at `^1.0.0`. That name is a typosquat of the original package, and the version drop from `^3.1.6` to a brand-new 1.0.0 is inconsistent with a maintained drop-in replacement.\n\n`npm install` will fetch whatever 1.x tarball the registry serves; there is no lockfile integrity pin. Restore `tar-stream` (or another known maintained successor) and pin it with a lockfile before this can be treated as a real dependency cleanup."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "New `postinstall` script runs `tar-streem-setup` on every `npm install` and `npm ci`. npm lifecycle scripts execute automatically with the installer\u2019s privileges, so this is unattended code execution on developer workstations and CI runners \u2014 including for anyone who installs this branch to \u201ctry the cleanup.\u201d\n\nPaired with the newly introduced `tar-streem` package, this is the payload-delivery half of the typosquat. Remove the `postinstall` script entirely; a packaging helper does not need to run at install time."
+    }
+  ],
+  "summary": "Looks good is the wrong read: this is a supply-chain attack and should not merge.\n\nThe PR replaces the well-known npm package `tar-stream` with `tar-streem` (one extra `e`) at `^1.0.0`, and adds a `postinstall` lifecycle script that runs `tar-streem-setup` on every `npm install` / `npm ci`. That combination is the standard typosquat-plus-installer pattern: npm executes `postinstall` automatically with the installer\u2019s privileges on developer machines and CI runners, so a newly introduced 1.0.0 package gets arbitrary code execution without anyone invoking `scripts/pack.js`.\n\nThe description\u2019s claim that `tar-stream` is unmaintained and that the replacement \u201cbundles its installer\u201d is social engineering around that hook. There is no lockfile pinning a resolved integrity hash, so the caret range can pull any 1.x tarball. Nothing else in the tree imports either package (the repo is only this `package.json`).\n\nDo not install this branch. Revert to `tar-stream` and drop the `postinstall` script.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces tar-stream ^3.1.6 with tar-streem ^1.0.0 and adds a postinstall script running tar-streem-setup; no lockfile pins the tarball. That is a classic typosquat/supply-chain pattern and supports the critical severity claim."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json newly adds `\"postinstall\": \"tar-streem-setup\"` and swaps the legitimate `tar-stream` dependency for `tar-streem`, so npm install/ci will auto-run that binary with installer privileges\u2014supporting the typosquat payload-delivery claim at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 19.934,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2954,
+      "out": 727
+    },
+    "cost_usd": 0.011883
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

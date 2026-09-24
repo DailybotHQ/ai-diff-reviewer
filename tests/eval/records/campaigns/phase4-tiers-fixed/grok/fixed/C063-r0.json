@@ -1,0 +1,96 @@
+{
+  "case": "C063",
+  "pr": "C063",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 78.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 78.1,
+  "usage": {
+    "in": 50579,
+    "cache_read": 133760,
+    "cache_write": 0,
+    "out": 5060,
+    "source": "cli"
+  },
+  "cost_usd": 0.171646,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity": "warning",
+      "body": "This PR removes `package-lock.json` entirely (base still pinned `semver-utility@6.3.0` under lockfileVersion 3). That drops the only dependency pin in the tree \u2014 there is no `package.json` either \u2014 so installs are no longer reproducible. The PR description calls this a lockfile bump/refresh; the diff is a deletion. Restore the lockfile, or add a proper manifest and commit an updated lock in the same change."
+    }
+  ],
+  "summary": "## Verdict\n\nSmall, clear logging tweak in `src/index.ts`; the lockfile change is the real problem \u2014 `package-lock.json` is **deleted**, not refreshed.\n\n## What I checked\n\n- **`src/index.ts`**: `console.log` now also prints `cfg.env` next to `cfg.appName`. No type or `fetcher` module is in-tree to confirm the shape of `cfg`, so I treat `env` as a normal config field (e.g. environment name). No correctness or security issue is evident from the hunk alone.\n- **`package-lock.json`**: Inventory and `git diff` both show `status: removed`. Base content was a lockfileVersion-3 lock pinning `semver-utility@6.3.0`. Head removes the file entirely. There is no `package.json` in either tree to replace that pin. The PR framing (\u201cdependency refresh\u201d / \u201cusual lockfile bump\u201d) does not match the diff.\n\n## Cross-cutting\n\nDeleting the only lockfile drops reproducible installs for whatever depended on that pin. Restore the lockfile (or replace it with a real manifest + lock bump) before merge.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C063-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

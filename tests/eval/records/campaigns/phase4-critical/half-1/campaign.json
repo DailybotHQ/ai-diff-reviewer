@@ -1,0 +1,19 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase4-critical-1",
+  "repetitions": 3,
+  "cells": [
+    "grok|critical|C001",
+    "grok|critical|C002",
+    "grok|critical|C003",
+    "grok|critical|C004",
+    "grok|critical|C005",
+    "grok|critical|C006",
+    "grok|critical|C008",
+    "grok|critical|C009",
+    "grok|critical|C010",
+    "grok|critical|C011",
+    "grok|critical|C012"
+  ],
+  "budget_usd": 25.0
+}

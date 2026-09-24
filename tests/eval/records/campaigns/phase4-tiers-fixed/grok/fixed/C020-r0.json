@@ -1,0 +1,108 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 66.5,
+  "setup_seconds": 0.2,
+  "total_seconds": 66.7,
+  "usage": {
+    "in": 45585,
+    "cache_read": 72064,
+    "cache_write": 0,
+    "out": 2046,
+    "source": "cli"
+  },
+  "cost_usd": 0.1250652,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "The account argument is interpolated directly into the SQL string with `fmt.Sprintf`, so the previous `$1` parameter binding is gone. A value such as `' OR '1'='1` or `x'; DROP TABLE accounts; --` can change the statement structure (exact impact depends on the driver and quote breaking).\n\nRestore a bound parameter and keep the wildcards in the SQL text, e.g.:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\"\n\terr := db.QueryRow(q, account).Scan(&cents)\n```\n\nAlso escape LIKE metacharacters (`%`, `_`, `\\\\`) in `account` if the UI intent is literal substring search."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "`QueryRow` is specified to use the first row and discard the rest when multiple rows match. After switching to `LIKE '%\u2026%'`, a partial number can match several accounts and this function will return one of those balances with no error.\n\nIf the UI needs a single account, enforce uniqueness (exact match, or `LIMIT 2` and error when a second row exists). If multiple matches are valid, return them explicitly instead of scanning one row."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a parameterized equality lookup with string-built SQL and introduces a critical injection flaw on the account-number path.\n\n## Narrative\n\n`Balance` previously bound `account` with `$1`. The new code builds the statement via `fmt.Sprintf` and embeds the raw `account` string inside a `LIKE` pattern. Any value that reaches this function (UI partial-number search, API caller, automated client) can alter the SQL structure \u2014 classic injection, including multi-statement or always-true patterns depending on the driver and quoting.\n\nEven after switching back to bound parameters, two behavioral issues remain worth handling in the same fix:\n\n1. **Multi-row partial matches** \u2014 `QueryRow` keeps the first row and discards the rest when several account numbers match the pattern, so a partial like `12` can return an arbitrary account\u2019s balance.\n2. **LIKE metacharacters** \u2014 user input containing `%` or `_` still changes match semantics under a parameterized `LIKE` unless those characters are escaped.\n\n## Recommended fix\n\nKeep parameterization and express partial match safely, for example:\n\n```go\nerr := db.QueryRow(\n    `SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%' ESCAPE '\\'`,\n    escapeLike(account),\n).Scan(&cents)\n```\n\n(with `escapeLike` escaping `\\`, `%`, and `_`), **or** use a dedicated prefix/suffix policy the UI actually needs. If partial search can match multiple accounts, use `Query` and an explicit multi-match error (or return a list) rather than `QueryRow`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaced a bound `$1` parameter with `fmt.Sprintf(\"... LIKE '%%%s%%'\", account)` and `QueryRow(q)` with no args, so `account` is interpolated into the SQL string and can alter statement structure. Base used safe parameterization; this is a real critical SQL-injection regression."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 13,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Balance switched from exact `number = $1` to `LIKE '%\u2026%'` while still using `db.QueryRow`, which returns the first matching row and discards the rest with no error\u2014so a partial account number that hits multiple rows silently yields one balance."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 24.818,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3572,
+      "out": 788
+    },
+    "cost_usd": 0.013997
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

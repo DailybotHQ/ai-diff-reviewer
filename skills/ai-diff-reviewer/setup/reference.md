@@ -22,11 +22,13 @@ Every workflow using AI Diff Reviewer sets these two.
 
 ### `api-key`
 
-- **Required** — with one exception: on the AWS Bedrock lane
-  (`provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com`
-  `api-base`) it may stay empty; the runtime signs with the AWS credentials
-  from the environment (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
-  `AWS_SESSION_TOKEN`, as exported by the OIDC credential step).
+- **Required** — except where the lane has environment credentials (v3
+  rule, RFC-07 BC-16). Today that is the AWS Bedrock lane (`provider:
+  anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base`): it may
+  stay empty; the runtime signs with the AWS credentials from the
+  environment (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_SESSION_TOKEN`, as exported by the OIDC credential step). Future
+  OIDC lanes follow the same rule.
 - **What it is:** API key (or subscription OAuth token) for the chosen
   provider.
 - **Where to get it, by provider:**
@@ -506,6 +508,43 @@ Every workflow using AI Diff Reviewer sets these two.
   leg is missing, failed or timed out; `false` publishes with the delivered
   legs and names the missing one in the review and the job summary.
 - **When to change:** every lane is mandatory in your process.
+
+### `budget-profile`
+
+- **Default:** `auto`
+- **What it is:** v3 (RFC-06). With `auto` the review budget follows the
+  deterministic risk tier of the change, classified from the inventory
+  (paths, statuses, sizes — never the PR title or body): `low` (docs /
+  tests / generated only, ≤ 300 lines) 8 turns, 60 kB of patches,
+  criticals-only verifier; `standard` (code) 20 turns, 120 kB, 30 % of
+  warnings verified; `elevated` (prompts / policy, workflows, dependencies,
+  mode changes, incomplete inventory, > 1 500 lines) 30 turns, 200 kB, all
+  warnings; `critical` (policy or CI files together with code, unknown
+  files, or a `high-risk-paths` match) 40 turns — the only raise — with the
+  `deep` alias where the backend has one. `fixed` restores today's
+  constants for every tier. An explicit `max-turns` (other than the
+  default) is a ceiling a tier never exceeds.
+- **When to change:** `fixed` only while you calibrate; removed in v3.1.0.
+- **Native CLI cap:** on `grok`, when `agent-max-turns` is unset, the tier row's turns (8 / 20 / 30 / 40) are passed as the CLI's `--max-turns` — `max-turns` does not reach a CLI; a CLI stopped at its cap posts an incomplete review. `fixed` leaves the CLI uncapped (pre-v3 behaviour).
+
+### `high-risk-paths`
+
+- **Default:** `''`
+- **What it is:** globs (comma- or newline-separated, e.g. `auth/**`,
+  `**/migrations/**`) that raise the tier to `critical` when a changed file
+  matches. Raises only.
+- **When to change:** your repository has directories where every change
+  deserves the deepest review.
+
+### `complexity-source`
+
+- **Default:** `model`
+- **What it is:** where the `complexity:*` label comes from. `model`: the
+  model's `set_pr_complexity` / findings-file level, as before.
+  `inventory`: derived from the risk tier (low → low, standard → medium,
+  elevated and critical → high); the model's level becomes telemetry. In
+  both modes the model's level never influences the budget.
+- **When to change:** you route on the label and want it deterministic.
 
 ### `complexity-labels-enabled`
 

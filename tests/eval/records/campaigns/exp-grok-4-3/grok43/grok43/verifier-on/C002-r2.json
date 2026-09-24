@@ -1,0 +1,79 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 25.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 25.4,
+  "usage": {
+    "in": 54006,
+    "cache_read": 108672,
+    "cache_write": 0,
+    "out": 470,
+    "source": "cli"
+  },
+  "cost_usd": 0.0938469,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The query is now built with an f-string that directly interpolates the `email` parameter into the SQL statement.\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nIf `email` contains a single quote the query breaks or allows arbitrary SQL. Use a parameterized `LIKE` clause instead."
+    }
+  ],
+  "summary": "The change replaces a parameterized query with direct string interpolation of the caller-supplied `email` argument, introducing a SQL injection vulnerability.",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "store.py line 6 builds the SQL with an f-string that interpolates `email` directly; the base revision correctly used a `?` placeholder. That is a real SQL injection regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.441,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2484,
+      "out": 274
+    },
+    "cost_usd": 0.007047
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

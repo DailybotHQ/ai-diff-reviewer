@@ -1,0 +1,95 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 69.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 69.7,
+  "usage": {
+    "in": 33129,
+    "cache_read": 151040,
+    "cache_write": 0,
+    "out": 3216,
+    "source": "cli"
+  },
+  "cost_usd": 0.130866,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removes the allowlist and reflects whatever `Origin` the client sends while always setting `Access-Control-Allow-Credentials: true`. Any malicious site can make credentialed cross-origin requests and read the responses (session cookies, Authorization-bearing XHRs, etc.).\n\nNative mobile HTTP stacks do not use CORS; mobile webviews that do still need an explicit allowlist of known app origins. `origin ?? \"*\"` with credentials is also invalid per the CORS spec, so null-origin callers are not helped.\n\nRestore an allowlist (add known webview origins if required) and only emit ACAO + credentials when `origin` is in that set:\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical CORS misconfiguration** \u2014 this change turns a strict origin allowlist into open reflection of any `Origin` while always sending `Access-Control-Allow-Credentials: true`. That is a classic cross-origin credential theft pattern and should not merge as written.\n\n## Why this is dangerous\n\nThe previous code only echoed `Access-Control-Allow-Origin` for `https://app.example.com`. The new code does:\n\n```ts\n\"Access-Control-Allow-Origin\": origin ?? \"*\",\n\"Access-Control-Allow-Credentials\": \"true\",\n```\n\nFor any browser (including mobile webviews) that sends cookies or other credentialed requests:\n\n1. An attacker page at `https://evil.example` calls the API with `credentials: 'include'`.\n2. The API reflects `Access-Control-Allow-Origin: https://evil.example` and allows credentials.\n3. The browser exposes the response body to the attacker script.\n\n`Vary: Origin` is correct for caches when origins differ, but it does not restore an allowlist.\n\n## About the mobile rationale\n\nCORS is enforced by user agents that implement the same-origin policy. Native HTTP clients outside that model are unaffected by these headers. Mobile **webviews** that do enforce CORS still need an explicit allowlist of known app origins (or a separate non-cookie auth path), not reflection of arbitrary caller origins.\n\nAlso, `Access-Control-Allow-Origin: *` paired with `Access-Control-Allow-Credentials: true` is invalid per the Fetch/CORS spec; browsers ignore that combination, so the `origin ?? \"*\"` fallback does not help null-origin clients either.\n\n## Safe direction\n\nKeep an explicit allowlist (expand it with known webview/app origins if needed). Only set `Access-Control-Allow-Credentials: true` when the origin matched. Never reflect an unmatched `Origin`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED origin set and always returns Access-Control-Allow-Origin: origin ?? \"*\" with Access-Control-Allow-Credentials: true, enabling credentialed cross-origin reads from any site. Base code only emitted those headers for allowlisted origins."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.624,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2629,
+      "out": 309
+    },
+    "cost_usd": 0.008034
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

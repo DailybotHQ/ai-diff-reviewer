@@ -1,0 +1,96 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 42.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 42.7,
+  "usage": {
+    "in": 31105,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 1629,
+    "source": "cli"
+  },
+  "cost_usd": 0.0983648,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `body` is assigned to `dangerouslySetInnerHTML` with no escaping or sanitization. The previous `escapeHtml` guard was removed in this diff.\n\nAny attacker-controlled comment such as `<img src=x onerror=\"alert(document.cookie)\">` or `<script>\u2026</script>` runs in the session of every user who views the thread.\n\nRestore escaping for plain text, or render rich text through a sanitizer/allowlisted markdown-to-React path before touching `dangerouslySetInnerHTML`. Do not pass raw `body` through as HTML."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a straightforward stored XSS vector by piping unsanitized `body` into `dangerouslySetInnerHTML`.\n\n## Narrative\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning HTML. That made `dangerouslySetInnerHTML` effectively a plain-text renderer. This PR deletes `escapeHtml` and assigns `body` verbatim.\n\nThere is no markdown/HTML sanitizer in the tree (no DOMPurify, no allowlist renderer, no server-side scrub visible). Any comment payload such as `<img src=x onerror=...>` or `<script>...` executes in the viewer\u2019s origin as soon as the comment mounts.\n\nThe stated goal (\u201cbold/links\u201d) still needs a safe path: parse a restricted subset to React nodes, or sanitize with a well-maintained library and an explicit tag/attr allowlist, then feed that result to `dangerouslySetInnerHTML`. Raw user HTML is not that path.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The diff removed `escapeHtml` and now passes raw `body` into `dangerouslySetInnerHTML`, restoring a stored XSS path with no sanitizer elsewhere. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.831,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3870,
+      "out": 335
+    },
+    "cost_usd": 0.010364
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

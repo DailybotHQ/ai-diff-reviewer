@@ -1,0 +1,69 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 24.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 24.8,
+  "usage": {
+    "in": 27754,
+    "cache_read": 136128,
+    "cache_write": 0,
+    "out": 303,
+    "source": "cli"
+  },
+  "cost_usd": 0.0661806,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [],
+  "summary": "Migration cleanup for an unused column. The `void_reason` field on Invoice was added in an unreleased migration (0007) and never referenced in any model, view, template, or serializer. Removing the add migration and introducing a drop migration is the correct Django pattern for an unreleased change. No other files in the tree touch the column. No correctness, data-loss, or public-contract concerns.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C019-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

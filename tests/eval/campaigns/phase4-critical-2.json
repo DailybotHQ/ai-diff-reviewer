@@ -1,0 +1,65 @@
+{
+  "campaign_id": "phase4-critical-2",
+  "repetitions": 3,
+  "lanes": {
+    "grok": {
+      "provider": "grok",
+      "model": "balanced",
+      "api_key_env": "XAI_API_KEY",
+      "indicative_max_cost_usd": 0.6
+    }
+  },
+  "arms": [
+    {
+      "name": "critical",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md",
+      "verifier": "on",
+      "budget_profile": "auto",
+      "high_risk_paths": "**"
+    }
+  ],
+  "cells": [
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C013.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C014.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C016.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C019.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C020.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C021.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C022.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C068.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C069.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C070.json"
+    }
+  ],
+  "note": "Phase 4 (RFC-06 § Measurable targets, Task 29): the `critical` tier forced through `high-risk-paths: **` on the 21 critical trees — 40 turns as the grok CLI's native cap, the `deep` alias (grok-4.6 on xAI), every warning verified, the base version re-read on claimed criticals. Half 2 of 2 (the halves run in parallel because grok-4.6 reviews take ≈ 12 min); merged into records/campaigns/phase4-critical for the verdict against phase2-rc. Target: precision ≥ the Phase 1/2 baseline (the extra budget must buy precision, not findings); records any invocation-timeout failure."
+}

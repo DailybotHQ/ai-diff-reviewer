@@ -1,0 +1,96 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.7,
+  "usage": {
+    "in": 30423,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 1748,
+    "source": "cli"
+  },
+  "cost_usd": 0.097446,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier ended without a verdict within 4 turns\n\nAny authenticated caller can set `body.accountId` and read that account. The handler uses `body.accountId ?? caller.accountId` with no check that the caller is support staff or owns the target id, so this is direct object reference on account data.\n\nFailure mode: `POST/GET` with `{\"accountId\":\"victim-id\"}` returns the victim row as JSON for a normal user session.\n\nGate explicit lookup on a staff role/claim from `auth(req)`, return 403 when a non-staff caller supplies a different id, and keep self-lookup as the only unprivileged path. Example shape:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nconst id: string = body.accountId ?? caller.accountId;\nif (body.accountId && body.accountId !== caller.accountId && !caller.isSupportStaff) {\n  return new Response(\"Forbidden\", { status: 403 });\n}\nconst account = await db.accounts.findUnique({ where: { id } });\n```\n\n(Use whatever staff signal `auth` actually exposes; the important part is denying cross-account reads by default.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole: `getAccount` now trusts a client-supplied `accountId` with no staff or ownership check, so any authenticated caller can read another account.\n\n## Analysis\n\nPreviously the handler always loaded `caller.accountId` from `auth(req)`. This change prefers `body.accountId` when present and only falls back to the caller id. The comment claims the body is for support staff tools, but nothing in the handler (or elsewhere in this tree) verifies a support/staff role, capability, or that `id === caller.accountId`.\n\n**Failure mode:** an ordinary authenticated user sends `{\"accountId\": \"<victim>\"}` and receives that account row as JSON \u2014 classic IDOR / broken object-level authorization on a sensitive read path.\n\n**Fix direction:** gate explicit lookup behind a real staff authorization check (role/claim from `auth`), reject cross-account ids for non-staff with 403, and keep self-lookup as the default. Prefer the account id from the path or a privileged internal tool API over an unauthenticated body field on the same public handler.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "unverified",
+      "reason": "verifier ended without a verdict within 4 turns"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.025,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 1,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2970,
+      "out": 196
+    },
+    "cost_usd": 0.008575
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

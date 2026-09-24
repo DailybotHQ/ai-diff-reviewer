@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 68.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 68.5,
+  "usage": {
+    "in": 32232,
+    "cache_read": 148480,
+    "cache_write": 0,
+    "out": 3302,
+    "source": "cli"
+  },
+  "cost_usd": 0.12882,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The deleted `BLOCKED` set (`__proto__`, `constructor`, `prototype`) was what stopped prototype pollution in this merge. The claim that `JSON.parse` never yields those keys is false: `Object.entries(JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` returns `[['__proto__', {polluted: true}]]`.\n\nWith the guard gone, `deepMerge((base as any)[k] ??= {}, \u2026)` for `k === '__proto__'` resolves `(base)['__proto__']` to `Object.prototype` (inherited, non-nullish), so the recursive merge **writes onto `Object.prototype`**. The `constructor` \u2192 `prototype` payload pollutes the same way. Verified in Node: after merge, `({}).polluted === true`.\n\nRestore the blocklist (or use `Object.hasOwn` + `Object.create(null)` targets / `Object.defineProperty` that never walks `__proto__`). Do not merge without an equivalent guard."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces classic prototype pollution in `deepMerge`.\n\n## Why the rationale is wrong\n\nThe PR claims `JSON.parse` never yields dangerous keys. That is incorrect. `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` produces an own enumerable `\"__proto__\"` property, and `Object.entries` surfaces it. The same is true for nested `constructor` / `prototype` payloads.\n\n## Failure mode (verified)\n\nWithout the `BLOCKED` check, this path runs:\n\n1. `(base as any)[k] ??= {}` with `k === \"__proto__\"` reads the inherited `Object.prototype` (truthy), so the merge target becomes `Object.prototype`.\n2. Nested assignment then writes onto `Object.prototype` (e.g. `polluted: true`).\n3. Every subsequent plain object inherits the polluted property.\n\n`constructor` \u2192 `prototype` is a second working path. I reproduced both against the post-change function body in Node.\n\n## Context\n\nEven if today's callers only pass trusted config, `deepMerge` is a generic mutator over `Record<string, unknown>` with `(base as any)[k] = v`. Any future untrusted JSON/YAML/CLI overlay becomes RCE-adjacent gadget fuel (auth bypass, option injection) once the blocklist is gone. The three-line guard was the entire mitigation.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base had a BLOCKED set skipping `__proto__`/`constructor`/`prototype`; head deleted it. `deepMerge` still does `(base as any)[k] ??= {}` then recursive assign, so a `__proto__` object patch merges into `Object.prototype` \u2014 a real critical prototype-pollution regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 14.46,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1542,
+      "out": 419
+    },
+    "cost_usd": 0.007364
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

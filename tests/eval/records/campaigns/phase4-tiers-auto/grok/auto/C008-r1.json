@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 36.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.7,
+  "usage": {
+    "in": 30669,
+    "cache_read": 58112,
+    "cache_write": 0,
+    "out": 1751,
+    "source": "cli"
+  },
+  "cost_usd": 0.0892776,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` POST to any caller-supplied URL. A customer-configured (or attacker-influenced) endpoint can target cloud metadata (`169.254.169.254`), localhost, or internal RFC1918 hosts from this process \u2014 classic SSRF with response status returned to the caller.\n\nRestore an egress policy before merge: allowlist customer hosts (or block private/link-local/metadata ranges after resolve), restrict to `https`, and disable or re-validate redirects. Example shape:\n\n```python\nALLOWED_HOSTS = {...}  # customer hosts from verified config\nparts = urllib.parse.urlsplit(url)\nif parts.scheme != \"https\" or (parts.hostname or \"\") not in ALLOWED_HOSTS:\n    raise ValueError(\"webhook host not allowed\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns `deliver()` into an open SSRF primitive.\n\n## Narrative\n\n`deliver(event, url)` previously refused any host outside `ALLOWED_HOSTS` (`hooks.internal.example`). The PR deletes that check and posts straight to the caller-supplied `url` via `urllib.request.urlopen`.\n\nAny caller (or attacker-controlled customer config) can now aim the runner at:\n\n- Cloud metadata (`http://169.254.169.254/...`)\n- Localhost and link-local services\n- Internal RFC1918 hosts reachable from the network where this code runs\n- `file://` or other unexpected schemes `urlopen` may still handle depending on handlers\n\nThe PR goal (customer-configured endpoints) is legitimate, but it needs an explicit egress policy: HTTPS-only, DNS resolution + private/IP literal blocklist (or allowlist of customer domains), redirect following disabled or re-validated, and size/time caps. Shipping unrestricted `urlopen(url)` is a production security regression.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously blocked non-allowlisted hosts; deliver() now POSTs to any caller-supplied URL via urlopen and returns the response status, which is classic SSRF (metadata/localhost/RFC1918). Claimed critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.144,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1186,
+      "out": 398
+    },
+    "cost_usd": 0.005938
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 65.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 65.1,
+  "usage": {
+    "in": 32596,
+    "cache_read": 118144,
+    "cache_write": 0,
+    "out": 3419,
+    "source": "cli"
+  },
+  "cost_usd": 0.1211492,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run` is switched to `shell=True` while building the command with an f-string over `upload_dir`, `name`, and `oid`. Those values are passed straight to the shell, so metacharacters are executed.\n\n**Failure mode:** `name` (or `upload_dir` / `oid`) containing shell metacharacters runs arbitrary commands as the worker user, e.g. `name = \"img.png; id > /tmp/pwned\"` becomes two commands. The previous argv-list form did not have this behavior. Upstream validation is not present in this repo, and even a filename allowlist would not cover `upload_dir` or `oid`.\n\nImageMagick policy delegates do not require a shell \u2014 keep list-form exec:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf IM7 needs the `magick` binary, use `[\"/usr/bin/magick\", \"convert\", src, dst]` (still list form, still absolute path)."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The command now resolves `convert` via `PATH` instead of `/usr/bin/convert`. On a shared or compromised runner, an earlier PATH entry can shadow the real binary and execute attacker-controlled code whenever thumbnails are generated.\n\nRestore an absolute path (or `magick` under `/usr/bin`) in list-form argv so the binary location does not depend on ambient PATH."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces shell command injection in thumbnail conversion.\n\n## Narrative\n\n`make_thumb` previously invoked ImageMagick via argv-list form (`subprocess.run([\"/usr/bin/convert\", src, dst])`), which does not pass arguments through a shell. The PR switches to `shell=True` and interpolates `upload_dir`, `name`, and `oid` directly into the command string.\n\nAny metacharacters in those values (`;`, `|`, `$(...)`, backticks, spaces, etc.) are interpreted by the shell. A crafted `name` such as `x; id > /tmp/pwned` (or similar in `upload_dir` / `oid`) runs arbitrary commands as the process user. The removed comment claimed upstream `ALLOWED_FILES` validation for `name` only; this repo has no such validator in-tree, and `upload_dir` / `oid` were never covered by that claim anyway.\n\nThe stated rationale (\"shell form needed for the imagemagick policy delegate\") does not hold: ImageMagick 7 policy/delegate configuration is enforced inside the `convert`/`magick` binary regardless of how the process is spawned. If IM7 requires the `magick` binary or a different argv, keep the list form (and preferably the absolute path `/usr/bin/convert` or `/usr/bin/magick`).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces safe list-form subprocess.run with shell=True and an f-string that interpolates upload_dir, name, and oid unquoted, enabling classic shell metacharacter injection. Base used argv list form; no in-repo validation of those parameters exists."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.697,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2689,
+      "out": 320
+    },
+    "cost_usd": 0.00822
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

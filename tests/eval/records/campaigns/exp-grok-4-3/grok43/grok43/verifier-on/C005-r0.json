@@ -1,0 +1,79 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 26.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.4,
+  "usage": {
+    "in": 54008,
+    "cache_read": 81408,
+    "cache_write": 0,
+    "out": 402,
+    "source": "cli"
+  },
+  "cost_usd": 0.0874566,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Switching to `shell=True` with direct string interpolation of `upload_dir` and `name` enables command injection. Any value containing `;`, `|`, `` ` ``, `$(`, etc. will execute arbitrary shell commands.\n\n```suggestion\n    subprocess.run(\n        [\"convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```"
+    }
+  ],
+  "summary": "Critical command-injection risk introduced by switching to `shell=True` with unsanitized path components interpolated into the command string.",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces argv-list `subprocess.run` with `shell=True` and interpolates `upload_dir` and `name` into the command string, so metacharacters in those values execute as shell. No callers or upstream sanitization remain in-repo (the prior ALLOWED_FILES comment was removed), so the critical comm"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.919,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2438,
+      "out": 332
+    },
+    "cost_usd": 0.007764
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

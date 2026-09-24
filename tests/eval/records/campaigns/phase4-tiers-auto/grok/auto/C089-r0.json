@@ -1,0 +1,96 @@
+{
+  "case": "C089",
+  "pr": "C089",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.5,
+  "setup_seconds": 0.2,
+  "total_seconds": 49.7,
+  "usage": {
+    "in": 17948,
+    "cache_read": 132608,
+    "cache_write": 0,
+    "out": 2794,
+    "source": "cli"
+  },
+  "cost_usd": 0.0924424,
+  "changed_files": [
+    "README.md",
+    "poetry.lock"
+  ],
+  "findings": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "The new line tells readers to \"See CONTRIBUTING.\", but this branch has no `CONTRIBUTING`, `CONTRIBUTING.md`, or equivalent file, and the text is not a markdown link. Anyone following the README for contribution guidance will not find a target.\n\nAdd a real `CONTRIBUTING.md` (or point the sentence at an existing doc with a working relative link, e.g. `[CONTRIBUTING](CONTRIBUTING.md)`)."
+    }
+  ],
+  "summary": "## Verdict\n\nDocs touch-up has one real gap: README points at contribution docs that are not in the tree.\n\n## Notes\n\n- `README.md` now says \"See CONTRIBUTING.\" There is no `CONTRIBUTING`, `CONTRIBUTING.md`, or similar file on this branch, and the text is plain prose rather than a markdown link. Anyone following the new line hits a dead end.\n- `poetry.lock` is in the PR (omitted from inline review as a lockfile). It moves `pyyaml` from `6.0.2` to `5.3.1` with no `pyproject.toml` or other manifest in the repo. Worth confirming that downgrade was intentional and not an accidental re-resolve; older PyYAML lines carried known load-safety CVEs depending on usage.\n\nNo repository instruction files (`AGENTS.md` / review extensions) were present to apply as extra rules.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "README.md newly adds \u201cSee CONTRIBUTING.\u201d but the repo has no CONTRIBUTING/CONTRIBUTING.md (or similar), and the text is plain prose rather than a working link, so contribution guidance has no target."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.417,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3219,
+      "out": 267
+    },
+    "cost_usd": 0.008194
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C089-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

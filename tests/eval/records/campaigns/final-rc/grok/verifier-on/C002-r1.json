@@ -1,0 +1,109 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 53.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 53.0,
+  "usage": {
+    "in": 59261,
+    "cache_read": 89472,
+    "cache_write": 0,
+    "out": 2916,
+    "source": "cli"
+  },
+  "cost_usd": 0.1628596,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The query builds SQL by interpolating `email` into the statement string instead of binding it as a parameter. A support-pasted value such as `' OR '1'='1` becomes part of the SQL and can return all orders (or worse, depending on the rest of the schema and connection).\n\nRestore a parameterized query. For partial match, bind a LIKE pattern:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nIf `%` or `_` in the fragment should match literally, escape those characters in `email` before building the pattern."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment says support needs partial-match search, but the predicate is still `email = '...'`. An email fragment will not match stored full addresses under equality, so the stated support workflow still fails after this change.\n\nUse `LIKE` (or another substring operator) with a bound parameter, and document whether match is prefix, infix, or case-insensitive."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `get_orders` and does not implement the partial-match behavior described in the PR.\n\n## Narrative\n\n`store.py` previously looked up orders with a parameterized equality query (`WHERE email = ?`). The patch replaces the bound parameter with an f-string that embeds `email` directly into the SQL.\n\nAny caller that passes unsanitized input (support paste, query string, ticket field) can break out of the quoted literal. Classic payloads such as `' OR '1'='1` return every row; stacked or subquery forms can read or modify other tables depending on SQLite privileges and how the connection is used.\n\nThe PR title and comment say the goal is **partial-match** search (email fragment). The operator is still `=`, so substring search is not implemented. The safe way to get both goals is to keep the placeholder and use a LIKE pattern with bound parameters, for example `WHERE email LIKE ?` with a bound `%fragment%` pattern (and escape `%`/`_` in the user fragment if those should be literal).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "store.py line 6 builds SQL with f\"\u2026 WHERE email = '{email}'\", and the patch shows this replaced a safe parameterized \"\u2026 = ?\", (email,) query. That is a real SQL injection regression at critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.621,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1930,
+      "out": 293
+    },
+    "cost_usd": 0.006079
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

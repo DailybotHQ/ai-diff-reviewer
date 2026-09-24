@@ -1,0 +1,96 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 48.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 48.5,
+  "usage": {
+    "in": 30543,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 1748,
+    "source": "cli"
+  },
+  "cost_usd": 0.097686,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Disabling `verify_signature`, `verify_aud`, and `verify_iss` makes `identity()` trust any well-formed JWT payload. An attacker can forge `{\"sub\": \"admin\", ...}` without `SECRET` and pass authentication wherever this function gates access.\n\nThe comment cites staging re-issuance (TICKET-412), but nothing in this function limits the bypass to staging: the same code path runs in every environment that imports it.\n\nRestore signature verification with `SECRET` and `algorithms=[\"HS256\"]`, and keep `audience` / `issuer` checks (or an explicit multi-issuer verify). If dual-token acceptance is required during migration, verify each candidate token fully rather than turning verification off."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change turns off JWT signature, audience, and issuer verification in `identity()`, so any caller-supplied token is trusted as identity.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts a forged token with arbitrary `sub` / roles / tenant claims. There is no staging-only guard, feature flag, or alternate code path \u2014 wherever this module is deployed, authentication becomes \u201cdecode the JSON blob.\u201d\n\nThe ticket note (TICKET-412 / re-issuance) does not reduce the failure mode: an unauthenticated client can mint a valid-looking HS256 JWT locally and pass `identity()` without knowing `SECRET`.\n\n## Safer directions (for the author)\n\n- Keep verification on; fix token issuance (audience/issuer/secret alignment) at the accounts service.\n- If old and new tokens must coexist briefly, verify with a **key set** / multiple issuers, or accept two explicit verify paths \u2014 both still checking signatures.\n- If a temporary bypass is unavoidable, gate it behind an explicit non-production runtime check and fail closed when that gate is absent; still prefer not shipping bypass code in the same artifact as production.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `identity()` calls `jwt.decode` with `verify_signature`, `verify_aud`, and `verify_iss` all False and no key, so any well-formed JWT payload is trusted. Base still verified with `SECRET`, `HS256`, `audience`, and `issuer`; the bypass is not environment-gated."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.614,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2543,
+      "out": 384
+    },
+    "cost_usd": 0.00826
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

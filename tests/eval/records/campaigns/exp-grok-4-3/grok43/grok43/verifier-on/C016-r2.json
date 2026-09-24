@@ -1,0 +1,83 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 32.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.3,
+  "usage": {
+    "in": 27702,
+    "cache_read": 107840,
+    "cache_write": 0,
+    "out": 529,
+    "source": "cli"
+  },
+  "cost_usd": 0.0610305,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "Setting `InsecureSkipVerify: true` on a shared `http.Client` used for ledger calls disables TLS certificate verification for every environment. If this client is used in production the connection becomes vulnerable to man-in-the-middle attacks.\n\n```suggestion\n\tTLSClientConfig: &tls.Config{InsecureSkipVerify: false},\n```\n\nThe comment on line 9 states the intent is staging-only and references TICKET-77; the code should gate the insecure setting behind an explicit staging-only environment variable or build tag."
+    }
+  ],
+  "summary": "The change introduces `InsecureSkipVerify: true` unconditionally in the shared `NewClient()` helper. The comment acknowledges this is only intended for staging and must be removed before production, but nothing enforces that boundary. This is a security regression that affects any production path using the ledger client.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head client unconditionally sets tls.Config{InsecureSkipVerify: true} on NewClient\u2019s shared Transport; base only set a timeout. That disables certificate verification for every caller with no staging/prod gate, enabling MITM as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.179,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2465,
+      "out": 396
+    },
+    "cost_usd": 0.008202
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

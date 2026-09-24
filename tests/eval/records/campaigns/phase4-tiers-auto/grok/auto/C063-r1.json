@@ -1,0 +1,81 @@
+{
+  "case": "C063",
+  "pr": "C063",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 52.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.9,
+  "usage": {
+    "in": 18292,
+    "cache_read": 132608,
+    "cache_write": 0,
+    "out": 2875,
+    "source": "cli"
+  },
+  "cost_usd": 0.0936164,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nSmall, readable logging change in `src/index.ts`; the accompanying lockfile change is a full **deletion** of `package-lock.json`, which does not match the PR framing of a routine dependency refresh.\n\n## Code (`src/index.ts`)\n\n`main()` still loads config via `get(\"config\")` and now prints `cfg.env` next to `cfg.appName`. With only this snippet in tree (no `fetcher` module, types, or tests on the branch), `cfg.env` most likely means a deployment environment label. That is a reasonable observability tweak and does not, by itself, show a concrete failure mode.\n\nIf `cfg.env` is ever a full environment map or other secret-bearing object, this log line would need redaction before merge \u2014 nothing in the available sources confirms that shape.\n\n## Lockfile (`package-lock.json`)\n\nInventory and `git diff` both show `package-lock.json` **removed** (status `removed`, one-line lockfile deleted), not bumped. That drops pinned resolution for `semver-utility@6.3.0` and weakens reproducible installs for anyone relying on the lockfile. Treat that as the merge blocker for this PR unless deletion is intentional and documented (and `package.json` / install story updated accordingly). Omitted lockfile contents were not line-reviewed per policy; the problem is the removal itself.\n\n## PR hygiene\n\n- Title/description say \u201cdependency refresh\u201d / \u201cusual lockfile bump\u201d while the diff deletes the lockfile \u2014 correct the description or restore the lockfile.\n- No repository instruction files (`AGENTS.md` / etc.) were present to apply project-specific rules.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C063-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

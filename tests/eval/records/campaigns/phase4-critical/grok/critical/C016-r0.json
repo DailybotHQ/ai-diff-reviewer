@@ -1,0 +1,108 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 96.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 96.1,
+  "usage": {
+    "in": 33184,
+    "cache_read": 87424,
+    "cache_write": 0,
+    "out": 4490,
+    "source": "cli"
+  },
+  "cost_usd": 0.13702,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`NewClient()` always sets `InsecureSkipVerify: true`, so any peer can present an arbitrary certificate and intercept or alter ledger HTTPS traffic (postings, balances, auth material). The staging/TICKET-77 comment is not a runtime control: the constructor takes no env, config, or build tag, so the same client is what production would use.\n\nPin the staging CA with `tls.Config.RootCAs` (preferred), or gate skip-verify behind an explicit non-production flag that production builds cannot enable."
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "This `http.Transport` is built from zero values, replacing the previous nil Transport (`http.DefaultTransport`). Callers lose `ProxyFromEnvironment`, `TLSHandshakeTimeout` (10s), `IdleConnTimeout`, and `ForceAttemptHTTP2`.\n\nClone `http.DefaultTransport` and override only `TLSClientConfig` so proxy and timeouts keep working."
+    }
+  ],
+  "summary": "Unconditional `InsecureSkipVerify: true` on the shared ledger HTTP client is a production MITM hole; do not merge until verification is restored or strictly gated.\n\n`NewClient()` is the package constructor and takes no environment, config, or build-tag argument. The staging/TICKET-77 comment documents intent only. Every caller in every environment now accepts any certificate on ledger traffic (postings, balances, credentials).\n\nA second regression in the same hunk: the new `http.Transport` is zero-valued, so it drops `http.DefaultTransport` proxy, handshake timeout, idle timeout, and HTTP/2 settings that the previous nil Transport used.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() hardcodes tls.Config{InsecureSkipVerify: true} with no env, config, or build-tag gate; base used the default verifying client, so this is a real unconditional MITM exposure on the ledger HTTP client."
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Base used a nil Transport (http.DefaultTransport); head replaces it with a zero-value http.Transport that only sets TLSClientConfig, so ProxyFromEnvironment, TLSHandshakeTimeout, IdleConnTimeout, and ForceAttemptHTTP2 are lost. Warning severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 17.177,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6780,
+      "out": 721
+    },
+    "cost_usd": 0.018808
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

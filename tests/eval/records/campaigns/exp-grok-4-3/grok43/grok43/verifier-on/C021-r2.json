@@ -1,0 +1,96 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 45.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.3,
+  "usage": {
+    "in": 28239,
+    "cache_read": 162752,
+    "cache_write": 0,
+    "out": 646,
+    "source": "cli"
+  },
+  "cost_usd": 0.07322665,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "Replaces the well-known `tar-stream` package with `tar-streem`. If this is intentional, the new package must be verified; otherwise this is a supply-chain attack vector.\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "`postinstall` runs `tar-streem-setup` on every `npm install`. This executes arbitrary code from the new dependency during installation.\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```"
+    }
+  ],
+  "summary": "Critical supply-chain issues introduced by the dependency swap and postinstall hook.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces well-known tar-stream with typosquat tar-streem and adds a postinstall hook running tar-streem-setup, which is a classic supply-chain attack pattern."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head package.json adds a postinstall script that runs tar-streem-setup and swaps the legitimate tar-stream dependency for tar-streem, so npm install will execute that binary from the new dependency. That matches arbitrary code execution on install; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 15.245,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4235,
+      "out": 679
+    },
+    "cost_usd": 0.013824
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 28.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 28.2,
+  "usage": {
+    "in": 14569,
+    "cache_read": 175040,
+    "cache_write": 0,
+    "out": 531,
+    "source": "cli"
+  },
+  "cost_usd": 0.05666925,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Replacing `json.loads` with `pickle.loads` on untrusted session data creates a remote code execution vector. An attacker who can supply the `raw` value can craft a pickle payload that executes arbitrary code on the next `load_session` call.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\nUse a safe format (JSON) or a restricted unpickler with an allow-list of permitted classes."
+    }
+  ],
+  "summary": "The change replaces JSON session decoding with pickle. This introduces a critical remote-code-execution surface because `load_session` now deserializes attacker-controlled bytes with `pickle.loads`.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces json.loads with pickle.loads on base64-decoded session input (web/session.py), which is a classic arbitrary-code-execution vector on untrusted data. Base revision used safe JSON; the regression and critical severity are both supported."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.172,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2270,
+      "out": 381
+    },
+    "cost_usd": 0.007696
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

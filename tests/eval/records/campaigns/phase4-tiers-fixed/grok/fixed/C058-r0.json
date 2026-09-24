@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 83.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 83.8,
+  "usage": {
+    "in": 18593,
+    "cache_read": 102400,
+    "cache_write": 0,
+    "out": 3154,
+    "source": "cli"
+  },
+  "cost_usd": 0.08683,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** The tar-stream bump ^2.2.0\u2192^3.1.6 is real and CHANGELOG.md falsely claims an API migration in scripts/pack.js, which is absent on base and head with no JS/TS sources at all. Severity is not critical: there are zero tar-stream call sites in the tree, so no in-repo runtime break is demonstrated.\n\nMajor upgrade of `tar-stream` from `^2.2.0` to `^3.1.6` with no corresponding source changes in this PR. tar-stream 3 changes the pack/extract entry API; v2 call sites break at runtime after install.\n\nThe PR description and `CHANGELOG.md` both claim an API migration in `scripts/pack.js`, but that file is absent from the tree on base and head, and it is not in the diff. Land the real migration (or restore/add `scripts/pack.js` updated for v3) in the same commit as the dependency bump before merging."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "This entry asserts an \"API migration in scripts/pack.js\" for the tar-stream 2\u21923 upgrade. No `scripts/pack.js` change (and no such file) appears in the PR, so the changelog overstates what shipped and will mislead anyone auditing the upgrade later.\n\nEither include the migration it describes, or rewrite the bullet to match the actual diff (dependency/lockfile bump only)."
+    }
+  ],
+  "summary": "## Verdict\n\nIncomplete major upgrade \u2014 `tar-stream` is bumped 2 \u2192 3 and the changelog claims an API migration, but no call-site changes ship in this PR.\n\n## Narrative\n\n`package.json` and `package-lock.json` both move `tar-stream` to `3.1.6`, so the lockfile is consistent with the manifest. The problem is the missing migration work the PR itself documents.\n\n`CHANGELOG.md` states the upgrade includes an \"API migration in scripts/pack.js\". That path does not exist on either base or head, and the diff touches only the changelog, manifest, and lockfile. tar-stream 3 is a breaking major; any remaining v2 `pack`/`extract`/`entry` usage will fail at runtime once 3.x is installed. Shipping the version bump alone, while advertising a completed migration, leaves consumers with a false all-clear.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "downgraded",
+      "reason": "The tar-stream bump ^2.2.0\u2192^3.1.6 is real and CHANGELOG.md falsely claims an API migration in scripts/pack.js, which is absent on base and head with no JS/TS sources at all. Severity is not critical: there are zero tar-stream call sites in the tree, so no in-repo runtime break is demonstrated."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 28.806,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 1,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 948,
+      "out": 512
+    },
+    "cost_usd": 0.006146
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

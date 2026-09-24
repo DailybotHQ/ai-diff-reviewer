@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.3,
+  "usage": {
+    "in": 29733,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1421,
+    "source": "cli"
+  },
+  "cost_usd": 0.0853488,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Missing `SMTP_PASSWORD` no longer fails closed: `os.environ.get` supplies the literal default `smtp-prod-backup-77`, which is committed to source.\n\nAnyone with repo read access can authenticate as `notifications` on `smtp.internal.example`. A cron host without the secret mounted will still log in successfully, hiding the misconfiguration, and the value remains recoverable from git history after any later rotation.\n\nRemove the default and fail with a clear error if the env var is unset (or ensure the cron unit/mount always provides `SMTP_PASSWORD`). Example:\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n\nIf you need softer cron behavior without embedding a secret:\n\n```python\npassword = os.environ.get(\"SMTP_PASSWORD\")\nif not password:\n    raise RuntimeError(\"SMTP_PASSWORD is not set\")\ns.login(\"notifications\", password)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nHard-coded production SMTP credential in source \u2014 do not merge until removed.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), so a missing secret failed closed at login. This change switches to `os.environ.get(..., \"smtp-prod-backup-77\")`, which embeds a real-looking production password in the repo.\n\nFailure modes:\n- Anyone with read access to the repo (or its history after merge) obtains the SMTP account password.\n- Cron/jobs without the secret still authenticate successfully using the baked-in fallback, so a missing mount is silent rather than loud.\n- Rotating the real secret does not revoke the fallback until another code change; the value remains in git history.\n\nThe crash-on-missing-secret problem is real for cron, but the fix belongs in deployment (mount/inject `SMTP_PASSWORD` for the cron environment), or in code that fails with a clear configuration error \u2014 never a default password literal.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces fail-closed `os.environ[\"SMTP_PASSWORD\"]` with `os.environ.get(..., \"smtp-prod-backup-77\")`, committing a production SMTP password default in source. That matches the claimed critical secret-exposure regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.742,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2366,
+      "out": 286
+    },
+    "cost_usd": 0.006858
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

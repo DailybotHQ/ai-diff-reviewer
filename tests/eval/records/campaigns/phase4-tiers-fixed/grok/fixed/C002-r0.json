@@ -1,0 +1,108 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 55.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 55.7,
+  "usage": {
+    "in": 31540,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 2811,
+    "source": "cli"
+  },
+  "cost_usd": 0.1063268,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The query embeds `email` directly into SQL with an f-string, replacing the safe `?` parameter binding. Attacker- or support-controlled input such as `' OR '1'='1` changes the predicate and can return all orders (or otherwise manipulate the statement). Restore a parameterized query; never interpolate user text into SQL.\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nIf you keep `LIKE`, also escape `%`/`_` in `email` so user input cannot widen the pattern unintentionally."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The PR title/comment say support needs fragment/partial email match, but the predicate remains `email = '...'`. A pasted substring will not match stored full addresses. Use a parameterized `LIKE` (or `instr(email, ?) > 0`) so the behavior matches the request once the injection issue is fixed."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a SQL injection vulnerability and does not implement the stated partial-match behavior.\n\n## Analysis\n\n`get_orders` previously used a parameterized query (`WHERE email = ?` with a bound argument). The PR substitutes the `email` value directly into the SQL via an f-string.\n\nAny caller-controlled `email` (support paste flows are exactly that) can break out of the quoted literal and alter the statement \u2014 for example `' OR 1=1 --` returns every order, or other attached payloads depending on SQLite settings. Parameter binding exists specifically to prevent this class of bug.\n\nSeparately, the comment and PR title claim partial-match search, but the predicate is still equality (`=`), not `LIKE` / `instr` / similar. Support pasting an email fragment will still get zero rows for non-exact input, so the functional goal is unmet even ignoring security.\n\n## Fix direction\n\nKeep the placeholder API and express partial match with a bound pattern, for example:\n\n```python\ncur = conn.execute(\n    \"SELECT id, total FROM orders WHERE email LIKE ? ESCAPE '\\\\'\",\n    (f\"%{escape_like(email)}%\",),\n)\n```\n\n(with a small helper that escapes `%`, `_`, and the escape char in user input).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code at store.py:6 builds the SQL with an f-string that embeds `email` directly (`f\"... WHERE email = '{email}'\"`), and the patch shows this replaced a safe parameterized `?` query. That is a genuine SQL injection regression at critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The new comment claims partial-match support, but the query still uses `email = '...'` (equality only), so a substring will not match full stored addresses. That matches the finding; warning severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 12.582,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4594,
+      "out": 539
+    },
+    "cost_usd": 0.013267
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

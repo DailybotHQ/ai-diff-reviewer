@@ -1,0 +1,96 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 80.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 81.0,
+  "usage": {
+    "in": 33041,
+    "cache_read": 147456,
+    "cache_write": 0,
+    "out": 4036,
+    "source": "cli"
+  },
+  "cost_usd": 0.1345348,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "The deleted `BLOCKED` guard was the only protection against prototype pollution. The rationale that `JSON.parse` never yields dangerous keys is false: `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` produces an own enumerable `\"__proto__\"` key, and `Object.entries` feeds it into the merge loop.\n\nConcrete failure: for `k === \"__proto__\"`, `(base as any)[k] ??= {}` resolves to `Object.prototype` (truthy, so no `{}` is created), then `deepMerge(Object.prototype, v)` writes attacker fields onto the shared prototype. The same path works via `{\"constructor\":{\"prototype\":{\"pwned\":true}}}`. Verified in Node against this function \u2014 `{}.polluted` / `{}.pwned` become set; with the old blocklist they stay undefined.\n\n`patch` is `Record<string, unknown>`, so inputs need not come from `JSON.parse` at all. Restore the blocklist (or an equivalent safe-key merge) and add regression tests for both payloads."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the `__proto__` / `constructor` / `prototype` blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Why the premise is wrong\n\nThe PR claims `JSON.parse` never yields dangerous keys. That is incorrect on current Node/V8:\n\n```js\nObject.keys(JSON.parse('{\"__proto__\": {\"polluted\": true}}'))\n// \u2192 ['__proto__']  (own enumerable property)\n```\n\n`Object.entries` therefore surfaces those keys, and the merge body assigns into them.\n\n## Failure mode (verified)\n\nWithout the guard, both of these pollute `Object.prototype`:\n\n1. **`__proto__` nest:** `(base)[k] ??= {}` with `k === \"__proto__\"` reads the existing prototype (truthy), so the recursive call becomes `deepMerge(Object.prototype, v)` and writes attacker-controlled fields onto the shared prototype.\n2. **`constructor.prototype` nest:** `JSON.parse('{\"constructor\":{\"prototype\":{\"pwned\":true}}}')` walks onto `Object.prototype` the same way.\n\nI reproduced both in Node against the post-change function: `{}.polluted === \"yes\"` and `{}.pwned === true` after merge. With the old `BLOCKED` set, the same inputs leave the prototype clean.\n\n`deepMerge` is also typed as `patch: Record<string, unknown>` \u2014 callers are free to pass non-JSON objects (object literals, YAML, user-built maps). Even a correct claim about `JSON.parse` would not justify removing the guard at this boundary.\n\n## Recommendation\n\nRestore the blocklist (or equivalent: `Object.create(null)` targets, `Object.hasOwn` + `Object.defineProperty` only on safe keys, or a merge that never uses `[[Set]]` on attacker keys). Add a unit test that asserts `JSON.parse('{\"__proto__\":{\"x\":1}}')` and the `constructor.prototype` payload do not affect `{}.x`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `BLOCKED` set skipped `__proto__`/`constructor`/`prototype`; head removed it with no replacement. `deepMerge` still does `(base as any)[k] ??= {}` then recursive write, so `__proto__`/`constructor.prototype` patches can pollute `Object.prototype`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.515,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5109,
+      "out": 375
+    },
+    "cost_usd": 0.012954
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.6,
+  "usage": {
+    "in": 30134,
+    "cache_read": 120448,
+    "cache_write": 0,
+    "out": 2359,
+    "source": "cli"
+  },
+  "cost_usd": 0.1105564,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query via `fmt.Sprintf`, so any caller-controlled value becomes SQL text. A search like `%' OR 1=1 --` (or dialect-equivalent) can alter the predicate, read other rows, or execute additional statements depending on the driver.\n\nRestore a bound parameter and keep the value out of the SQL string:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso escape `%` and `_` inside `account` before wrapping it, so user input cannot broaden the LIKE pattern unintentionally."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "**Ambiguous match with `QueryRow`:** substring `LIKE '%%\u2026%%'` can return multiple accounts, but `QueryRow` only scans one row (or errors with `ErrMultipleRows` depending on driver/usage). A partial UI search can therefore surface the wrong balance or fail unpredictably.\n\nAfter fixing parameterization, decide the product rule: unique match required, ordered limit-1 with an explicit tie-break, or return a list to the UI instead of a single balance."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by building the query with `fmt.Sprintf` and embedding the `account` argument directly into the SQL string.\n\n## Narrative\n\n`Balance` previously used a parameterized equality check (`WHERE number = $1`), which correctly kept the account value out of the SQL text. The partial-match UI goal is reasonable, but the implementation drops parameterization entirely:\n\n```go\nq := fmt.Sprintf(\"SELECT balance_cents FROM accounts WHERE number LIKE '%%%s%%'\", account)\nerr := db.QueryRow(q).Scan(&cents)\n```\n\nAny caller-supplied `account` (UI search box, API query param, etc.) can close the string literal and inject arbitrary SQL. Example payload shape: `%' OR 1=1 --` (exact exploit depends on the driver/dialect). That is a production security regression on a balance lookup path.\n\nPartial match can still be done safely with a bound parameter, e.g. `WHERE number LIKE $1` and an argument like `\"%\" + escaped + \"%\"`, after escaping LIKE metacharacters (`%`, `_`) in the user input so they are treated as literals.\n\nSecondary correctness concern: `QueryRow` expects at most one row. A substring `LIKE` can match multiple accounts and silently return an arbitrary one (driver-dependent), which is wrong for a balance API even after the injection is fixed. Prefer an exact-prefix policy, uniqueness enforcement, or an explicit multi-row API.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf embedding `account` directly into SQL and passes no bound args, whereas base used a safe `$1` parameter. That is a real SQL-injection regression; critical severity is appropriate."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.758,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2371,
+      "out": 367
+    },
+    "cost_usd": 0.007891
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

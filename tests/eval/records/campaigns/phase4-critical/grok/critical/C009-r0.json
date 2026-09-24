@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 60.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 61.0,
+  "usage": {
+    "in": 89602,
+    "cache_read": 58752,
+    "cache_write": 0,
+    "out": 2546,
+    "source": "cli"
+  },
+  "cost_usd": 0.223856,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `escapeHtml` and passing `body` straight into `dangerouslySetInnerHTML` turns every comment into executable HTML. A body such as `<img src=x onerror=alert(document.cookie)>` or `<a href=\"javascript:\u2026\">` runs in other users' browsers. This also does not implement markdown: `**bold**` stays literal text while real tags execute.\n\nKeep HTML-escaping, or parse markdown through a sanitizing renderer and never feed raw user HTML to `dangerouslySetInnerHTML`."
+    }
+  ],
+  "summary": "Looks good is the wrong read \u2014 this is a stored XSS regression and should not merge.\n\n`Comment` previously HTML-escaped `body` before `dangerouslySetInnerHTML`. This PR deletes `escapeHtml` and injects `body` as raw HTML. There is no markdown parser and no sanitizer anywhere in the tree; a comment containing `<img src=x onerror=\u2026>` or an `javascript:` link runs in every reader's browser. The new comment claims bold/links, but `**bold**` still renders as literal text while real HTML executes.\n\nRestore escaping, or parse markdown into React nodes / sanitized HTML (e.g. a sanitizing markdown renderer). Do not pass unsanitized user content to `dangerouslySetInnerHTML`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and feeds the raw comment body into dangerouslySetInnerHTML, so attacker-controlled HTML/JS executes in other users' browsers. Base still escaped the body; this is a clear critical XSS regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.744,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2552,
+      "out": 382
+    },
+    "cost_usd": 0.008266
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

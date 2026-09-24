@@ -1,0 +1,95 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 58.8,
+  "setup_seconds": 0.1,
+  "total_seconds": 58.9,
+  "usage": {
+    "in": 17977,
+    "cache_read": 101248,
+    "cache_write": 0,
+    "out": 2851,
+    "source": "cli"
+  },
+  "cost_usd": 0.0834344,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity": "critical",
+      "body": "This diff adds `a.run=function(s){return eval(s)}` to the shipped bundle. Any caller that can pass a string into `window.app.run` gets arbitrary JS execution in the page context.\n\nThe PR frames this as a post-toolchain rebuild, but `src/app.ts` is byte-identical on base and head and only defines `init()` \u2014 there is no `run` and no `eval` in source. This is a hand-edited (or otherwise out-of-band) dist change, not a faithful regenerate.\n\nRemove the `run`/`eval` path from `dist/app.min.js` (restore the previous bundle or rebuild strictly from current source) and land any intentional API change as a reviewed `src/` commit first."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This is not a toolchain rebuild: `src/app.ts` is unchanged while `dist/app.min.js` gains a new public API that executes arbitrary strings via `eval`.\n\n## What changed\n\nThe only file in the PR is the generated bundle `dist/app.min.js` (omitted from the embedded diff as generated content). The one-line replacement is:\n\n- **Before:** `init` only (`console.log('ok')`)\n- **After:** same `init`, plus `a.run = function(s) { return eval(s) }`\n\n`src/app.ts` still exports only `init()` with no `run` and no `eval`. Head and base share the same `src/app.ts` blob; only `dist/app.min.js` moved. A real rebuild after a toolchain upgrade would not invent behavior absent from source.\n\n## Why this is blocking\n\n`window.app.run(userControlledString)` is arbitrary JavaScript execution in the page context. Shipping that under a \u201cregenerated the bundle\u201d title hides a behavioral/security change in an artifact reviewers often skip.\n\n## Cross-cutting\n\n- **Source/dist contract broken:** checked-in minified output no longer matches `src/`. Treat `dist/` as tainted until it is reproduced from source (or the source change is reviewed on its own PR).\n- **No build metadata** in-repo (no package.json/bundler config here), so there is no script evidence this came from a toolchain bump.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "dist/app.min.js newly exposes window.app.run via eval(s), while base lacked it and src/app.ts is unchanged and only defines init() with no run/eval. That is an out-of-band dist injection enabling arbitrary JS execution in page context; critical severity is warranted."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.707,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2269,
+      "out": 492
+    },
+    "cost_usd": 0.008412
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C090-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

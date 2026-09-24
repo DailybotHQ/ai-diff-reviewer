@@ -31,7 +31,7 @@ branding:
 
 inputs:
   api-key:
-    description: 'Provider API key. Required for every provider except AWS Bedrock: with `provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base` it may stay empty and the action signs with the AWS credentials from the environment (OIDC), or you can pass the packed `KEY:SECRET[:SESSION]` format instead.'
+    description: 'Provider API key. Optional wherever the lane has environment credentials (v3 rule) — today AWS Bedrock: with `provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base` it may stay empty and the action signs with the AWS credentials from the environment (OIDC), or you can pass the packed `KEY:SECRET[:SESSION]` format instead. Required for every other provider.'
     required: false
   github-token:
     description: 'Token used to read the PR diff and post the review. Needs `pull-requests: write` and `contents: read`. Pass either the default `secrets.GITHUB_TOKEN` or a PAT/automation token if you want the review attributed to a specific bot account.'
@@ -167,6 +167,18 @@ inputs:
     description: 'v3 aggregate only (RFC-04): when `true`, a missing, failed or timed-out leg fails the check. Default `false` publishes with the delivered legs and names the missing one in the review and the job summary.'
     required: false
     default: 'false'
+  budget-profile:
+    description: 'v3 (RFC-06, BC-13/BC-19). `auto` (default): the review budget follows the deterministic risk tier of the change — `low` 8 turns / 60 kB of patches / criticals-only verifier, `standard` 20 / 120 kB / 30 % of warnings, `elevated` 30 / 200 kB / all warnings, `critical` 40 turns (the only raise) with the `deep` alias where the backend has one. `fixed`: today''s constants for every tier (30 turns, `balanced`, 120 kB, 30 %). Transition knob — removed in v3.1.0.'
+    required: false
+    default: 'auto'
+  high-risk-paths:
+    description: 'v3 (RFC-06): comma- or newline-separated globs (e.g. `auth/**`, `**/migrations/**`) that raise the risk tier to `critical` when a changed file matches. Raises only — nothing lowers a tier, and PR metadata is never an input.'
+    required: false
+    default: ''
+  complexity-source:
+    description: 'v3 (RFC-06, BC-14). `model` (default): the complexity label comes from the model''s `set_pr_complexity` / findings-file level as before. `inventory`: the label is derived from the deterministic risk tier (low → low, standard → medium, elevated/critical → high); the model''s level is telemetry only. In both cases the model''s level never influences budgets.'
+    required: false
+    default: 'model'
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -177,7 +189,7 @@ inputs:
   # These inputs only affect the CLI providers (`claude-code`, `cursor`, `codex`).
   # Ignored by `anthropic`. Empty = provider default.
   agent-max-turns:
-    description: 'Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns N`). Claude Code, Cursor and Codex expose no turn-count flag — the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound). Whole number; ignored by chat-completions providers (use `max-turns`).'
+    description: 'Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns N`; when unset, `budget-profile: auto` passes the risk tier row''s turns — 8 / 20 / 30 / 40; a CLI stopped at its cap posts an incomplete review). Claude Code, Cursor and Codex expose no turn-count flag — the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound). Whole number; ignored by chat-completions providers (use `max-turns`).'
     required: false
     default: ''
   agent-extra-args:
@@ -415,9 +427,9 @@ runs:
       # artifacts the emit legs uploaded for this head. Every artifact of the
       # run is downloaded into one sub-directory each; the runtime keys on the
       # head SHA inside the documents and ignores other heads. Pinned by SHA
-      # (v4.3.0).
+      # (v8.0.1).
       if: inputs.mode == 'aggregate'
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         pattern: ai-diff-reviewer-*
         path: ${{ runner.temp }}/ai-diff-reviewer-legs
@@ -462,6 +474,9 @@ runs:
         AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
         AIPRR_MIN_AGREEMENT: ${{ inputs.min-agreement }}
         AIPRR_REQUIRE_ALL_LEGS: ${{ inputs.require-all-legs }}
+        AIPRR_BUDGET_PROFILE: ${{ inputs.budget-profile }}
+        AIPRR_HIGH_RISK_PATHS: ${{ inputs.high-risk-paths }}
+        AIPRR_COMPLEXITY_SOURCE: ${{ inputs.complexity-source }}
         AIPRR_ARTIFACT_DIR: ${{ runner.temp }}/ai-diff-reviewer-legs
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
@@ -500,9 +515,9 @@ runs:
       # RFC-05: the document is the input of the aggregator, the eval gate and
       # the apply-review skill. `always()` so a failed or skipped run still
       # ships its (minimal) document; the step is a no-op when nothing was
-      # written. Pinned by SHA (v4.6.2).
+      # written. Pinned by SHA (v7.0.1).
       if: always() && steps.review.outputs.structured-output-path != ''
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: ${{ steps.review.outputs.structured-output-artifact }}
         path: ${{ steps.review.outputs.structured-output-path }}

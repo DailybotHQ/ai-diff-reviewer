@@ -1,0 +1,95 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 45.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.0,
+  "usage": {
+    "in": 31166,
+    "cache_read": 117120,
+    "cache_write": 0,
+    "out": 2468,
+    "source": "cli"
+  },
+  "cost_usd": 0.112276,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Insecure deserialization:** `pickle.loads` on the decoded session blob lets an attacker who controls `raw` run arbitrary code during unpickling (classic `__reduce__` gadget).\n\nSession tokens are typically attacker-influenced (cookies/headers). Replacing `json.loads` with `pickle.loads` turns a data-only decode into remote code execution on the web worker.\n\n**Fix:** keep a data-only format (JSON/msgpack with a fixed schema), or store rich objects server-side and put only an opaque signed session id in the client blob. If pickle is unavoidable for trusted IPC, document that contract and refuse any client-supplied path into this function.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(restore `import json` and drop `import pickle`). For cart plugin objects, define a JSON-serializable schema or use a server-side session store."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces remote code execution via insecure deserialization.\n\n## Narrative\n\n`load_session` previously decoded a base64 blob with `json.loads`, which only reconstitutes plain data. Switching to `pickle.loads` means any crafted payload that reaches `raw` can execute arbitrary Python during unpickling (`__reduce__`, etc.).\n\nSession blobs are almost always client-influenced (cookie, header, or request body). Even if some callers only pass server-issued values today, the function name and signature advertise a general session decoder; the next caller that feeds it request input inherits RCE with no further change.\n\nPickle is not a safe interchange format for untrusted or semi-trusted input. Richer cart/plugin objects need an explicit schema (JSON + typed fields, `dataclasses.asdict`, msgpack without custom ext hooks, or a sealed/encrypted server-side session store keyed by id).\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces json.loads with pickle.loads on base64-decoded session input in load_session, which is a classic RCE vector if raw is client-controlled. Base revision confirms this is a regression from a data-only decoder."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.533,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6060,
+      "out": 356
+    },
+    "cost_usd": 0.01441
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

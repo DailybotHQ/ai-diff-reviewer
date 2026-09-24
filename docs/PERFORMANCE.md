@@ -46,11 +46,35 @@ Agent-runner providers don't hit this section — they own their own loop intern
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
 - Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed message (patches budgeted at `FIRST_MESSAGE_PATCH_BYTES = 120 000` bytes — see below; anything beyond is fetched on demand with `get_patch`).
-- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, and both the inline cap and `max-turns` scale with the delta (floors: 3 comments, 6 turns). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14`.
+- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, the inline cap scales with the delta (floor 3 comments) and, since v3 (RFC-06), the turn budget is `clamp(4 + 1.5 × changed files + 1 × outstanding findings, 4, max-turns)` — ≈ 8–12 turns on a typical 1–3-file follow-up instead of the full cap; a follow-up with no code change spends **zero** review turns (the verifier re-reads the outstanding anchors instead). Measured (Task 27): on PR #61's real deltas the grok leg went from 4.16 M input tokens ($1.69) on a full round to 0.98–1.60 M ($0.53–0.77) on small incremental pushes (−62 … −76 %), the glm leg from 6.9–7.2 M to 3.4–4.4 M (−37 … −52 %); a no-change round costs ≈ $0.007 (verifier only). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14.5`.
 - Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
 
 If you increase `max-turns` or `MAX_CONVERSATION_TURNS_RETAINED`, **estimate the token impact first**. `AGENTS.md` DON'T #9 makes this explicit: raising defaults without measuring the per-review cost delta is not merged.
+
+### Risk-tiered budgets (v3, RFC-06)
+
+Every run classifies the change inventory deterministically (paths, statuses, binary / mode-change / omitted flags, line counts — never PR metadata) into a risk tier and takes its budget row from one table (`BUDGET_MATRIX`):
+
+| Tier | When | Max turns | Review alias | Output tokens / turn | Verifier | Patch bytes in the first message |
+|---|---|---|---|---|---|---|
+| `low` | only docs / tests / generated files, ≤ 300 lines, inventory complete | 8 | `balanced` | 4 096 | criticals only | 60 k |
+| `standard` | any code file, nothing sensitive, inventory complete | 20 | `balanced` | 8 192 | criticals + 30 % of warnings | 120 k |
+| `elevated` | prompts / policy, workflow / CI or dependency files; a mode change; incomplete inventory; > 1 500 lines | 30 | `balanced` | 8 192 | all criticals + all warnings | 200 k |
+| `critical` | policy or CI files **together with** code; an unknown file; a `high-risk-paths` match | 40 (the only raise: ≈ +$0.15–0.35 at grok-4.5 rates, on the rarest tier) | `deep` where the kind has one, else `balanced` | 8 192 | all | 200 k |
+
+`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. On a CLI runner with a native turn cap (`grok --max-turns`) the tier **row's** turns (8 / 20 / 30 / 40) become that cap when `agent-max-turns` is unset — neither the in-process `max-turns` ceiling nor the incremental delta budget reaches a CLI, because a CLI turn is not an in-process turn (the dogfood's `max-turns: 12` stopped the grok CLI at 12 on a `critical` PR before this was separated). A CLI that stops at its cap yields an **incomplete** review (BC-04), never a crashed run. `fixed` leaves the CLI uncapped, as before v3. The raw diff is kept up to the largest row's patch budget (200 kB), so a tier's byte budget — including the output-token cap on the chat-completions runners — always binds (Final Review fixes, 2026-09-24). The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. 
+
+**Measured (Phase 4, 2026-09-24, grok CLI lane, verifier on; `tests/eval/records/campaigns/phase4-*`).** 33 corpus cells × 3 under `auto` and `fixed`, plus the `critical` row forced with `high-risk-paths: **` on the 21 critical trees:
+
+| Tier | Cells | Cost / run `auto` vs `fixed` | Recall `auto` vs `fixed` | Turns used (mean) | Cap-exhausted zero-finding runs |
+|---|---|---|---|---|---|
+| `low` | 3 | $0.092 vs $0.106 (−14 %) | no labelled defects on the docs-only cases; 0 FP in both | 4.3 | 0 |
+| `standard` | 19 | $0.100 vs $0.102 (−1 %) | 57 / 57 vs 57 / 57 | 4.1 | 0 |
+| `elevated` | 11 | $0.097 vs $0.104 (−4 %) | 7 / 18 vs 11 / 18 — one coverage-probe label (C063) is satisfied differently at the row's 200 kB patch budget; C090 within the repetition swing | 4.1 | 0 |
+| `critical` (forced; grok-4.6) | 21 | $0.155 vs $0.114 (+41 %, vs the `phase2-rc` grok-4.5 baseline) | **63 / 63** vs 60 / 63; adjudicated precision 1.0 (74 / 74) | 4.7 | 0 |
+
+Reading: on small fixtures the turn rows never bind (≈ 4 turns used), so the tiers move cost only through patch bytes and the verifier sample (−1 … −14 %); the `critical` row's extra cost is the `deep` model and it bought the three planted criticals the baseline missed at unchanged precision. Cap-exhausted zero-finding runs: 0 / 261. The recall guard held (no cell beyond the −2 blocking rule); the verdict `records/verdicts/phase4-tiers.json` is non-blocking and not promotable (deltas below the 38 % floor). What the corpus cannot show — a run that actually reaches the row's cap — the dogfood did: the grok CLI stopped at its native cap on PR #63, which is where the incomplete-on-cap behaviour above comes from.
 
 ## The agent-runner budget
 

@@ -1,0 +1,96 @@
+{
+  "case": "C089",
+  "pr": "C089",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 51.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.0,
+  "usage": {
+    "in": 60517,
+    "cache_read": 89984,
+    "cache_write": 0,
+    "out": 2714,
+    "source": "cli"
+  },
+  "cost_usd": 0.1643132,
+  "changed_files": [
+    "README.md",
+    "poetry.lock"
+  ],
+  "findings": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "The new line tells readers to \"See CONTRIBUTING.\", but the repo has no `CONTRIBUTING`, `CONTRIBUTING.md`, or similarly named guide file. Anyone following the README dead-ends.\n\nAdd the referenced guide (or link to an existing path that actually exists) in the same change so the pointer resolves."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken contributor pointer in `README.md`; the accompanying lockfile change looks unrelated and should be confirmed intentional.\n\n## Notes\n\n`README.md` now says \"See CONTRIBUTING.\" but this repository has no `CONTRIBUTING`, `CONTRIBUTING.md`, or other contributor guide at the root (or under the shallow tree). Readers following that sentence hit a dead end.\n\n`poetry.lock` is also modified on this docs-titled PR (omitted from inline review as a lockfile). Its presence next to a one-line README touch-up is worth a maintainer glance so an accidental re-resolve does not land with the docs fix.\n\nNo repository instruction files (`AGENTS.md` / review extensions) were present to apply extra conventions.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "README.md line 3 newly says \"See CONTRIBUTING.\" but no CONTRIBUTING, CONTRIBUTING.md, or similarly named file exists in the repository, so the pointer is a dead end."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.674,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1863,
+      "out": 255
+    },
+    "cost_usd": 0.005666
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C089-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 31.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.2,
+  "usage": {
+    "in": 14580,
+    "cache_read": 121152,
+    "cache_write": 0,
+    "out": 559,
+    "source": "cli"
+  },
+  "cost_usd": 0.0464829,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Returning `\"Access-Control-Allow-Origin\": origin ?? \"*\"` together with `\"Access-Control-Allow-Credentials\": \"true\"` violates the CORS spec. When credentials are used the browser requires an exact origin match; `*` is rejected and a reflected arbitrary origin enables reflected-origin attacks.\n\n```suggestion\n  if (!origin) {\n    return {};\n  }\n  return {\n    \"Access-Control-Allow-Origin\": origin,\n    \"Access-Control-Allow-Credentials\": \"true\",\n    Vary: \"Origin\",\n  };\n```"
+    }
+  ],
+  "summary": "The change replaces the origin allow-list with unconditional reflection of any origin while keeping `Access-Control-Allow-Credentials: true`. This combination is forbidden by the CORS specification: browsers ignore the `Allow-Origin` header (or treat it as invalid) when credentials are requested and the origin is `*` or an untrusted reflected value. Any authenticated cross-origin request from a webview or other client will now be blocked or silently stripped of credentials.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `corsHeaders` returns `Access-Control-Allow-Origin: origin ?? \"*\"` with `Access-Control-Allow-Credentials: true`, reflecting any caller origin (and pairing `*` with credentials when origin is null). Base had an explicit allowlist; that guard was removed, so the critical CORS misconfiguratio"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.289,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2546,
+      "out": 397
+    },
+    "cost_usd": 0.00837
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

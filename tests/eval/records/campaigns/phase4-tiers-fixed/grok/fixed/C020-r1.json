@@ -1,0 +1,95 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 50.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 50.5,
+  "usage": {
+    "in": 17529,
+    "cache_read": 131200,
+    "cache_write": 0,
+    "out": 2588,
+    "source": "cli"
+  },
+  "cost_usd": 0.089946,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query with `fmt.Sprintf` instead of a bound parameter. UI- or caller-controlled input can close the quote and change the statement, reading or altering data beyond the intended account.\n\nRestore parameterization and apply wildcards to the bound value:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso escape `%` and `_` in `account` if users should match those characters literally, and decide how multiple `LIKE` matches should be handled \u2014 `QueryRow` returns one arbitrary row when several numbers share the substring."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `Balance`.\n\n## Narrative\n\n`ledger/query.go` previously bound `account` with a parameterized `$1` placeholder. The new code builds the query with `fmt.Sprintf` and embeds the raw `account` string inside a `LIKE` pattern. Any caller-controlled value (the PR description says this comes from a partial-number UI) can break out of the string literal and alter the SQL, reading or altering data beyond the intended account.\n\nPartial match does not require string concatenation into SQL. Keep the value bound as a parameter and put the wildcards in the bound argument (and escape `%` / `_` in user input if those should be literal).\n\nA secondary correctness issue: `QueryRow` with a non-unique `LIKE` predicate returns an arbitrary matching row when several accounts share a substring, so balance results can be wrong even for benign partial inputs.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Balance builds the LIKE query with fmt.Sprintf embedding `account` directly, and the base revision used a bound `$1` parameter\u2014so caller-controlled input can break out of the quote. That is a genuine critical SQL injection regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.553,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3184,
+      "out": 344
+    },
+    "cost_usd": 0.009226
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

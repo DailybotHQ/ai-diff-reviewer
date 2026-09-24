@@ -1,0 +1,96 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 22.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 22.3,
+  "usage": {
+    "in": 30600,
+    "cache_read": 116096,
+    "cache_write": 0,
+    "out": 2067,
+    "source": "cli"
+  },
+  "cost_usd": 0.1084308,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "`user.name.split()[0]` crashes when `name` is empty or whitespace-only: `\"\".split()` and `\"   \".split()` return `[]`, so the `[0]` access raises `IndexError`.\n\nGuard the split result (and consider `None`) before indexing:\n\n```suggestion\ndef first_name(user):\n    parts = (user.name or \"\").split()\n    return parts[0] if parts else \"\"\n```"
+    },
+    {
+      "path": "utils.py",
+      "line": 2,
+      "severity": "info",
+      "body": "`sum(i.price for i in items)` already returns `0` for an empty iterable, so the early return does not change behavior. Keeping it is fine if you want the empty-input path documented in code; otherwise it can be dropped without changing results."
+    }
+  ],
+  "summary": "## Verdict\n\nSmall utility tweak with one real edge-case bug in the new helper.\n\n## Notes\n\n`total` now short-circuits on empty `items` and returns `0`. That matches what `sum(...)` already does for an empty iterable, so the guard is harmless and makes the empty-input contract explicit.\n\n`first_name` is new and assumes `user.name` is always a non-empty, non-whitespace string. `\"\".split()` and `\"   \".split()` both yield `[]`, so `[0]` raises `IndexError`. Worth hardening before this is called with untrusted or form-derived names.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    },
+    {
+      "path": "utils.py",
+      "line": 2,
+      "severity_claimed": "info",
+      "status": "skipped",
+      "reason": "info is never verified"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C091-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

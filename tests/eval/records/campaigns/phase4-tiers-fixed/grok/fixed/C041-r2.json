@@ -1,0 +1,93 @@
+{
+  "case": "C041",
+  "pr": "C041",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.2,
+  "usage": {
+    "in": 32297,
+    "cache_read": 117760,
+    "cache_write": 0,
+    "out": 2794,
+    "source": "cli"
+  },
+  "cost_usd": 0.116686,
+  "changed_files": [
+    "tests/test_slug.py"
+  ],
+  "findings": [
+    {
+      "path": "tests/test_slug.py",
+      "line": 3,
+      "severity": "warning",
+      "body": "IAR verified: `python -m unittest discover -s tests` reports `Ran 0 tests`, and `pytest` is not available in this environment. A bare `def test_basic()` with `assert` is pytest-style and is invisible to stdlib discovery, so this PR does not actually cover `slug()`.\n\nUse `unittest.TestCase` so the suite runs with the stdlib runner:\n\n```suggestion\nimport unittest\nfrom utils.slug import slug\n\n\nclass SlugTests(unittest.TestCase):\n    def test_basic(self):\n        self.assertEqual(slug(\" Hello World \"), \"hello-world\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nThe assertion matches `slug()` for the one happy-path input, but the new file is not a runnable test under this repo\u2019s available tooling.\n\n## Notes\n\n`tests/test_slug.py` defines a bare `test_basic()` with a plain `assert`. `python -m unittest discover -s tests` reports **Ran 0 tests**; `pytest` is not installed here. As landed, the PR does not actually exercise `utils.slug.slug`.\n\nConvert the case to `unittest.TestCase` (or add a real pytest runner to CI) so discovery executes it. Broader inputs (multiple spaces, punctuation, empty string) would strengthen coverage once the runner works.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "low",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "tests/test_slug.py",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

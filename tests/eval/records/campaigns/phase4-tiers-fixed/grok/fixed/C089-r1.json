@@ -1,0 +1,96 @@
+{
+  "case": "C089",
+  "pr": "C089",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.5,
+  "usage": {
+    "in": 17688,
+    "cache_read": 102400,
+    "cache_write": 0,
+    "out": 2538,
+    "source": "cli"
+  },
+  "cost_usd": 0.081324,
+  "changed_files": [
+    "README.md",
+    "poetry.lock"
+  ],
+  "findings": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "This line tells readers to see CONTRIBUTING, but this branch has no CONTRIBUTING (or CONTRIBUTING.md) file \u2014 only README.md and poetry.lock. Anyone following the new pointer hits a dead end. Add the contributing guide the sentence refers to, or point at an existing path with a real markdown link (for example `[CONTRIBUTING.md](CONTRIBUTING.md)` once that file exists)."
+    }
+  ],
+  "summary": "## Verdict\n\nSmall docs PR with one real problem in the README, plus an unrelated lockfile downgrade that should not ship with a \"link CONTRIBUTING\" change.\n\n## README\n\nThe only substantive edit adds `See CONTRIBUTING.` under the title. The repository tree at this head contains only `README.md` and `poetry.lock` \u2014 there is no `CONTRIBUTING`, `CONTRIBUTING.md`, or any similarly named file. The new line therefore points readers at a guide that does not exist, and it is plain text rather than a markdown link despite the PR title.\n\n## Lockfile (omitted from inline review)\n\n`poetry.lock` is listed as omitted/generated, so it was not reviewed line-by-line. Its presence in this PR is still material: the lock moves `pyyaml` from `6.0.2` to `5.3.1` with no `pyproject.toml`/manifest change in the diff and no explanation beyond \"lock re-resolved.\" That is a dependency downgrade on a YAML parser with a well-known vulnerability history in the 5.3.x line, bundled under a docs-only title. Confirm the pin is intentional and justified before merge, or drop the lockfile hunk from this PR.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C089-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

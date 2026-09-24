@@ -1,0 +1,83 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 24.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 24.9,
+  "usage": {
+    "in": 29980,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 1575,
+    "source": "cli"
+  },
+  "cost_usd": 0.09533,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "Empty or whitespace-only `user.name` makes this crash: `\"\".split()` and `\"   \".split()` both return `[]`, so `[0]` raises `IndexError`. Guard the split result (or reject blank names explicitly) before indexing.\n\n```suggestion\ndef first_name(user):\n    parts = user.name.split()\n    return parts[0] if parts else \"\"\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSmall utility tweak with one real edge-case bug in the new helper.\n\n## Notes\n\n`total()` now short-circuits on falsy `items` and returns `0`. For an empty list that matches what `sum(...)` already does; the guard is still useful when `items` is `None`, where the old code raised `TypeError`.\n\n`first_name()` is new and crashes on empty or whitespace-only `user.name` because `\"\".split()` / `\"   \".split()` yield `[]` and `[0]` raises `IndexError`. Same call also assumes `user` and `user.name` are present and string-typed.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "`first_name` does `user.name.split()[0]` with no guard; `\"\".split()` and whitespace-only splits are `[]`, so indexing raises `IndexError`. Warning severity is appropriate for this correctness bug."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.154,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1855,
+      "out": 272
+    },
+    "cost_usd": 0.005777
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C091-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "case": "C037",
+  "pr": "C037",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.5,
+  "usage": {
+    "in": 16721,
+    "cache_read": 102016,
+    "cache_write": 0,
+    "out": 1750,
+    "source": "cli"
+  },
+  "cost_usd": 0.0745468,
+  "changed_files": [
+    "README.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a small, clear runbook addition with no blocking issues.\n\n## Notes\n\nThe PR only extends `README.md` with a **Runbook** section for clearing the local build cache via `rm -rf .cache/`, plus an operational guard about `/srv`. That matches the stated intent (document the cache-clear step).\n\nThe command is a relative path under the working directory, which is the usual pattern for a local-dev cache wipe. The `/srv` note is enough context for operators who might otherwise run the same step in a shared host layout.\n\nNo code, config, workflow, or contract surfaces changed. Nothing further to gate on.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 8,
+  "budget": {
+    "tier": "low",
+    "profile": "auto",
+    "turns": 8,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 4096,
+    "verifier_warning_pct": 0,
+    "patch_bytes": 60000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

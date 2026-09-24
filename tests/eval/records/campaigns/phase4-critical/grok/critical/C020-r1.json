@@ -1,0 +1,108 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 76.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 76.7,
+  "usage": {
+    "in": 61495,
+    "cache_read": 59008,
+    "cache_write": 0,
+    "out": 3776,
+    "source": "cli"
+  },
+  "cost_usd": 0.17515,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "`account` is spliced into the SQL string with `fmt.Sprintf`, so any quote or statement separator from the partial-number UI becomes part of the query. The previous version bound it as `$1`. Input such as `' OR '1'='1` or `'; DROP TABLE accounts; --` executes as SQL, and `%` / `_` in the fragment are also LIKE wildcards.\n\nKeep a bound parameter (and escape LIKE metacharacters if the fragment should be literal):\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\"\n\terr := db.QueryRow(q, account).Scan(&cents)\n```"
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "`QueryRow` scans the first matching row and discards the rest. After switching `number = $1` to `LIKE '%\u2026%'`, a short fragment (for example `12`) can match several accounts and `Balance` still returns a single `cents` with `err == nil`. That is the wrong account's money.\n\nRequire a unique match (`sql.ErrNoRows` / too-many-rows), or select with an exact unique key after the user picks one account."
+    }
+  ],
+  "summary": "**SQL injection in `Balance` must be fixed before merge.** Interpolating `account` into the query with `fmt.Sprintf` lets UI input change the SQL; the previous `$1` bind was the safe form.\n\nPartial-number lookup also needs a uniqueness check: `QueryRow` returns the first `LIKE` match and discards the rest, so a short fragment can show another account's `balance_cents`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head interpolates `account` via fmt.Sprintf into a LIKE query (ledger/query.go:11\u201312), while base bound it as `$1`; that is a real SQL-injection regression and critical severity is appropriate."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Balance switched from exact `number = $1` to `LIKE '%\u2026%'` while still using `QueryRow`, which returns only the first row with err == nil when several accounts match a fragment\u2014so a short partial can yield another account\u2019s balance."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 15.151,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4843,
+      "out": 605
+    },
+    "cost_usd": 0.014161
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

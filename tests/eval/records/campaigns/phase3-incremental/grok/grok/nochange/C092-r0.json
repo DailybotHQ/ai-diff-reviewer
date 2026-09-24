@@ -1,0 +1,75 @@
+{
+  "case": "C092",
+  "pr": "C092",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 0,
+  "tool_calls": 0,
+  "seconds": 6.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 6.2,
+  "usage": {
+    "in": 2004,
+    "cache_read": 0,
+    "cache_write": 0,
+    "out": 286,
+    "source": "api"
+  },
+  "cost_usd": 0.006518,
+  "changed_files": [
+    "src/a.ts"
+  ],
+  "findings": [],
+  "summary": "No code changed since `3cf58c16`, so this round spent no review turns and re-read the 1 outstanding finding(s) with the verifier instead:\n\n- `src/a.ts:1` (warning) \u2014 **verified**: The head change hard-codes `{ timeout: 250 }` on `http.get` in `fetchUser`. 250 ms is an aggressive network timeout that can fail under cold starts or latency, and nothing in the file or callers makes",
+  "round": "nochange",
+  "effective_max_turns": 0,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [
+    {
+      "path": "src/a.ts",
+      "line": 1,
+      "status": "verified",
+      "reason": "The head change hard-codes `{ timeout: 250 }` on `http.get` in `fetchUser`. 250 ms is an aggressive network timeout that can fail under cold starts or latency, and nothing in the file or callers makes"
+    }
+  ],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.111,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2004,
+      "out": 286
+    },
+    "cost_usd": 0.006518
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C092-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

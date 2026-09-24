@@ -1,0 +1,95 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 94.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 94.6,
+  "usage": {
+    "in": 34028,
+    "cache_read": 88192,
+    "cache_write": 0,
+    "out": 5150,
+    "source": "cli"
+  },
+  "cost_usd": 0.143052,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier ended without a verdict within 4 turns\n\nAny caller `Origin` is now copied into `Access-Control-Allow-Origin` while `Access-Control-Allow-Credentials` is always `true`. A page on an attacker site can `fetch` this API with `credentials: \"include\"`, the browser will send the user's cookies, and the reflected ACAO header lets that page read the response body. Native mobile HTTP stacks ignore CORS, so this does not enable those clients; it only opens browser and webview callers. Restore an explicit allowlist (add known webview origins such as `capacitor://localhost` if needed) and keep `Vary: Origin`."
+    }
+  ],
+  "summary": "This change turns a single-origin allowlist into a credentialed CORS reflector: any website can read authenticated API responses. Restore an explicit allowlist before merge.\n\n`corsHeaders` previously echoed `Access-Control-Allow-Origin` only for `https://app.example.com`, and only then attached `Access-Control-Allow-Credentials: true`. It now copies whatever `Origin` the client sent (or `*` when the header is absent) and always enables credentials. A browser on an attacker page that calls this API with `credentials: \"include\"` will send the user's cookies; the reflected ACAO header lets that page read the body. That is a direct authenticated-data exfiltration path.\n\nThe stated mobile-client motivation does not justify the new headers. Native HTTP stacks ignore CORS, so they already succeed without an ACAO header. Mobile webviews that load untrusted pages are exactly the callers this policy now trusts. `Access-Control-Allow-Origin: *` together with credentials is also invalid per the Fetch spec, so the `origin == null` branch is rejected by browsers; the dangerous case is every real browser `Origin`.\n\n`Vary: Origin` is the right cache hint once an allowlist is restored. If Capacitor/Ionic/WebView origins are required, add those specific values (`capacitor://localhost`, `ionic://localhost`, `http://localhost`) to the set rather than echoing the request.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "unverified",
+      "reason": "verifier ended without a verdict within 4 turns"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.671,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 1,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4272,
+      "out": 227
+    },
+    "cost_usd": 0.011032
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

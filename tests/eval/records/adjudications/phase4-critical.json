@@ -1,0 +1,1850 @@
+{
+  "schema": "adjudication/1.0",
+  "campaign_id": "phase4-critical",
+  "adjudicator": "claude-code (claude-fable-5-1), executing agent \u2014 developer countersign pending (F7)",
+  "blind": true,
+  "method": "source-grounded: head-tree excerpt at the anchor + case labels read before the verdict; arm and lane hidden until seal",
+  "adjudicated_at": "2026-09-24T13:49:22Z",
+  "positive_cases": [
+    "C001",
+    "C002",
+    "C003",
+    "C004",
+    "C005",
+    "C006",
+    "C008",
+    "C009",
+    "C010",
+    "C011",
+    "C012",
+    "C013",
+    "C014",
+    "C016",
+    "C019",
+    "C020",
+    "C021",
+    "C022",
+    "C068",
+    "C069",
+    "C070"
+  ],
+  "notes": "Phase 4 critical arm (Task 29): the 21 critical trees \u00d7 3, critical tier forced through high-risk-paths ** \u2014 40 turns as the grok CLI native cap, deep alias (grok-4.6 on xAI), every warning verified, base re-read on claimed criticals. Every claim adjudicated at its claimed severity, blind to the verifier's verdict (re-joined at seal). Source-grounded: head-tree excerpt at the anchor + case labels read before each verdict. Understated severities (an injection or credential leak reported as warning) are recorded in notes; the tool has no 'understated' verdict.",
+  "findings": [
+    {
+      "id": "b97578094b2844a9",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "bef16336157f5a8dcff269326d9e5242f38f9db20a4606597d83eb57ba9c54f5"
+    },
+    {
+      "id": "af528851edf1fd90",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "531ac4297c12bd6d321e3f07d1c9aaa24f79f0faa83f48819fdae827ec033e4e"
+    },
+    {
+      "id": "a3645e1a1fa3b125",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "9eda6bd592deba34b6561faa5150051b8cd4d2141dc1e8499655a2b248bc1020"
+    },
+    {
+      "id": "8b1bea61614d381b",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "functional defect at the anchor (exact-match predicate cannot serve the requested fragment search); not the labelled injection, real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "b8b8ac3e867fb7bac0d0caa00cf886e8dabce0f27b70e28ee69d3191dece944a"
+    },
+    {
+      "id": "ca2cdb0a0238b03b",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "419a36d166588db0672fbc6e27edc7f171fa451c51239a070f2f9897bfe0e257"
+    },
+    {
+      "id": "6c024739a331bdee",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "functional defect at the anchor (exact-match predicate); real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "6088e02a607199832c9b824cb878568418ea719bc8467a9aab727ff47b7151af"
+    },
+    {
+      "id": "950d83fcbb38a473",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "the labelled SQL injection, reported as warning \u2014 severity understated, defect real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "009475bf8944d4f4499f60ab5bea0769bc6b85f9ee3e1d3d7700475c55df5668"
+    },
+    {
+      "id": "d46c7405817d9fb5",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "the labelled SQL injection, reported as warning \u2014 severity understated, defect real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "73e4d2ee02fab74c4e23c1820fda4120b8f06abd1b3da5d1f7c1c92bbb7cc611"
+    },
+    {
+      "id": "ba36eb8166765d63",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "6a6b2b42d6ee19d44ed3e3a928b3c4908d7585f6cfff5d0612d45eddfbf407a0"
+    },
+    {
+      "id": "f03d8c7cbe2fd02d",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d0917c0ff849f9242e4f47fd703b6dd7081b0028b3ab3c23d3236b4080debf04"
+    },
+    {
+      "id": "36aeada166ed2620",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "deb4226d8f8611b52fd897255ed4282315367d24513e57adf0895fbbd9ba9a92"
+    },
+    {
+      "id": "5759503f109ffd38",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d2545880105edc046393363b207074ec99feee3644fb928519daf3eb5c979aaf"
+    },
+    {
+      "id": "ecfcaba72aa4d248",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d1489844266423866e73a9fd481898a731d8efc557de472356d7a194e00b5669"
+    },
+    {
+      "id": "2c7b0e5947ad583b",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "ea2ab05618d091ea225e95261a796196d6484a8e5fa1df1f405ccb97514e5406"
+    },
+    {
+      "id": "fd0536dd897e8f88",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "f5c92b1894beef4685220afed37a02ed3823b5161cf0d87671b6792a66d06bed"
+    },
+    {
+      "id": "cf450ddbd8830e04",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "19e17d2a1b3128b79bbd39c45e0fe23cffda7859a355d86986b138c50bbc2f92"
+    },
+    {
+      "id": "66e79766e2925de8",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "71c99dcc60e5cde5159132c0f3ceb5225c5a808ed3a0d97f182a9af1835c43e6"
+    },
+    {
+      "id": "7170b22446e31550",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "7a343d7b1651572b20dc0282a10be54a30e62ba425b80d257abf42b2b5db3461"
+    },
+    {
+      "id": "0ae45619fd55c46e",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "322d6a2476e7d657cfc0900aee22aecd0644b39aa8c29fa6ee88df13fcb8c768"
+    },
+    {
+      "id": "ea6708a9c2fda65b",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "37f6ba66674ea388aa9bb9f1d5b9521e12144e27202ba239c75571a0a667ef71"
+    },
+    {
+      "id": "9cdfa9f2ce1ec808",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "0925e37b7ce971eabebcb81f4126d0659af4c5fdf9153689203b178c617bef78"
+    },
+    {
+      "id": "22e790519f76e7fe",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "130f49d15af6fbcffd627abe6dc81c91577d6582161767fe3ce8482d910889bd"
+    },
+    {
+      "id": "ad414adf18cf1a45",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "03b22af2311b32ba701cfba181c495409d88469ff9ba0ef06b1be95204d712f4"
+    },
+    {
+      "id": "76f84c29a71eb4a6",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "cefbd0645705590b2d7263b5983b362eb2142c8dca6add51594cd206bb4ff253"
+    },
+    {
+      "id": "9fe8108f61faa2b5",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "8605dbb84cd559a42c6970e15f10e366e16b6eb9e3936351e4290358cbdcce92"
+    },
+    {
+      "id": "80a01ed0eb29809c",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d8aa619503bb9dde62db6eeb7e1a7b5ed6c47e34b68148901f1e329627e87eb0"
+    },
+    {
+      "id": "7c80fe5b0fd74467",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c0a5fef3fb602e9c89d7c57ac325dbac0f2066ed25685794061b5d305000ffae"
+    },
+    {
+      "id": "1683941485122ba4",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "f102b319d77ef6e222aece43e3b4c82145b33ee2508013270cb09e59f23ddd55"
+    },
+    {
+      "id": "668ad14d1cb45620",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d4f0e6adcaf397a216c82b5e0fb5d5d3e96e58ff010426f4dbff812cfc1b79b0"
+    },
+    {
+      "id": "8e2aba9892bd1f18",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "warning",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "minor real regression (info breadcrumb dropped); warning is proportionate",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "51321c059abd936aa0c5c9f3a3b5601c9619edd69e1c26635053d687d5df4300"
+    },
+    {
+      "id": "379876418f0fd294",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "167e651de6110d36714b3bb67a37b731c3d31bb7f8a4f95c77b8a77b3794df7c"
+    },
+    {
+      "id": "ca5801ab3ca76369",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "0bec2d51d8f7fcd40802b3e5ca55b34ff9aa4e5c4df3136e7a8ad126f5af1fb8"
+    },
+    {
+      "id": "9789651d7055605a",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "warning",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "the labelled credential leak, reported as warning \u2014 understated, real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "a8e3fbeda3b161a38f7cd81fc2addf8a7323fe75368a4a6f9e7106eaa6c3dea7"
+    },
+    {
+      "id": "6f8d4190c11dcc0b",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "35ec38b34a8adb62ee8266af5635e77f7f6b030deb4ce720f79357bdfe15a9f9"
+    },
+    {
+      "id": "a3900989236de3d8",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "49d8f9cbc080db101559c49daec442e0e41bb412a4192fbca4443794bb986d10"
+    },
+    {
+      "id": "ac222fc1699eb12e",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "cd3958d35908c98543125e4ee4138be59ab9c1d4d91e590da9d3076a1bbee960"
+    },
+    {
+      "id": "5f8f376cc472fabd",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "994e1ca6354eee838614490f098635e97253a645bb48b05a7700f413f71207a6"
+    },
+    {
+      "id": "e3ae836e1debb936",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "cce4483353040232ef79d43510fc1b37859b965119fa3713df32b0298fccb694"
+    },
+    {
+      "id": "cdb7e0292cf44fc9",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "dc9e0ef4b27424f760398a38b442ffccf423b8a26c7c2b61c047374ab97ed974"
+    },
+    {
+      "id": "4a9908618ce17c9a",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "verifier ran out of turns (published as annotated warning); the CORS reflection with credentials is real and critical",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "unverified"
+      ],
+      "body_sha256": "7102a83c1aadfc25ecea3bbc6bb33194ec89c39dbd5af3c02448a2ea9913d9b5"
+    },
+    {
+      "id": "9c4d4a66d8f6350c",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "49db5dcba66efc0685ae6b90feeb50029c333bcf4b1fb8e1e5dd866621efc297"
+    },
+    {
+      "id": "26d581f98d224116",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d0f3fb0ca3393a770c20276c19d2747e16225b46541c3f13c11f3d64de057b07"
+    },
+    {
+      "id": "51208f3bb1d2d14e",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "unlabelled: a zero-value http.Transport does drop DefaultTransport's proxy/timeouts/HTTP2 \u2014 real, warning proportionate",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "29dd50dfe9786bdeb7f751025f941a049f82fbaa2af887e4e2969d1e5fb0ef19"
+    },
+    {
+      "id": "49208dc8935b2e02",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "a7aea86ab444fe30f49763cc36de92289b11acc9980ac86c61065a6469e041a8"
+    },
+    {
+      "id": "e317fbd36d8d9631",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "955e580ca4a2798bb1203fe773239b1617d290d620cff29c094a05d860fb95e8"
+    },
+    {
+      "id": "176d27c59e01bf63",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "8570e7f44b5187e1c2d3bf512db9296289aca7d7131e40111058a111af142e1a"
+    },
+    {
+      "id": "e6d166b1a2f3b315",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "the fixture's head removes migrations/0007_add_reason.py while 0008 depends on it \u2014 a real NodeNotFoundError; distinct from the labelled destructive drop (fixture defect noted as follow-up C019)",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "7d369f5c7c6c2f0d92c57a5a501a15d6e1134e376ced75ce2fc0e3b2bed896d1"
+    },
+    {
+      "id": "f4bacf51d81c6236",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "the fixture's head removes migrations/0007_add_reason.py while 0008 depends on it \u2014 a real NodeNotFoundError; distinct from the labelled destructive drop (fixture defect noted as follow-up C019)",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "fbaa2a6d2fbcc1708213e4a0c4a708e0878981ed79e9f4a20c44b92722e6d5e4"
+    },
+    {
+      "id": "a362dc79b04f0481",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "the fixture's head removes migrations/0007_add_reason.py while 0008 depends on it \u2014 a real NodeNotFoundError; distinct from the labelled destructive drop (fixture defect noted as follow-up C019)",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d603bd2d14717ce0dba1f71ab9cf6ae79e1ac5463fa94450750fd1519cf12ed4"
+    },
+    {
+      "id": "6b5d643600c38a06",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "the labelled destructive drop, reported as warning after the graph defect \u2014 understated, real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "32bec6f550aa286493373885458a7a4bec3522389bfbf70f40151b032053b0b9"
+    },
+    {
+      "id": "628fe396d1386b42",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "63e4176a50a6a5e9fd9c65274a06f22acb05239637fd32412124835374733e8b"
+    },
+    {
+      "id": "756c5c99c5fcccae",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "4fb3472122fdcd8b21b9e56f5ccf12686ebfe24e0efc76afc072178ce858ff1e"
+    },
+    {
+      "id": "73d8c40c35d2c55c",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "real logic defect: LIKE can match several accounts and QueryRow returns one silently; distinct from the labelled injection",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c9fd2ee3d4f19074807e3163cbb3957e308d2a128aa09ac858f09e46b2ed316c"
+    },
+    {
+      "id": "3203db5a51bad17f",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "the labelled SQL injection at the QueryRow line, reported as warning \u2014 understated, real",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "009e516fbadf955855fe7363be33193d5f3092d77b81efed1a655d45e3923a16"
+    },
+    {
+      "id": "ed438334c85bccb7",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "real logic defect (multi-match balance); distinct from the labelled injection",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "bdf0b36515bcfd64674797d50d6f1eb8901d3a1df5b23cce6fa0325ed0d48fa0"
+    },
+    {
+      "id": "a0a3860c9c8d7d5e",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "real logic defect (multi-match balance); distinct from the labelled injection",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "ee64569ae54ab5a58bbce5fe9eb9587fc656680be1cdc8950c19d2a1d832ef65"
+    },
+    {
+      "id": "5b571224eef9decd",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "9f620f10150c5907bedd2847a77e0891f1e9adfce99147ee8d2c20b044e7e480"
+    },
+    {
+      "id": "008e181ec2608d93",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "1dc0e0d2cf6787bc0adbe7d3030fb3091c83f7ec0a67d201b40d39bb6bc9cb46"
+    },
+    {
+      "id": "df5b5d824b49be57",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "27a6ba3e133cbb5a844517a2ff2486aaecedeed066a8866678b7f015e5ea3a75"
+    },
+    {
+      "id": "496a079eed95efb8",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "e3dff237bab2023c64356d33a830794b187134c12e758a311e8498fe47b6752b"
+    },
+    {
+      "id": "5457c997be52d606",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "44d11e6fbb1d1190eb8a5d5bdc2038ed5a53deaaaafc8a1d90af89fe08ebfc15"
+    },
+    {
+      "id": "808769de178d82d2",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "a7929844e658e6c959c7772afedcc734a15efb9e9f82533a95c130689419ed29"
+    },
+    {
+      "id": "2f7f317f92afbabf",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "5c4705f7f503bb7ca71bea5071cd2e22c4a8ecc294bcc2fefd4c64b1e3d08c0a"
+    },
+    {
+      "id": "2e70ffa8e4029955",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "4171b5aeabcb7d9d77d6002622aedef7fc373f443c55c1e6f536ff5bb01cf080"
+    },
+    {
+      "id": "41e8f2a0732cf318",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "62e224fdd88557f9f26841131182421c22baa65aa2407486ec4eed32996acb0d"
+    },
+    {
+      "id": "7386f2966132f3a8",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "1f6959890539711b9f777ccd62fd9ea5461a4e775736b2bec8a9a29cd33e68fd"
+    },
+    {
+      "id": "59ed6b68d38053f8",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "66ee058d79ebe48ec4ca6f1842cd6114b545fbb7a1164b8c53fb80cf4920d66b"
+    },
+    {
+      "id": "753c64cc34bc8238",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "fc4a245b5f41a8695cddc152c98da07f8fe4f2475453b2bcdaab701bcacebb05"
+    },
+    {
+      "id": "3536b0e896a7fb16",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "59fcbbaeb2c802232cace1d67dd0b938bab944a9f4251b887f841a5ac86d0b4e"
+    },
+    {
+      "id": "4301e2fa2b7cd138",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "f4e97983fbdaa5194fd38fb0b9a78ecdff7578eac40623c43ff94efa78fbfb4d"
+    },
+    {
+      "id": "da7a759f7565b726",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "16f3c89049e7d8b6f03ac5de24b40dfcdcaa76b5751f1288691e41c9f31059db"
+    },
+    {
+      "id": "053e1fed7624d703",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "37f63195c6689c31369f6fa36bfd6263e63f71bd0809bff361f0daad3932da73"
+    },
+    {
+      "id": "698eb5170dde7399",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "264e97b0ebe808ea65557c12ff864f50e59c2931b76dae65bda318699873b6d1"
+    },
+    {
+      "id": "755a69ac58a282bd",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "matches the case label; the excerpt at the anchor shows the defect",
+      "lanes": [
+        "grok|xai|grok-4.6"
+      ],
+      "arms": [
+        "critical"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "f1a7139e20828d7298cb76a8fc34578f3befe518eabf9f0a9c38d3b8702f8cb1"
+    }
+  ],
+  "precision": {
+    "positive_cases": 21,
+    "findings": 74,
+    "overall": {
+      "true": 74,
+      "false": 0,
+      "overstated": 0,
+      "precision": 1.0
+    },
+    "per_lane": {
+      "grok|xai|grok-4.6": {
+        "true": 74,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    },
+    "per_verifier": {
+      "unverified": {
+        "true": 1,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      },
+      "verified": {
+        "true": 73,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    },
+    "per_disposition": {
+      "published": {
+        "true": 74,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    }
+  }
+}

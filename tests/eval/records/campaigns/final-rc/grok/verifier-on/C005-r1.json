@@ -1,0 +1,96 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 54.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 55.0,
+  "usage": {
+    "in": 31062,
+    "cache_read": 88064,
+    "cache_write": 0,
+    "out": 2577,
+    "source": "cli"
+  },
+  "cost_usd": 0.1040052,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Switching `subprocess.run` to `shell=True` with an f-string turns `upload_dir`, `name`, and `oid` into shell syntax. A crafted `name` or `oid` (for example `x; id > /tmp/pwned; #`) executes arbitrary commands as the service user and can write outside `/srv/thumbs/`.\n\nImageMagick policy delegates do not need a shell \u2014 keep the argv list (and the absolute binary path). If the upstream validator was the safety rail, it is no longer documented here and does not cover `upload_dir` / `oid` anyway.\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical command-injection regression in `make_thumb`: the conversion call was switched from an argv list to `shell=True` with unquoted interpolation of `upload_dir`, `name`, and `oid`.\n\n## Narrative\n\nImageMagick 7 policy/delegate behavior does not require a shell. `subprocess.run([...], shell=False)` still execs `/usr/bin/convert` directly and honors the same process environment and policy.xml. The previous argv form was the correct boundary.\n\nWith `shell=True`, any metacharacters in the three interpolated values become shell syntax. Even if `name` were constrained upstream by an `ALLOWED_FILES` regex (the comment that documented that assumption was removed, and no such validator exists in this tree), `upload_dir` and `oid` remain fully attacker-shaped once they reach this helper. A value such as metacharacters in `name` or `oid` runs arbitrary commands as the service user and can overwrite paths under `/srv/thumbs/`.\n\nSecondary issue on the same hunk: dropping the absolute `/usr/bin/convert` path for a bare `convert` makes the call PATH-dependent on the runner.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces a safe argv-list `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid` into the shell command, enabling command injection. That matches the claimed critical security defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.012,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2169,
+      "out": 313
+    },
+    "cost_usd": 0.006677
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

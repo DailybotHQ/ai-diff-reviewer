@@ -1,0 +1,95 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 75.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 75.6,
+  "usage": {
+    "in": 34009,
+    "cache_read": 153600,
+    "cache_write": 0,
+    "out": 4143,
+    "source": "cli"
+  },
+  "cost_usd": 0.169676,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "The PathPrefix move also unwraps `middleware.RequireRole(\"admin\")`. `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` are now registered as bare `http.HandlerFunc`s, so any caller who can reach those URLs can list users and edit roles. The parent `routes()` function does not re-apply that middleware.\n\nKeep the existing wrapper on each handler (or `Use` it on the v2 subrouter if `RequireRole` is a mux middleware). Restore `authz := middleware.RequireRole(\"admin\")` above the subrouter as well:\n\n```suggestion\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```"
+    }
+  ],
+  "summary": "The PathPrefix move is the right gorilla/mux shape, but the same hunk drops the admin role check. Restore that wrapper before merge.\n\n`r.PathPrefix(\"/api/v2\").Subrouter()` plus `v2.Handle(\"/admin/...\")` lands at `/api/v2/admin/users` and `/api/v2/admin/roles`. What is not a cleanup is removing `authz := middleware.RequireRole(\"admin\")` and registering `listUsers` / `editRoles` as bare `http.HandlerFunc`s. Those two routes previously required the admin role; after this change any caller who can hit the new paths can list users and POST role edits. Nothing else in the repo re-applies that middleware on the parent router.\n\nThe unversioned `/admin/users` and `/admin/roles` paths are gone with no shim. That matches the versioning intent, but clients still on those URLs will 404 until they switch.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base routes wrapped listUsers/editRoles with middleware.RequireRole(\"admin\"); the head PathPrefix move registers both as bare HandlerFuncs on the v2 subrouter with no authz wrapper or Use() call, so admin endpoints are unauthenticated."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.523,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2820,
+      "out": 361
+    },
+    "cost_usd": 0.008728
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

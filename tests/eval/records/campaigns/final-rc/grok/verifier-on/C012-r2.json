@@ -1,0 +1,96 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 85.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.2,
+  "usage": {
+    "in": 20499,
+    "cache_read": 164864,
+    "cache_write": 0,
+    "out": 4229,
+    "source": "cli"
+  },
+  "cost_usd": 0.1158312,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `BLOCKED` guard re-enables prototype pollution. `JSON.parse` **does** yield own keys named `__proto__` (and `constructor` / `prototype` can be supplied the same way); `Object.entries` enumerates them.\n\nWith the guard gone, `deepMerge((base as any)[k] ??= {}, v)` for `k === \"__proto__\"` reads `base[\"__proto__\"]` (the inherited accessor), gets `Object.prototype`, and recursively assigns into it. Concrete failure: `deepMerge({}, JSON.parse('{\"__proto__\": {\"polluted\": true}}'))` makes `{}.polluted === true`. The `constructor.prototype` payload similarly sets `{}.pwned`.\n\nRestore the blocklist (or merge via `Object.defineProperty` / null-prototype intermediates that never assign through `__proto__`). The PR rationale is incorrect \u2014 do not drop this check because of an assumed `JSON.parse` invariant."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`. The PR claim that `JSON.parse` never yields dangerous keys is false.\n\n## Why this is blocking\n\n`JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an own property named `__proto__` (verified on current Node). `Object.entries` enumerates it. Without the guard, this path runs:\n\n```ts\ndeepMerge((base as any)[k] ??= {}, v as Record<string, unknown>);\n```\n\nWhen `k === \"__proto__\"`, `(base)[k]` reads the inherited setter/getter and resolves to `Object.prototype` (truthy), so `??=` does not create a safe child object and recursion merges **into `Object.prototype`**. The same class of attack works via `constructor` / `prototype`.\n\nReproduced after this change:\n\n- `deepMerge({}, JSON.parse('{\"__proto__\": {\"polluted\": true}}'))` \u2192 `{}.polluted === true`\n- `deepMerge({}, JSON.parse('{\"constructor\": {\"prototype\": {\"pwned\": 1}}}')))` \u2192 `{}.pwned === 1`\n- With the previous `BLOCKED` set, both stay clean\n\nEven if some callers only pass trusted literals today, `deepMerge` is a generic `Record<string, unknown>` helper \u2014 any future config/API/user JSON path inherits the hole. The blocklist was the right mitigation for assignment-based merges; delete it only if the implementation switches to `Object.create(null)` targets + `Object.hasOwn` / `Object.defineProperty` that never touch `__proto__` accessors.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The PR removed the BLOCKED set and the `BLOCKED.has(k) continue` guard from `deepMerge`. The remaining `(base as any)[k] ??= {}` / assignment path still treats `__proto__` as a normal key, so `deepMerge({}, JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` mutates `Object.prototype` \u2014 a real critical "
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 14.26,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5009,
+      "out": 439
+    },
+    "cost_usd": 0.013138
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

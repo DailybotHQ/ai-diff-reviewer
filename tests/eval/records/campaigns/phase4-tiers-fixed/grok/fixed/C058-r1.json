@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 58.6,
+  "setup_seconds": 0.4,
+  "total_seconds": 59.0,
+  "usage": {
+    "in": 33319,
+    "cache_read": 120960,
+    "cache_write": 0,
+    "out": 3825,
+    "source": "cli"
+  },
+  "cost_usd": 0.125876,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "The Unreleased entry claims an \"API migration in scripts/pack.js\", but `scripts/pack.js` is not part of this PR and does not exist in the repository (tree only has `package.json`, `package-lock.json`, and `CHANGELOG.md`). tar-stream 3 is a major bump with breaking API changes; documenting a completed migration that was not shipped will mislead anyone relying on the changelog.\n\nEither add the real call-site migration to this PR, or change the bullet to record only the dependency pin bump (and note that call sites still need migration if/when they exist)."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "Major bump of `tar-stream` from `^2.2.0` to `^3.1.6` with no corresponding call-site updates in the same PR. The PR description says call sites were migrated; none appear in the diff. If this package is consumed with tar-stream 2-era pack/extract usage elsewhere, those sites will break at runtime once 3.x resolves.\n\nConfirm there are no remaining tar-stream 2 call patterns, or include the migration (e.g. the claimed `scripts/pack.js`) before treating this as complete."
+    }
+  ],
+  "summary": "## Verdict\n\nMajor dependency bump is incomplete: the changelog and PR description claim a tar-stream 2\u21923 API migration in `scripts/pack.js`, but that file is not in the diff and does not exist in the repository.\n\n## Narrative\n\n`package.json` and `package-lock.json` correctly move `tar-stream` from 2.2.0 to 3.1.6. tar-stream 3 is a major release with breaking stream/API changes, so a real consumer would need call-site updates. This tree has no `scripts/` directory and no imports of `tar-stream` at all \u2014 only the version pins and a changelog bullet that asserts the migration already happened.\n\nThat makes the release note actively misleading for anyone reading Unreleased: it documents work that was not shipped. Before merge, either land the actual `scripts/pack.js` (or equivalent) migration in this PR, or rewrite the changelog to state that only the dependency pin moved and call sites still need review.\n\nLockfile version string matches `package.json` (^3.1.6 \u2192 locked 3.1.6), so the lockfile presence itself is fine; contents were omitted from review by policy.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

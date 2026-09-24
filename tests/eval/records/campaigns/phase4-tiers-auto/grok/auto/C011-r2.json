@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.8,
+  "setup_seconds": 0.2,
+  "total_seconds": 43.9,
+  "usage": {
+    "in": 30650,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 1765,
+    "source": "cli"
+  },
+  "cost_usd": 0.098194,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "`process.env.PROCESSOR_KEY` is written into the debug log payload on every charge. That credential will land in whatever sink consumes `log.debug` (stdout, log agents, SIEM, support tooling) and can be used to replay charges against the processor.\n\nRemove `key` from the log fields. Keep `orderId` and `ref` only \u2014 those are enough for support to correlate failures without exposing secrets.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n\nIf support truly needs a privileged replay path, use a separate audited break-glass tool that never prints the raw key into application logs."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change writes the payment processor credential (`PROCESSOR_KEY`) into application logs on every successful charge.\n\n## Why this is blocking\n\n`log.debug(\"charge context\", { \u2026, key: process.env.PROCESSOR_KEY })` puts a live secret into the observability pipeline. Debug logs are routinely shipped to centralized log stores, retained for weeks/months, and readable by support and anyone with log-backend access. A credential in those systems is an exfiltration and replay risk, which matches the comment\u2019s stated goal (\u201cso support can replay failures\u201d).\n\nThe previous `log.info` line already gave support the non-secret charge context (`orderId`, `ref`). That is the right surface for failure investigation; the processor key must stay out of log payloads entirely.\n\n## Secondary note\n\nReplacing the info-level \u201ccharge created\u201d event with debug-only context also drops a useful operational signal unless debug logging is always on in production \u2014 but that is secondary to the secret leak.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `src/payments/charge.ts:7` logs `key: process.env.PROCESSOR_KEY` in the charge debug payload; base only logged `orderId` and `ref`. That is a real credential leak into whatever consumes `log.debug`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.134,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1227,
+      "out": 457
+    },
+    "cost_usd": 0.006886
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "case": "C089",
+  "pr": "C089",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 41.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.8,
+  "usage": {
+    "in": 17612,
+    "cache_read": 131968,
+    "cache_write": 0,
+    "out": 2346,
+    "source": "cli"
+  },
+  "cost_usd": 0.0888904,
+  "changed_files": [
+    "README.md",
+    "poetry.lock"
+  ],
+  "findings": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "This line tells readers to see CONTRIBUTING, but the repository has no CONTRIBUTING file (no `CONTRIBUTING`, `CONTRIBUTING.md`, or equivalent on the branch). Anyone following the new README pointer hits a dead end.\n\nAdd a real CONTRIBUTING guide (or link to an existing external contrib doc), or drop this line until that file exists."
+    }
+  ],
+  "summary": "## Verdict\n\nDocs-only PR with one real issue: README points at a CONTRIBUTING guide that is not in the tree.\n\n## Notes\n\n`README.md` now says \"See CONTRIBUTING.\" The repo only contains `README.md` and `poetry.lock` \u2014 there is no `CONTRIBUTING`, `CONTRIBUTING.md`, or similar path, so the new pointer is a dead reference.\n\n`poetry.lock` is listed as omitted/generated. From the inventory alone it is a one-line version churn alongside a docs edit, with no `pyproject.toml` (or other manifest) in the change set. Worth confirming that lock update was intentional and not accidental noise in the same commit; do not treat the lock blob as reviewed line-by-line.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "README.md",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C089-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

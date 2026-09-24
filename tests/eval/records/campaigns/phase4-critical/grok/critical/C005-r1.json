@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 88.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 88.3,
+  "usage": {
+    "in": 60846,
+    "cache_read": 125312,
+    "cache_write": 0,
+    "out": 4791,
+    "source": "cli"
+  },
+  "cost_usd": 0.213094,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`make_thumb` interpolates `upload_dir`, `name`, and `oid` into a shell command. A value such as `foo.png; id` (or metacharacters in `oid` / `upload_dir`) runs as extra commands under the worker user.\n\nImageMagick policy.xml applies to argv-form `convert`. Restore the list form and the `/usr/bin/convert` absolute path.\n\n```suggestion\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n```\n\nThis repo has no `ALLOWED_FILES` check (the old comment claiming one was removed). Filename regex validation of `name` still leaves `upload_dir` and `oid` as shell-injection surfaces."
+    }
+  ],
+  "summary": "Switching `make_thumb` to `subprocess.run(..., shell=True)` with an interpolated command string is a command-injection regression on a path that already takes upload-derived names.\n\nImageMagick 7 policy delegates are configured in `policy.xml` and apply to argv-form invocations. The previous `[\"/usr/bin/convert\", src, dest]` call is the correct IM7 invocation.\n\nThis tree has no `ALLOWED_FILES` (or any other) validator for `name` / `upload_dir` / `oid`. A filename regex on `name` still leaves `upload_dir` and `oid` interpolated into the shell.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `make_thumb` builds `f\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"` and runs it with `shell=True`, so metacharacters in those values execute as extra commands. Base used a safe argv list (`[\"/usr/bin/convert\", ...]`) with no shell; no in-repo validation of those inputs remains."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.881,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2569,
+      "out": 401
+    },
+    "cost_usd": 0.008517
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

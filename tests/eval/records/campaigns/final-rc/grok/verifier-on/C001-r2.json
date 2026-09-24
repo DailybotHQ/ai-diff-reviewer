@@ -1,0 +1,96 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 43.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.0,
+  "usage": {
+    "in": 29876,
+    "cache_read": 57344,
+    "cache_write": 0,
+    "out": 1494,
+    "source": "cli"
+  },
+  "cost_usd": 0.0859192,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization check. Any client that can reach this route can delete any user and get `204`, including viewer-scoped cleanup jobs and unauthenticated callers.\n\nThat is an access-control bypass on a destructive endpoint. Fix the cleanup-job 403 by giving the job a principal that is allowed to delete (dedicated role, service credential, or separate internal handler), and keep a require-role (or equivalent) guard on this route.\n\n```suggestion\n@require_role(\"admin\")\ndef delete_user(user):\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only authorization check on `DELETE /users/<user>`, turning a privileged destructive operation into an open endpoint.\n\n## Analysis\n\n`delete_user` previously required `@require_role(\"admin\")`. The PR replaces that guard with a comment so cleanup jobs running as `viewer` stop getting 403s. That fixes the symptom by deleting the access control entirely: any caller who can reach the route can remove any user from `USERS` and receive `204`.\n\nThe failure mode is immediate and concrete. With the decorator gone there is no role check, no caller identity check, and no substitute gate (service account, internal-only middleware, signed job token, etc.). A viewer session, an unauthenticated client, or any scripted caller can delete `alice` or `bob`.\n\nIf cleanup jobs need delete access, grant that capability narrowly (dedicated job role/credential, server-side job path, or an allowlisted principal) while keeping human/interactive callers on least privilege. Removing `@require_role` is not an acceptable fix for job 403s.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base revision guarded DELETE /users/<user> with @require_role(\"admin\"); head replaces that decorator with a comment and leaves delete_user with no auth check, so any client can remove users and get 204. That is a real access-control regression on a destructive route."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.532,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3075,
+      "out": 361
+    },
+    "cost_usd": 0.00911
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

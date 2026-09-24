@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 131.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 131.7,
+  "usage": {
+    "in": 22380,
+    "cache_read": 138496,
+    "cache_write": 0,
+    "out": 5565,
+    "source": "cli"
+  },
+  "cost_usd": 0.1196988,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** CHANGELOG.md\u2019s Unreleased line claims an \u201cAPI migration in scripts/pack.js\u201d, but pack.js is absent on base and head, no source file imports tar-stream, and the diff only bumps package.json/lock to ^3.1.6\u2014so the migration claim is false. Impact is a misleading changelog (no runtime consumer), so critical is too high.\n\nThe new Unreleased entry states that tar-stream 2\u21923 includes an \"API migration in scripts/pack.js\", and the PR description says call sites were migrated. That migration is not in this diff: `scripts/pack.js` does not exist on base or head, and no other source file changed.\n\ntar-stream 3 changes pack/extract header and stream APIs relative to v2. If production code still uses the v2 call shape, installing `^3.1.6` will fail at runtime; if there is no consumer, this changelog line documents work that never shipped. Either include the `scripts/pack.js` (or other call-site) migration in this PR, or drop the migration claim until that change lands."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "`tar-stream` moves from a v2 range (`^2.2.0`) to a v3 range (`^3.1.6`) with no other source edits in the PR. For a major upgrade, the diff should show the pack/extract call sites updated for the v3 API (the changelog even points at `scripts/pack.js`).\n\nAs landed, reviewers cannot verify that consumers compile or run against 3.x. Add the migrated call sites (or a brief note in the PR body if this package truly has zero runtime imports and the bump is lockstep-only for a downstream image)."
+    }
+  ],
+  "summary": "## Verdict\n\nIncomplete major upgrade \u2014 the version bump is present, but the claimed call-site migration is not.\n\n## What changed\n\n`tar-stream` is raised from `^2.2.0` to `^3.1.6` in `package.json`, with a matching `package-lock.json` pin to `3.1.6` and a CHANGELOG bullet under Unreleased. That is the entire diff (3 files, +3/\u22122).\n\n## Why this is a problem\n\nThe PR description says call sites were migrated, and `CHANGELOG.md` names an API migration in `scripts/pack.js`. Neither base nor head contains `scripts/pack.js` (or any other consumer of `tar-stream`). A major bump of `tar-stream` changes pack/extract header and stream APIs; shipping only the version range without the migration the authors themselves document leaves the upgrade half-done and the release notes inaccurate.\n\n`package-lock.json` is present and the locked version matches the manifest range, so lockfile drift is not the issue here.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "downgraded",
+      "reason": "CHANGELOG.md\u2019s Unreleased line claims an \u201cAPI migration in scripts/pack.js\u201d, but pack.js is absent on base and head, no source file imports tar-stream, and the diff only bumps package.json/lock to ^3.1.6\u2014so the migration claim is false. Impact is a misleading changelog (no runtime consumer), so crit"
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "package.json only bumps tar-stream from ^2.2.0 to ^3.1.6; the repo has no JS/TS sources or scripts/pack.js despite the changelog claiming an API migration there, so reviewers cannot see v3 call-site updates."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 32.959,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 1,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6075,
+      "out": 964
+    },
+    "cost_usd": 0.019572
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

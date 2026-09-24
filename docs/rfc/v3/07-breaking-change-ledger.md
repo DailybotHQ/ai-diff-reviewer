@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 9, 2026-09-23). Collects
+Implemented (pending release) — 2026-09-24: every row BC-01 … BC-20 shipped on `main` (Phases 0–2, squash `0177b67`, `v3.0.0-rc.1`) or on the Phase 3–4 branch (BC-13 incremental half `e0cdddc`; BC-13 / 14 / 15 / 19 `42cc4c4`; BC-16 as the documented rule), or was closed as unchanged (BC-20); the per-row closure table with landing commits and MIGRATION_v3 sections is plan-local (`PLAN_v3_implementation/analysis_results/BC_LEDGER_CLOSURE.md`). Accepted — 2026-09-23 (D-00, developer instruction to PLAN_v3_implementation). Originally a discovery record (PLAN_v3_discovery, Task 9, 2026-09-23). Collects
 every public-contract change proposed by RFC-01…06 plus the candidates
 recorded at the v2.5.0 release, classifies each, and outlines
 `docs/MIGRATION_v3.md`. Consumed by RFC-08 (release cuts; pending rows

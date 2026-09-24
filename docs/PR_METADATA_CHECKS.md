@@ -62,6 +62,10 @@ The existing pattern in many repos is a line-count-based labeller (small = <50 l
 
 If you want to *combine* both signals (e.g. show `size:XL` for line-count and `complexity:high` for cognitive load), keep your existing labeller and add this one alongside it — they use different prefixes and don't collide.
 
+### `complexity-source` (v3)
+
+Since v3 the label has two possible sources. `model` (default) keeps the assessment above. `inventory` derives the label from the deterministic **risk tier** the runtime computes from the change inventory (RFC-06: `low` → `low`, `standard` → `medium`, `elevated` / `critical` → `high`) — paths, statuses and sizes only, never the PR title or body — so routing rules see the same label on every re-run. In both modes the model's level is telemetry: it never changes the review budget, which is set by the tier (`budget-profile`).
+
 ### Downstream routing
 
 The applied label is a real PR label — any GitHub Action or webhook can react to it. Common patterns:

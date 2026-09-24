@@ -1,0 +1,89 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 23.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 23.2,
+  "usage": {
+    "in": 30580,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 1821,
+    "source": "cli"
+  },
+  "cost_usd": 0.09839,
+  "changed_files": [
+    "q.py"
+  ],
+  "findings": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`by_email` builds SQL by concatenating `email` into the query string. Attacker-controlled input such as `x' OR '1'='1` alters the predicate and can return arbitrary rows (or worse, depending on the driver).\n\nMatch the `by_name` fix and bind the value:\n\n```suggestion\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nPrior SQL injection in `by_name` is fixed with a bound parameter. The new `by_email` helper reintroduces the same concatenation pattern on `email`.\n\n## Notes\n\n`by_name` now correctly uses `?` placeholders with a parameter tuple. `by_email` builds the query by concatenating `email` into the string, so any caller-controlled email can alter the SQL (classic injection / logic bypass).\n\n**Recommendation:** request-changes",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "b50b033fe4c3975c": [
+      "resolved",
+      "by_name now uses parameterized execute with ? and (name,)"
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "by_email at q.py:6 builds the query with string concatenation of `email`, so attacker-controlled input can alter the SQL predicate. That matches the claimed SQL injection; by_name already shows the correct parameterized form."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.718,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2031,
+      "out": 282
+    },
+    "cost_usd": 0.006164
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C094-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": []
+}

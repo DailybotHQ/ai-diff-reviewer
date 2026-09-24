@@ -1,0 +1,109 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 63.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.9,
+  "usage": {
+    "in": 17344,
+    "cache_read": 101760,
+    "cache_write": 0,
+    "out": 2185,
+    "source": "cli"
+  },
+  "cost_usd": 0.078326,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "`middleware.RequireRole(\"admin\")` previously wrapped both admin handlers; this diff registers them as bare `http.HandlerFunc`s on the new `/api/v2` subrouter with no `v2.Use(...)` or per-route authz.\n\n**Failure mode:** any unauthenticated client can `GET /api/v2/admin/users` and `POST /api/v2/admin/roles`, which is privilege escalation to admin-only operations.\n\nRestore the role check on the subrouter or each handler, for example:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tauthz := middleware.RequireRole(\"admin\")\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n```\n\n(and the same `authz(...)` wrap on `/admin/roles`)."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "`POST /api/v2/admin/roles` is registered without the former `authz` wrapper. Role mutation is an admin-only operation; leaving it open lets any client change roles.\n\nApply the same `middleware.RequireRole(\"admin\")` wrap used on `listUsers` (or `v2.Use` once for the whole admin group)."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change strips admin authorization while relocating the routes.\n\n## What went wrong\n\nThe diff correctly introduces an `/api/v2` subrouter for the admin group, but it drops `middleware.RequireRole(\"admin\")` that previously wrapped both handlers. The new registrations pass bare `http.HandlerFunc` values:\n\n- `GET /api/v2/admin/users` \u2192 `a.listUsers`\n- `POST /api/v2/admin/roles` \u2192 `a.editRoles`\n\nThere is no `v2.Use(...)`, no per-route wrapper, and no other auth gate in this repo. Any caller who can reach the server can list users and edit roles.\n\nThe path move itself matches the stated versioning cleanup; the failure mode is the missing role check on the new routes.\n\n## Fix direction\n\nRestore the admin role middleware on the v2 subrouter (for example `v2.Use(middleware.RequireRole(\"admin\"))` once the middleware matches `mux.MiddlewareFunc`, or wrap each handler as before). Keep the `/api/v2` prefix if that is the intended public path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base wrapped both admin handlers with middleware.RequireRole(\"admin\"); head moves them to /api/v2 as bare HandlerFuncs with no v2.Use or per-route authz, and no other RequireRole usage remains in the tree."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base registered POST /admin/roles behind middleware.RequireRole(\"admin\"); head moved it to /api/v2/admin/roles as a bare HandlerFunc with no authz wrap (same for listUsers). Role mutation is therefore reachable without admin authorization."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 24.067,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5078,
+      "out": 770
+    },
+    "cost_usd": 0.016645
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

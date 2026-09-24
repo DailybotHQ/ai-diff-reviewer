@@ -1,0 +1,83 @@
+{
+  "case": "C092",
+  "pr": "C092",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 23.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 23.3,
+  "usage": {
+    "in": 30860,
+    "cache_read": 88576,
+    "cache_write": 0,
+    "out": 1646,
+    "source": "cli"
+  },
+  "cost_usd": 0.0981688,
+  "changed_files": [
+    "src/a.ts",
+    "src/lib/a.ts"
+  ],
+  "findings": [],
+  "summary": "## Follow-up review\n\nPure rename of `src/a.ts` \u2192 `src/lib/a.ts` with the same `fetchUser` body. No new issues in the rename itself (no remaining in-repo callers of the old path).\n\nThe open warning on the hard-coded 250 ms timeout is **still open**: the call is now `http.get(\\`/users/${id}\\`, { timeout: 250 })` at `src/lib/a.ts:1`. The move did not make the timeout configurable.\n\n**Recommendation:** comment-only",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "49d72ee8b843900a": [
+      "open",
+      "Timeout still hard-coded at 250 in src/lib/a.ts:1 after rename; not made configurable."
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C092-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  },
+  "prior_findings_kept": [
+    {
+      "path": "src/a.ts",
+      "line": 1,
+      "severity": "warning",
+      "status": "open",
+      "body": "250 ms hard-coded timeout will flake on cold starts; make it configurable. Timeout still hard-coded at 250 in src/lib/a.ts:1 after rename; not made configurable."
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 36.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.8,
+  "usage": {
+    "in": 16884,
+    "cache_read": 101120,
+    "cache_write": 0,
+    "out": 2141,
+    "source": "cli"
+  },
+  "cost_usd": 0.07695,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nDo not merge: the only change is a hand-edited generated bundle that diverges from source and introduces a new `eval` surface.\n\n## What changed\n\n- Single file: `dist/app.min.js` (omitted/generated; +1/\u22121).\n- PR frames this as a post-toolchain rebuild. `src/app.ts` is untouched and still only exports `init()` logging `ok`.\n- The new bundle body adds `a.run = function (s) { return eval(s) }`, which is absent from `src/app.ts`.\n\n## Why this matters\n\n1. **Generated artifact out of sync with source** \u2014 A pure rebuild of the current tree cannot produce an API that does not exist in `src/`. Either the bundle was edited by hand, or the commit set is incomplete (missing source). Shipping `dist/` that cannot be reproduced from `src/` breaks the usual release/reproducibility contract.\n2. **New code-execution sink** \u2014 `app.run` passes its argument straight to `eval`. Any caller that forwards untrusted input (query params, postMessage, URL fragments, third-party script data) gets arbitrary JS execution in the page origin. That is a classic XSS primitive, and it is new behavior relative to base \u2014 not a minifier/toolchain artifact.\n3. **PR description does not match the diff** \u2014 \"Regenerated the bundle after the toolchain upgrade\" does not explain adding a public `run`/`eval` API. Treat the metadata as unreliable for intent.\n\n## Notes on review scope\n\n`dist/app.min.js` is classified as generated/omitted, so no inline findings were filed on its lines (per inventory omit rules). The problems above are visible from the one-line dist diff plus the unchanged `src/app.ts` on the same HEAD.\n\n## What would make this mergeable\n\n- If the `run`/`eval` API is intentional: add it in `src/`, document the trust boundary, avoid `eval` unless strictly required, and regenerate `dist/` from that source in the same PR.\n- If this was only meant to be a toolchain rebuild: regenerate from current `src/` so `dist/app.min.js` matches `init`-only source, with no behavioral drift.\n\n**Recommendat",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C090-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

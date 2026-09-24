@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 51.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.8,
+  "usage": {
+    "in": 62179,
+    "cache_read": 88064,
+    "cache_write": 0,
+    "out": 2076,
+    "source": "cli"
+  },
+  "cost_usd": 0.1632332,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is set on every client from `NewClient()`, with no staging/prod gate. Any network path that can MITM the ledger host can present an arbitrary certificate and the client will trust it, exposing ledger traffic to interception and modification.\n\nThe comment references staging and TICKET-77, but a comment is not a control \u2014 production builds get the same transport.\n\n**Fix:** default to verification; only skip when an explicit non-prod config is set. Better: load the staging CA into `tls.Config.RootCAs` so verification stays on.\n\n```go\nTransport: &http.Transport{\n    TLSClientConfig: &tls.Config{\n        MinVersion: tls.VersionTLS12,\n        // RootCAs: stagingPool, // trust staging CA\n        // InsecureSkipVerify only if conf.AllowInsecureTLS && conf.Env != \"production\"\n    },\n},\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 `NewClient()` now disables TLS certificate verification for every caller, with no environment or build gate. That is a production MITM exposure on what appears to be a financial ledger client.\n\n## Why this is blocking\n\n`tls.Config{InsecureSkipVerify: true}` is wired into the default `http.Transport` inside `NewClient()`. The comment says the skip is for a self-signed staging cert and points at TICKET-77, but the code path is unconditional: any binary that calls `NewClient()` (staging or production) will accept any certificate, including one presented by an on-path attacker.\n\nConcrete failure mode: an attacker who can intercept traffic to the ledger host terminates TLS with an arbitrary cert, then reads or modifies ledger requests and responses. The client will not reject the handshake.\n\n## What would make this acceptable\n\nGate the skip on an explicit non-production signal (env, config flag, or build tag), defaulting to verify-on. Prefer fixing staging properly: trust the staging CA via `RootCAs` / `x509.CertPool`, or use a real cert. A TODO comment is not a control.\n\n## Scope note\n\nThe repo only contains `internal/ledger/client.go`; no callers or env wiring were present to soften this. Severity stands on the unconditional skip alone.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() unconditionally sets tls.Config{InsecureSkipVerify: true} with only a comment about staging/TICKET-77 and no env or config gate; base used the default verifying transport, so this is a real critical TLS MITM exposure."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.652,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3528,
+      "out": 374
+    },
+    "cost_usd": 0.010042
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

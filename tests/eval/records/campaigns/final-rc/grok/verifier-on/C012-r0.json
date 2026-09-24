@@ -1,0 +1,96 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 89.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 89.0,
+  "usage": {
+    "in": 33742,
+    "cache_read": 179712,
+    "cache_write": 0,
+    "out": 4592,
+    "source": "cli"
+  },
+  "cost_usd": 0.1489496,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The removed `BLOCKED` guard (`__proto__`, `constructor`, `prototype`) was load-bearing. `JSON.parse` **does** emit those as own enumerable keys \u2014 e.g. `Object.entries(JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` yields `[[\"__proto__\", {polluted: true}]]`.\n\nWith the guard gone, `(base as any)[k] ??= {}` on `k === \"__proto__\"` resolves to `Object.prototype` (inherited getter, truthy), so the recursive merge writes attacker keys onto `Object.prototype`. The `constructor`/`prototype` path pollutes the same way. Confirmed on this function body in Node: both payloads set `Object.prototype.polluted`.\n\nRestore the blocklist (or use null-prototype targets and safe key defines) before merging."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Analysis\n\nThe PR claim that `JSON.parse` never yields dangerous keys is incorrect. On current Node/V8, `JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an **own enumerable** `\"__proto__\"` property. `Object.entries` surfaces it, and this merge then walks it:\n\n- `(base)[\"__proto__\"] ??= {}` resolves to `Object.prototype` via the inherited getter (truthy, so `??=` keeps it).\n- Recursing into that target assigns attacker-controlled keys onto `Object.prototype`.\n- The same class of issue applies to `constructor` / `prototype` (`constructor.prototype` pollution).\n\nI verified both `__proto__` and `constructor.prototype` payloads against the post-change function body: `Object.prototype` was polluted in both cases.\n\nThe blocklist was the only guard in this helper. Restoring it (or switching to `Object.create(null)` targets plus safe property define that never touches `__proto__`) is required before merge.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `BLOCKED` set skipped `__proto__`/`constructor`/`prototype`; head removed it. The remaining `(base as any)[k] ??= {}` / assignment path still allows recursive writes onto `Object.prototype` for those keys, so the load-bearing guard regression is real and severity critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 16.471,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2782,
+      "out": 426
+    },
+    "cost_usd": 0.009042
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

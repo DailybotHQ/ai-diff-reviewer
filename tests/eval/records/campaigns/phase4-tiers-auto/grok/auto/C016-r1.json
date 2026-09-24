@@ -1,0 +1,108 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.9,
+  "usage": {
+    "in": 30911,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 2141,
+    "source": "cli"
+  },
+  "cost_usd": 0.10078,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hard-coded in `NewClient()` with no environment, build-tag, or config guard. Every consumer of this client \u2014 including production \u2014 will accept any TLS certificate, enabling MITM on ledger HTTPS traffic.\n\nA comment referencing staging and TICKET-77 does not limit runtime behavior. If staging needs a self-signed cert, trust that CA via `RootCAs` (or gate skip-verify behind an explicit non-prod flag that defaults off and fails closed in prod).\n\n```suggestion\n\t\tTransport: &http.Transport{\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},\n\t\t\tProxy: http.ProxyFromEnvironment,\n\t\t},\n```\n\n(The suggestion restores verification; wire staging trust via `RootCAs` or a separate staging-only client rather than skip-verify.)"
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "Assigning a bare `&http.Transport{}` replaces the default transport and loses proxy-from-environment, reasonable idle-conn defaults, and HTTP/2 configuration from `http.DefaultTransport`.\n\nWhen you customize TLS, clone `http.DefaultTransport` (or set `Proxy: http.ProxyFromEnvironment` and the usual limits explicitly) so skip-verify is not the only behavioral change."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge as-is.** `NewClient()` now disables TLS certificate verification for every caller, with no environment, build tag, or configuration gate. A comment and `TICKET-77` do not constrain runtime behavior \u2014 any production binary that uses this client will accept any certificate, including an attacker\u2019s.\n\n## Why this is blocking\n\n`internal/ledger/client.go` sets `tls.Config{InsecureSkipVerify: true}` on the client\u2019s transport. That turns off server identity checks for all HTTPS ledger traffic from this client. On a component named \u201cledger,\u201d intercepted or redirected traffic can be read or altered without TLS detecting it.\n\nThe PR description frames this as a staging-only workaround for a self-signed cert. The code path is unconditional: `NewClient()` takes no env/option and always installs skip-verify. Staging convenience shipped this way becomes a permanent foot-gun the moment the same artifact or package is used outside staging.\n\n## Secondary note\n\nReplacing `Transport` with a bare `&http.Transport{}` also drops `http.DefaultTransport` defaults (proxy-from-env, HTTP/2, idle connection limits). Worth fixing when the TLS approach is corrected; not the primary blocker.\n\n## What \u201cfixed\u201d looks like\n\nPrefer one of:\n- Trust the staging CA explicitly (`RootCAs` pool) or pin the staging cert.\n- Gate skip-verify behind an explicit staging-only config that defaults to secure and cannot be on in prod (fail closed).\n- Use a separate staging constructor/test helper that never ships in the production client.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() hard-codes tls.Config{InsecureSkipVerify: true} with only a staging comment and no env/build/config guard; the base version used a default http.Client that verified certs, so this is a real unconditional MITM risk."
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.795,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2275,
+      "out": 332
+    },
+    "cost_usd": 0.007489
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

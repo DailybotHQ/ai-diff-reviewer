@@ -1,0 +1,11 @@
+{
+  "campaign_id": "phase2-rc",
+  "planned": 63,
+  "executed": 63,
+  "resumed": 0,
+  "spent_usd_upper_bound": 6.8999,
+  "unknown_cost_runs": 0,
+  "budget_usd": 70.0,
+  "stop_at_usd": 63.0,
+  "stopped_reason": null
+}

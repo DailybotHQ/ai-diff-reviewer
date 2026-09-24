@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 46.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.4,
+  "usage": {
+    "in": 16260,
+    "cache_read": 71808,
+    "cache_write": 0,
+    "out": 1470,
+    "source": "cli"
+  },
+  "cost_usd": 0.0628824,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hard-coded on the shared `NewClient()` transport, so **every** ledger HTTPS call skips certificate and hostname verification \u2014 including production if this client is used there.\n\nThat enables trivial MITM on ledger traffic (credentials, transfer payloads, account data). A comment and TICKET-77 do not scope the weakening to staging.\n\n**Fix:** either (1) load the staging CA/cert into `tls.Config.RootCAs` and keep verify on, or (2) gate skip-verify behind an explicit config/env that defaults to `false` and is only set in staging. Never ship an unconditional skip on a shared factory."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification on the shared ledger HTTP client, which is a production MITM exposure if the same binary ships outside staging.\n\n## Analysis\n\n`NewClient()` always builds an `http.Transport` with `tls.Config{InsecureSkipVerify: true}`. There is no environment, build tag, or config switch: every caller of `NewClient()` skips hostname and chain validation against any ledger endpoint.\n\nThe comment and TICKET-77 acknowledge this is a staging workaround, but a comment cannot enforce that boundary. A self-signed staging cert is better handled by trusting that specific CA/cert (custom `RootCAs`) or by gating skip-verify behind an explicit non-prod config that defaults to secure.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() unconditionally sets tls.Config{InsecureSkipVerify: true} on the shared HTTP transport with no env/config gate; base had default verification. That is a real TLS MITM weakness on every caller of this factory."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.482,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1244,
+      "out": 452
+    },
+    "cost_usd": 0.006403
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

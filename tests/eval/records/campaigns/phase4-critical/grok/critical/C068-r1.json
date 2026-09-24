@@ -1,0 +1,95 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 61.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 61.3,
+  "usage": {
+    "in": 58343,
+    "cache_read": 30208,
+    "cache_write": 0,
+    "out": 2783,
+    "source": "cli"
+  },
+  "cost_usd": 0.148488,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`pickle.loads` runs attacker-controlled bytecode on the session blob. Anyone who can set `raw` (cookie, header, or plugin payload) can ship a pickled object whose `__reduce__` executes arbitrary code when this function decodes it.\n\nKeep a safe wire format (JSON, or HMAC-signed tokens) and reconstruct plugin objects from an explicit schema after decode. Do not unpickle client-supplied session data."
+    }
+  ],
+  "summary": "**Unsafe deserialization of session data \u2014 do not merge until `pickle.loads` is gone.**\n\n`load_session` still takes a raw base64 blob (the same cookie/header-shaped input as before) and now feeds it to `pickle.loads`. Pickle reconstructs objects by executing their `__reduce__` / `__setstate__` paths, so a client who can set `raw` gets arbitrary code execution on the server. JSON decoding of the same blob could not do that.\n\nThere are no in-repo callers to inspect; the function is the public decoder. Plugin objects that need richer types should be rebuilt from a constrained JSON (or HMAC-signed) schema after a safe decode.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "web/session.py decodes `raw` with base64 then `pickle.loads`, and the diff shows this replaced safe `json.loads`. Untrusted session blobs can therefore trigger arbitrary code via pickle `__reduce__`, so the critical RCE claim holds."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.641,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3629,
+      "out": 370
+    },
+    "cost_usd": 0.010067
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

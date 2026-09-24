@@ -1,0 +1,83 @@
+{
+  "case": "C092",
+  "pr": "C092",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 20.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 20.6,
+  "usage": {
+    "in": 30977,
+    "cache_read": 88832,
+    "cache_write": 0,
+    "out": 1768,
+    "source": "cli"
+  },
+  "cost_usd": 0.0992116,
+  "changed_files": [
+    "src/a.ts",
+    "src/lib/a.ts"
+  ],
+  "findings": [],
+  "summary": "## Follow-up review\n\nThe only change since the last review is a pure rename: `src/a.ts` \u2192 `src/lib/a.ts` (100% similarity). No behavior change in this commit.\n\nThe open warning about the hard-coded `timeout: 250` is **still open** \u2014 the same line now lives at `src/lib/a.ts:1`. Cold starts can still exceed 250 ms and flake for the same reason as before. Making the timeout configurable (or raising it with a named constant and a clear default) would close it.\n\nNo new issues from the move itself: the file content is unchanged, and there are no in-repo import sites that still point at `src/a.ts`.\n\n**Recommendation:** request-changes (prior warning still open).",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "49d72ee8b843900a": [
+      "open",
+      "Still present after rename: src/lib/a.ts:1 keeps hard-coded { timeout: 250 }; content unchanged from 5438e4e."
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C092-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  },
+  "prior_findings_kept": [
+    {
+      "path": "src/a.ts",
+      "line": 1,
+      "severity": "warning",
+      "status": "open",
+      "body": "250 ms hard-coded timeout will flake on cold starts; make it configurable. Still present after rename: src/lib/a.ts:1 keeps hard-coded { timeout: 250 }; content unchanged from 5438e4e."
+    }
+  ]
+}

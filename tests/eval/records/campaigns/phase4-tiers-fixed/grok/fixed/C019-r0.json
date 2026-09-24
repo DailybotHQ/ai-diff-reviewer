@@ -1,0 +1,109 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 85.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.2,
+  "usage": {
+    "in": 32559,
+    "cache_read": 88192,
+    "cache_write": 0,
+    "out": 3189,
+    "source": "cli"
+  },
+  "cost_usd": 0.1107096,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`dependencies` pins `billing.0007_add_reason`, but this PR deletes `migrations/0007_add_reason.py`, so the graph is unsatisfiable.\n\nFresh installs fail resolving `0008`; environments that already applied `0007` fail because the migration is recorded in `django_migrations` yet missing on disk.\n\nKeep `0007_add_reason.py` and ship only this `RemoveField` migration (the usual path when the add already landed). If `0007` truly never shipped to any database, remove `0007` and do not add a migration that depends on it."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Deleting `0007_add_reason` removes the migration that introduced `Invoice.void_reason` from the app\u2019s migration history on disk.\n\nIf any database has already run this migration, Django will report a missing migration and refuse to plan further operations; historical `void_reason` values also lose their schema lineage for rebuilds from migrations alone.\n\nRestore this file and drop the column in a new forward migration (`0008`) instead of rewriting history."
+    }
+  ],
+  "summary": "## Verdict\n\nThis migration change will break Django\u2019s migration graph: `0008_drop_reason` depends on `billing.0007_add_reason`, but this PR deletes `migrations/0007_add_reason.py`.\n\n## Why it matters\n\n- **Fresh databases:** `migrate` cannot resolve the `0008` dependency because `0007_add_reason` is not on disk.\n- **Databases that already applied 0007:** Django records `billing.0007_add_reason` in `django_migrations`, but the file is gone, so subsequent migrate/CI checks fail with a missing-migration error.\n- **Intent vs. mechanics:** Dropping an unused `void_reason` column is fine; the safe shape is keep `0007` and add `0008` with `RemoveField` (or, only if `0007` was never shipped anywhere, delete `0007` and do not add a dependent `0008`).\n\n## Recommendation\n\nRestore `migrations/0007_add_reason.py` and keep `0008_drop_reason.py` as the forward migration that removes the field. Confirm `0007` has been applied (or squash only on unreleased local history).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "0008_drop_reason.py depends on billing.0007_add_reason while this PR deletes migrations/0007_add_reason.py, leaving an unsatisfiable Django migration graph for both fresh and already-applied environments."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`migrations/0007_add_reason.py` is deleted while it still introduced `Invoice.void_reason` at base, and `0008_drop_reason.py` still depends on `(\"billing\", \"0007_add_reason\")`, so the migration graph is broken for both fresh and already-applied databases."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 32.837,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5648,
+      "out": 990
+    },
+    "cost_usd": 0.019028
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

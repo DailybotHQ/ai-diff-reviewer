@@ -1,0 +1,11 @@
+{
+  "campaign_id": "phase3-incremental",
+  "planned": 36,
+  "executed": 36,
+  "resumed": 0,
+  "spent_usd_upper_bound": 2.6823,
+  "unknown_cost_runs": 0,
+  "budget_usd": 45.0,
+  "stop_at_usd": 40.5,
+  "stopped_reason": null
+}

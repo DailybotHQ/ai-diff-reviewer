@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 84.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 84.7,
+  "usage": {
+    "in": 32616,
+    "cache_read": 119040,
+    "cache_write": 0,
+    "out": 3870,
+    "source": "cli"
+  },
+  "cost_usd": 0.147972,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` and load a different account. The handler takes that value whenever it is present and queries `db.accounts.findUnique` with it, so `{\"accountId\": \"<victim>\"}` returns that account's record. Restrict the override to a verified staff role on `caller` (and keep `caller.accountId` for everyone else), or move staff lookup to a separate staff-only route."
+    }
+  ],
+  "summary": "Any authenticated caller can look up another account by sending `accountId` in the JSON body. `getAccount` previously scoped the query to `caller.accountId` from `auth(req)`; this change substitutes a client-supplied id with no staff-role (or other authorization) check before `findUnique`.\n\nThat is an IDOR on a staff-tool path that still sits on the same handler regular users hit. Gate the override on a verified staff role, or put staff lookup on a separate, staff-only route that rejects mismatched ids for everyone else.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head handler sets `id` from `body.accountId ?? caller.accountId` with no staff/role check, so any authenticated caller can load another account. The base version only used `caller.accountId`, confirming this is a real IDOR regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 14.774,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2526,
+      "out": 355
+    },
+    "cost_usd": 0.008539
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

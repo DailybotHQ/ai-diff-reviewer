@@ -1,0 +1,109 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 66.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 66.5,
+  "usage": {
+    "in": 31426,
+    "cache_read": 87424,
+    "cache_write": 0,
+    "out": 2503,
+    "source": "cli"
+  },
+  "cost_usd": 0.1040972,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Authorization bypass:** `middleware.RequireRole(\"admin\")` was dropped when these routes moved under `/api/v2`. `GET /api/v2/admin/users` is now registered as a bare `http.HandlerFunc(a.listUsers)` with no role gate.\n\nAny caller who can reach the process can list users. Restore the admin wrapper (or `v2.Use(authz)` for the admin group) on this handle before merge.\n\n```suggestion\n\tv2.Handle(\"/admin/users\", middleware.RequireRole(\"admin\")(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n```"
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Authorization bypass on a mutating admin API:** `POST /api/v2/admin/roles` previously required `middleware.RequireRole(\"admin\")`. It is now a bare `http.HandlerFunc(a.editRoles)`.\n\nUnauthenticated or unprivileged clients can edit roles \u2014 privilege escalation and likely persistent access-control corruption. Re-apply the same admin middleware used on the users route.\n\n```suggestion\n\tv2.Handle(\"/admin/roles\", middleware.RequireRole(\"admin\")(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change drops admin authorization while relocating the routes, leaving user-list and role-edit endpoints unauthenticated.\n\n## What went wrong\n\nThe PR correctly introduces a `/api/v2` subrouter and re-registers the admin handlers under it. In the same edit it removes:\n\n```go\nauthz := middleware.RequireRole(\"admin\")\n```\n\nand registers bare `http.HandlerFunc(...)` handlers. Anyone who can reach the server can now `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` with no role check.\n\nThat is a privilege-escalation / broken-authorization regression on sensitive admin surfaces, not a neutral routing cleanup.\n\n## What to restore\n\nKeep the path move, but wrap both handlers with the same `RequireRole(\"admin\")` middleware (or attach it on the `v2` subrouter via `Use` if every `/api/v2/admin/*` route must be admin-only).\n\nExample shape:\n\n```go\nv2 := r.PathPrefix(\"/api/v2\").Subrouter()\nauthz := middleware.RequireRole(\"admin\")\nv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\nv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\n## Other notes\n\n- Moving `/admin/*` \u2192 `/api/v2/admin/*` is a public URL break for existing clients; fine if versioning is intentional and callers are updated in the same release train, but call that out in the changelog.\n- No repository instruction files were present; review used the general security/correctness rubric.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base wrapped `/admin/users` with `middleware.RequireRole(\"admin\")`; head registers bare `http.HandlerFunc(a.listUsers)` under `/api/v2` with no role gate or other authz middleware remaining in the tree."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base routes wrapped POST /admin/roles with middleware.RequireRole(\"admin\"); head registers a bare http.HandlerFunc(a.editRoles) under /api/v2 with no authz replacement, so the admin middleware regression is real and severity-critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 24.166,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4767,
+      "out": 748
+    },
+    "cost_usd": 0.015916
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

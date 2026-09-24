@@ -1,0 +1,81 @@
+{
+  "case": "C088",
+  "pr": "C088",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 22.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 22.2,
+  "usage": {
+    "in": 29803,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1037,
+    "source": "cli"
+  },
+  "cost_usd": 0.0919016,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a correct one-line fix so `pad` zero-fills instead of space-filling.\n\n## Notes\n\n`String.prototype.padStart(4)` defaults the fill to a space. Passing `\"0\"` matches the stated intent (\"pad with zeros\") and preserves length-4 truncation behavior for longer inputs.\n\n`package-lock.json` is listed as omitted/generated; its presence as a lockfile refresh alongside this formatting fix is fine to leave unreviewed. No `package.json` or tests accompany the change in-tree, which is pre-existing scope rather than a regression from this diff.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C088-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

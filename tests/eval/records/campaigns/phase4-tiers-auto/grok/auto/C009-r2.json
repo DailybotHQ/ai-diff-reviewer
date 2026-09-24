@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.9,
+  "usage": {
+    "in": 16363,
+    "cache_read": 100864,
+    "cache_write": 0,
+    "out": 1597,
+    "source": "cli"
+  },
+  "cost_usd": 0.0725672,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `escapeHtml` was removed and `body` is passed straight into `dangerouslySetInnerHTML`. Any HTML/JS in the comment string executes in the reader\\u2019s browser (e.g. `<img src=x onerror=\\\"...\\\">`, `<svg onload=...>`).\n\n**Failure mode:** User- or API-supplied comment text is treated as trusted HTML. One malicious comment compromises every viewer of the thread.\n\n**Fix:** Do not assign raw `body` to `__html`. Either (1) render a safe markdown subset to React nodes with HTML disabled, or (2) sanitize with a strict allowlist library before `dangerouslySetInnerHTML`, and cover XSS payloads in tests. Restoring `escapeHtml` alone is correct for plain text but will not deliver bold/links \u2014 use a real formatter/sanitizer for that."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a straightforward stored XSS by removing HTML escaping and feeding the raw `body` string into `dangerouslySetInnerHTML`.\n\n## Analysis\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning to `__html`, which made the `dangerouslySetInnerHTML` usage safe for plain text. The diff deletes `escapeHtml` and renders `body` as HTML with no sanitizer and no markdown pipeline.\n\nAny caller that passes user- or third-party-controlled comment text (the typical case for a `Comment` component) can inject markup such as `<img src=x onerror=...>` or `<script>...` and run script in the session of every reader. The comment about \"bold/links\" does not mitigate that: raw HTML is not a formatting layer.\n\n## What would make this safe\n\n- Parse a constrained markdown subset to React elements (e.g. a markdown library with HTML disabled), or\n- If HTML input is truly required, run it through a well-tested sanitizer allowlist (tags/attrs only) **before** `dangerouslySetInnerHTML`, and add tests for script/event-handler payloads.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes unsanitized body into dangerouslySetInnerHTML, so any HTML/JS in comment text executes for viewers \u2014 a real XSS regression matching the claim."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.367,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1111,
+      "out": 318
+    },
+    "cost_usd": 0.005333
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

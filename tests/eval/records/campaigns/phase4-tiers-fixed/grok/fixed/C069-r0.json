@@ -1,0 +1,95 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 40.5,
+  "usage": {
+    "in": 18141,
+    "cache_read": 102144,
+    "cache_write": 0,
+    "out": 2192,
+    "source": "cli"
+  },
+  "cost_usd": 0.0800772,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `middleware.RequireRole(\"admin\")` previously wrapped both admin handlers; this diff registers `a.listUsers` and `a.editRoles` with no authorization middleware.\n\n**Failure mode:** Any caller who can hit the server may `GET /api/v2/admin/users` (enumerate users) and `POST /api/v2/admin/roles` (change roles) without holding the admin role. Path prefixing under `/api/v2` does not replace access control.\n\n**Fix:** Restore the admin role gate on these routes (per-handler wrap or subrouter `Use`):\n\n```go\nauthz := middleware.RequireRole(\"admin\")\nv2 := r.PathPrefix(\"/api/v2\").Subrouter()\nv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\nv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change strips admin authorization from privileged endpoints while relocating them under `/api/v2`.\n\n## What happened\n\nThe PR moves `GET /admin/users` and `POST /admin/roles` onto a `PathPrefix(\"/api/v2\")` subrouter. That path move is fine on its own. In the same edit, `middleware.RequireRole(\"admin\")` is deleted and both handlers are registered as bare `http.HandlerFunc` values.\n\n## Impact\n\nAnyone who can reach the server can call:\n\n- `GET /api/v2/admin/users` \u2014 user listing\n- `POST /api/v2/admin/roles` \u2014 role mutation\n\nwithout an admin role check. That is a privilege-escalation / broken-authorization regression on the highest-risk surface in the diff (authz + admin APIs).\n\n## Fix direction\n\nKeep the subrouter move, and re-wrap both handlers with `middleware.RequireRole(\"admin\")` (or apply the same middleware on the `v2` subrouter via `Use` if that is the project pattern). Also confirm callers are updated to the new `/api/v2/admin/...` paths as part of the versioning work.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The diff removes middleware.RequireRole(\"admin\") from both admin handlers and registers listUsers/editRoles with no authz; path prefixing under /api/v2 does not restore the role check, so this is a real critical authorization bypass."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.046,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2564,
+      "out": 323
+    },
+    "cost_usd": 0.007476
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "case": "C048",
+  "pr": "C048",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 24.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 24.9,
+  "usage": {
+    "in": 29882,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1303,
+    "source": "cli"
+  },
+  "cost_usd": 0.0849388,
+  "changed_files": [
+    "package-lock.json"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLockfile-only PR: one `resolved` URL field was added on an existing `left-pad@1.3.0` entry; version and integrity are unchanged.\n\n## Notes\n\n`package-lock.json` is omitted from normal diff review (generated lockfile). From the one-line delta alone:\n\n- No `package.json` change accompanies the lockfile edit.\n- The package version (`1.3.0`) and `integrity` value are identical before and after.\n- The only addition is a `resolved` URL (`https://registry.example.com/left-pad`), which matches a registry URL normalization rather than a dependency bump or integrity swap.\n\nNo actionable findings on reviewable source. If this were a production consumer lockfile, maintainers would still want CI/`npm ci` green against the same `package.json`, but that is outside what this diff can prove.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

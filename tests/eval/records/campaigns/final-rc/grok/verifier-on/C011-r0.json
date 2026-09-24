@@ -1,0 +1,96 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.7,
+  "usage": {
+    "in": 30371,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1557,
+    "source": "cli"
+  },
+  "cost_usd": 0.0961576,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Issue:** `log.debug` includes `process.env.PROCESSOR_KEY` in the structured log payload. That credential will land in log sinks (stdout on CI/runners, aggregators, retained archives) whenever debug logging is enabled \u2014 including staging and production incident debugging.\n\n**Failure mode:** Anyone who can read those logs can replay charges or call the payment processor as this service. The comment on line 6 confirms the intent is to ship credentials for support replay, which is exactly the leak.\n\n**Fix:** Log only non-secret charge context (`orderId`, `ref`). Restore the prior info log, or keep a debug line without `key`. Support replay needs a secured channel (vault, break-glass tooling), not log payloads.\n\n```suggestion\n  log.info(\"charge created\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor API key into debug output on every successful charge.\n\n## Findings\n\nThe new `log.debug` call in `src/payments/charge.ts` includes `process.env.PROCESSOR_KEY` in the structured payload. The inline comment states this is intentional so support can \"replay failures.\" That puts a live credential into whatever sink consumes debug logs (stdout, log aggregators, support tooling, retained log archives).\n\nAnyone with read access to those logs can reuse the key against the payment processor. Debug level is also often enabled in staging and sometimes in production during incidents, so this is not limited to local developer machines.\n\nThe previous `log.info(\"charge created\", { orderId, ref })` line already gave support the non-secret identifiers needed to correlate a charge. Restoring that shape (or an equivalent debug line **without** the key) is the right fix; support replay should use a secured internal tool or vault-backed one-time access, not log shipping.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `charge.ts` logs `process.env.PROCESSOR_KEY` in the debug payload (with an explicit comment), while base only logged `orderId` and `ref`. That is a real credential-to-logs leak with critical impact."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.059,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3699,
+      "out": 290
+    },
+    "cost_usd": 0.009292
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

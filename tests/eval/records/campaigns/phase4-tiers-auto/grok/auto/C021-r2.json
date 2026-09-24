@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 59.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 59.7,
+  "usage": {
+    "in": 17156,
+    "cache_read": 100992,
+    "cache_write": 0,
+    "out": 2343,
+    "source": "cli"
+  },
+  "cost_usd": 0.0786676,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Typosquat dependency swap.** `tar-stream` (established streaming tar library) is replaced with `tar-streem@^1.0.0` \u2014 a one-letter misspelling, not a documented fork or scoped rename. Installing this pulls an unknown package from the registry under a trusted-looking name.\n\nFailure mode: `npm install` resolves and executes code from an attacker-controlled package. Restore `tar-stream` (or another audited package with a verified name and integrity pin) before any install runs on CI or developer machines."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Automatic postinstall execution of the swapped package.** `\"postinstall\": \"tar-streem-setup\"` runs on every install without an explicit user command. Combined with the `tar-streem` dependency, this is the standard malicious-package dropper pattern (lifecycle script runs setup binary as soon as the package is fetched).\n\nFailure mode: CI runners and developer workstations execute untrusted code at install time (credential theft, reverse shell, lockfile/poisoning follow-ons). Remove the `postinstall` script entirely; lifecycle hooks that invoke a newly introduced third-party binary need an independent security review and pinning, which this PR does not provide."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the maintained `tar-stream` package with a lookalike name and adds an automatic installer hook \u2014 a classic npm supply-chain compromise pattern.\n\n## What changed\n\n1. **Dependency swap:** `tar-stream` (^3.1.6) \u2192 `tar-streem` (^1.0.0). The new name is a near-typo of a widely used packaging library; nothing in-repo documents a legitimate migration or upstream rename.\n2. **New `postinstall` script:** `tar-streem-setup` runs on every `npm install` / `npm ci`, executing whatever binary that package ships under the installer\u2019s privileges.\n\nThe PR description (\u201cunmaintained\u2026 bundles its installer\u201d) matches common social-engineering copy for malicious package swaps. `scripts/pack.js` is referenced but absent from the tree; there is no evidence this rename preserves API or build behavior.\n\n## Release decision\n\n**Recommendation:** request-changes\n\nBlock until the dependency remains a known-good package (e.g. `tar-stream` or another verified maintained alternative) and any install-time script is removed or fully justified with a pinned, audited package identity.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces the real dependency tar-stream@^3.1.6 with tar-streem@^1.0.0 and adds a postinstall script that runs tar-streem-setup, which is a classic typosquat supply-chain pattern that would execute untrusted package code on install."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds both a typosquat dependency (`tar-streem`) and `\"postinstall\": \"tar-streem-setup\"`, so install automatically executes that binary\u2014the classic malicious lifecycle-script dropper pattern. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 14.001,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4319,
+      "out": 562
+    },
+    "cost_usd": 0.012829
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

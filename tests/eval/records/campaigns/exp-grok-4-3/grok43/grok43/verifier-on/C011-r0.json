@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 30.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.8,
+  "usage": {
+    "in": 27597,
+    "cache_read": 108032,
+    "cache_write": 0,
+    "out": 464,
+    "source": "cli"
+  },
+  "cost_usd": 0.06064765,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Logging `process.env.PROCESSOR_KEY` directly leaks a payment processor credential into debug output. If logs are shipped to any observability system or viewed by support, the secret is exposed.\n\n```suggestion\nlog.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "The change introduces a credential leak into debug logs. The payment charge path now explicitly includes `PROCESSOR_KEY` (an API credential) in the log payload. This is a production security regression that exposes secrets to anyone with log access.",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `charge.ts` explicitly passes `key: process.env.PROCESSOR_KEY` into `log.debug`, so the payment processor credential is written into log payloads as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.212,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2321,
+      "out": 301
+    },
+    "cost_usd": 0.007754
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

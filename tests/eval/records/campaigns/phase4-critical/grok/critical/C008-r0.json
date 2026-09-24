@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 78.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 78.4,
+  "usage": {
+    "in": 61253,
+    "cache_read": 28800,
+    "cache_write": 0,
+    "out": 4150,
+    "source": "cli"
+  },
+  "cost_usd": 0.161806,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` POST to any caller-supplied URL. Values such as `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:1/` are now accepted, and `urllib.request.urlopen` follows redirects, so a public host can bounce the request onto an internal IP. If customer endpoints are required, restrict the scheme to HTTPS, resolve and reject private/link-local/loopback/metadata ranges, and re-validate redirect targets (or restore an explicit allowlist)."
+    }
+  ],
+  "summary": "Removing the webhook host allowlist makes `deliver()` an open SSRF sink: any caller-supplied URL is POSTed with `urllib.request.urlopen`, which follows redirects.\n\nThat matches the stated goal of customer-owned endpoints, but there is no replacement control \u2014 no HTTPS-only scheme check, no block of loopback/link-local/RFC1918/metadata addresses, and no re-validation of redirect targets. A customer- or attacker-controlled `url` can hit `http://169.254.169.254/`, `http://127.0.0.1/`, or an internal service, or bounce there via a 302.\n\nRestore an explicit allowlist, or add equivalent SSRF guards, before merge.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS allowlist that previously rejected non-approved hosts, so deliver() now POSTs via urllib.request.urlopen to any caller-supplied URL, enabling SSRF including metadata/loopback targets and redirect-based internal reach. Critical severity is appropriate for unrestric"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.21,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2245,
+      "out": 323
+    },
+    "cost_usd": 0.00735
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

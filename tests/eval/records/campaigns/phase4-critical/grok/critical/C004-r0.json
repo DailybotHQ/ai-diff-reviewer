@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 55.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 55.7,
+  "usage": {
+    "in": 31023,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2932,
+    "source": "cli"
+  },
+  "cost_usd": 0.123798,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` into `REPORTS` lets a client read any file the process can open. `GET /reports/x?path=../../etc/passwd` resolves to `/srv/reports/../../etc/passwd`; `GET /reports/x?path=/etc/passwd` makes `os.path.join` discard `REPORTS` and serve `/etc/passwd`. Flask `send_file` does not confine the path.\n\nServe nested reports with `send_from_directory(REPORTS, relative)` (or `safe_join` plus an abspath-prefix check) so the resolved path must stay under `/srv/reports`."
+    }
+  ],
+  "summary": "This change removes the only path sanitizer (`os.path.basename`) and joins an unsanitized query parameter into `send_file`. That is a path-traversal / arbitrary-file-read on a public download route.\n\n`GET /reports/x?path=../../etc/passwd` becomes `/srv/reports/../../etc/passwd`. `GET /reports/x?path=/etc/passwd` makes `os.path.join` drop `REPORTS` and open `/etc/passwd` directly. Flask's `send_file` does not confine the path to a directory.\n\nNested folders such as `2024/q3` can be served safely with `send_from_directory(REPORTS, relative)` (or `werkzeug.security.safe_join` plus an abspath-prefix check). Do not merge until that confinement is in place.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces basename-sanitized `name` with unsanitized `request.args.get(\"path\", name)` joined into REPORTS and passed to send_file, so `?path=../../etc/passwd` or `?path=/etc/passwd` can read arbitrary files. That is a real critical arbitrary-file-read regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.121,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2072,
+      "out": 351
+    },
+    "cost_usd": 0.006711
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

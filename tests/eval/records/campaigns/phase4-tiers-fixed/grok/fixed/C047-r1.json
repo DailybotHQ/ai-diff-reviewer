@@ -1,0 +1,93 @@
+{
+  "case": "C047",
+  "pr": "C047",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 47.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.3,
+  "usage": {
+    "in": 31462,
+    "cache_read": 117504,
+    "cache_write": 0,
+    "out": 2787,
+    "source": "cli"
+  },
+  "cost_usd": 0.1148972,
+  "changed_files": [
+    ".github/workflows/test.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "warning",
+      "body": "Adding `'24'` to `strategy.matrix.node` does not change which Node binary runs. Nothing in this job references `${{ matrix.node }}` (no `actions/setup-node` / `node-version`), so both matrix legs execute `npm test` on the runner default and the workflow never validates Node 24.\n\nWire the matrix into setup before claiming multi-version coverage, for example:\n\n```yaml\nsteps:\n  - uses: actions/checkout@v4\n  - uses: actions/setup-node@v4\n    with:\n      node-version: ${{ matrix.node }}\n  - run: npm test\n```\n\nWithout that, the extra matrix entry only duplicates CI time and gives false confidence that Node 24 is covered."
+    }
+  ],
+  "summary": "## Verdict\n\nThe matrix change does not actually exercise Node 24. `matrix.node` is declared but never referenced by any step, so both matrix legs run the same default runner environment and `npm test` twice.\n\n## Notes\n\n`.github/workflows/test.yml` still has no `runs-on`, no `actions/checkout`, and no `actions/setup-node` with `node-version: ${{ matrix.node }}`. Those gaps predate this PR; they are why adding `'24'` cannot deliver the stated \u201ctest on node 24\u201d goal. The job also has no explicit `permissions:` block (least-privilege posture for workflow jobs).\n\nOnce `setup-node` (and typically `checkout`) wire up `${{ matrix.node }}`, the `'20', '24'` matrix is a reasonable LTS coverage expansion.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "case": "C092",
+  "pr": "C092",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 33.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.8,
+  "usage": {
+    "in": 30531,
+    "cache_read": 116864,
+    "cache_write": 0,
+    "out": 1975,
+    "source": "cli"
+  },
+  "cost_usd": 0.1079712,
+  "changed_files": [
+    "src/a.ts",
+    "src/lib/a.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/lib/a.ts",
+      "line": 1,
+      "severity": "warning",
+      "body": "The PR title/description frame this as a path-only move into `lib/`, but the new line also passes `{ timeout: 250 }` to `http.get`. A 250ms budget is far below typical `/users/:id` latency (TLS handshake alone often exceeds it), so successful calls will start failing once the client enforces the option.\n\nEither drop the timeout from this rename PR, or justify and tune it (and document the behavior change) as its own commit:\n\n```suggestion\nexport const fetchUser = (id: string) => http.get(`/users/${id}`);\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nRestructure claim does not match the diff: `fetchUser` also gains a hard-coded 250ms request timeout while moving from `src/a.ts` to `src/lib/a.ts`.\n\n## Notes\n\n- Pure path move would be fine; the only substantive line in the patch is the new `{ timeout: 250 }` option.\n- 250ms is below typical end-to-end latency for a `/users/:id` HTTP call (DNS, TLS, server processing). Under normal network conditions this will surface as intermittent or systematic fetch failures.\n- No other repo files import `src/a.ts`, so the rename itself does not break in-tree callers here. Downstream packages that still import the old path would need a separate update.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/lib/a.ts",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Base `src/a.ts` called `http.get` with no options; head `src/lib/a.ts` is the same move plus `{ timeout: 250 }`, so this is not path-only and introduces a very short client budget that can fail ordinary `/users/:id` requests."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.434,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2254,
+      "out": 480
+    },
+    "cost_usd": 0.008745
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C092-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

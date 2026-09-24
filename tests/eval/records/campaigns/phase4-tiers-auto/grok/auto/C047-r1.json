@@ -1,0 +1,106 @@
+{
+  "case": "C047",
+  "pr": "C047",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 82.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 82.4,
+  "usage": {
+    "in": 32033,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 3472,
+    "source": "cli"
+  },
+  "cost_usd": 0.111394,
+  "changed_files": [
+    ".github/workflows/test.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "critical",
+      "body": "This modified job has no explicit `permissions:` block. Without one, the job inherits the repository default token scope, which may still be `write-all` on consumer forks that copy this pattern.\n\nAdd a least-privilege map on the job (or workflow) before merge, for example:\n\n```yaml\npermissions:\n  contents: read\n```\n\nThat keeps `npm test` working while satisfying the explicit-permissions posture required for modified workflow jobs."
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "warning",
+      "body": "Adding `'24'` to `matrix.node` does not select Node 24 at runtime. Nothing in this workflow references `${{ matrix.node }}` or runs `actions/setup-node` with `node-version: ${{ matrix.node }}`, so both matrix legs use the runner default Node and the PR title's \"test on node 24\" goal is unmet (two identical `npm test` runs).\n\nWire the matrix into setup before merge, for example after checkout:\n\n```yaml\n- uses: actions/setup-node@v4\n  with:\n    node-version: ${{ matrix.node }}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nThe matrix edit does not actually exercise Node 24, and the modified job still ships without an explicit `permissions:` block.\n\n## Narrative\n\nThis PR only expands `strategy.matrix.node` from `['20']` to `['20', '24']` in `.github/workflows/test.yml`. That matches the stated goal of covering the Node 24 LTS line, but the job never consumes `matrix.node`: there is no `actions/setup-node` (or equivalent) step and no `${{ matrix.node }}` reference anywhere in the workflow. GitHub Actions will schedule two matrix legs that run the same default runner image and the same `npm test` command, so CI cost doubles without gaining Node 24 coverage.\n\nThe job was modified and still has no top-level or job-level `permissions:` map. For Marketplace-facing and security-sensitive Actions repos, every modified workflow job needs an explicit least-privilege block (for example `contents: read`) so the job does not inherit a repo-default `write-all` token.\n\n## Adjacent context (pre-existing, not re-flagged as new defects on unchanged lines)\n\nThe workflow also has no `runs-on` and no checkout step. Those pre-existed this one-line matrix change; they would still prevent a meaningful test run even after wiring `matrix.node`. Worth fixing in the same pass if the intent is real multi-version CI.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The modified job `t` in `.github/workflows/test.yml` has no workflow- or job-level `permissions:` block; the only change is expanding the node matrix, so the job remains under default token scope. That matches the claimed least-privilege gap for a modified workflow job."
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The workflow defines matrix.node as ['20','24'] but never references ${{ matrix.node }} and has no setup-node step, so both matrix legs run identical npm test on the runner default Node; adding '24' does not test Node 24."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 25.53,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2912,
+      "out": 731
+    },
+    "cost_usd": 0.011772
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

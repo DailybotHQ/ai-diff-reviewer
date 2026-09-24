@@ -1,0 +1,95 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 40.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.1,
+  "usage": {
+    "in": 30446,
+    "cache_read": 57216,
+    "cache_write": 0,
+    "out": 1488,
+    "source": "cli"
+  },
+  "cost_usd": 0.0869848,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Disabling `verify_signature`, `verify_aud`, and `verify_iss` makes `identity()` trust any token payload. An attacker can mint an unsigned JWT (or one signed with an arbitrary key) and obtain any `sub`/roles the app reads from the decoded dict.\n\nThe comment cites a temporary staging migration (TICKET-412), but nothing scopes this to staging: there is no env check, config flag, or fail-closed default. Merging this into a shared `auth.py` disables authentication for every deployment that imports it.\n\nRestore verification with the real signing key (or a dual-key accept during rotation). If an emergency bypass is unavoidable, gate it explicitly on a non-production environment and keep `audience`/`issuer` checks enabled even then."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification for every caller of `identity()`, which means any client can forge a token and assume any identity.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts unsigned or arbitrarily signed payloads. The PR description frames this as a temporary staging unblock for TICKET-412, but the code has **no environment, feature-flag, or host gate** \u2014 the same path would run wherever this module is deployed.\n\nThe previous contract (`SECRET` + `HS256` + fixed `audience`/`issuer`) is removed entirely. `SECRET` remains in the module but is no longer used, so re-enabling verification is not automatic when tokens are re-issued.\n\n## Recommendation\n\nKeep verification on. If staging tokens truly cannot validate until re-issuance, use a staging-only key/issuer rotation, dual-key accept during migration, or an explicit non-production guard that fails closed in prod \u2014 never global `verify_signature: False`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes SECRET/algorithms/audience/issuer from jwt.decode and sets verify_signature, verify_aud, and verify_iss all to False with only a TICKET-412 comment and no env/config gate, so any unsigned or arbitrarily signed token payload is trusted."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.043,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2466,
+      "out": 392
+    },
+    "cost_usd": 0.008206
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 63.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.6,
+  "usage": {
+    "in": 32214,
+    "cache_read": 119040,
+    "cache_write": 0,
+    "out": 2984,
+    "source": "cli"
+  },
+  "cost_usd": 0.141852,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The parameterized `WHERE email = ?` query was replaced with an f-string that splices `email` into SQL. A fragment such as `x' OR '1'='1` returns every order; a `UNION SELECT` payload can read other tables. `sqlite3.execute` still parses the injected expression inside a single statement, so this is a live injection, not a theoretical one.\n\nKeep the `?` placeholder and bind the value. If fragment search is the goal, use `LIKE` with a bound pattern rather than string-building the statement.\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```"
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The comment and PR description say support will paste an email fragment, but the predicate is still `email = '{email}'`. SQLite equality is exact, so a substring such as `alice@` returns no rows. A bound `LIKE` pattern (`%fragment%`) is what the requested lookup needs; also escape `%` and `_` in the fragment so those characters are literal."
+    }
+  ],
+  "summary": "This change replaces a parameterized lookup with an f-string that interpolates `email` into SQL, which is a SQL injection on a customer-order query. The intended partial-match behavior is also missing: the predicate is still equality, so a pasted fragment will not match. Restore a bound parameter and use `LIKE` if fragment search is required.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `store.py` builds the query with an f-string that interpolates `email` directly into SQL, and the base revision correctly used a `?` placeholder with a bound parameter. That is a live SQL injection regression at critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The comment at store.py:4 claims partial-match search, but the query still uses exact equality (`email = '...'`), so SQLite will not match email fragments. A LIKE with escaped wildcards would be required for the stated behavior."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 14.017,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4979,
+      "out": 555
+    },
+    "cost_usd": 0.014184
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

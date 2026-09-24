@@ -1,0 +1,81 @@
+{
+  "case": "C088",
+  "pr": "C088",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "unknown",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 37.5,
+  "usage": {
+    "in": 31545,
+    "cache_read": 88832,
+    "cache_write": 0,
+    "out": 2445,
+    "source": "cli"
+  },
+  "cost_usd": 0.1044096,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nRequest changes: the TypeScript pad fix is fine, but the accompanying lockfile refresh is a supply-chain red flag that should block merge.\n\n## What looks good\n\n`src/index.ts` correctly switches `padStart` from the default space fill to explicit zero-padding (`padStart(4, \"0\")`). That matches the PR title and is a clear, minimal behavior fix.\n\n## Lockfile concern (omitted from inline review)\n\n`package-lock.json` is listed as an omitted/generated file, so this is summary-only rather than an inline comment on lockfile lines.\n\nThe lock refresh is not a routine registry bump. `left-pad` moves from `1.3.0` on `registry.npmjs.org` to `1.3.1` resolved at `https://example-mirror.invalid/pkgs/left-pad-1.3.1.tgz`. That host is not a trusted npm endpoint; installing from it would pull the tarball from an untrusted (and here clearly invalid) mirror. Pairing that with a version bump, without a matching `package.json` change in this PR and without integrity hashes visible in the lock snippet, is exactly the kind of lockfile drift that should fail a security review.\n\n**Before merge:** restore `resolved` to the official registry (or another explicitly approved internal registry), confirm the intended version/integrity, and keep lockfile edits out of \"formatting fix\" PRs unless the dependency change is explained and verified.\n\n## Scope note\n\nNo repository instruction files (`AGENTS.md` / review guides) were present. Review is based on the diff, the fetched lockfile delta, and standard supply-chain hygiene.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C088-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

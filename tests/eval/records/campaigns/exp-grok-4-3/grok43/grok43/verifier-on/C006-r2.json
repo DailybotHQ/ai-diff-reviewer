@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.6,
+  "usage": {
+    "in": 27296,
+    "cache_read": 80704,
+    "cache_write": 0,
+    "out": 405,
+    "source": "cli"
+  },
+  "cost_usd": 0.0539108,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Disabling signature, audience, and issuer verification turns `identity(token)` into an unauthenticated identity function. Any string passed as `token` will be returned as a decoded payload.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```\n\nThis bypasses the entire auth contract for staging. Re-enable verification (or use a staging-specific key/audience) before merging."
+    }
+  ],
+  "summary": "This PR disables all JWT verification in `auth.py:identity`. The change removes signature, audience, and issuer checks, allowing any token (including attacker-controlled values) to be treated as valid. This is a direct authentication bypass.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.py identity() now calls jwt.decode with verify_signature, verify_aud, and verify_iss all False and no SECRET/algorithms, so any token string is accepted as a decoded payload. The base version correctly verified HS256 with audience and issuer; this is a real critical auth bypass."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 15.967,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2082,
+      "out": 291
+    },
+    "cost_usd": 0.006345
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

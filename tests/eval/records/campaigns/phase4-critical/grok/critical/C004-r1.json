@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 56.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 56.0,
+  "usage": {
+    "in": 29359,
+    "cache_read": 89984,
+    "cache_write": 0,
+    "out": 2946,
+    "source": "cli"
+  },
+  "cost_usd": 0.121386,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "`request.args.get(\"path\", name)` is joined onto `REPORTS` with no sanitization, and `os.path.basename` was removed. `/reports/x?path=../../etc/passwd` is served as `/srv/reports/../../etc/passwd`; `?path=/etc/passwd` makes `os.path.join` drop `REPORTS` and send `/etc/passwd`. `send_file` does not confine the path.\n\nUse `send_from_directory` (Werkzeug `safe_join`) and a relative subpath \u2014 either `/reports/<path:name>` or a query value that rejects `..` and absolute paths:\n\n```suggestion\n    rel = request.args.get(\"path\", name)\n    return send_from_directory(REPORTS, rel)\n```"
+    }
+  ],
+  "summary": "The download handler now joins an unsanitized query parameter into the filesystem path and dropped `os.path.basename`. That is a path-traversal / arbitrary-file-read on `/reports/<name>`.\n\nA request such as `/reports/x?path=../../etc/passwd` resolves to `/srv/reports/../../etc/passwd`. An absolute `path` (`?path=/etc/passwd`) makes `os.path.join` discard `REPORTS` entirely. `flask.send_file` does not confine the result to `/srv/reports`.\n\nKeep nested folders by switching the route to `<path:name>` (or validating a relative subpath) and serving with `send_from_directory(REPORTS, rel)`, which uses Werkzeug `safe_join`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed `os.path.basename` and now passes `request.args.get(\"path\", name)` straight into `os.path.join(REPORTS, ...)` then `send_file`, so `..` segments and absolute paths escape `/srv/reports` and enable arbitrary file read. That matches a critical path-traversal regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.288,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2524,
+      "out": 328
+    },
+    "cost_usd": 0.008014
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

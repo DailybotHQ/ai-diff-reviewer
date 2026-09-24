@@ -1,0 +1,73 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 0,
+  "tool_calls": 0,
+  "seconds": 4.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 4.9,
+  "usage": {
+    "in": 1555,
+    "cache_read": 0,
+    "cache_write": 0,
+    "out": 200,
+    "source": "api"
+  },
+  "cost_usd": 0.004745,
+  "changed_files": [],
+  "findings": [],
+  "summary": "No code changed since `76486736`, so this round spent no review turns and re-read the 1 outstanding finding(s) with the verifier instead:\n\n- `q.py:2` (warning) \u2014 **verified**: q.py:2 builds SQL via `\"SELECT * FROM t WHERE name = '\" + name + \"'\"`, so `name` is interpolated rather than bound as a parameter; the SQL-injection defect is real and matches the claimed warning.",
+  "round": "nochange",
+  "effective_max_turns": 0,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [
+    {
+      "path": "q.py",
+      "line": 2,
+      "status": "verified",
+      "reason": "q.py:2 builds SQL via `\"SELECT * FROM t WHERE name = '\" + name + \"'\"`, so `name` is interpolated rather than bound as a parameter; the SQL-injection defect is real and matches the claimed warning."
+    }
+  ],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.878,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1555,
+      "out": 200
+    },
+    "cost_usd": 0.004745
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C094-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 0
+  }
+}
