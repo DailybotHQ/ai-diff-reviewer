@@ -46,11 +46,24 @@ Agent-runner providers don't hit this section — they own their own loop intern
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
 - Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed message (patches budgeted at `FIRST_MESSAGE_PATCH_BYTES = 120 000` bytes — see below; anything beyond is fetched on demand with `get_patch`).
-- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, the inline cap scales with the delta (floor 3 comments) and, since v3 (RFC-06), the turn budget is `clamp(4 + 1.5 × changed files + 1 × outstanding findings, 4, max-turns)` — ≈ 8–12 turns on a typical 1–3-file follow-up instead of the full cap; a follow-up with no code change spends **zero** review turns (the verifier re-reads the outstanding anchors instead). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14.5`.
+- Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, the inline cap scales with the delta (floor 3 comments) and, since v3 (RFC-06), the turn budget is `clamp(4 + 1.5 × changed files + 1 × outstanding findings, 4, max-turns)` — ≈ 8–12 turns on a typical 1–3-file follow-up instead of the full cap; a follow-up with no code change spends **zero** review turns (the verifier re-reads the outstanding anchors instead). Measured (Task 27): on PR #61's real deltas the grok leg went from 4.16 M input tokens ($1.69) on a full round to 0.98–1.60 M ($0.53–0.77) on small incremental pushes (−62 … −76 %), the glm leg from 6.9–7.2 M to 3.4–4.4 M (−37 … −52 %); a no-change round costs ≈ $0.007 (verifier only). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14.5`.
 - Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
 
 If you increase `max-turns` or `MAX_CONVERSATION_TURNS_RETAINED`, **estimate the token impact first**. `AGENTS.md` DON'T #9 makes this explicit: raising defaults without measuring the per-review cost delta is not merged.
+
+### Risk-tiered budgets (v3, RFC-06)
+
+Every run classifies the change inventory deterministically (paths, statuses, binary / mode-change / omitted flags, line counts — never PR metadata) into a risk tier and takes its budget row from one table (`BUDGET_MATRIX`):
+
+| Tier | When | Max turns | Review alias | Output tokens / turn | Verifier | Patch bytes in the first message |
+|---|---|---|---|---|---|---|
+| `low` | only docs / tests / generated files, ≤ 300 lines, inventory complete | 8 | `balanced` | 4 096 | criticals only | 60 k |
+| `standard` | any code file, nothing sensitive, inventory complete | 20 | `balanced` | 8 192 | criticals + 30 % of warnings | 120 k |
+| `elevated` | prompts / policy, workflow / CI or dependency files; a mode change; incomplete inventory; > 1 500 lines | 30 | `balanced` | 8 192 | all criticals + all warnings | 200 k |
+| `critical` | policy or CI files **together with** code; an unknown file; a `high-risk-paths` match | 40 (the only raise: ≈ +$0.15–0.35 at grok-4.5 rates, on the rarest tier) | `deep` where the kind has one, else `balanced` | 8 192 | all | 200 k |
+
+`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. The per-tier recall guard is measured in Phase 4 (RFC-06 § Measurable targets).
 
 ## The agent-runner budget
 

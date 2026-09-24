@@ -507,6 +507,42 @@ Every workflow using AI Diff Reviewer sets these two.
   legs and names the missing one in the review and the job summary.
 - **When to change:** every lane is mandatory in your process.
 
+### `budget-profile`
+
+- **Default:** `auto`
+- **What it is:** v3 (RFC-06). With `auto` the review budget follows the
+  deterministic risk tier of the change, classified from the inventory
+  (paths, statuses, sizes — never the PR title or body): `low` (docs /
+  tests / generated only, ≤ 300 lines) 8 turns, 60 kB of patches,
+  criticals-only verifier; `standard` (code) 20 turns, 120 kB, 30 % of
+  warnings verified; `elevated` (prompts / policy, workflows, dependencies,
+  mode changes, incomplete inventory, > 1 500 lines) 30 turns, 200 kB, all
+  warnings; `critical` (policy or CI files together with code, unknown
+  files, or a `high-risk-paths` match) 40 turns — the only raise — with the
+  `deep` alias where the backend has one. `fixed` restores today's
+  constants for every tier. An explicit `max-turns` (other than the
+  default) is a ceiling a tier never exceeds.
+- **When to change:** `fixed` only while you calibrate; removed in v3.1.0.
+
+### `high-risk-paths`
+
+- **Default:** `''`
+- **What it is:** globs (comma- or newline-separated, e.g. `auth/**`,
+  `**/migrations/**`) that raise the tier to `critical` when a changed file
+  matches. Raises only.
+- **When to change:** your repository has directories where every change
+  deserves the deepest review.
+
+### `complexity-source`
+
+- **Default:** `model`
+- **What it is:** where the `complexity:*` label comes from. `model`: the
+  model's `set_pr_complexity` / findings-file level, as before.
+  `inventory`: derived from the risk tier (low → low, standard → medium,
+  elevated and critical → high); the model's level becomes telemetry. In
+  both modes the model's level never influences the budget.
+- **When to change:** you route on the label and want it deterministic.
+
 ### `complexity-labels-enabled`
 
 - **Default:** `false`

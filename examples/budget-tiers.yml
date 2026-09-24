@@ -1,0 +1,80 @@
+# Risk-tiered budgets (v3, RFC-06) — the three budget inputs at their shipped
+# defaults, so you can see what to change.
+#
+# Since v3 the review budget follows a deterministic risk tier classified
+# from the change inventory — file paths, statuses, mode changes and line
+# counts only, never the PR title, body, labels or author (a "docs only"
+# title cannot lower a tier). Per-file classes: docs, tests, generated,
+# dependencies, workflows-ci, prompts-policy, code, unknown.
+#
+#   tier      turns  patch bytes  verifier warning sample  review alias
+#   low          8       60 kB      0 % (criticals only)   balanced
+#   standard    20      120 kB     30 %                    balanced
+#   elevated    30      200 kB    100 %                    balanced
+#   critical    40      200 kB    100 % (+ base re-read)   deep, where the lane has one
+#
+#   low       docs / tests / generated only, ≤ 300 changed lines
+#   standard  any code change
+#   elevated  dependency manifests or lockfiles, a workflow / prompt / policy
+#             file, a mode change, an incomplete inventory, > 1 500 lines
+#   critical  a workflow / prompt / policy file changed TOGETHER with code, an
+#             unknown class, or a `high-risk-paths` match
+#
+# An explicit `max-turns` (any value other than the default 30) stays a
+# ceiling on every tier. Follow-up rounds are budgeted by the delta instead
+# (docs/ITERATION_AWARENESS.md § 9.2). See docs/PERFORMANCE.md § "Risk-tiered
+# budgets (v3)".
+
+name: PR review (risk-tiered budgets)
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: DailybotHQ/ai-diff-reviewer@v3
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- budget by risk tier (defaults shown) -------------------------
+          budget-profile: auto            # 'fixed' keeps the pre-v3 constants
+                                          # (30 turns, 120 kB, 30 %) on every
+                                          # tier — transition knob, removed in
+                                          # v3.1.0.
+          high-risk-paths: ''             # comma / newline globs that raise a
+                                          # PR to `critical` when a changed
+                                          # file matches — raises only, e.g.
+                                          #   high-risk-paths: |
+                                          #     src/auth/**
+                                          #     migrations/**
+                                          #     **/payments/**
+          # max-turns: 30                 # any other value caps every tier
+
+          # --- complexity label source ---------------------------------------
+          complexity-labels-enabled: 'true'
+          complexity-source: model        # 'inventory' derives the
+                                          # `complexity:*` label from the tier
+                                          # (low → low, standard → medium,
+                                          # elevated / critical → high) — the
+                                          # label never depends on the model.
+                                          # In every mode the model's level
+                                          # is telemetry and never sets a
+                                          # budget.

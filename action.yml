@@ -167,6 +167,18 @@ inputs:
     description: 'v3 aggregate only (RFC-04): when `true`, a missing, failed or timed-out leg fails the check. Default `false` publishes with the delivered legs and names the missing one in the review and the job summary.'
     required: false
     default: 'false'
+  budget-profile:
+    description: 'v3 (RFC-06, BC-13/BC-19). `auto` (default): the review budget follows the deterministic risk tier of the change — `low` 8 turns / 60 kB of patches / criticals-only verifier, `standard` 20 / 120 kB / 30 % of warnings, `elevated` 30 / 200 kB / all warnings, `critical` 40 turns (the only raise) with the `deep` alias where the backend has one. `fixed`: today''s constants for every tier (30 turns, `balanced`, 120 kB, 30 %). Transition knob — removed in v3.1.0.'
+    required: false
+    default: 'auto'
+  high-risk-paths:
+    description: 'v3 (RFC-06): comma- or newline-separated globs (e.g. `auth/**`, `**/migrations/**`) that raise the risk tier to `critical` when a changed file matches. Raises only — nothing lowers a tier, and PR metadata is never an input.'
+    required: false
+    default: ''
+  complexity-source:
+    description: 'v3 (RFC-06, BC-14). `model` (default): the complexity label comes from the model''s `set_pr_complexity` / findings-file level as before. `inventory`: the label is derived from the deterministic risk tier (low → low, standard → medium, elevated/critical → high); the model''s level is telemetry only. In both cases the model''s level never influences budgets.'
+    required: false
+    default: 'model'
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -462,6 +474,9 @@ runs:
         AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
         AIPRR_MIN_AGREEMENT: ${{ inputs.min-agreement }}
         AIPRR_REQUIRE_ALL_LEGS: ${{ inputs.require-all-legs }}
+        AIPRR_BUDGET_PROFILE: ${{ inputs.budget-profile }}
+        AIPRR_HIGH_RISK_PATHS: ${{ inputs.high-risk-paths }}
+        AIPRR_COMPLEXITY_SOURCE: ${{ inputs.complexity-source }}
         AIPRR_ARTIFACT_DIR: ${{ runner.temp }}/ai-diff-reviewer-legs
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the

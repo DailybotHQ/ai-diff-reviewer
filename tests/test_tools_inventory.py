@@ -122,7 +122,7 @@ class InventoryOnARealRepo(unittest.TestCase):
         state = reviewer.ReviewState(inventory=ctx.inventory)
         first = reviewer.execute_tool("get_change_inventory", {}, state)
         doc = json.loads(first)
-        self.assertEqual(set(doc), {"head_sha", "base_sha", "files", "omitted_count", "complete"})
+        self.assertEqual(set(doc), {"head_sha", "base_sha", "files", "omitted_count", "complete", "risk_tier"})  # RFC-06: the tool exposes the tier
         self.assertEqual(doc["head_sha"], self.head)
         self.assertIs(reviewer.execute_tool("get_change_inventory", {}, state), state.inventory_json)
         self.assertLessEqual(len(first.encode("utf-8")), reviewer.MAX_TOOL_OUTPUT_BYTES)

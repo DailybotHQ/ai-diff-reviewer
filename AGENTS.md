@@ -389,7 +389,7 @@ The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the age
 6. Send a PR that changes the prompt without a before/after comparison on a real PR.
 7. Print the API key (or any sensitive env var) to stdout — `redact_for_log` is the gate for tool-arg logging, but never `print(os.environ["AIPRR_API_KEY"])`.
 8. Bypass the existing 422 fallback path when adding a new submission code path — preserve graceful degradation.
-9. Increase `max_tokens` or `MAX_TURNS` defaults without estimating the cost-per-review impact and documenting it.
+9. Increase `max_tokens` or `MAX_TURNS` defaults without estimating the cost-per-review impact and documenting it. Since v3 the per-run turn budget comes from `BUDGET_MATRIX` (a row per risk tier, RFC-06) — change a row, not `DEFAULT_MAX_TURNS`, and re-run the Phase 4 per-tier campaign (`docs/PERFORMANCE.md § "Risk-tiered budgets"`) so the recall guard is re-measured.
 10. Add a new top-level `action.yml` input "just to support a one-off use case" — every input is a long-lived public contract.
 11. Hardcode anything that should be a constant — magic numbers, paths, severity ranks. The top of `scripts/reviewer.py` is the canonical place for runtime constants.
 12. Edit content in `.claude/...` or `CLAUDE.md` — both are symlinks. Edit the canonical paths under `.agents/...` and `AGENTS.md`.

@@ -69,7 +69,7 @@ Indicative list prices in USD per 1M tokens (input / output). Cached input is ch
 | `cursor` | Cursor subscription | `auto` | `auto` | `composer-2.5` | `auto` is flat-rate on Pro and routes well; `composer-2.5` burns metered credits — reserve for deep passes. |
 | any | Azure Foundry / custom gateway | *(no tier rows)* | | | Deployment names are consumer-defined; a tier word fails fast with guidance — set `model` to the deployment name or gateway model id. |
 
-Built-in defaults when `model` is empty: `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.5` (grok — v2.3.0+, was `grok-4.3`), `auto` (cursor).
+Built-in defaults when `model` is empty (v2 ids; **since v3 an empty `model` resolves the `balanced` alias of the lane's backend per the risk tier — BC-15 — and `deep` on the `critical` tier where the kind has one; the v2 ids below apply under `budget-profile: fixed` or on kinds without tier rows**): `claude-sonnet-4-6` (anthropic, claude-code), `gpt-5.6-luna` (openai, codex), `grok-4.5` (grok — v2.3.0+, was `grok-4.3`), `auto` (cursor).
 
 ### Route tiers by risk (recipe)
 
