@@ -1,0 +1,96 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.9,
+  "usage": {
+    "in": 30961,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 2180,
+    "source": "cli"
+  },
+  "cost_usd": 0.101306,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Any browser-supplied `Origin` is echoed in `Access-Control-Allow-Origin` while `Access-Control-Allow-Credentials` is always `true`. A malicious site can issue credentialed cross-origin requests (cookies/session) and read the responses \u2014 full CSRF-style data exfiltration against authenticated users.\n\nCORS is enforced only by browsers; native mobile HTTP clients ignore these headers, so relaxing them does not unlock native apps. Mobile webviews still need an explicit allowlist of trusted origins (the previous `ALLOWED` set, extended with known webview origins).\n\nAlso, when `origin` is null this emits `Access-Control-Allow-Origin: *` together with credentials, which browsers reject per the CORS spec, so the null-origin path fails for credentialed calls anyway.\n\nRestore an allowlist check before reflecting the origin, and only set `Access-Control-Allow-Credentials` for allowlisted origins:\n\n```suggestion\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** in CORS: the allowlist is removed and every request origin is reflected with credentials enabled.\n\n## Analysis\n\n`corsHeaders` previously returned credentialed ACAO headers only for `https://app.example.com`. This change always returns:\n\n- `Access-Control-Allow-Origin: <request Origin or *>`\n- `Access-Control-Allow-Credentials: true`\n\n**Failure mode:** any origin (e.g. `https://evil.example`) that can trigger a credentialed XHR/fetch against this API receives a matching ACAO plus credentials, so the browser exposes authenticated responses to that origin.\n\nThe PR rationale (native mobile clients lack a fixed origin) does not justify this. Native clients do not enforce CORS; only browsers/webviews do. Webviews that need cross-origin access should be added to an explicit allowlist.\n\nSecondary issue: `origin ?? \"*\"` with credentials is invalid per the Fetch CORS algorithm \u2014 user agents must fail that combination \u2014 so missing-Origin credentialed calls still break.\n\n## Recommendation\n\nDo not merge until the allowlist (or equivalent origin validation) is restored. Extend `ALLOWED` with concrete mobile-webview origins if those are required.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `corsHeaders` always sets `Access-Control-Allow-Origin` to the request Origin (or `*`) and `Access-Control-Allow-Credentials: true`, while base only did so for `ALLOWED` origins. That is a classic credentialed CORS misconfiguration enabling cross-origin response reads for authenticated browser "
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.882,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5211,
+      "out": 386
+    },
+    "cost_usd": 0.013762
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

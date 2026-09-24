@@ -1,0 +1,96 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 56.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 56.1,
+  "usage": {
+    "in": 32307,
+    "cache_read": 88704,
+    "cache_write": 0,
+    "out": 2486,
+    "source": "cli"
+  },
+  "cost_usd": 0.1061412,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Password-reset tokens must come from a CSPRNG. This replaces `randomBytes(32)` (256 bits) with `Math.floor(Math.random() * 1e12).toString(36)`, which is (1) a non-cryptographic PRNG and (2) at most 10\u00b9\u00b2 distinct values (~40 bits), often only 9 base36 characters after `padStart`. An attacker can brute-force reset links or predict tokens and take over accounts.\n\nFor edge runtimes, use Web Crypto instead of `Math.random`:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\n`crypto.getRandomValues` is available on Cloudflare Workers, Vercel Edge, Deno, and modern Node, and preserves the original 256-bit strength."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a 256-bit CSPRNG password-reset token with `Math.random()`, which is neither cryptographically secure nor sufficiently large.\n\n## Why this is blocking\n\n`newResetToken()` previously returned `randomBytes(32).toString(\"hex\")` (64 hex chars, 256 bits of entropy from Node's CSPRNG). The new implementation:\n\n1. Draws from `Math.random()`, a non-cryptographic PRNG that is predictable under known-seed / state-recovery attacks in several JS engines.\n2. Collapses the token space to at most `1e12` values (~40 bits), then encodes as base36 and pads to 9 characters \u2014 trivial to brute-force online or offline if tokens/hashes leak.\n\nAny caller issuing password-reset (or similar) links with this helper becomes account-takeoverable.\n\n## Edge-compatible fix\n\nEdge runtimes (Cloudflare Workers, Vercel Edge, Deno, browsers) expose the Web Crypto API. Prefer that over `Math.random()`:\n\n```ts\nexport function newResetToken(): string {\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n}\n```\n\nThat keeps 256 bits of CSPRNG entropy and works without Node's `crypto.randomBytes`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head replaces crypto.randomBytes(32) with Math.floor(Math.random()*1e12).toString(36), a non-CSPRNG with at most ~10^12 values (~40 bits). That is a real critical password-reset token weakness versus the prior 256-bit hex tokens."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.799,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4607,
+      "out": 368
+    },
+    "cost_usd": 0.011908
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

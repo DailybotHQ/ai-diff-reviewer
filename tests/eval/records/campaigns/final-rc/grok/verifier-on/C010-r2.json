@@ -1,0 +1,96 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 47.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.6,
+  "usage": {
+    "in": 30513,
+    "cache_read": 116736,
+    "cache_write": 0,
+    "out": 1868,
+    "source": "cli"
+  },
+  "cost_usd": 0.1072548,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` and load a different account. The handler never checks that the caller is support staff or otherwise allowed to access that id \u2014 it only requires `auth(req)` to succeed, then prefers the client-supplied id over `caller.accountId`.\n\n**Failure mode:** `POST/GET` with `{\"accountId\": \"<victim-id>\"}` and a normal user session returns that victim\u2019s account JSON from `db.accounts.findUnique`.\n\n**Fix:** Only honor an explicit account id after an authorization check (staff role / capability), otherwise force `id = caller.accountId`. Example:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nconst id =\n  typeof body.accountId === \"string\" && isSupportStaff(caller)\n    ? body.accountId\n    : caller.accountId;\nconst account = await db.accounts.findUnique({ where: { id } });\n```\n\nAlternatively, keep this route self-only and add a separate staff-only endpoint with its own authz."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** until the account lookup is authorized. This change turns a self-only account fetch into an open IDOR: any authenticated caller can pass `accountId` in the body and read another account.\n\n## Analysis\n\n`getAccount` previously resolved the account exclusively from `caller.accountId` returned by `auth(req)`. The new path prefers `body.accountId` with no role check, no ownership check, and no allowlist. The comment says the body override is for support staff tools, but nothing in the handler enforces that the caller is staff (or otherwise privileged) before honoring the override.\n\nFailure mode: a normal authenticated user sends `{\"accountId\": \"<victim>\"}` and receives that account\u2019s full JSON from `db.accounts.findUnique`.\n\n## Secondary notes (not filed separately)\n\n- Prefer a dedicated staff route or an explicit authorization helper (e.g. `assertStaff(caller)` / `canAccessAccount(caller, id)`) rather than overloading the self-service handler.\n- `body.accountId` is not validated as a non-empty string before it reaches the DB query.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head handler sets `id = body.accountId ?? caller.accountId` and loads that account with no role/capability check, while base only used `caller.accountId`. Any authenticated caller can therefore fetch another account by supplying `accountId` in the body."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.638,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6424,
+      "out": 414
+    },
+    "cost_usd": 0.0161
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

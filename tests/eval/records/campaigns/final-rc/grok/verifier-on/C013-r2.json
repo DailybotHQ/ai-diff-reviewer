@@ -1,0 +1,96 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 49.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.1,
+  "usage": {
+    "in": 31586,
+    "cache_read": 88192,
+    "cache_write": 0,
+    "out": 1907,
+    "source": "cli"
+  },
+  "cost_usd": 0.1010716,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "**Issue:** Password-reset tokens are no longer cryptographically random. `Math.random()` is not a CSPRNG, and `Math.floor(Math.random() * 1e12)` yields at most ~10^12 distinct values (~40 bits) before base36 encoding\u2014down from 256 bits (`randomBytes(32)` \u2192 64 hex chars). An attacker can brute-force or predict tokens and take over accounts.\n\n**Failure mode:** Anyone who can request resets (or observe a few tokens) can enumerate/guess a valid token and call the reset endpoint to set a new password.\n\n**Fix:** Use the Web Crypto API, which is available on Edge runtimes (and Node), e.g.:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nDo not use `Math.random()` for any security token."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces cryptographically secure password-reset token generation with a weak, predictable PRNG and collapses entropy from 256 bits to roughly 40 bits.\n\n## Analysis\n\n`src/auth/reset.ts` previously used Node `crypto.randomBytes(32)` (64 hex characters). The new implementation:\n\n1. Uses `Math.random()`, which is not a CSPRNG and is unsuitable for secrets.\n2. Samples only `Math.floor(Math.random() * 1e12)` before base36 encoding \u2014 at most ~10\u00b9\u00b2 distinct tokens.\n3. Pads to 9 characters, so tokens are short and feasible to brute-force against a reset endpoint.\n\nEdge-runtime compatibility does not require weakening entropy. The Web Crypto API (`crypto.getRandomValues`) is available on Vercel Edge, Cloudflare Workers, Deno, and modern Node, and preserves the original 32-byte token strength.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Password-reset tokens were changed from `randomBytes(32).toString(\"hex\")` (256-bit CSPRNG) to `Math.floor(Math.random() * 1e12).toString(36)`, which is not cryptographically secure and has far too little entropy. This is a real critical security regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.905,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2340,
+      "out": 423
+    },
+    "cost_usd": 0.008165
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

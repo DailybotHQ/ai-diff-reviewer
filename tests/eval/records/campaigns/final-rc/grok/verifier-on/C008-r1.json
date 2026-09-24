@@ -1,0 +1,96 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.1,
+  "usage": {
+    "in": 17005,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 2007,
+    "source": "cli"
+  },
+  "cost_usd": 0.0762728,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check means `deliver()` will POST to any caller-supplied `url` via `urllib.request.urlopen`. A customer- or attacker-controlled endpoint can target cloud metadata (`http://169.254.169.254/`), loopback, or internal hosts, and `urllib` will follow redirects off-allowlist by default.\n\nRestore an egress policy before merge: HTTPS-only, resolve and pin IPs blocking private/link-local/metadata ranges (and DNS rebinding), and/or a configurable per-tenant host allowlist. Keep the check immediately before `urlopen`, and disable redirect following to a different host."
+    }
+  ],
+  "summary": "## Verdict\n\nThis change opens a **server-side request forgery (SSRF)** hole by deleting the only host allowlist before `urlopen`. Do not merge until outbound webhook URLs are constrained again.\n\n## What went wrong\n\n`deliver()` previously resolved the URL hostname and rejected anything outside `ALLOWED_HOSTS`. That guard is gone; the function now POSTs to whatever string is passed as `url`. Anyone who can set a customer webhook URL (or influence `event` delivery config) can point the runner at link-local metadata (`169.254.169.254`), loopback, internal RFC1918 hosts, or non-HTTP schemes `urllib` will still open.\n\nSupporting enterprise customer endpoints is a valid product goal, but it requires an explicit egress policy (HTTPS-only, DNS rebinding-safe IP checks, block private/link-local/metadata ranges, and/or a per-tenant allowlist), not an unconditional `urlopen`.\n\n## Notes\n\n- Pre-existing: `json_dumps` is referenced but not defined/imported in this file; unrelated to this diff but will break the call path once host checks are restored.\n- No other files in the repo compensate for the removed check.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the hostname check that previously rejected non-allowlisted URLs; deliver() now urlopen()s any caller-supplied url with no egress controls, enabling SSRF to metadata/internal hosts. Critical severity is appropriate for unrestricted server-side request egress."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.449,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2309,
+      "out": 393
+    },
+    "cost_usd": 0.007898
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

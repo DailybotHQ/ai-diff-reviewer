@@ -1,0 +1,96 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.2,
+  "usage": {
+    "in": 30269,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1571,
+    "source": "cli"
+  },
+  "cost_usd": 0.0959992,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hard-coded in `NewClient()` with no staging/prod guard. Every consumer of this client \u2014 including production \u2014 will accept any TLS certificate, so a network attacker can MITM ledger traffic (credentials, transfers, account data) without a valid cert for the real host.\n\nThe comment references TICKET-77 and \"revisit before prod\", but nothing in the constructor reads an env, config flag, or build tag, so the bypass ships everywhere this binary runs.\n\nPin the staging CA in `RootCAs`, or construct an insecure transport only in staging wiring behind an explicit opt-in that defaults to verify-on. Leave the default `NewClient()` with verification enabled."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification on the ledger HTTP client, enabling MITM on every environment that uses `NewClient()`, including production.\n\n## Why this is blocking\n\n`InsecureSkipVerify: true` is set on the shared `NewClient()` constructor with no environment, build-tag, or config gate. The comment and ticket acknowledge this is a staging workaround, but the code path is global: any caller gets a client that accepts any certificate (or none).\n\nFor a ledger client that almost certainly carries financial or identity-bearing traffic, that is a production outage/security risk, not a temporary staging convenience.\n\n## Safer directions (for the author)\n\n- Gate skip-verify behind an explicit non-prod config flag that defaults to false, **or**\n- Trust the staging CA via `tls.Config{RootCAs: pool}` loaded from a pinned PEM, **or**\n- Use a staging-only transport constructed in staging main/wiring, leaving `NewClient()` secure by default.\n\nA ticket comment alone does not constrain runtime behavior.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient unconditionally sets tls.Config{InsecureSkipVerify: true} with only a TICKET-77 comment and no env/config/build-tag guard; the base version used the default verifying client, so this is a real TLS MITM regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.281,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2987,
+      "out": 346
+    },
+    "cost_usd": 0.008844
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

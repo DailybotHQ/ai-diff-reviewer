@@ -1,0 +1,96 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 32.3,
+  "usage": {
+    "in": 30747,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1512,
+    "source": "cli"
+  },
+  "cost_usd": 0.087846,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` directly onto `REPORTS` lets any client read files outside the reports directory.\n\n**Failure mode:** `GET /reports/x?path=../../etc/passwd` becomes `send_file(\"/srv/reports/../../etc/passwd\")`, which serves host files the app user can read (credentials, configs, etc.).\n\n**Fix:** resolve the joined path and ensure it stays under the reports root before calling `send_file`. Example:\n\n```python\nfrom werkzeug.utils import safe_join\n\n@app.route(\"/reports/<name>\")\ndef download(name: str):\n    rel = request.args.get(\"path\", name)\n    full = safe_join(REPORTS, rel)\n    if full is None:\n        abort(400)\n    # optional belt-and-suspenders after resolve:\n    # if not os.path.realpath(full).startswith(os.path.realpath(REPORTS) + os.sep):\n    #     abort(400)\n    return send_file(full)\n```\n\nIf the route param alone should express the subpath, use a path converter (`/reports/<path:name>`) still gated by `safe_join`, and do not take a raw filesystem path from the query string."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical path-traversal vulnerability in the report download endpoint.\n\n## Analysis\n\nThe previous handler confined downloads with `os.path.basename(name)`, so path segments and `..` could not escape `/srv/reports`. The new code joins `request.args.get(\"path\", name)` straight onto `REPORTS` with no validation.\n\nConcrete failure mode: `GET /reports/x?path=../../etc/passwd` (or any absolute-looking relative chain) resolves under `/srv/reports/../../etc/passwd` and `send_file` can serve arbitrary files readable by the process. The same applies when `name` itself carries separators if the framework passes them through and `path` is omitted.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) is reasonable, but the join must stay inside `REPORTS`: resolve the candidate, then reject anything whose real path is not under the reports root (and ideally reject absolute paths and null bytes). Flask/`werkzeug` `safe_join` plus an explicit root check is the usual pattern.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed `os.path.basename` and now does `send_file(os.path.join(REPORTS, request.args.get(\"path\", name)))` with no containment check, so a client-controlled `path` like `../../etc/passwd` escapes `/srv/reports`. That is a real arbitrary-file-read regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.461,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2213,
+      "out": 296
+    },
+    "cost_usd": 0.006688
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

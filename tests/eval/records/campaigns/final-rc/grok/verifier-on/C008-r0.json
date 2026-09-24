@@ -1,0 +1,96 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 92.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 92.9,
+  "usage": {
+    "in": 62099,
+    "cache_read": 175616,
+    "cache_write": 0,
+    "out": 4477,
+    "source": "cli"
+  },
+  "cost_usd": 0.2037448,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check means `deliver()` will POST to any caller-supplied URL via `urllib.request.urlopen`.\n\n**Failure mode:** a malicious or misconfigured `url` such as `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:2375/`, or an internal RFC1918 service causes this process to initiate the request and return/handle the response \u2014 credential theft, internal API access, or port scanning from the server's network position.\n\nCustomer-configured endpoints need a safe substitute for the allowlist, for example:\n1. Persist endpoints only after validation (https scheme, no IP literals in private/link-local/metadata ranges, DNS resolution checked against the same blocklist).\n2. Re-validate at delivery time (scheme + host/IP) before `urlopen`.\n3. Prefer an explicit allowlist/registry of approved hosts per tenant over free-form URLs on the hot path.\n\nDo not ship unrestricted `urlopen` on user-controlled URLs."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only webhook host allowlist and turns `deliver()` into an open server-side request against whatever URL the caller passes.\n\n## Why this is blocking\n\n`deliver(event, url)` previously resolved the URL hostname and rejected anything outside `ALLOWED_HOSTS` (`hooks.internal.example`). That guard is gone. The function now builds a `urllib.request.Request` from the raw `url` string and calls `urlopen` with no host, scheme, or address-range checks.\n\nConcrete failure mode: if `url` is attacker-influenced or even merely customer-controlled without a hardened allowlist, the runner/process can be pointed at:\n\n- Cloud metadata (`http://169.254.169.254/...`) and steal credentials\n- Loopback / link-local admin APIs (`http://127.0.0.1:...`)\n- Internal RFC1918 services not exposed publicly\n\nThat is classic SSRF. Supporting customer-configured endpoints is a valid product goal; it requires validating endpoints at configuration time (https-only, public resolvable hosts, block private/link-local/metadata ranges, optional DNS-pinning) \u2014 not deleting the gate on the request path.\n\n## Pre-existing notes (not introduced here)\n\n`json_dumps` is still undefined in this module, and the old code used `urllib.parse` without an explicit import. Those are adjacent hygiene issues; the merge blocker is the removed host restriction.\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base `deliver()` enforced `ALLOWED_HOSTS` before `urlopen`; head removes that check and POSTs to any caller-supplied URL, enabling classic SSRF (metadata/link-local/internal targets). Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.071,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1966,
+      "out": 352
+    },
+    "cost_usd": 0.007094
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

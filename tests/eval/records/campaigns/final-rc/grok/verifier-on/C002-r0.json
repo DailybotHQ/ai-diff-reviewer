@@ -1,0 +1,109 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.6,
+  "usage": {
+    "in": 31408,
+    "cache_read": 88064,
+    "cache_write": 0,
+    "out": 2804,
+    "source": "cli"
+  },
+  "cost_usd": 0.1060592,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "This replaces the parameterized `WHERE email = ?` binding with an f-string that interpolates `email` directly into the SQL text. Any attacker-controlled or support-pasted value can close the quote and inject arbitrary SQL (for example `' OR '1'='1` returns all orders; destructive payloads depending on the connection). Failure mode: untrusted input reaches `conn.execute` as code, not data.\n\nRestore a bound parameter. For partial match use `LIKE` with the pattern as a bound value:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```"
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment says partial-match search was requested, but the SQL still uses `email = '...'` (exact match). Pasting an email fragment will not match full addresses stored in the table, so support still cannot find orders by substring after this change.\n\nIf partial match is the goal, use `WHERE email LIKE ?` with a bound `%<fragment>%` pattern (and keep parameterization \u2014 see the injection finding on the query line)."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a safe parameterized query with string-interpolated SQL, introducing a classic SQL injection.\n\n## Analysis\n\n`get_orders` previously bound `email` via `?` placeholders. The new code embeds `email` directly in an f-string into the SQL text.\n\nAny caller-controlled value (support paste, query param, form field) can break out of the quotes and alter the statement \u2014 for example returning every order, or running destructive SQL depending on the connection. SQLite still executes attacker-controlled SQL when it is concatenated this way.\n\nThe PR goal is also unmet: the comment and title claim partial-match search, but the predicate remains `email = ...` (exact equality). Partial match needs a parameterized `LIKE` (or equivalent) with wildcards bound as values.\n\n## Recommendation\n\nRestore the bound parameter and implement partial match safely, for example:\n\n```python\ncur = conn.execute(\n    \"SELECT id, total FROM orders WHERE email LIKE ?\",\n    (f\"%{email}%\",),\n)\n```\n\nValidate or normalize the fragment if support tooling should constrain free-text input.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code at store.py:6 interpolates `email` into the SQL via an f-string, and the base version used a safe bound parameter `(email,)`. That is a real SQL-injection regression of critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.271,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2168,
+      "out": 284
+    },
+    "cost_usd": 0.00645
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

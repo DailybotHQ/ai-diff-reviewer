@@ -1,0 +1,109 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.2,
+  "setup_seconds": 0.1,
+  "total_seconds": 51.3,
+  "usage": {
+    "in": 30842,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 2254,
+    "source": "cli"
+  },
+  "cost_usd": 0.1012816,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run` is now invoked with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid` without quoting or escaping. A value such as `name=\"x.png; id > /tmp/pwned\"` (or metacharacters in `upload_dir` / `oid`) is interpreted by the shell, so this becomes remote command execution on the thumbnail host.\n\nRestore the argv-list form (and keep the absolute binary path). ImageMagick 7\u2019s policy/delegate behavior does not require a shell; use `/usr/bin/magick` or `/usr/bin/convert` with a list of arguments instead:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf the binary was renamed under IM7, swap in `/usr/bin/magick` with the same list style \u2014 do not reintroduce `shell=True`."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The command string calls bare `convert` instead of `/usr/bin/convert`. Under `shell=True` the shell resolves this via `PATH`, so a poisoned PATH (or a shadow binary earlier on PATH) can redirect thumbnail processing. Prefer an absolute path to the IM binary in an argv list (`/usr/bin/convert` or `/usr/bin/magick`)."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a command-injection vulnerability by switching a safe argv-list `subprocess.run` to `shell=True` with unquoted interpolation of `upload_dir`, `name`, and `oid`.\n\n## Why this is blocking\n\nThe previous call passed a fixed binary path and two path arguments as a list, so the kernel exec\u2019d ImageMagick with no shell metacharacter interpretation. The new form builds a single shell string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny of those three values can break out of the intended command (`;`, `|`, `$(\u2026)`, backticks, spaces, quotes). The old comment that `name` was validated upstream by `ALLOWED_FILES` was removed; even if that regex still exists elsewhere, `upload_dir` and `oid` are fully interpolated with no guard visible in this module, and filename allowlists often still permit characters that are deadly inside a shell.\n\nDropping the absolute `/usr/bin/convert` path in favor of bare `convert` under `shell=True` also makes the invocation depend on `PATH` (and shell builtins), which is a weaker posture on a shared runner or upload-processing host.\n\n## ImageMagick 7 note\n\nIf IM7 truly needs a different binary or delegate setup, the usual fix is still argv-list form: call `magick` (or `/usr/bin/magick`) with a list of arguments, or set env/`MAGICK_CONFIGURE_PATH` as required. Policy delegates are enforced inside ImageMagick regardless of whether the parent used `shell=True`; shell mode is not required for that.\n\n## Recommendation\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces a safe argv-list `subprocess.run` with `shell=True` and an unquoted f-string of `upload_dir`, `name`, and `oid`, enabling shell metacharacter injection/RCE. Base used a list form without a shell; no in-repo validation of those parameters remains."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.949,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2584,
+      "out": 362
+    },
+    "cost_usd": 0.008287
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

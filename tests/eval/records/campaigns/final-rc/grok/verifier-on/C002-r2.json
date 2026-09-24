@@ -1,0 +1,96 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.7,
+  "setup_seconds": 0.1,
+  "total_seconds": 47.8,
+  "usage": {
+    "in": 60537,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 2164,
+    "source": "cli"
+  },
+  "cost_usd": 0.1514148,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The query embeds `email` directly into SQL with an f-string, removing the parameterized `?` binding. A support-pasted value such as `x' OR 1=1 --` returns every order; crafted input can also modify or delete rows depending on connection settings.\n\nThe comment claims partial-match search, but the predicate is still `=`, so email fragments will not match unless the full address is supplied.\n\nRestore a bound parameter. For substring search use a parameterized `LIKE` with an escaped pattern:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ? ESCAPE '\\\\'\",\n        (\"%\" + email.replace(\"\\\\\", \"\\\\\\\\\").replace(\"%\", \"\\\\%\").replace(\"_\", \"\\\\_\") + \"%\",)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical SQL injection is introduced in `get_orders` \u2014 do not merge until the query is parameterized again.\n\n## Narrative\n\n`store.py` replaces the safe `?` bound parameter with an f-string that embeds `email` directly into the SQL text. Any caller that passes a user- or ticket-supplied fragment (exactly what support described) can break out of the string literal and run arbitrary SQL against the orders database.\n\nThe comment claims partial-match search, but the predicate is still equality (`email = '...'`), so the change does not deliver substring behavior either. Restore a bound parameter and use a parameterized `LIKE` (with `ESCAPE`) or equivalent if partial match is required.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "store.py line 6 interpolates `email` into the SQL string with an f-string, replacing the prior parameterized `?` binding; that is a genuine SQL injection regression. The equality predicate also does not implement the claimed partial-match search."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.885,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2443,
+      "out": 318
+    },
+    "cost_usd": 0.007664
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

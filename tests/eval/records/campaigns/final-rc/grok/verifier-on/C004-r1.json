@@ -1,0 +1,96 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.2,
+  "setup_seconds": 0.1,
+  "total_seconds": 33.3,
+  "usage": {
+    "in": 30013,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1550,
+    "source": "cli"
+  },
+  "cost_usd": 0.086606,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** removing `os.path.basename` and passing `request.args.get(\"path\", name)` into `os.path.join(REPORTS, ...)` lets callers read any file the process can open.\n\nConcrete cases:\n- `GET /reports/x?path=../../etc/passwd` escapes the reports root via `..`\n- `GET /reports/x?path=/etc/passwd` \u2014 `os.path.join` treats an absolute second argument as the full path, so `REPORTS` is ignored\n\nKeep nested relative paths, but resolve and enforce containment:\n\n```suggestion\n    candidate = request.args.get(\"path\", name)\n    if os.path.isabs(candidate):\n        abort(400)\n    full = os.path.realpath(os.path.join(REPORTS, candidate))\n    if not full.startswith(os.path.realpath(REPORTS) + os.sep):\n        abort(400)\n    return send_file(full)\n```\n\n(Also import `abort` from Flask.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change reintroduces arbitrary file read via path traversal on the report download endpoint.\n\n## Analysis\n\n`download` previously constrained the filename with `os.path.basename(name)`, so path segments and `..` could not escape `/srv/reports`. The new code joins `request.args.get(\"path\", name)` straight into `send_file` with no normalization, containment check, or basename/segment allowlist.\n\nFailure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves under `/srv/reports/../../etc/passwd` and can leave the reports root.\n2. **Absolute path override:** `os.path.join(\"/srv/reports\", \"/etc/passwd\")` discards the reports root and serves `/etc/passwd` directly.\n3. **Route param fallback:** even without `path`, a crafted `name` is no longer basename-sanitized.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) is fine, but the resolved path must be checked to stay inside `REPORTS` after `os.path.realpath` (or equivalent), and only relative segments should be accepted.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head removed `os.path.basename` and joins unsanitized `request.args.get(\"path\", name)` into `os.path.join(REPORTS, ...)`, so `..` traversal and absolute paths both escape the reports root\u2014an arbitrary file read."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.656,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2237,
+      "out": 294
+    },
+    "cost_usd": 0.006699
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

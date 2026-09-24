@@ -1,0 +1,109 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 44.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.6,
+  "usage": {
+    "in": 16986,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 2120,
+    "source": "cli"
+  },
+  "cost_usd": 0.0769128,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is set for every `NewClient()` instance with no environment or config gate. Any network attacker can present an arbitrary certificate and MITM ledger HTTPS traffic (credentials, payloads, responses).\n\nThe staging self-signed cert note and TICKET-77 do not limit this to staging \u2014 production builds get the same client.\n\n**Fix:** pin trust with the staging CA in `tls.Config.RootCAs`, or gate skip behind an explicit non-prod flag that defaults to verify-on and fails closed in production. Example shape:\n\n```go\ntr := http.DefaultTransport.(*http.Transport).Clone()\nif cfg.AllowInsecureTLS { // staging-only, default false\n    tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}\n}\nreturn &http.Client{Timeout: 10 * time.Second, Transport: tr}\n```"
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "Replacing `Transport` with a bare `&http.Transport{TLSClientConfig: ...}` discards `http.DefaultTransport` defaults (env proxy, dial timeouts, idle conn limits, HTTP/2). Ledger calls may stop honoring `HTTP_PROXY`/`HTTPS_PROXY` and pick up weaker connection behavior.\n\nClone the default transport and only override TLS:\n\n```go\ntr := http.DefaultTransport.(*http.Transport).Clone()\ntr.TLSClientConfig = &tls.Config{ /* ... */ }\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every caller of `NewClient()`, with no staging-only gate.\n\n## Why this is blocking\n\n`tls.Config{InsecureSkipVerify: true}` makes the client accept any certificate (or none). Anyone on the network path can MITM ledger traffic and read or alter requests and responses. The comment references staging and TICKET-77, but `NewClient()` has no environment, build tag, or config flag \u2014 the same client ships to production as written.\n\nA ticket and a \"revisit before prod\" comment do not bound the blast radius. The failure mode is silent acceptance of a forged cert on every HTTPS call this client makes.\n\n## Safer directions\n\n1. **Prefer trust, not skip:** load the staging CA (or the self-signed cert) via `x509.CertPool` / `RootCAs` so verification still runs.\n2. **If skip is unavoidable short-term:** gate it behind an explicit staging-only config (env or constructor flag that defaults to secure), refuse to start in production with skip enabled, and log loudly when it is on.\n3. **Transport hygiene:** when setting a custom `Transport`, clone `http.DefaultTransport` (or copy its fields) so proxy, HTTP/2, and idle-conn defaults are preserved \u2014 only override `TLSClientConfig`.\n\n## Scope note\n\nRepo is a single-file stub (`internal/ledger/client.go`); no callers or env wiring to soften this. The insecure path is the only path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` always sets `tls.Config{InsecureSkipVerify: true}` with only a staging comment and no env/config gate; base used the default verifying client. That fully disables cert validation for any caller of this factory."
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.364,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1240,
+      "out": 386
+    },
+    "cost_usd": 0.005999
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

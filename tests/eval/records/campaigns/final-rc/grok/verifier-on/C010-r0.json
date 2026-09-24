@@ -1,0 +1,96 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 84.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 84.6,
+  "usage": {
+    "in": 33314,
+    "cache_read": 150784,
+    "cache_write": 0,
+    "out": 3095,
+    "source": "cli"
+  },
+  "cost_usd": 0.1304332,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `accountId` in the JSON body and read that account. The previous code always used `caller.accountId` from `auth(req)`; this change substitutes `body.accountId` with no check that the caller is support staff or otherwise authorized for cross-account reads.\n\nFailure mode: a normal user authenticates, sends `{\"accountId\":\"<victim>\"}`, and receives the victim account payload from `Response.json(account)`.\n\nGate cross-account lookup explicitly before the query, for example:\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string = body.accountId ?? caller.accountId;\n  if (id !== caller.accountId && !caller.isSupport) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\n(Adapt `caller.isSupport` to whatever role claim `auth()` actually exposes; the important part is denying cross-account reads by default.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 this change turns a self-only account fetch into an unscoped lookup of any account id supplied in the request body, with no staff/role check.\n\n## Analysis\n\nPreviously `getAccount` always loaded `caller.accountId` from `auth(req)`, so the authenticated principal could only read their own row. The new path does:\n\n```ts\nconst id = body.accountId ?? caller.accountId;\n```\n\nand queries `db.accounts.findUnique({ where: { id } })` with no comparison against the caller, no support/role gate, and no allowlist of staff tools. The comment claims support-staff intent; the code enforces none of it. Any caller who can authenticate and send JSON can pass another user's `accountId` and receive that account record (IDOR / broken object-level authorization).\n\nThe fixture only contains this route (no `auth` implementation or middleware in-tree), so there is no evidence of an outer guard that would restrict this handler to staff. Until such a check exists **inside** this handler or a proven equivalent gate on the route, this is a production-blocking security defect.\n\nSecondary notes (not filed separately): body is read unconditionally (awkward if this stays a GET); `body.accountId` is not validated as a string before use.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses `body.accountId ?? caller.accountId` with no authorization check, while base always scoped to `caller.accountId`. Any authenticated caller can therefore request another account\u2019s payload via the body."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.867,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2719,
+      "out": 345
+    },
+    "cost_usd": 0.009018
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

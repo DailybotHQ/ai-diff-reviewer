@@ -1,0 +1,96 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 52.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 52.3,
+  "usage": {
+    "in": 18476,
+    "cache_read": 133248,
+    "cache_write": 0,
+    "out": 2746,
+    "source": "cli"
+  },
+  "cost_usd": 0.0934024,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `body` is written into the DOM as HTML with no escaping or sanitization. User-controlled comment text such as `<img src=x onerror=\"\u2026\">` or `<script>\u2026</script>` executes in every viewer's browser when the comment renders.\n\n**Fix:** Restore escaping, render `body` as text (`{body}`), or run it through a vetted sanitizer / markdown renderer that emits safe React nodes before any HTML assignment.\n\n```suggestion\n  return <div className=\"comment\">{body}</div>;\n```\n\nIf rich formatting is required, parse an allowlisted subset (e.g. bold/links only) into React elements rather than trusting raw HTML."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a straightforward XSS vulnerability by feeding unsanitized comment HTML into the DOM.\n\n## Analysis\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning to `dangerouslySetInnerHTML`, which made the markup safe (plain text). This PR deletes `escapeHtml` and passes `body` through raw.\n\nAny comment body containing HTML or script is executed in the viewer's session. Concrete payload: `body = '<img src=x onerror=alert(document.cookie)>'` (or a script/event-handler variant) runs as soon as the comment renders. Because this component is named and shaped for user-authored comment text, that input is attacker-controlled in normal use.\n\nThe comment about \"bold/links\" does not mitigate this: there is no markdown parser, allowlist sanitizer (e.g. DOMPurify), or link-only renderer \u2014 raw HTML is trusted wholesale.\n\n## Recommendation\n\nKeep escaping (or render as React text children), or parse a safe subset (markdown to React elements / sanitized HTML with an explicit allowlist). Do not assign untrusted strings to `dangerouslySetInnerHTML`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removed escapeHtml and now assigns unsanitized body to dangerouslySetInnerHTML, so attacker-controlled comment HTML would execute in viewers\u2019 browsers. That is a real stored-XSS regression; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.292,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4349,
+      "out": 351
+    },
+    "cost_usd": 0.011342
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

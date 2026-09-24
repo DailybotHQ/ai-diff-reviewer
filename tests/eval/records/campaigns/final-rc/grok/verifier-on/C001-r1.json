@@ -1,0 +1,96 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.6,
+  "usage": {
+    "in": 30769,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1949,
+    "source": "cli"
+  },
+  "cost_usd": 0.0992672,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no access control. Any client that can reach this route can delete any user (`USERS.remove(user)` \u2192 204), including admins.\n\nCleanup jobs hitting 403 should get a dedicated principal or role (e.g. `service` / `cleanup`) checked on the **caller**, or the job should authenticate as admin \u2014 not an open endpoint.\n\nRestore a role check (or equivalent authn/authz) before merge; do not ship an unauthenticated destructive route."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 `DELETE /users/<user>` is now callable with no role check, so any client can delete any user.\n\n## Narrative\n\nThe PR removes `@require_role(\"admin\")` from `delete_user` to unblock cleanup jobs that run as a viewer. That trades a 403 for an open delete endpoint: there is no replacement gate (caller auth, service-account role, or internal-only binding).\n\n`require_role` still exists in `app.py` and is the only access control on this route. After this change, `delete_user` only does `USERS.remove(user)` and returns 204. Anyone who can reach the app can remove `alice`, `bob`, or any other name in the list.\n\nA durable fix is to authorize the **caller** (or a dedicated cleanup/service role), not to drop the decorator. If cleanup must run as `viewer`, add an explicit role or principal that is allowed to delete, and keep denying anonymous or unrelated callers.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base had `@require_role(\"admin\")` on `DELETE /users/<user>`; head replaces it with a comment and leaves `delete_user` with no auth check before `USERS.remove(user)` \u2192 204. Any reachable client can delete any user, so the critical authorization regression holds."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.367,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2998,
+      "out": 317
+    },
+    "cost_usd": 0.008717
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

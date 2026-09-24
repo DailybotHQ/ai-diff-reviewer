@@ -1,0 +1,96 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.0,
+  "usage": {
+    "in": 30363,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1639,
+    "source": "cli"
+  },
+  "cost_usd": 0.0966336,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "`log.debug` includes `process.env.PROCESSOR_KEY` in the structured payload. On every successful charge this ships the payment-processor credential into whatever sink backs `log` (stdout on CI/prod, log aggregators, support tooling). Anyone with log read access can replay the key and create charges.\n\nRemove `key` from the payload entirely. Keep only non-secret correlation fields (`orderId`, `ref`, and processor error metadata if you add a failure path). Restore an info-level success log without credentials so ops still sees charge creation.\n\n```suggestion\n  log.info(\"charge created\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change writes the payment processor credential into application logs.\n\n## Narrative\n\n`charge()` previously recorded a safe info event with `orderId` and `ref`. The new debug payload adds `process.env.PROCESSOR_KEY` under the field `key`, and the inline comment states that credentials are included so support can replay failures.\n\nThat is a secret-exfiltration path on every successful charge: debug logs are routinely shipped to centralized logging, retained, and readable by anyone with log access (support, on-call, third-party log vendors). A leaked processor key enables fraudulent charges against the merchant account.\n\nSupport replay needs non-secret charge context only (`orderId`, `ref`, processor error codes, masked PAN last-4 if already available from the processor response). Credential material must stay in the secret store / runner env and must never enter log pipelines.\n\n**Secondary effect:** replacing `log.info(\"charge created\", \u2026)` with `log.debug` also drops the operational success signal at info level, so charge-creation visibility regresses even after the secret is removed.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `charge.ts` logs `process.env.PROCESSOR_KEY` in the structured `log.debug` payload on every successful charge, a regression from the base info log that only included `orderId` and `ref`. That is a real credential leak into whatever backs `log`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.143,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2338,
+      "out": 409
+    },
+    "cost_usd": 0.008052
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

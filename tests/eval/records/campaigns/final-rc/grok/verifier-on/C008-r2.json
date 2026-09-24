@@ -1,0 +1,96 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "911f2462cf58",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 36.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.2,
+  "usage": {
+    "in": 30585,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1659,
+    "source": "cli"
+  },
+  "cost_usd": 0.0971976,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check means `urllib.request.urlopen` will POST to any caller-supplied `url`. A customer- or attacker-controlled endpoint can target cloud metadata (`http://169.254.169.254/`), `localhost`, or internal RFC1918 services from your infrastructure \u2014 classic SSRF with a 5s timeout as the only limit.\n\nRestore an egress policy before merge: require `https`, resolve and reject private/link-local/metadata literals and resolved IPs, and keep a configurable allowlist (or per-tenant validated callback domains) rather than an open fetch."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only webhook host allowlist and turns `deliver()` into an open SSRF primitive.\n\n## Narrative\n\n`webhooks.py` previously rejected any URL whose hostname was outside `ALLOWED_HOSTS` (`hooks.internal.example`). The PR deletes that gate and posts the event body to whatever `url` the caller passes.\n\nIf `url` is customer- or attacker-influenced (the PR description says it is), the runner/server will initiate server-side requests to arbitrary destinations: cloud metadata (`169.254.169.254`), localhost admin ports, link-local/internal RFC1918 hosts, and non-HTTP schemes `urllib` may still follow. Timeout alone does not bound *where* the request goes.\n\nSupporting customer endpoints is a real product need, but it requires an explicit egress policy \u2014 HTTPS-only, block private/link-local/metadata ranges, DNS rebinding controls, and preferably an allowlist or per-tenant validated domain \u2014 not deletion of the existing check.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "tier_turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the hostname check; deliver() now POSTs via urllib.request.urlopen to any caller-supplied url with only a 5s timeout, enabling SSRF to metadata/localhost/internal hosts as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.477,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2245,
+      "out": 296
+    },
+    "cost_usd": 0.006676
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
