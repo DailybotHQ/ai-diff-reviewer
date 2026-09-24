@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.0.0] — 2026-09-24
+
 ### Breaking (v3)
 
 - **BC-13 — risk-tiered budgets (full rounds).** The review budget follows a deterministic risk tier classified from the change inventory (`classify_inventory`, never PR metadata): `low` 8 turns / 60 kB of patches / criticals-only verifier / 4 096 output tokens, `standard` 20 / 120 kB / 30 % of warnings, `elevated` 30 / 200 kB / all warnings, `critical` 40 turns (the only raise) with the `deep` alias where the backend has one. `budget-profile: fixed` restores today's constants for one minor cycle; an explicit `max-turns` stays a ceiling; `high-risk-paths` raises the tier; on `grok` the tier row's turns (8 / 20 / 30 / 40) are the CLI's native `--max-turns` when `agent-max-turns` is unset (`max-turns` and the incremental delta budget stay in-process knobs — a CLI turn is not an in-process turn), and a CLI that stops at its cap posts an **incomplete** review instead of crashing the run. The tier is in the inventory, the run record and the document. Cost expectations change per tier (down on small changes, up only on `critical`).
