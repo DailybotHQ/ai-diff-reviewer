@@ -1,0 +1,96 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.2,
+  "usage": {
+    "in": 31548,
+    "cache_read": 88704,
+    "cache_write": 0,
+    "out": 2282,
+    "source": "cli"
+  },
+  "cost_usd": 0.1033992,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "`user.name.split()[0]` assumes `split()` always returns at least one token. For an empty string or whitespace-only name (`\"\"`, `\"   \"`), `split()` returns `[]` and this line raises `IndexError: list index out of range`.\n\nGuard the empty case before indexing, or use a safe default:\n\n```suggestion\ndef first_name(user):\n    parts = user.name.split()\n    return parts[0] if parts else \"\"\n```"
+    },
+    {
+      "path": "utils.py",
+      "line": 2,
+      "severity": "info",
+      "body": "`sum(i.price for i in items)` already returns `0` for an empty iterable, so the `if not items: return 0` branch does not change the empty-list result. It does change `total(None)` from `TypeError` to `0`, which can hide a caller bug. If the intent is only empty collections, prefer an explicit check such as `if len(items) == 0` (after confirming `items` is a sequence), or drop the guard and keep the `sum` behavior."
+    }
+  ],
+  "summary": "## Verdict\n\nSmall utility tweak with one real correctness hole in the new `first_name` helper.\n\n## Notes\n\n- `total([])` already returned `0` via `sum(...)` before this change; the new guard mainly changes behavior for other falsy values such as `None` (now returns `0` instead of raising `TypeError`).\n- `first_name` is new and crashes on empty or whitespace-only names because `str.split()` yields an empty list and `[0]` raises `IndexError`. Verified with `''` and `'   '`.\n\nNo repository instruction files were present; review is against general correctness only.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "utils.py",
+      "line": 8,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    },
+    {
+      "path": "utils.py",
+      "line": 2,
+      "severity_claimed": "info",
+      "status": "skipped",
+      "reason": "info is never verified"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C091-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

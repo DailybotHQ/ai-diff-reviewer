@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 24.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 24.2,
+  "usage": {
+    "in": 53957,
+    "cache_read": 81536,
+    "cache_write": 0,
+    "out": 502,
+    "source": "cli"
+  },
+  "cost_usd": 0.08715595,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Removed `os.path.basename` sanitization and now passes an attacker-controlled `request.args.get(\"path\", name)` value straight into `os.path.join(REPORTS, ...)`. An attacker can request `/reports/x?path=../../../etc/passwd` and `send_file` will serve files outside `/srv/reports`.\n\n```suggestion\n    safe = os.path.normpath(request.args.get(\"path\", name)).lstrip(os.sep)\n    if safe.startswith(\"..\") or os.path.isabs(safe):\n        abort(400)\n    return send_file(os.path.join(REPORTS, safe))\n```"
+    }
+  ],
+  "summary": "The change removes the only path sanitization and introduces an unsanitized `path` query parameter directly into `send_file`. This opens a path-traversal vulnerability on the `/reports/<name>` route.",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed `os.path.basename(name)` and now joins attacker-controlled `request.args.get(\"path\", name)` directly into `os.path.join(REPORTS, ...)`, so `?path=../../../etc/passwd` can escape `/srv/reports` via `send_file`. This is a real critical path-traversal regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.576,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2080,
+      "out": 309
+    },
+    "cost_usd": 0.006475
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

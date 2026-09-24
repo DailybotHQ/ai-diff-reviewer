@@ -122,6 +122,8 @@ and `campaigns/summary.json`; the constants live in `tests/eval/determinism.py`.
 | **Blocking — instrument** | any run record invalid against the schema; any first-party lane run with `usage_known = false`; a cell missing a repetition | 0 tolerated | P-7; S7 F4 |
 | **Descriptive only** | n < 3 per cell, or a lane with fewer than 4 cases | — | E-17 |
 
+**Schema amendment (Task 27, 2026-09-24):** `run-record/3.0` `context.iar_mode` gains `verifier-only` (RFC-06: a follow-up round with no code change spends no review turns; the verifier re-reads the outstanding anchors). Both schema copies updated; the record's `budget.turns_used` is 0 and `verifier_runs` = the number of outstanding findings on such a round.
+
 **v3 re-stamp (PLAN_v3_implementation Task 25, 2026-09-24, Stage Gate B decision).**
 The v3.0 prompt and budgeted first message widen the per-run trajectory on
 the tree corpus (cache-normalised token spread 0.24–0.28 where v2 measured

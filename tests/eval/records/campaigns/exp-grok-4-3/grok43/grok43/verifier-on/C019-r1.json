@@ -1,0 +1,69 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 44.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.3,
+  "usage": {
+    "in": 27887,
+    "cache_read": 191168,
+    "cache_write": 0,
+    "out": 449,
+    "source": "cli"
+  },
+  "cost_usd": 0.08052985,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [],
+  "summary": "Migration pair cleanly adds then removes the `void_reason` column on Invoice. The change touches only migration files. No other source files exist in the workspace to cross-check usage, but the diff itself introduces no observable contract break, security issue, or unguarded data-loss pattern beyond the standard RemoveField semantics already present in the added migration. Recommendation: approve.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C019-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

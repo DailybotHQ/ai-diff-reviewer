@@ -1,0 +1,97 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 34.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.8,
+  "usage": {
+    "in": 28186,
+    "cache_read": 163968,
+    "cache_write": 0,
+    "out": 825,
+    "source": "cli"
+  },
+  "cost_usd": 0.0737886,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Switch from `execFile` (argv array) to `exec` (shell) plus direct interpolation of the new `filter` parameter creates a command-injection surface.\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "The template literal passes caller-controlled `filter` unquoted into the shell. Any value containing `;`, `&&`, `$(`, or backticks will execute arbitrary commands.\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```"
+    }
+  ],
+  "summary": "Critical command-injection vulnerability introduced by switching from `execFile` (argv) to `exec` (shell) while interpolating an untrusted `filter` parameter directly into the command string.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces execFile (argv, no shell) with exec and interpolates the new unsanitized `filter` string into a shell command, which is a real command-injection regression at critical severity."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change switched from safe execFile to exec and interpolates the caller-supplied filter unquoted into a shell command (`-filter ${filter}`), so metacharacters can run arbitrary commands. That is a genuine critical command-injection defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 14.48,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6696,
+      "out": 664
+    },
+    "cost_usd": 0.018912
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

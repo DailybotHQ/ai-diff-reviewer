@@ -1,0 +1,86 @@
+{
+  "case": "C091",
+  "pr": "C091",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 16.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 16.8,
+  "usage": {
+    "in": 59663,
+    "cache_read": 58368,
+    "cache_write": 0,
+    "out": 1712,
+    "source": "cli"
+  },
+  "cost_usd": 0.1471084,
+  "changed_files": [
+    "utils.py"
+  ],
+  "findings": [],
+  "summary": "## Follow-up review\n\nThe empty-collection guard on `total()` addresses the prior warning: `if not items: return 0` covers both `[]` and `None`, so callers that pass `None` no longer hit `TypeError` on `sum(...)`.\n\n`first_name()` is unchanged \u2014 `user.name.split()[0]` still raises `IndexError` when `name` is empty or whitespace-only. That prior warning stays open; no new findings on this diff.\n\n**Recommendation:** request-changes (open prior warning on `first_name`)",
+  "round": "2",
+  "effective_max_turns": 8,
+  "prior_finding_updates": {
+    "5d977ce4424f3a31": [
+      "resolved",
+      "Guard `if not items: return 0` handles both [] and None before sum()."
+    ],
+    "09584834c0aebae2": [
+      "open",
+      "first_name still does user.name.split()[0] with no empty/whitespace guard."
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C091-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": [
+    {
+      "path": "utils.py",
+      "line": 6,
+      "severity": "warning",
+      "status": "open",
+      "body": "first_name() crashes on an empty name ('' .split()[0] \u2192 IndexError). first_name still does user.name.split()[0] with no empty/whitespace guard."
+    }
+  ]
+}

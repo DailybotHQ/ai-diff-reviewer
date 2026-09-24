@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 37.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.8,
+  "usage": {
+    "in": 28170,
+    "cache_read": 191168,
+    "cache_write": 0,
+    "out": 663,
+    "source": "cli"
+  },
+  "cost_usd": 0.0784986,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Any authenticated caller can now pass `body.accountId` and receive the record for any account. The only guard is `auth(req)`, which authenticates the caller but does not authorize access to the target account.\n\n```suggestion\n  const caller = await auth(req);\n  if (caller.role !== 'staff') {\n    // only staff may look up other accounts\n    throw new Response('forbidden', { status: 403 });\n  }\n  const id: string = body.accountId ?? caller.accountId;\n```"
+    }
+  ],
+  "summary": "Critical authorization bypass in `getAccount`. The endpoint now accepts an arbitrary `accountId` from the request body without verifying the caller is authorized to access that account.",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch changed getAccount from looking up only caller.accountId to accepting body.accountId with no role or ownership check, so any authenticated caller can fetch any account. That matches the claimed broken authorization."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.268,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4815,
+      "out": 386
+    },
+    "cost_usd": 0.012919
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

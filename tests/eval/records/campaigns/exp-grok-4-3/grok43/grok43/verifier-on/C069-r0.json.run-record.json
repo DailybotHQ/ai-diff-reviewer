@@ -1,0 +1,86 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "run-grok-xai-2780b00eec8d-1790253672-468b26bb",
+  "recorded_at": "2026-09-24T12:41:12Z",
+  "runner": "cli",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "model_alias": null,
+  "runtime_sha": "ef19c30e943443288b46a280dd314f0225cd98e0",
+  "prompt_sha256": "166a8e4b0bf91ffc78d53a2df61332b71ae47e1cd12626b4181df6e71d9582c0",
+  "extension_sha256": null,
+  "sampling": {
+    "requested": {},
+    "sent": {},
+    "stripped": []
+  },
+  "context": {
+    "repo_kind": "fixture_tree",
+    "head_sha": "2780b00eec8d9286a4127775cab80698c52370a8",
+    "base_sha": "d0e4007d2af2b532e8a2a03467448afc41ac4ed5",
+    "corpus_case_id": "C069",
+    "corpus_sha256": "de3ffde9c1cf839d7f319c60ebd2216e794766973bae77c1fd770b988c53c7a0",
+    "changed_files": 1,
+    "omitted_files": 0,
+    "diff_chars": 667,
+    "diff_truncated": false,
+    "iar_mode": "none",
+    "instruction_files_read": []
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 15,
+    "tool_calls": 0,
+    "risk_tier": "unclassified",
+    "verifier_runs": 0
+  },
+  "outcome": {
+    "findings_total": 0,
+    "findings_by_severity": {
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "findings_verified": 0,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "lenient",
+      "passed": true
+    },
+    "score": {
+      "must_find_total": 1,
+      "must_find_hits": 0,
+      "false_positives": 0,
+      "unlabelled": 0,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 44364,
+    "cache_read_tokens": 365120,
+    "cache_write_tokens": 0,
+    "output_tokens": 1803,
+    "source": "cli"
+  },
+  "cost_usd": 0.142269,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 0.031,
+    "provider_seconds": 56.611,
+    "verifier_seconds": null,
+    "total_seconds": 56.642
+  },
+  "status": "incomplete",
+  "failure_class": null,
+  "campaign": {
+    "id": "exp-grok-4-3",
+    "cell": "grok43|verifier-on|C069",
+    "repetition": 0,
+    "arm": "verifier-on"
+  }
+}

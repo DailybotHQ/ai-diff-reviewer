@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 26.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.7,
+  "usage": {
+    "in": 14567,
+    "cache_read": 148224,
+    "cache_write": 0,
+    "out": 510,
+    "source": "cli"
+  },
+  "cost_usd": 0.05274105,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "jwt.decode is now called with every verification flag disabled. Any attacker-controlled string is accepted and its claims are returned as the caller's identity.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```"
+    }
+  ],
+  "summary": "Critical security and correctness regression. The change disables all JWT verification inside the single authentication entry point.",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "identity() now calls jwt.decode with verify_signature, verify_aud, and verify_iss all False and without SECRET/algorithms/audience/issuer, so any attacker-controlled token is accepted as identity. The base revision correctly verified HS256 signatures against SECRET with audience and issuer checks."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.804,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2020,
+      "out": 299
+    },
+    "cost_usd": 0.006269
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

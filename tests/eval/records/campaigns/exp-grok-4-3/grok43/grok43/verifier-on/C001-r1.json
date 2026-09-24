@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 32.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.5,
+  "usage": {
+    "in": 27376,
+    "cache_read": 107712,
+    "cache_write": 0,
+    "out": 382,
+    "source": "cli"
+  },
+  "cost_usd": 0.0599874,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 17,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` eliminates the only guard on `DELETE /users/<user>`. Any request now succeeds and removes the named user from `USERS`.\n\n```suggestion\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n```"
+    }
+  ],
+  "summary": "The change removes the sole authorization check from the user deletion endpoint. This allows any caller (including unauthenticated requests or viewer-role accounts) to delete any user.",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 17,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base revision guarded DELETE /users/<user> with @require_role(\"admin\"); head replaces that decorator with a comment, so delete_user runs with no authorization and any caller can remove entries from USERS."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.331,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2298,
+      "out": 276
+    },
+    "cost_usd": 0.006687
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

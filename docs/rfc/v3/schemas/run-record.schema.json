@@ -196,6 +196,7 @@
           "enum": [
             "full",
             "incremental",
+            "verifier-only",
             "none"
           ]
         },

@@ -1,0 +1,11 @@
+{
+  "campaign_id": "exp-grok-4-3",
+  "planned": 63,
+  "executed": 3,
+  "resumed": 60,
+  "spent_usd_upper_bound": 4.9795,
+  "unknown_cost_runs": 0,
+  "budget_usd": 75.0,
+  "stop_at_usd": 67.5,
+  "stopped_reason": null
+}

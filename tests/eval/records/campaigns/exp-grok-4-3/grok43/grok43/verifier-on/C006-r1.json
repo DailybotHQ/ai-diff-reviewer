@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 29.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.3,
+  "usage": {
+    "in": 27264,
+    "cache_read": 107520,
+    "cache_write": 0,
+    "out": 333,
+    "source": "cli"
+  },
+  "cost_usd": 0.059909,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Disabling signature, audience and issuer verification means any JWT (including attacker-supplied tokens with forged claims) is accepted by `identity`. This breaks the documented authentication contract.\n\n```suggestion\n    return jwt.decode(token, SECRET, algorithms=[\"HS256\"], audience=\"api\", issuer=\"accounts.internal.example\")\n```"
+    }
+  ],
+  "summary": "Critical security regression: authentication verification has been completely disabled in the only changed file.",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `identity()` calls `jwt.decode` with `verify_signature`, `verify_aud`, and `verify_iss` all False and no key/algorithms, so any token is accepted. Base correctly verified HS256 with SECRET, audience, and issuer \u2014 a critical auth bypass regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.645,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2263,
+      "out": 331
+    },
+    "cost_usd": 0.007382
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

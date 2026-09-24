@@ -1,0 +1,69 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 12,
+  "tool_calls": null,
+  "seconds": 52.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.6,
+  "usage": {
+    "in": 56134,
+    "cache_read": 272448,
+    "cache_write": 0,
+    "out": 1178,
+    "source": "cli"
+  },
+  "cost_usd": 0.1379146,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [],
+  "summary": "## Code Review Summary\n\n_The xAI Grok agent finished without writing its findings file (2 attempt(s)), so this round carries no findings. This is an incomplete review \u2014 re-run (toggle the label) or check the workflow log for the agent's own output._",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C070-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

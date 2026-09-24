@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 28.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.0,
+  "usage": {
+    "in": 14542,
+    "cache_read": 121216,
+    "cache_write": 0,
+    "out": 502,
+    "source": "cli"
+  },
+  "cost_usd": 0.0471007,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Hard-coded credential `\"smtp-prod-backup-77\"` is now committed in the source and will be used for SMTP login whenever `SMTP_PASSWORD` is absent.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n\nIf a missing variable must not crash cron jobs, the login should be skipped or the credential must come from a mounted secret / vault, never from a literal in the repository."
+    }
+  ],
+  "summary": "The change replaces a required environment lookup for `SMTP_PASSWORD` with a fallback to a literal string `\"smtp-prod-backup-77\"`. This introduces a hard-coded credential directly into source control.",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), so the literal credential is committed and used whenever the env var is unset. The base revision required SMTP_PASSWORD with no fallback, confirming this is a real critical credential leak."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.037,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2093,
+      "out": 306
+    },
+    "cost_usd": 0.006457
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 26.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.9,
+  "usage": {
+    "in": 27641,
+    "cache_read": 135104,
+    "cache_write": 0,
+    "out": 491,
+    "source": "cli"
+  },
+  "cost_usd": 0.06540705,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "If an attacker can observe or guess `Math.random` state (common in some edge runtimes or via timing), they can predict or brute-force reset tokens. The original `randomBytes(32)` produced 256 bits of entropy; the replacement produces at most ~40 bits and a 9-character string.\n\n```suggestion\n  return randomBytes(32).toString(\"hex\");\n```\n\n(The `crypto` import must be restored or replaced with the Web Crypto API `crypto.getRandomValues` for edge compatibility.)"
+    }
+  ],
+  "summary": "The change replaces a cryptographically secure 256-bit reset token with a low-entropy value derived from `Math.random`. This is an authentication surface and must be treated as critical.",
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `randomBytes(32)` (256-bit CSPRNG) with `Math.floor(Math.random() * 1e12).toString(36)`, yielding at most ~40 bits and a short predictable token for password resets\u2014a real critical security regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.659,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2260,
+      "out": 339
+    },
+    "cost_usd": 0.00745
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

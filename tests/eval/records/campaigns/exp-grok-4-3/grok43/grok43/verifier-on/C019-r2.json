@@ -1,0 +1,70 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 14,
+  "tool_calls": null,
+  "seconds": 44.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.7,
+  "usage": {
+    "in": 42623,
+    "cache_read": 340800,
+    "cache_write": 0,
+    "out": 682,
+    "source": "cli"
+  },
+  "cost_usd": 0.12998375,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [],
+  "summary": "Clean removal of an unused `void_reason` column. The PR deletes the add migration and introduces the matching remove migration with the correct dependency. Grep across the workspace found no remaining references to `void_reason` outside the new migration file itself. This is a low-risk, reversible schema cleanup.\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C019-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

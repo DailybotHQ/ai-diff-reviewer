@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 29.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.1,
+  "usage": {
+    "in": 27668,
+    "cache_read": 135552,
+    "cache_write": 0,
+    "out": 610,
+    "source": "cli"
+  },
+  "cost_usd": 0.0656279,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "The replacement removes `os.path.basename` sanitization and passes `request.args.get(\"path\", name)` directly into `os.path.join(REPORTS, ...)`. An attacker can supply `path=../../../etc/passwd` (or any absolute/relative path) and retrieve arbitrary files from the server.\n\n```suggestion\n    safe = os.path.normpath(request.args.get(\"path\", name)).lstrip(os.sep)\n    if os.path.isabs(safe) or \"..\" in safe.split(os.sep):\n        abort(400)\n    return send_file(os.path.join(REPORTS, safe))\n```"
+    }
+  ],
+  "summary": "Critical path-traversal vulnerability introduced by removing the only input sanitization and constructing the filesystem path directly from an attacker-controlled query parameter.",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change drops `os.path.basename` and feeds `request.args.get(\"path\", name)` straight into `os.path.join(REPORTS, ...)`, so `path=../../../etc/passwd` or an absolute path can escape `/srv/reports` and be served via `send_file`. That is a real arbitrary-file-read regression; critical severity is ap"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.672,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2071,
+      "out": 301
+    },
+    "cost_usd": 0.006409
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

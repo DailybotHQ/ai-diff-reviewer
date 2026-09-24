@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 26.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 27.0,
+  "usage": {
+    "in": 14609,
+    "cache_read": 148544,
+    "cache_write": 0,
+    "out": 467,
+    "source": "cli"
+  },
+  "cost_usd": 0.05212255,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 1,
+      "severity": "critical",
+      "body": "Removal of the `BLOCKED` set and its guard allows `__proto__`, `constructor`, and `prototype` keys from untrusted `patch` input to reach `(base as any)[k] ??= {}` and the direct assignment path, enabling prototype pollution."
+    }
+  ],
+  "summary": "The change removes the prototype-pollution blocklist from `deepMerge`. The function accepts arbitrary `Record<string, unknown>` input and performs recursive property assignment; without the guard, attacker-controlled keys `__proto__`, `constructor`, and `prototype` reach object creation/assignment and can pollute the prototype chain. The stated rationale (JSON.parse output) does not cover the public contract of the function.",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base `deepMerge` skipped `__proto__`/`constructor`/`prototype` via `BLOCKED`; head removed that set and the `continue` guard, so those keys now hit `(base as any)[k] ??= {}` and direct assignment\u2014classic prototype pollution."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.314,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4966,
+      "out": 356
+    },
+    "cost_usd": 0.012478
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

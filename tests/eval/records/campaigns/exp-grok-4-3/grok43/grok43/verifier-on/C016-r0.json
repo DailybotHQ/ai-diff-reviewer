@@ -1,0 +1,83 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 36.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.2,
+  "usage": {
+    "in": 28007,
+    "cache_read": 162532,
+    "cache_write": 0,
+    "out": 507,
+    "source": "cli"
+  },
+  "cost_usd": 0.07211015,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "Setting `InsecureSkipVerify: true` on every `NewClient()` call disables TLS verification for all environments. If any production path reaches this client, a MITM attacker can impersonate the ledger.\n\n```suggestion\n\tTLSClientConfig: &tls.Config{InsecureSkipVerify: false},\n```\n\n(Or gate the insecure transport behind a build tag / env var that is never enabled for prod builds.)"
+    }
+  ],
+  "summary": "The change unconditionally disables TLS certificate verification for every caller of `NewClient()`. The comment claims the bypass is staging-only, but nothing in the code enforces that scope, so the insecure client will also be used against production endpoints.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head client factory unconditionally sets tls.Config{InsecureSkipVerify: true} for every NewClient(), and the patch newly introduced that insecure transport (base used a plain http.Client). No env/build gate exists, so any caller would skip TLS verification."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.098,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2640,
+      "out": 400
+    },
+    "cost_usd": 0.009062
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

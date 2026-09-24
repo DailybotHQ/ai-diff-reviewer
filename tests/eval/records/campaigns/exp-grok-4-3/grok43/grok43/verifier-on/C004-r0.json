@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 29.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.2,
+  "usage": {
+    "in": 27387,
+    "cache_read": 107776,
+    "cache_write": 0,
+    "out": 467,
+    "source": "cli"
+  },
+  "cost_usd": 0.05975895,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "If `path` contains `..` segments the join escapes `/srv/reports` and `send_file` serves arbitrary files on disk.\n\n```suggestion\n    p = request.args.get(\"path\", name)\n    safe = os.path.normpath(os.path.join(REPORTS, p))\n    if not safe.startswith(REPORTS + os.sep):\n        abort(400)\n    return send_file(safe)\n```"
+    }
+  ],
+  "summary": "The change replaces the `basename` guard with an unsanitized `request.args.get(\"path\")` value passed directly to `send_file`. This introduces a path-traversal vulnerability on a file-serving endpoint.",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code joins unsanitized `request.args.get(\"path\", name)` under `/srv/reports` and passes it to `send_file`, so `..` segments escape the reports root. The base revision used `os.path.basename(name)`, so this is a real critical path-traversal regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.167,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2068,
+      "out": 321
+    },
+    "cost_usd": 0.006497
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

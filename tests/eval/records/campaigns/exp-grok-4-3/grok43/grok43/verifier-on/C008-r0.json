@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 35.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.2,
+  "usage": {
+    "in": 14873,
+    "cache_read": 176256,
+    "cache_write": 0,
+    "out": 749,
+    "source": "cli"
+  },
+  "cost_usd": 0.05854745,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removal of the `ALLOWED_HOSTS` check (previously performed on `urllib.parse.urlsplit(url).hostname`) means `deliver` now issues an HTTP POST to any URL supplied by the caller.\n\nIf a malicious or compromised caller passes an external or internal target URL, the service will send the event payload there. This is a classic SSRF / data-exfiltration risk.\n\n```suggestion\n    host = urllib.parse.urlsplit(url).hostname or \"\"\n    if host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n```"
+    }
+  ],
+  "summary": "The change removes the only host-authorization guard in the webhook delivery path. The previous implementation rejected any URL whose hostname was not in `ALLOWED_HOSTS`; the new version performs an unconditional `urllib.request.urlopen` to whatever URL the caller supplies. This introduces a server-side request forgery (SSRF) vector and allows arbitrary event data to be exfiltrated to attacker-controlled endpoints. No compensating controls (scheme validation, private-IP blocking, redirect following limits, or caller-side authorization) are present in the diff or the surrounding file.",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base `webhooks.py` restricted POSTs to `ALLOWED_HOSTS` via `urlsplit(url).hostname`; head removes that check and posts the event to any caller-supplied URL, which is a real SSRF/exfiltration regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.496,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4393,
+      "out": 376
+    },
+    "cost_usd": 0.011528
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

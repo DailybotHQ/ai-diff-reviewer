@@ -1,0 +1,83 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 30.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.4,
+  "usage": {
+    "in": 27547,
+    "cache_read": 108096,
+    "cache_write": 0,
+    "out": 500,
+    "source": "cli"
+  },
+  "cost_usd": 0.06010795,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Returns `Access-Control-Allow-Origin: origin ?? \"*\"` together with `Access-Control-Allow-Credentials: \"true\"`. Per the CORS spec, `*` (or a reflected arbitrary origin) may not be used with credentials; browsers will refuse or expose the response insecurely. Any mobile webview or attacker-controlled origin can now send authenticated requests.\n\n```suggestion\n  if (!origin || !isAllowedOrigin(origin)) {\n    return {};\n  }\n  return {\n    \"Access-Control-Allow-Origin\": origin,\n    \"Access-Control-Allow-Credentials\": \"true\",\n    Vary: \"Origin\",\n  };\n```"
+    }
+  ],
+  "summary": "The change removes the origin allow-list and unconditionally returns both `Access-Control-Allow-Origin` (reflecting the caller or `*`) and `Access-Control-Allow-Credentials: true`. This combination is a security violation: credentialed requests from arbitrary origins become possible. The prior explicit allow-list was the only protection; nothing else in the codebase constrains callers.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `corsHeaders` always sets `Access-Control-Allow-Origin` to the request origin (or `*`) together with `Access-Control-Allow-Credentials: true`, removing the previous allowlist. That is the classic credentials+reflected-origin CORS misconfiguration and a real security regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.075,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5271,
+      "out": 395
+    },
+    "cost_usd": 0.013834
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

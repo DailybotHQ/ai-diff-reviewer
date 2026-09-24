@@ -1,0 +1,83 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 37.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.9,
+  "usage": {
+    "in": 14975,
+    "cache_read": 176576,
+    "cache_write": 0,
+    "out": 544,
+    "source": "cli"
+  },
+  "cost_usd": 0.05995145,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "Account value is interpolated directly into the SQL string via `fmt.Sprintf`. If `account` contains a quote or SQL fragment, the query can be altered or data exfiltrated.\n\n```suggestion\nerr := db.QueryRow(\n\t\"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\", account,\n).Scan(&cents)\n```"
+    }
+  ],
+  "summary": "Critical SQL injection introduced by switching from a parameterized query to `fmt.Sprintf` string interpolation inside a LIKE clause. The `account` parameter is now attacker-controlled input that reaches the database without escaping or parameterization.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf and embeds `account` raw into the SQL string, so quotes/SQL fragments can alter the query. Base used a safe `$1` parameter; this is a real critical SQL injection regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.681,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2185,
+      "out": 290
+    },
+    "cost_usd": 0.006545
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

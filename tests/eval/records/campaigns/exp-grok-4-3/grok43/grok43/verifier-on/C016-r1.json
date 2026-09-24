@@ -1,0 +1,83 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 47.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.9,
+  "usage": {
+    "in": 15043,
+    "cache_read": 203136,
+    "cache_write": 0,
+    "out": 550,
+    "source": "cli"
+  },
+  "cost_usd": 0.06558595,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "Setting `InsecureSkipVerify: true` disables certificate validation for every call made by this client. An attacker who can intercept traffic between the service and the staging ledger can present any certificate and the client will accept it.\n\n```suggestion\n\t\tTLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // staging only; remove before prod (TICKET-77)\n```"
+    }
+  ],
+  "summary": "The change introduces `InsecureSkipVerify: true` on the ledger HTTP client to accommodate a self-signed certificate in staging. The comment correctly ties the exception to TICKET-77 and scopes it away from prod. No other callers or ledger usage exist in the repository, so the blast radius is limited to this client. The risk is real (MITM on the staging ledger path) but contained; a warning is the honest severity.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The head client sets tls.Config{InsecureSkipVerify: true} on NewClient's Transport, so certificate validation is disabled for all callers; the base version used a plain http.Client without that bypass."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.977,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2632,
+      "out": 294
+    },
+    "cost_usd": 0.007361
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 25.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 25.5,
+  "usage": {
+    "in": 30185,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 1755,
+    "source": "cli"
+  },
+  "cost_usd": 0.097012,
+  "changed_files": [
+    "q.py"
+  ],
+  "findings": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection via string concatenation.** `email` is interpolated directly into the query, so a value like `' OR '1'='1` can alter the WHERE clause or worse depending on the DBAPI driver. `by_name` above already shows the safe pattern \u2014 use a bound parameter.\n\n```suggestion\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nLooks good on the `by_name` fix \u2014 one critical SQL injection remains in the new `by_email` helper.\n\n## Narrative\n\n`by_name` correctly moved to a bound parameter (`?`, `(name,)`), which closes the injection the previous review flagged. The new `by_email` path copies the old anti-pattern: it builds the SQL string with quote-concatenation around `email`, so any caller-supplied value can alter the query (for example `' OR '1'='1`) or chain statements depending on the driver.\n\nMirror the `by_name` fix:\n\n```python\ndef by_email(db, email):\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```\n\nNo other files changed; inventory is complete.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "by_email builds the query with string concatenation of email (q.py:6), which is classic SQL injection; by_name already uses a bound parameter, so the defect is real and severity critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 4.842,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2013,
+      "out": 276
+    },
+    "cost_usd": 0.006092
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C094-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

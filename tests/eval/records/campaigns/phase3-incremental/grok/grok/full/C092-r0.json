@@ -1,0 +1,84 @@
+{
+  "case": "C092",
+  "pr": "C092",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.3,
+  "usage": {
+    "in": 31365,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2026,
+    "source": "cli"
+  },
+  "cost_usd": 0.1011516,
+  "changed_files": [
+    "src/a.ts",
+    "src/lib/a.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/lib/a.ts",
+      "line": 1,
+      "severity": "warning",
+      "body": "This is not a pure restructure: `fetchUser` now passes `{ timeout: 250 }` to `http.get`. A 250ms budget is very tight for a `/users/:id` round-trip \u2014 under normal latency, TLS, or a cold backend the request will abort and surface as a timeout error even when the API is healthy.\n\nEither drop the options object to keep the move behavior-preserving, or pick a production-realistic timeout (and document why) if the deadline is intentional."
+    }
+  ],
+  "summary": "## Verdict\n\nSneaky behavior change under a rename-only framing \u2014 the 250ms timeout on `fetchUser` needs a second look before merge.\n\n## Notes\n\nThe PR moves `src/a.ts` \u2192 `src/lib/a.ts` and is described as \"Restructure only,\" but the single-line body also passes `{ timeout: 250 }` into `http.get`. That is a runtime contract change, not a pure move.\n\nNo other files exist in this tree, so import-path fallout from the rename is not observable here. `http` is still referenced with no import or definition in the file (pre-existing on the base side); worth fixing when this module is wired up for real.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/lib/a.ts",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "`src/lib/a.ts` defines `fetchUser` as `http.get(`/users/${id}`, { timeout: 250 })`. The 250ms client timeout is present in the head code; nothing in the tree contradicts that this budget is unusually tight for a normal `/users/:id` round-trip."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 16.737,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2108,
+      "out": 436
+    },
+    "cost_usd": 0.007702
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C092-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

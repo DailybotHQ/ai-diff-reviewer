@@ -14458,7 +14458,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             pr_ctx,
             base_sha=_resolve_base_sha(base_ref=base_ref),
             iar_mode=(
-                iar_pre_context.mode
+                ("verifier-only" if iar_pre_context.verifier_only else iar_pre_context.mode)
                 if iar_pre_context is not None
                 else "none"
             ),

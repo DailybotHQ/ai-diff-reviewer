@@ -1,0 +1,83 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 21.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 21.7,
+  "usage": {
+    "in": 30630,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 1865,
+    "source": "cli"
+  },
+  "cost_usd": 0.098754,
+  "changed_files": [
+    "q.py"
+  ],
+  "findings": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`by_email` builds SQL with string concatenation on `email`, so attacker-controlled input can change the query (classic SQL injection). `by_name` in this same diff already shows the safe form \u2014 use a bound parameter here too.\n\n```suggestion\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nLooks good on the `by_name` fix \u2014 one critical SQL injection remains in the new `by_email` helper before merge.\n\n## Narrative\n\n`by_name` correctly moved to a bound parameter (`?`, `(name,)`), which closes the injection the previous review flagged. The new `by_email` path copies the old anti-pattern: it builds the WHERE clause by concatenating `email` into the SQL string. Any caller-controlled value such as a crafted email with quotes and boolean logic alters the query predicate and can return unintended rows depending on how `db.execute` is implemented.\n\nMirror the `by_name` pattern for `by_email` so both lookup helpers share the same safe API shape.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "by_email at q.py:6 builds the query via string concatenation of email, which is classic SQL injection; by_name in the same file correctly uses a bound parameter, so the defect is real and severity critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.005,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1869,
+      "out": 270
+    },
+    "cost_usd": 0.005793
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C094-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

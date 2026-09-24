@@ -1,0 +1,89 @@
+{
+  "case": "C094",
+  "pr": "C094",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 18.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 18.9,
+  "usage": {
+    "in": 29541,
+    "cache_read": 58112,
+    "cache_write": 0,
+    "out": 1226,
+    "source": "cli"
+  },
+  "cost_usd": 0.0838716,
+  "changed_files": [
+    "q.py"
+  ],
+  "findings": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "SQL is built by concatenating `email` into the query string. A value like `x' OR 1=1--` alters the predicate and can return or modify unintended rows.\n\nBind the value the same way `by_name` does:\n\n```suggestion\n    return db.execute(\"SELECT * FROM t WHERE email = ?\", (email,))\n```"
+    }
+  ],
+  "summary": "Prior SQL concatenation in `by_name` is fixed with a bound parameter. The new `by_email` helper builds the query the same unsafe way the old `by_name` did, so untrusted `email` input can still inject SQL.\n\n**Recommendation:** request-changes",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "b50b033fe4c3975c": [
+      "resolved",
+      "by_name now uses parameterized execute with ? and (name,)"
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "q.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "by_email builds SQL via string concatenation of `email` (`\"SELECT * FROM t WHERE email = '\" + email + \"'\"`), which is classic SQL injection; by_name correctly uses a `?` placeholder. The defect is real and severity critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 3.574,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2119,
+      "out": 300
+    },
+    "cost_usd": 0.006448
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C094-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": []
+}

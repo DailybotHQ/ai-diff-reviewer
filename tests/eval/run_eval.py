@@ -390,10 +390,22 @@ def run_case(
         "round": round_mode or "full",
         "effective_max_turns": effective_turns,
         "prior_finding_updates": {fp: list(v) for fp, v in (result.prior_finding_updates or {}).items()},
+        # multi-round scoring (fixture note: "labels describe what must still be flagged (open / regressed) after
+        # round 2"): a prior the model reported open / regressed is a flag at the prior's anchor — the incremental
+        # protocol asks the model to update the prior instead of re-posting it inline.
+        "prior_findings_kept": [
+            {"path": pf.path, "line": pf.line, "severity": pf.severity, "status": st, "body": f"{pf.body_excerpt} {reason}"}
+            for pf in (pre_context.prior_findings if pre_context is not None else ())
+            for st, reason in [(result.prior_finding_updates or {}).get(pf.fingerprint, ("", ""))]
+            if st in (r.PRIOR_FINDING_STATUS_OPEN, r.PRIOR_FINDING_STATUS_REGRESSED)
+        ],
         "outstanding_verdicts": [{"path": pf.path, "line": pf.line, "status": v.status, "reason": v.reason[:200]} for pf, v in outstanding_verdicts],
         **verifier_payload(r, result, report),
     }
-    payload["score"] = score_run(payload, corpus_entry=case_labels_as_corpus_entry(case))
+    scored = dict(payload)
+    if payload.get("prior_findings_kept"):
+        scored["findings"] = list(payload["findings"]) + [{"path": k["path"], "line": k["line"], "severity": k["severity"], "body": k["body"]} for k in payload["prior_findings_kept"]]
+    payload["score"] = score_run(scored, corpus_entry=case_labels_as_corpus_entry(case))
     sc = payload["score"]
     doc = record.to_dict(status=record.status or r.RUN_STATUS_COMPLETED, failure_class=None)
     doc["outcome"]["score"] = {

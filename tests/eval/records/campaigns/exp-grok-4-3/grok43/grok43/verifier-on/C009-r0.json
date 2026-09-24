@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 31.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.5,
+  "usage": {
+    "in": 27841,
+    "cache_read": 135872,
+    "cache_write": 0,
+    "out": 645,
+    "source": "cli"
+  },
+  "cost_usd": 0.06669065,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removal of `escapeHtml` combined with passing raw `body` to `dangerouslySetInnerHTML` allows arbitrary HTML (including script tags) from the `body` prop to execute in the browser.\n\nIf `body` contains user-controlled content (comments), an attacker can inject `<script>`, event handlers, or other payloads that run with the viewer's origin.\n\n```suggestion\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: escapeHtml(body) }} />;\n```\n\n(Verified: `escapeHtml` existed on lines 3-5 of the base file; no sanitization or callers that pre-escape were found in the diff scope.)"
+    }
+  ],
+  "summary": "Critical XSS vulnerability introduced by removing HTML escaping and passing unsanitized `body` directly to `dangerouslySetInnerHTML`.",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes the raw body prop into dangerouslySetInnerHTML, so attacker-controlled comment HTML can execute in the viewer\u2019s origin. Base still escaped &lt;/&gt;/&amp;; head has no replacement sanitizer."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.495,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2334,
+      "out": 373
+    },
+    "cost_usd": 0.007879
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

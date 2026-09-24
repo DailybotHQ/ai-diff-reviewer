@@ -1,0 +1,83 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 34.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.0,
+  "usage": {
+    "in": 27670,
+    "cache_read": 135119,
+    "cache_write": 0,
+    "out": 490,
+    "source": "cli"
+  },
+  "cost_usd": 0.0664038,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "If `raw` comes from a client-controlled cookie or token (the typical use of `load_session`), an attacker can craft a pickle payload that executes arbitrary code on the server during deserialization.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\nPickle is only safe for fully trusted data. Revert to JSON or add cryptographic signing + a safe loader."
+    }
+  ],
+  "summary": "Critical security regression: `web/session.py` now deserializes untrusted client input with `pickle.loads`.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code deserializes `raw` with `pickle.loads` after base64 decode, and the patch shows this replaced safe `json.loads`. That is arbitrary code execution on attacker-controlled session/cookie material; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.377,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2170,
+      "out": 357
+    },
+    "cost_usd": 0.007352
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "case": "C093",
+  "pr": "C093",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "e0cdddcd2baf",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 10.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 10.1,
+  "usage": {
+    "in": 29255,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 787,
+    "source": "cli"
+  },
+  "cost_usd": 0.080512,
+  "changed_files": [
+    "store.go"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nThe change acknowledges `Write` returns `(n, err)` but still discards both values, so the prior warning stands.\n\n## Narrative\n\n`Save` now does `_, _ = w.Write(b)`. That silences a common Go check/compile complaint about unused results, but it does not surface a failed or short write. Callers still have no way to know the payload was not fully persisted.\n\nNo new issues on the diff beyond that open finding.\n\n**Recommendation:** request-changes",
+  "round": "2",
+  "effective_max_turns": 7,
+  "prior_finding_updates": {
+    "ff6c4664bcd91790": [
+      "open",
+      "Still discards Write result via _, _; error and short-write are unchecked."
+    ]
+  },
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C093-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  },
+  "prior_findings_kept": [
+    {
+      "path": "store.go",
+      "line": 4,
+      "severity": "warning",
+      "status": "open",
+      "body": "w.Write's error is ignored; a short write silently loses data. Still discards Write result via _, _; error and short-write are unchecked."
+    }
+  ]
+}

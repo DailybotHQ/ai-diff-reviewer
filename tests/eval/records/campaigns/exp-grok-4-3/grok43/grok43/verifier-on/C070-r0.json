@@ -1,0 +1,84 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 31.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.3,
+  "usage": {
+    "in": 14537,
+    "cache_read": 121024,
+    "cache_write": 0,
+    "out": 564,
+    "source": "cli"
+  },
+  "cost_usd": 0.04710355,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "If `filter` contains shell metacharacters (e.g. `lanczos; rm -rf /tmp`), the command executes arbitrary attacker-controlled code. The previous `execFile` form with an argv array prevented this; the new `exec` form with direct interpolation does not.\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```"
+    }
+  ],
+  "summary": "The PR replaces the safe `execFile` argv form with `exec` and interpolates an untrusted `filter` parameter directly into the shell command. This introduces a command-injection vulnerability. The change is confined to a single 8-line file; no other call sites or callers exist in the repository.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code interpolates the unescaped `filter` parameter into `exec(\\`... -filter ${filter} ...\\`)`, so shell metacharacters run as arbitrary commands. Base used `execFile` with an argv array and no `filter`, so this is a real critical shell-injection regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.02,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2574,
+      "out": 369
+    },
+    "cost_usd": 0.008335
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

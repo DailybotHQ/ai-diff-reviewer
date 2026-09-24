@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 61.2,
+  "setup_seconds": 0.1,
+  "total_seconds": 61.3,
+  "usage": {
+    "in": 54589,
+    "cache_read": 108160,
+    "cache_write": 0,
+    "out": 522,
+    "source": "cli"
+  },
+  "cost_usd": 0.09532075,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` from `delete_user` allows any caller to delete users. The route now performs `USERS.remove(user)` with no role or identity check.\n\n```suggestion\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n```"
+    }
+  ],
+  "summary": "Critical authorization regression. The change removes the only access control on the DELETE /users/<user> endpoint. Cleanup jobs now succeed, but every caller (including unauthenticated or viewer-role requests) can delete users.",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from the DELETE `/users/<user>` handler; head `delete_user` only calls `USERS.remove(user)` with no role or identity check, so any caller can delete users."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 30.442,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2066,
+      "out": 296
+    },
+    "cost_usd": 0.006343
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

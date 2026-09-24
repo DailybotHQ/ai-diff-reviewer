@@ -1,0 +1,83 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 26.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.4,
+  "usage": {
+    "in": 14490,
+    "cache_read": 147840,
+    "cache_write": 0,
+    "out": 482,
+    "source": "cli"
+  },
+  "cost_usd": 0.0518905,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "If `raw` contains attacker-controlled data (e.g. a session cookie or query parameter), `pickle.loads` will execute arbitrary Python code during deserialization.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\nUse a safe format such as JSON or a signed/encrypted session store instead of pickle for any data that originates outside the application."
+    }
+  ],
+  "summary": "The change replaces `json.loads` with `pickle.loads` for session decoding. This introduces a critical remote code execution vulnerability because `pickle` can execute arbitrary code during deserialization of untrusted data.",
+  "round": "full",
+  "effective_max_turns": 30,
+  "prior_finding_updates": {},
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "web/session.py deserializes session `raw` with pickle.loads after base64 decode; the diff shows a regression from safe json.loads. Pickle on untrusted session input enables arbitrary code execution, so critical severity is justified."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.271,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3679,
+      "out": 367
+    },
+    "cost_usd": 0.010149
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

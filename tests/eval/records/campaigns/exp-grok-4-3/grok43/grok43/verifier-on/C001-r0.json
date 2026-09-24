@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.3",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 39.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 40.0,
+  "usage": {
+    "in": 27535,
+    "cache_read": 107840,
+    "cache_write": 0,
+    "out": 469,
+    "source": "cli"
+  },
+  "cost_usd": 0.06050675,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "The `@require_role(\"admin\")` guard is removed from `delete_user`. The `require_role` decorator (lines 8-15) aborts with 403 unless `ROLES.get(user) == \"admin\"`. After this change any caller can delete entries from `USERS`.\n\n```suggestion\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n```"
+    }
+  ],
+  "summary": "Removing the `@require_role(\"admin\")` decorator from the DELETE endpoint eliminates the only authorization check on a destructive mutation. Cleanup jobs can now succeed, but so can any caller\u2014including viewers\u2014resulting in unauthorized user deletion.",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base revision guards `delete_user` with `@require_role(\"admin\")`, which aborts 403 unless `ROLES.get(user) == \"admin\"`. Head replaces that decorator with a comment, so any caller can remove entries from `USERS` with no authorization check."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 18.075,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3776,
+      "out": 291
+    },
+    "cost_usd": 0.009452
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
