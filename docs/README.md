@@ -35,6 +35,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |
 | [ITERATION_AWARENESS.md](ITERATION_AWARENESS.md) | Iteration-Aware Review (IAR) subsystem — converges multi-round self-review loops via content-anchored fingerprints, four convergence policies, generation tracking, and a hardcoded critical-always-surfaces safety rail. Runs on every review; wrapped in `try/except` so an IAR failure degrades to the baseline review path. |
 | [MIGRATION_v2.md](MIGRATION_v2.md) | v2 default pin, contract, and IAR / skip-review platform notes. |
+| [MIGRATION_v3.md](MIGRATION_v3.md) | v3 pin lines, contract (no inputs renamed), what you must change (verified-critical gating, unfinished reviews are red, generated review body, in-process wire shape), what you may adopt, transition knobs, the eval gate. |
 
 ## Local companion skill (`skills/ai-diff-reviewer/`)
 

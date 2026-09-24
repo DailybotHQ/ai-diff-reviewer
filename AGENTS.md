@@ -85,7 +85,7 @@ correctness, clarity, simplicity, and verified completion.
 - **Python 3.10+ standard library only.** No `requirements.txt`, no `pyproject.toml`, no virtualenv. Every dependency is a supply-chain question for every consumer.
 - **Composite GitHub Action** — not Docker, not Node. The runtime is whatever Python ships with `ubuntu-latest`.
 - **Single source file** for the runtime: `scripts/reviewer.py`. The simplicity is the feature.
-- **Runner × backend abstraction.** Six runners (`anthropic`, `openai` in-process; `claude-code`, `cursor`, `codex`, `grok` CLIs) and an `EndpointProfile` resolved from the optional `api-base` input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom). Every backend URL comes from `resolve_endpoint_profile`; empty `api-base` keeps each runner byte-identical to earlier releases.
+- **Runner × backend abstraction.** Six runners (`anthropic`, `openai` in-process; `claude-code`, `cursor`, `codex`, `grok` CLIs) and an `EndpointProfile` resolved from the optional `api-base` input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom). Every backend URL comes from `resolve_endpoint_profile`; an empty `api-base` selects the vendor's default endpoint (the v2 "byte-identical to earlier releases" promise ended with v3's request shape — BC-17, `docs/MIGRATION_v3.md`).
 
 ---
 
@@ -217,7 +217,7 @@ Whenever you change runtime behaviour:
 
 ### 8. SemVer for Releases (MANDATORY)
 
-Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. Never delete a published tag — consumers pin to it.
+Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. Never delete a published tag — consumers pin to it. **v3 adds an eval gate (BC-02):** `auto-release.yml` cuts a release only when `tests/eval/release_gate.py` finds a current, non-blocking `verdict/1.0` for the candidate's runtime + prompt; a missing or stale verdict skips the cut (see `docs/RELEASE_RECOVERY.md`).
 
 ### 9. Marketplace Branding Stable
 

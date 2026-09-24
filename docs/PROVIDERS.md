@@ -266,7 +266,7 @@ The Anthropic provider caches both the system prompt and the diff-bearing first 
 
 | Backend | `api-base` | `api-key` | Models | Notes |
 |---|---|---|---|---|
-| Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | Byte-identical to previous releases: `x-api-key` auth, `cache_control` on the system prompt. |
+| Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | `x-api-key` auth, `cache_control` on the system prompt. v3 changes the request shape of every in-process runner (inventory + budgeted patches + parity tools, BC-03); the v2 "byte-identical" promise is withdrawn (BC-17, [MIGRATION_v3](MIGRATION_v3.md)). |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/anthropic` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | Flat-rate plan ⇒ ≈ 0 marginal cost per review. Zero-install GLM path; the deepest GLM reviews use `provider: claude-code` with the same base (see below). |
 | xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.5`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
 | Moonshot/Kimi | `https://api.moonshot.ai/anthropic` | Moonshot API key | `kimi-k2-0905-preview`, `kimi-k2-turbo-preview` | Kimi for Claude Code: the `claude-code` runner runs K2 through this base. |

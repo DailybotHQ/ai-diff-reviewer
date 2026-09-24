@@ -367,12 +367,18 @@ Every workflow using AI Diff Reviewer sets these two.
     blocked. Recommended for the first 1–2 weeks of calibration.
   - `block-on-critical` — fail if any inline comment is severity
     `critical` (security, data loss, breaking API). Recommended
-    steady-state default.
+    steady-state default. v3: only a **verified** critical blocks —
+    an unverified claim publishes as an annotated `warning`
+    (`strict-unverified-criticals: true` restores v2 gating).
   - `block-on-warning` — fail if any inline comment is `critical` OR
     `warning`. Aggressive.
   - `block-on-any` — fail if ANY inline comment was posted (including
     `info`). Zero-tolerance mode for security-critical or regulated
     stacks.
+- **Unfinished reviews (v3):** a review that ends `incomplete` (turn
+  cap without `submit_review`) or `timeout` posts its partial findings
+  with a note and fails the check under `block-on-critical` and
+  stricter; `lenient` stays green.
 - **Severity source:** the model decides per comment via the
   `severity` tool argument, guided by the bundled default prompt
   (`prompts/default.md` in the action repo).

@@ -334,11 +334,13 @@ Consume them in a later step by giving the action step an `id`:
 | Mode | What fails the check |
 |---|---|
 | `lenient` (default) | Nothing. The review posts; the check is always green. |
-| `block-on-critical` | One or more inline comments tagged `critical`. |
+| `block-on-critical` | One or more **verified** `critical` findings (v3: a claimed critical the verifier could not confirm publishes as an annotated `warning` and does not block; `strict-unverified-criticals: true` restores v2 gating for one minor cycle). |
 | `block-on-warning` | One or more inline comments tagged `critical` or `warning`. |
 | `block-on-any` | Any inline comment at all, including `info`. Zero-tolerance mode — use for security-critical or regulated stacks where every finding must be resolved before merge. |
 
 The model decides severity per inline comment via the tool's `severity` argument; the bundled default prompt explains the levels in detail. Customise the prompt to make the model more or less aggressive about each tier.
+
+**Reviews that do not finish are red (v3).** A review that hits its turn cap without submitting (`status: incomplete`) or its wall-clock cap (`timeout`) posts the partial findings with a note and **fails the check under `block-on-critical` and stricter**; `lenient` stays green. The status is in the run record and the structured output.
 
 Full guide: [docs/STRICTNESS.md](docs/STRICTNESS.md).
 
@@ -762,6 +764,7 @@ The deep-dive docs live under [`docs/`](docs/) and are cross-linked from every r
 | Trigger modes, branch-protection recipes & emergency-bypass label | [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md) |
 | Iteration-Aware Review (dedup, policies, escape label, outputs) | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
 | v2 pin + platform notes | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
+| v3 migration (contract, must-change list, transition knobs, eval gate) | [docs/MIGRATION_v3.md](docs/MIGRATION_v3.md) |
 | PR-metadata checks (autocomplete, warn, block) | [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md) |
 | Security model (author-association, egress surfaces, provider trust) | [docs/SECURITY.md](docs/SECURITY.md) |
 | Performance (turn budgets, prompt caching, token cost) | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
