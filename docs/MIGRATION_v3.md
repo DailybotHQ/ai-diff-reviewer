@@ -12,7 +12,7 @@ Exact pin when you want a frozen tag: `@v3.0.0` (skill frontmatter `version: "3.
 
 ## Contract
 
-- **Inputs renamed or removed: none.** Every v2 input keeps its name, type and default; v3 adds optional inputs only (`verifier`, `verifier-model`, `strict-unverified-criticals`; *planned*: `mode`, `expected-legs`, `min-agreement`, `require-all-legs`, `budget-profile`, `high-risk-paths`, `complexity-source`).
+- **Inputs renamed or removed: none.** Every v2 input keeps its name, type and default; v3 adds optional inputs only (`verifier`, `verifier-model`, `strict-unverified-criticals`, `mode`, `expected-legs`, `min-agreement`, `require-all-legs`; *planned*: `budget-profile`, `high-risk-paths`, `complexity-source`).
 - **Behaviours changed** (the breaking rows): **BC-03** in-process request shape, **BC-04** review status semantics, **BC-07** strictness gates on *verified* criticals, **BC-17** the "byte-identical" promise ends; *planned*: **BC-13** tiered turn budgets.
 - Env-var prefix stays `AIPRR_` (private contract). Repo path stays `DailybotHQ/ai-diff-reviewer`.
 
@@ -32,7 +32,8 @@ Work through this list once; most consumers change nothing.
 - **Verifier knobs (BC-18):** `verifier: on|off` (default `on`), `verifier-model` (alias `economy` by default, or an explicit id), `strict-unverified-criticals`. Measured cost: ≈ $0.009 and 10 s per verified finding ([PERFORMANCE.md § Verifier cost](PERFORMANCE.md#verifier-cost-v3-measured)).
 - **Documented-rules findings (BC-05):** the bundled prompt now reads `AGENTS.md`, `CONTRIBUTING.md` and friends and reports `contradicts-documented-rule` with the quoted rule; tune with `.review/extension.md`.
 - **Finding v3 fields in agent-runner findings files (BC-12):** optional `title`, `category`, `evidence.*` — legacy files still parse.
-- *Planned:* ensemble `mode: emit|aggregate` (BC-09), budget knobs (BC-19), `complexity-source: inventory` (BC-14), `api-key` optional wherever environment credentials exist (BC-16), default model alias `balanced` (BC-15).
+- **Ensemble mode (BC-09):** run each provider as a matrix leg with `mode: emit` and one `mode: aggregate` job — one consolidated review per head, duplicates merged by anchor, agreement per finding, the verifier run once; knobs `expected-legs`, `min-agreement`, `require-all-legs`; outputs `legs-expected`, `legs-delivered`, `duplicates-removed`, `agreement-histogram` ([examples/ensemble-matrix.yml](../examples/ensemble-matrix.yml)). Consumers with per-leg IAR history: the first aggregated round collapses the per-leg reviews and starts one history on the aggregate marker.
+- *Planned:* budget knobs (BC-19), `complexity-source: inventory` (BC-14), `api-key` optional wherever environment credentials exist (BC-16), default model alias `balanced` (BC-15).
 
 ## Transition knobs (one minor cycle)
 
@@ -46,7 +47,7 @@ Work through this list once; most consumers change nothing.
 1. **Verification pass on every review:** every claimed critical and a 30 % sample of warnings get a second, read-only, code-grounded look before publishing; the verifier fails open into visibility (never blocks, never hides).
 2. **Run record and structured output on every run** — success, skip, failure, timeout — with endpoint *kind* only, never a host.
 3. **Iteration-Aware Review keeps its rails**; retirement of a prior finding additionally needs the anchor re-read at the new head (BC-08), so an edited file no longer retires a finding by itself.
-4. **Consolidated review on matrices** (*planned*, BC-09): several legs emit, one aggregator posts.
+4. **Consolidated review on matrices (BC-09):** several legs emit, one aggregate job posts; the legs' job token needs only read scopes.
 
 ## Eval gate
 

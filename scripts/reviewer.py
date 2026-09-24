@@ -6318,8 +6318,6 @@ class ReviewResult:
     # Findings the verifier refuted (RFC-03): never posted inline, listed in
     # the structured output so nothing is dropped silently.
     refuted: list[Finding] = field(default_factory=list)
-    # RFC-04: the merged prior ledger of an aggregated review (raw finding-v3 dicts).
-    aggregate_prior_findings: list[dict[str, Any]] = field(default_factory=list)
     # Constructor-only compatibility flag (`ReviewResult(incomplete=True)`):
     # folded into `status` by `__post_init__`; reads go through the derived
     # property below, so `status` stays the single source of truth.
@@ -7891,8 +7889,8 @@ def build_verifier_provider(
         runner = VERIFIER_RUNNER_FOR_CLI_LANE.get(provider_id, "")
         if not runner:
             return None, "", "", "", f"no in-process backend to verify on for provider {provider_id!r}"
-        if provider_id == "grok":
-            base = XAI_OPENAI_COMPAT_API_BASE
+        if provider_id == "grok" and not base and not os.environ.get("OPENAI_BASE_URL", "").strip():
+            base = XAI_OPENAI_COMPAT_API_BASE  # the CLI's default backend has no OpenAI-compatible twin URL of its own
         elif not base:
             # The CLI lane may be pointed at a gateway through the inherited
             # `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` hook (`_build_cli_env`)
@@ -13178,7 +13176,8 @@ class LegDocument:
     run_id: str
     findings: list[Finding] = field(default_factory=list)
     refuted: list[dict[str, Any]] = field(default_factory=list)
-    prior_findings: list[dict[str, Any]] = field(default_factory=list)
+    prior_findings: dict[str, Any] = field(default_factory=dict)      # the document's ledger block (retired / still_open / regressed / unverified_claims)
+    prior_updates: dict[str, tuple[str, str]] = field(default_factory=dict)  # fingerprint → (status, reason) as the leg reported them
     narrative: str = ""
     cost_usd: float | None = None
     turns: int = 0
@@ -13272,6 +13271,32 @@ def leg_id_of(provider: str, endpoint_kind: str, model: str) -> str:
     return f"{provider}|{endpoint_kind}|{model}"
 
 
+def _prior_updates_from_block(block: Any, leg_id: str) -> dict[str, tuple[str, str]]:
+    """A leg's prior-findings ledger → `prior_finding_updates` for the aggregate's
+    own reconciliation: a retired or claimed-resolved prior is a `resolved`
+    claim (the aggregate re-corroborates it against its own checkout and the
+    anchor re-read), a regressed one is `regressed`."""
+    updates: dict[str, tuple[str, str]] = {}
+    if not isinstance(block, dict):
+        return updates
+    def fp_of(item: Any) -> str:
+        raw: str = str(item.get("id") if isinstance(item, dict) else item or "")
+        return raw[len(FINDING_ID_PREFIX):] if raw.startswith(FINDING_ID_PREFIX) else raw
+    for item in block.get("retired") or []:
+        fp: str = fp_of(item)
+        if fp:
+            updates[fp] = (PRIOR_FINDING_STATUS_RESOLVED, f"retired by `{leg_id}` ({item.get('reason') if isinstance(item, dict) else 'corroborated'})")
+    for item in block.get("unverified_claims") or []:
+        fp = fp_of(item)
+        if fp and fp not in updates:
+            updates[fp] = (PRIOR_FINDING_STATUS_RESOLVED, f"claimed resolved by `{leg_id}`")
+    for item in block.get("regressed") or []:
+        fp = fp_of(item)
+        if fp:
+            updates[fp] = (PRIOR_FINDING_STATUS_REGRESSED, f"regressed per `{leg_id}`")
+    return updates
+
+
 def parse_leg_document(doc: dict[str, Any], *, source: str = "") -> LegDocument:
     """Validate the keys the aggregator relies on and parse one leg document.
     Raises `ValueError` on a document that is not a `review-output/3.0`."""
@@ -13285,13 +13310,15 @@ def parse_leg_document(doc: dict[str, Any], *, source: str = "") -> LegDocument:
     findings: list[Finding] = [finding_from_v3_dict(f) for f in doc["findings"] if isinstance(f, dict)][:MAX_AGGREGATE_FINDINGS]
     summary: dict[str, Any] = doc.get("summary") if isinstance(doc.get("summary"), dict) else {}
     cost: Any = doc.get("cost_usd", run.get("cost_usd"))
+    leg_id: str = leg_id_of(str(run.get("provider") or ""), str(run.get("endpoint_kind") or ""), str(run.get("model") or ""))
+    prior_block: dict[str, Any] = doc.get("prior_findings") if isinstance(doc.get("prior_findings"), dict) else {}
     return LegDocument(
-        leg_id=leg_id_of(str(run.get("provider") or ""), str(run.get("endpoint_kind") or ""), str(run.get("model") or "")),
+        leg_id=leg_id,
         provider=str(run.get("provider") or ""), endpoint_kind=str(run.get("endpoint_kind") or ""), model=str(run.get("model") or ""),
         head_sha=str(context.get("head_sha") or run.get("head_sha") or ""), recorded_at=str(run.get("recorded_at") or ""),
         status=str(run.get("status") or RUN_STATUS_FAILED), run_id=str(run.get("run_id") or ""),
         findings=findings, refuted=[dict(r) for r in (doc.get("refuted") or []) if isinstance(r, dict)],
-        prior_findings=[dict(pf) for pf in (doc.get("prior_findings") or []) if isinstance(pf, dict)],
+        prior_findings=prior_block, prior_updates=_prior_updates_from_block(prior_block, leg_id),
         narrative=str(summary.get("narrative") or ""), cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         turns=int(budget.get("turns_used") or 0), usage_known=bool(doc.get("usage_known", run.get("usage_known", False))), source=source,
     )
@@ -13472,19 +13499,19 @@ def aggregate_documents(
                                   verification=FindingVerification(status="refuted", reason=str(r.get("reason") or "")), origin=r.get("origin") if isinstance(r.get("origin"), dict) else None)
             rf.agreement = {"legs_total": max(1, legs_total), "legs_reporting": 1, "reported_by": [leg]}
             refuted.append(rf)
-    prior: dict[str, dict[str, Any]] = {}
+    prior_updates: dict[str, tuple[str, str]] = {}
     for doc in latest.values():
-        for pf in doc.prior_findings:
-            fp: str = str(pf.get("fingerprint") or pf.get("id") or "")
-            if fp and fp not in prior:
-                prior[fp] = pf
+        for fp, (status, reason) in doc.prior_updates.items():
+            current: tuple[str, str] | None = prior_updates.get(fp)
+            if current is None or (status == PRIOR_FINDING_STATUS_REGRESSED and current[0] != PRIOR_FINDING_STATUS_REGRESSED):
+                prior_updates[fp] = (status, reason)
     narrative: str = max((doc.narrative for doc in latest.values() if doc.contributes), key=len, default="")
     result: ReviewResult = ReviewResult(summary=narrative, findings=consolidated, overall_severity=overall_severity([f.severity for f in consolidated]))
     result.refuted = refuted
     result.status = RUN_STATUS_COMPLETED if report.legs_delivered else RUN_STATUS_INCOMPLETE
     if not report.legs_delivered:
         result.status_note = "no review leg delivered a complete document"
-    result.aggregate_prior_findings = list(prior.values())
+    result.prior_finding_updates = prior_updates  # the aggregate's own IAR post step reconciles them
     return result, report
 
 
@@ -13532,6 +13559,14 @@ def render_aggregate_legs_table(report: AggregateReport) -> str:
         hist: str = ", ".join(f"{k} leg(s): {v}" for k, v in sorted(report.agreement_histogram.items(), key=lambda kv: int(kv[0])))
         lines += ["", f"Agreement: {hist}"]
     return "\n".join(lines)
+
+
+def iar_read_scope(mode: str, review_scope: str) -> str:
+    """The marker scope a run reads its IAR history from. In an ensemble the
+    history is one per PR on the aggregate marker (RFC-04 § Publishing): the
+    aggregate writes it, and the emit legs read it so they see the prior
+    findings and can report them resolved / still open."""
+    return AGGREGATE_SCOPE if mode in (MODE_EMIT, MODE_AGGREGATE) else review_scope
 
 
 def load_leg_documents(artifact_dir: Path) -> tuple[list[LegDocument], list[str]]:
@@ -14271,7 +14306,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             head_sha=head_sha,
             base_max_inline_comments=max_inline_comments,
             applied_label=applied_label,
-            provider_id=review_scope,
+            provider_id=iar_read_scope(mode, review_scope),
             bot_login=bot_login,
             max_turns=max_turns,
         )

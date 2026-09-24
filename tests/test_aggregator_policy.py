@@ -125,16 +125,35 @@ class LegsAndKnobs(unittest.TestCase):
         self.assertEqual((report.superseded, report.ignored_other_head, report.legs_missing), ([old.source], 1, [B]))
         self.assertEqual([(f.severity, f.extra["reports"][0]["run_id"]) for f in result.findings], [("warning", "new")])
 
-    def test_refuted_and_prior_ledger_are_merged(self) -> None:
+    def test_refuted_lists_and_prior_claims_are_merged(self) -> None:
         refuted = {"id": "f-x", "path": "r.py", "line": 4, "severity_claimed": "critical", "title": "Missing null guard", "reason": "guard exists", "origin": {"run_id": "a"}}
-        prior = {"fingerprint": "p" * 16, "path": "p.py", "line": 2, "severity": "warning", "lifecycle": {"state": "still_open"}}
-        docs = [_leg(A, [], refuted=[refuted], prior=[prior], narrative="short"), _leg(B, [], refuted=[dict(refuted)], prior=[dict(prior)], narrative="the longer narrative wins")]
-        result, report = reviewer.aggregate_documents(docs, head_sha=HEAD)
+        block_a = {"retired": [{"id": "f-" + "p" * 16, "reason": "verified_fixed"}], "still_open": ["f-" + "q" * 16], "regressed": [], "unverified_claims": ["f-" + "r" * 16]}
+        block_b = {"retired": [], "still_open": ["f-" + "p" * 16], "regressed": ["f-" + "r" * 16], "unverified_claims": []}
+        doc_a = _leg(A, [], refuted=[refuted], narrative="short"); doc_a.prior_updates = reviewer._prior_updates_from_block(block_a, A)
+        doc_b = _leg(B, [], refuted=[dict(refuted)], narrative="the longer narrative wins"); doc_b.prior_updates = reviewer._prior_updates_from_block(block_b, B)
+        result, report = reviewer.aggregate_documents([doc_a, doc_b], head_sha=HEAD)
         self.assertEqual(len(result.refuted), 1)
         self.assertEqual((result.refuted[0].verification.status, result.refuted[0].verification.reason, result.refuted[0].agreement["reported_by"]), ("refuted", "guard exists", [A]))
-        self.assertEqual(result.aggregate_prior_findings, [prior])
+        # the aggregate re-reconciles the legs' claims: a retired or claimed-resolved prior is a `resolved` claim, regressed wins
+        self.assertEqual(result.prior_finding_updates["p" * 16][0], reviewer.PRIOR_FINDING_STATUS_RESOLVED)
+        self.assertIn(A, result.prior_finding_updates["p" * 16][1])
+        self.assertEqual(result.prior_finding_updates["r" * 16][0], reviewer.PRIOR_FINDING_STATUS_REGRESSED)
+        self.assertNotIn("q" * 16, result.prior_finding_updates, "still open is not a claim")
         self.assertEqual(result.summary, "the longer narrative wins")
         self.assertEqual(result.findings, [])
+
+    def test_leg_document_prior_block_parses_into_claims(self) -> None:
+        doc = {"schema_version": reviewer.REVIEW_OUTPUT_SCHEMA_VERSION, "run": {"provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5", "status": "completed",
+               "context": {"head_sha": HEAD}}, "findings": [],
+               "prior_findings": {"retired": [{"id": "f-" + "a" * 16, "reason": "verified_fixed"}], "still_open": [], "regressed": ["f-" + "b" * 16], "unverified_claims": []}}
+        leg = reviewer.parse_leg_document(doc, source="x")
+        self.assertEqual(leg.prior_updates["a" * 16][0], "resolved"); self.assertEqual(leg.prior_updates["b" * 16][0], "regressed")
+        self.assertEqual(leg.prior_findings["retired"][0]["id"], "f-" + "a" * 16)
+
+    def test_iar_read_scope_is_the_aggregate_in_an_ensemble(self) -> None:
+        self.assertEqual(reviewer.iar_read_scope("emit", "grok"), reviewer.AGGREGATE_SCOPE)
+        self.assertEqual(reviewer.iar_read_scope("aggregate", "aggregate"), reviewer.AGGREGATE_SCOPE)
+        self.assertEqual(reviewer.iar_read_scope("review", "grok:abc"), "grok:abc")
 
 
 if __name__ == "__main__":

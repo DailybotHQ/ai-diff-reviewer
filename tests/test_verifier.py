@@ -164,6 +164,10 @@ class AliasResolution(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": reviewer.ZAI_ANTHROPIC_COMPAT_API_BASE}):
             prov, model, alias, kind, reason = reviewer.build_verifier_provider(provider_id="claude-code", api_key="zai-k", api_base="", requested_model="", review_model="glm-5.3")
         self.assertIsInstance(prov, reviewer.AnthropicProvider); self.assertEqual((kind, reason), ("zai", ""))
+        # a grok lane pointed at a gateway through OPENAI_BASE_URL verifies on that gateway, not on xAI
+        with mock.patch.dict(os.environ, {"OPENAI_BASE_URL": "https://gw.example.internal/v1"}):
+            prov, _, _, kind, reason = reviewer.build_verifier_provider(provider_id="grok", api_key="k", api_base="", requested_model="", review_model="m")
+        self.assertEqual(reason, ""); self.assertNotEqual(kind, "xai")
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "not a url"}):
             prov, _, _, _, reason = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="", requested_model="", review_model="m")
         self.assertIsNone(prov); self.assertIn("ANTHROPIC_BASE_URL", reason)

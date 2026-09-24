@@ -93,6 +93,10 @@ jobs:
     needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    # PR cells fetch PR metadata and files through the API (read scope only).
+    permissions:
+      contents: read
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
