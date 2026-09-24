@@ -30,7 +30,7 @@ jobs:
           # produce the diff seed. A shallow clone wouldn't have the base.
           fetch-depth: 0
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

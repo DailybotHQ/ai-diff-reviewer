@@ -24,7 +24,7 @@ The same [`prompts/default.md`](prompts/default.md) drives both surfaces. Pinnin
 
 | Surface | Where it runs | Install |
 |---|---|---|
-| **GitHub Action** — auto-review every PR | On `ubuntu-latest` in your CI | Add `uses: DailybotHQ/ai-diff-reviewer@v2` to a workflow → [§ jump](#in-ci--as-a-github-action) |
+| **GitHub Action** — auto-review every PR | On `ubuntu-latest` in your CI | Add `uses: DailybotHQ/ai-diff-reviewer@v3` to a workflow → [§ jump](#in-ci--as-a-github-action) |
 | **Coding-agent skill** — review before you push | In your coding agent (Cursor, Claude Code, Codex, Gemini, Copilot, Cline, Windsurf) | `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer` → [§ jump](#locally--as-a-coding-agent-skill) |
 
 **Use them together** — install the skill for pre-push checks, install the Action for the merge gate, share **one `.review/extension.md`** for your repo-specific rules, and the two stay in perfect sync (see [§ Bringing them together](#bringing-them-together--reviewextensionmd)).
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # required: the action uses `git diff origin/<base>...HEAD`
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -156,7 +156,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # Cursor — flat-rate on Pro
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: cursor
     api-key: ${{ secrets.CURSOR_API_KEY }}
@@ -165,7 +165,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # OpenAI Codex
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: codex
     api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -174,7 +174,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # xAI Grok CLI — full review contract, web search off, token never reaches the agent
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: grok
     api-key: ${{ secrets.XAI_API_KEY }}
@@ -183,7 +183,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # OpenAI Codex on Azure Foundry — model is your deployment name
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: codex
     api-base: https://<resource>.services.ai.azure.com/openai/v1
@@ -194,7 +194,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # Z.ai GLM through Claude Code — the recommended GLM runner (flat-rate Coding Plan)
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: claude-code
     api-base: https://api.z.ai/api/anthropic
@@ -205,7 +205,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # Z.ai GLM in-process (bounded loop, zero install)
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: anthropic
     api-base: https://api.z.ai/api/anthropic
@@ -216,7 +216,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # Azure Foundry in-process (bounded loop, zero install) — model is your deployment name
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: openai
     api-base: https://<resource>.services.ai.azure.com/openai/v1
@@ -227,7 +227,7 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 ```yaml
 # xAI in-process (bounded loop) — same key as the Grok CLI
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: openai
     api-base: https://api.x.ai/v1
@@ -248,7 +248,7 @@ Run each provider as a matrix leg with `mode: emit` and one `mode: aggregate` jo
 Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. Run `claude setup-token` on a machine logged into your plan, store the resulting `sk-ant-oat…` token as a secret, and pass it as `api-key` — the action auto-detects the prefix and uses subscription auth:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     provider: claude-code
     api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… subscription token
@@ -337,7 +337,7 @@ Consume them in a later step by giving the action step an `id`:
 
 ```yaml
       - id: review
-        uses: DailybotHQ/ai-diff-reviewer@v2
+        uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -399,7 +399,7 @@ Threat model & full detail: [docs/SECURITY.md § "Author-association gate"](docs
 ### Run only on PRs labelled `ready`, apply `pr-reviewed` on success
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -410,7 +410,7 @@ Threat model & full detail: [docs/SECURITY.md § "Author-association gate"](docs
 ### Block merge on critical findings
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -443,7 +443,7 @@ A *failing* required check blocks the merge; a *skipped* one does not. With **se
 ### Custom prompt for your codebase
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -462,7 +462,7 @@ The prompt is the most powerful knob. See [docs/PROMPTS.md](docs/PROMPTS.md) for
 Run only when you signal readiness by adding a label; toggle the label off/on to re-run:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -477,7 +477,7 @@ Full guide: [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md). Want unlabeled PRs t
 Let the reviewer write a first-draft body when the current one is empty or under 50 chars. Guarded by a marker so it never overwrites your edits.
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -491,7 +491,7 @@ Full guide: [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md).
 Apply a `complexity:low/medium/high` label based on cognitive load, files touched, and security surface — not line count:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -503,7 +503,7 @@ Apply a `complexity:low/medium/high` label based on cognitive load, files touche
 If you want the review attributed to a specific bot account (e.g. so branch protection rules can require approval from "anyone except the bot"):
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.AUTOMATION_GITHUB_TOKEN }}   # PAT for your bot account
@@ -514,7 +514,7 @@ If you want the review attributed to a specific bot account (e.g. so branch prot
 For a public repo, external contributors can open PRs — and each review costs real money (~50K–200K tokens per PR). The `author-association` input (default `OWNER,MEMBER,COLLABORATOR`, v1.3.0+) gates reviews on the PR author's relationship to the repo; the field comes from GitHub's payload and cannot be spoofed. Belt-and-suspenders combined with a label gate:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     author-association: 'OWNER,MEMBER,COLLABORATOR,CONTRIBUTOR'  # optional: allow returning contributors
@@ -555,7 +555,7 @@ The skill's [`prompt.md`](skills/ai-diff-reviewer/prompt.md) is a byte-identical
 npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific action version for reproducibility:
-npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v3 --skill ai-diff-reviewer
 ```
 
 `npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` in your repo and records source + content hash in `skills-lock.json` so teammates restore identical bytes with `npx skills experimental_install`. Bump with `npx skills update ai-diff-reviewer`.
@@ -688,7 +688,7 @@ The two surfaces converge on a single **repo-specific extension file** — a pla
 **Put your custom overrides in `.review/extension.md`** at your repo root — the local skill auto-detects it, and your CI workflow references the same file via the `prompt-extension-file:` input:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -828,7 +828,7 @@ No. It reads the `usage` block every API response already carries, or parses the
 Because a changed file and the model's word are not proof that a bug disappeared. By default (`prior-findings-resolution: advisory`) the model's `resolved` verdicts appear in the summary, the thread stays open until a maintainer resolves it, and an outstanding prior finding keeps counting toward the strictness gate. One exception (v2.3.1): when `collapse-previous` has already minimized that thread — so nobody can find it to resolve — a verdict the runtime can corroborate (finding not re-emitted **and** the file changed since the finding was raised, or was deleted) retires the finding without touching the thread, and the footer says `N auto-retired`. Teams that want fixed threads to actually close can opt into `prior-findings-resolution: verified`: the runtime then replies on and resolves a thread it can corroborate; anything it cannot corroborate stays open under both policies. Either way, read the check result from the `**Check status**` block or the tracking comment, never from the recommendation line. See [docs/ITERATION_AWARENESS.md § 14.4](docs/ITERATION_AWARENESS.md).
 
 **How do version pins between the Action and the skill line up?**
-They're intended to be identical. `uses: DailybotHQ/ai-diff-reviewer@v2.0.0` in CI + `npx skills add DailybotHQ/ai-diff-reviewer@v2.0.0 --skill ai-diff-reviewer` locally = byte-identical prompt on both surfaces. Pinning to the moving `@v2` alias on both sides also works — new patches and minor features flow to both simultaneously.
+They're intended to be identical. `uses: DailybotHQ/ai-diff-reviewer@v3.0.0` in CI + `npx skills add DailybotHQ/ai-diff-reviewer@v3.0.0 --skill ai-diff-reviewer` locally = byte-identical prompt on both surfaces. Pinning to the moving `@v2` alias on both sides also works — new patches and minor features flow to both simultaneously.
 
 ---
 

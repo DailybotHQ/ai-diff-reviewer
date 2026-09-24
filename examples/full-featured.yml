@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # never leave GITHUB_TOKEN in .git/config
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}

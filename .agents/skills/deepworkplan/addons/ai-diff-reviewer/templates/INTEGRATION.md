@@ -86,7 +86,7 @@ signalling ("Flow A / Flow B" phrases every subsequent request).
 
 ```bash
 # Tag-pinned install (pin whatever tag is current — this is the reproducible form)
-npx --yes skills add DailybotHQ/ai-diff-reviewer@v2.0.1 --skill ai-diff-reviewer -y
+npx --yes skills add DailybotHQ/ai-diff-reviewer@v3.0.1 --skill ai-diff-reviewer -y
 
 # Verify the vendored version matches the requested tag
 VENDORED=$(sed -nE 's/^version:[[:space:]]*"([^"]+)".*/\1/p' \
@@ -183,7 +183,7 @@ or a full copy of the four-job workflow):
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: <provider>
           api-key: ${{ secrets.<PROVIDER>_API_KEY }}

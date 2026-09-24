@@ -42,7 +42,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # never leave GITHUB_TOKEN in .git/config for the CLI to read
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: claude-code
           api-base: https://api.z.ai/api/anthropic

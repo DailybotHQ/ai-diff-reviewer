@@ -55,7 +55,7 @@ jobs:
       # Store AWS_REVIEW_CREDENTIALS = ACCESS_KEY_ID:SECRET_ACCESS_KEY[:SESSION]
       # and uncomment `api-key` below (then drop the OIDC step).
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: anthropic
           api-base: https://bedrock-runtime.us-east-1.amazonaws.com

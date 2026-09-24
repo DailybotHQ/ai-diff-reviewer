@@ -56,7 +56,7 @@ a **router with five coordinated sub-skills**:
    yes; never commits or pushes.
 
 The **CI Action** is the GitHub Marketplace listing "AI Diff Reviewer"
-([`DailybotHQ/ai-diff-reviewer@v2`](https://github.com/marketplace/actions/ai-diff-reviewer)),
+([`DailybotHQ/ai-diff-reviewer@v3`](https://github.com/marketplace/actions/ai-diff-reviewer)),
 same repository as the skill. The skill's `prompt.md` is **byte-identical**
 to the Action's shipped `prompts/default.md` at the same tag (enforced by
 upstream CI's `Skills — prompt-sync invariant` job).
@@ -144,7 +144,7 @@ acceptance — each reconciled if already present (§8):
 - The addon **MUST** install the vendored skill (the only supported install
   path) unless the developer recorded a declared exception (§2).
   Supported install method:
-  - `npx --yes skills add DailybotHQ/ai-diff-reviewer@v2.0.1 --skill ai-diff-reviewer -y`
+  - `npx --yes skills add DailybotHQ/ai-diff-reviewer@v3.0.1 --skill ai-diff-reviewer -y`
     (**tag-pinned**; both flags are required — `--yes` covers npm's own "Ok to
     proceed?" prompt; the subcommand `-y` covers the `skills` CLI's own "Which
     agents do you want to install to?" picker, which hangs in non-TTY without
@@ -197,7 +197,7 @@ acceptance — each reconciled if already present (§8):
   adapted to the consumer's answers (provider / strictness / trigger mode /
   external-contributor policy / PR-description mode / complexity labels).
 - The workflow **MUST** pin the upstream Action to the **v2** major-line tag
-  (`DailybotHQ/ai-diff-reviewer@v2`) so patch-level fixes flow automatically.
+  (`DailybotHQ/ai-diff-reviewer@v3`) so patch-level fixes flow automatically.
   Pinning to a frozen tag (`@v2.0.1`) is also acceptable — parity with the
   vendored skill's version is what makes local ≡ CI worth it. New installs
   **MUST NOT** pin `@v1`.

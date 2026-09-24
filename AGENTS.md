@@ -217,7 +217,7 @@ Whenever you change runtime behaviour:
 
 ### 8. SemVer for Releases (MANDATORY)
 
-Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. Never delete a published tag — consumers pin to it. **v3 adds an eval gate (BC-02):** `auto-release.yml` cuts a release only when `tests/eval/release_gate.py` finds a current, non-blocking `verdict/1.0` for the candidate's runtime + prompt; a missing or stale verdict skips the cut (see `docs/RELEASE_RECOVERY.md`).
+Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v3`) on every `v3.x.y` release; consumers pinning `@v3` get patches and minor features automatically (the frozen `v2` line is maintained from `release/v2` for six months — see [MIGRATION_v3](docs/MIGRATION_v3.md)). Never delete a published tag — consumers pin to it. **v3 adds an eval gate (BC-02):** `auto-release.yml` cuts a release only when `tests/eval/release_gate.py` finds a current, non-blocking `verdict/1.0` for the candidate's runtime + prompt; a missing or stale verdict skips the cut (see `docs/RELEASE_RECOVERY.md`).
 
 ### 9. Marketplace Branding Stable
 
@@ -229,7 +229,7 @@ The current values are:
 - `branding.icon: 'check-circle'`
 - `branding.color: 'purple'`
 
-**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` and copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v2`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
+**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` and copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v3`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
 
 The [Marketplace rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log) records the release history and rationale.
 
