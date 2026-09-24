@@ -290,7 +290,7 @@ def run_case(
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
         stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
     payload = {
-        "case": case.get("id"), "pr": case.get("id"), "repo": "fixture", "provider": provider_id, "api_base": api_base,
+        "case": case.get("id"), "pr": case.get("id"), "repo": "fixture", "provider": provider_id, "endpoint_kind": record.endpoint_kind,
         "model": model, "prompt": "composed", "extension": False,
         "runtime_head": record.runtime_sha[:12],
         "turns": turns, "tool_calls": tool_calls,
@@ -445,7 +445,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                                 review_model=args.model or "", inventory=ctx.inventory)
         stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
         payload = {
-            "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
+            "pr": args.pr, "repo": args.repo, "provider": args.provider, "endpoint_kind": record.endpoint_kind, "model": args.model or "",
             "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
             "turns": turns, "tool_calls": tool_calls,
             "seconds": round(time.time() - t0, 1),

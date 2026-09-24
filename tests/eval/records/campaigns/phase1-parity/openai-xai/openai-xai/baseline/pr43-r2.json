@@ -1,0 +1,91 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 6,
+  "tool_calls": 24,
+  "seconds": 76.1,
+  "setup_seconds": 4.6,
+  "total_seconds": 80.8,
+  "usage": {
+    "in": 64665,
+    "cache_read": 250240,
+    "cache_write": 0,
+    "out": 2193,
+    "source": "api"
+  },
+  "cost_usd": 0.192536,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity": "warning",
+      "body": "The comment (and the PR description) classify `codex` as a chat-completions leg that will apply complexity labels. In the runtime, `CodexProvider` subclasses `AgentRunnerProvider`, and `docs/PR_METADATA_CHECKS.md` marks complexity labeling as a no-op for all agent-runner providers (`cursor` / `claude-code` / `codex`). Only `provider: anthropic` will call `set_pr_complexity` and stamp `complexity:*`.\n\nAs written, maintainers will expect two legs to label and mis-debug a \u201cmissing\u201d codex label. Fix the comment to match the matrix:\n\n```suggestion\n          # (anthropic) perform the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n```\n"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity": "warning",
+      "body": "This PR silently renames the dogfood gate from `ready` \u2192 `AIReview` (scope grep, `label-gate`, `empty_reason`, gate `if:`, and operator-facing messages). That is the bulk of the diff, but the PR title/body only describe enabling complexity labels, and the test plan still says \u201capply the `ready` label\u201d.\n\nTwo concrete breakages follow:\n\n1. **Doc cross-references now point at a section that does not exist.** Comments in this file cite `docs/TRIGGER_MODES.md \u00a7 \"Recipe: run once when labelled AIReview\u2026\"`, but that doc\u2019s heading is still ``Recipe: run once when labelled `ready`\u2026`` and still documents `ready` / `no-ready-label`.\n2. **Contributor contract drift.** `AGENTS.md` still says self-review is \u201clabel-gated on `ready`\u201d. After merge, agents and humans following AGENTS.md will apply the wrong label and never trigger dogfood.\n\nEither split the rename into its own PR with AGENTS.md + `docs/TRIGGER_MODES.md` (+ any maintainer runbook) updated in lockstep, or restore `ready` here if the only intended change was complexity dogfooding."
+    }
+  ],
+  "summary": "## Verdict\n\nUseful dogfood of `complexity-labels-enabled`, but the PR also renames the self-review gate label and mis-documents which providers actually apply complexity labels \u2014 both should be fixed before merge.\n\n## Narrative\n\n**What looks good.** Turning on complexity labeling in `self-review.yml` is the right dogfood surface for `docs/PR_METADATA_CHECKS.md`. Inputs match the public contract (`complexity-labels-enabled` + default `complexity-label-prefix: 'complexity:'`), permissions already include `pull-requests: write`, and the feature is best-effort / non-blocking on the runtime path. No new secrets, no shell interpolation of PR content, no third-party action pins.\n\n**Findings.**\n\n1. **Codex \u2260 chat-completions for complexity labels** (`.github/workflows/self-review.yml` comment + PR body). Runtime `CodexProvider` is an `AgentRunnerProvider`; only `anthropic` will stamp `complexity:*`. Expect one label writer, not two \u2014 otherwise the test plan\u2019s \u201cconfirm the anthropic leg\u201d is fine, but any \u201ccodex should label too\u201d expectation is wrong.\n\n2. **Undocumented `ready` \u2192 `AIReview` rename.** Most of the diff is the gate rename (`label-gate`, scope grep, `empty_reason=no-gate-label`, gate `if:`, operator messages). That is a maintainer-facing contract change, not mentioned in the PR title/summary, and left `AGENTS.md` (\u201clabel-gated on `ready`\u201d) and `docs/TRIGGER_MODES.md` (recipe still `ready` / `no-ready-label`) stale. Workflow comments even cite a TRIGGER_MODES section title that does not exist yet. After merge, following AGENTS.md applies the wrong label and dogfood never runs.\n\n**Not raised as blockers.** Multi-leg races on the shared `complexity:*` label are inherent to the feature when several chat-completions legs run; with only anthropic applying labels today this is moot. `concurrency: cancel-in-progress` on the PR number is pre-existing and fine for label-toggle re-runs.\n\n**PR hygiene.** Title says complexity-only; body test plan still says apply `ready`. Al",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 45,
+  "seconds": 271.1,
+  "setup_seconds": 1.8,
+  "total_seconds": 272.9,
+  "usage": {
+    "in": 61803,
+    "cache_read": 435200,
+    "cache_write": 0,
+    "out": 4816,
+    "source": "api"
+  },
+  "cost_usd": 0.239542,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "`_read_github_event_repo_visibility()` only reads `repository.visibility`. When that field is missing (older webhook payloads / some GHES versions still ship `private: true|false` without `visibility`), this returns `unknown`.\n\nThe permission override and private fail-open both require `_is_private_or_internal_visibility()`, so a real private org admin under-reported as `CONTRIBUTOR` is denied instead of allowed \u2014 the exact false-skip this PR aims to fix. Fall back to the boolean `private` field when `visibility` is absent."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity": "warning",
+      "body": "`main()` calls `gh_get_collaborator_permission` whenever the webhook association is not in the allow-list, with **no visibility check**. On public repos the enhanced resolver correctly ignores write-tier permission, so the REST result is discarded \u2014 but every denied external PR still pays a GitHub API round-trip.\n\nThat contradicts the shipped docs/CHANGELOG claim that the lookup is private/internal-only, and weakens the \u201ccheapest-first / zero cost on deny\u201d abuse-prevention story on public repos (the gate\u2019s primary threat model). Gate the lookup with `_is_private_or_internal_visibility(repo_visibility)` and leave `permission_lookup_failed=False` on public/unknown so association-only deny stays free."
+    },
+    {
+      "path": "examples/open-source-safe.yml",
+      "line": 34,
+      "severity": "warning",
+      "body": "This example still says empty `author-association` is \u201conly sensible for private repos\u201d and that the author gate is a pure payload read with no API call. Both statements are stale after Option B: private/internal should keep the default allow-list (permission fallback), and a mismatch may perform one collaborator-permission lookup.\n\nAGENTS.md Rule #7 requires examples to stay aligned with runtime behaviour; leaving the old private-repo recommendation will push consumers back toward `author-association: ''` \u2014 the workaround this PR removes."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 16,
+      "severity": "info",
+      "body": "This callout still says a non-whitelisted author is skipped with \u201czero API cost\u201d. After this change that is only true for public/association-only denies; private/internal mismatches may call the collaborator-permission API. Worth a one-line update so it matches `docs/SECURITY.md`."
+    }
+  ],
+  "summary": "Solid fix for a real private-org false-skip, with the right public-vs-private split in the pure resolver and good unit coverage of the decision matrix. A few wiring/docs gaps still undercut the intended contract.\n\n### What works\n- `resolve_author_association_gate_enhanced` correctly keeps public repos association-only, allows `admin`/`maintain`/`write` only on private/internal, and fail-opens vs fail-closes by visibility as documented.\n- Username is `urllib.parse.quote`d; 404 \u2192 `none` (not lookup failure); broad `except` is annotated with the approved BLE001 pattern.\n- Docs surface is mostly in sync: `action.yml`, README, SECURITY, CHANGELOG, setup skill + reference.\n- New `AuthorAssociationGatePermissionTests` cover the important branches (including public write not widening a strict gate).\n\n### Gaps worth fixing before merge\n1. **`repository.visibility` only** \u2014 if the webhook omits `visibility` (but still has `private: true`), the gate treats the repo as `unknown` and never applies the private override/fail-open. Prefer falling back to the boolean `private` field.\n2. **Lookup not visibility-gated in `main()`** \u2014 every association miss currently hits the collaborators/permission API, including public external PRs where the result is ignored. That burns the \u201ccheapest-first / zero cost on deny\u201d property the gate is sold on; gate the call to private/internal only.\n3. **`examples/open-source-safe.yml` still teaches the old private-repo empty-gate workaround** and \u201cno API call\u201d wording \u2014 contradicts the new SECURITY guidance and AGENTS.md Rule #7.\n4. **`docs/TRIGGER_MODES.md`** still says \u201czero API cost\u201d for author-gate skips (info).\n\nNo critical security/contract breaks found (no new non-stdlib imports, no input renames, path/env allowlist untouched). Self-review dogfood is still unchecked in the PR body \u2014 worth running once the wiring fixes land.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "examples/open-source-safe.yml",
+      "line": 34,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 16,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 3,
+    "changed_files": 8
+  }
+}

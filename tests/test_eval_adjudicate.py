@@ -72,6 +72,33 @@ class Worksheet(unittest.TestCase):
         self.assertEqual(ws["sealed_key"][true_item["id"]]["lanes"], ["grok|xai|grok-4.5"])
         self.assertEqual(ws["positive_cases"], ["C001"])
 
+    def test_v3_refuted_and_downgraded_claims_join_blind_at_claimed_severity(self) -> None:
+        # verifier-on payload: F_TRUE published as verified critical; a second claim published as a
+        # warning after the policy (claimed critical, unverified); a third claim refuted and removed.
+        downgraded = {"path": "app.py", "line": 40, "severity": "warning", "body": "Unbounded loop."}
+        refuted = {"path": "app.py", "line": 50, "severity_claimed": "critical", "title": "x", "reason": "guard exists", "body": "Missing null guard."}
+        res = {"case": "C001", "findings": [F_TRUE, downgraded], "refuted": [refuted], "_lane": "grok|xai|grok-4.5", "_arm": "verifier-on", "_source": "r2",
+               "verification": [{"path": "app.py", "line": 19, "severity_claimed": "critical", "status": "verified", "reason": "ok"},
+                                {"path": "app.py", "line": 40, "severity_claimed": "critical", "status": "unverified", "reason": "no verdict"}]}
+        ws = adjudicate.build_worksheet([res], seed=1)
+        by_line = {it["line"]: it for it in ws["items"]}
+        self.assertEqual(sorted(by_line), [19, 40, 50])
+        self.assertEqual({it["severity"] for it in ws["items"]}, {"critical"})  # judged at the claimed severity
+        for it in ws["items"]:  # the verifier's verdict never reaches the blinded item
+            self.assertNotIn("verifier", it); self.assertNotIn("disposition", it); self.assertNotIn("reason", it)
+        key = ws["sealed_key"]
+        self.assertEqual(key[by_line[19]["id"]]["verifier"], ["verified"]); self.assertEqual(key[by_line[19]["id"]]["dispositions"], ["published"])
+        self.assertEqual(key[by_line[40]["id"]]["verifier"], ["unverified"])
+        self.assertEqual(key[by_line[50]["id"]]["verifier"], ["refuted"]); self.assertEqual(key[by_line[50]["id"]]["dispositions"], ["refuted"])
+        # seal: the adjudicator says the refuted claim was indeed false and the unverified one true
+        for it in ws["items"]:
+            it["verdict"] = "false" if it["line"] == 50 else "true"
+        rec = adjudicate.seal(ws, adjudicator="t", campaign_id="c")
+        self.assertEqual(rec["precision"]["per_verifier"]["refuted"], {"true": 0, "false": 1, "overstated": 0, "precision": 0.0})
+        self.assertEqual(rec["precision"]["per_verifier"]["verified"]["precision"], 1.0)
+        self.assertEqual(rec["precision"]["per_disposition"]["published"], {"true": 2, "false": 0, "overstated": 0, "precision": 1.0})
+        self.assertEqual(rec["precision"]["overall"]["precision"], round(2 / 3, 4))  # before the verifier: every claim
+
     def test_seal_refuses_missing_verdicts_and_computes_precision(self) -> None:
         ws = adjudicate.build_worksheet(_results(), seed=1)
         with self.assertRaises(SystemExit):

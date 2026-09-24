@@ -1,0 +1,79 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 39.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.3,
+  "usage": {
+    "in": 30928,
+    "cache_read": 117760,
+    "cache_write": 0,
+    "out": 2108,
+    "source": "cli"
+  },
+  "cost_usd": 0.109832,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`subprocess.run(..., shell=True)` with an f-string interpolates `upload_dir`, `name`, and `oid` directly into a shell command. A value such as `name=\"; rm -rf /; #\"` (or any metacharacters in `upload_dir` / `oid`) is executed by the shell \u2014 the previous argv-list form could not be injected this way.\n\nImageMagick policy/delegates do not require a shell. Keep `shell=False` and pass an argument vector (use `/usr/bin/magick` under IM7 if the binary name changed):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/magick\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a command-injection vulnerability by switching ImageMagick invocation from argv-list form to `shell=True` with unescaped path interpolation.\n\n## Analysis\n\n`make_thumb` now builds a shell command via an f-string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny of `upload_dir`, `name`, or `oid` containing shell metacharacters (`;`, `|`, `\\$()`, backticks, whitespace, etc.) is interpreted by the shell. The previous argv form (`[\"/usr/bin/convert\", src, dst]`) could not be injected this way because arguments are passed directly to `execve`.\n\nThe removed comment claimed `name` was validated upstream by an `ALLOWED_FILES` regex. That guard is no longer documented here, is not present in this repository, and never covered `upload_dir` or `oid`. Even a filename allowlist is a weak substitute for not using a shell.\n\nThe stated rationale (\"shell form needed for the imagemagick policy delegate\") does not require `shell=True`. ImageMagick 7 policy/delegates work with the argv form; if the binary name changed under IM7, the fix is to call `magick` (or the full path) as argv\\[0\\], still without a shell.\n\n## Recommendation\n\nKeep `shell=False` and an argument vector. If IM7 needs the `magick` frontend:\n\n```python\nsubprocess.run(\n    [\"/usr/bin/magick\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n    check=True,\n)\n```\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

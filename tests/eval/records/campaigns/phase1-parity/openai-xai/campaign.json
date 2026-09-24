@@ -1,0 +1,15 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase1-parity",
+  "repetitions": 3,
+  "cells": [
+    "openai-xai|baseline|pr15",
+    "openai-xai|baseline|pr25",
+    "openai-xai|baseline|pr37",
+    "openai-xai|baseline|pr39",
+    "openai-xai|baseline|pr43",
+    "openai-xai|baseline|pr45",
+    "openai-xai|baseline|pr46"
+  ],
+  "budget_usd": 40.0
+}

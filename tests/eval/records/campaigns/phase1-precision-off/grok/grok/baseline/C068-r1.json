@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 27.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 27.6,
+  "usage": {
+    "in": 29847,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 1328,
+    "source": "cli"
+  },
+  "cost_usd": 0.093582,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`pickle.loads` on `raw` executes arbitrary Python during deserialization. If `raw` comes from a cookie, header, or other client-controlled session token, an attacker can ship a base64-encoded pickle that runs OS commands (or anything else) as soon as `load_session` is called \u2014 full RCE on the web worker.\n\n`json.loads` only rebuilt data; pickle rebuilds objects via opcodes/`__reduce__`. \"Richer session objects\" for a cart plugin still need a safe format (JSON + explicit schema, `itsdangerous`-style signed payload, etc.). Do not unpickle untrusted input.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(Restore `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this PR replaces safe JSON session decoding with `pickle.loads` on inbound session bytes, which enables arbitrary code execution if `raw` is attacker-controlled (cookies, query params, or any client-supplied token).\n\n## Narrative\n\n`web/session.py` is the only changed file. `load_session` previously used `json.loads` after base64 decode \u2014 a data-only format. Switching to `pickle.loads` means a crafted payload can run `__reduce__` / opcode gadgets during unpickle, before any application logic runs. The comment cites \"cart plugin\" richer objects; that goal does not justify pickle on the decode path. Prefer a constrained serializer (JSON with an explicit schema, or a signed structured format) for any session blob that crosses a trust boundary.\n\nNo repository instruction files were present. Call sites are not in this tiny tree, but the function name and `raw: str` API strongly indicate external session material.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

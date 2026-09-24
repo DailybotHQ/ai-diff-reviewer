@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.9,
+  "usage": {
+    "in": 30401,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1585,
+    "source": "cli"
+  },
+  "cost_usd": 0.0963472,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Secret credential written to logs.** `process.env.PROCESSOR_KEY` is included in the `log.debug` payload. Anyone with access to debug/aggregated logs can recover the payment-processor key and replay or forge charges.\n\nRemove `key` from the log fields. Keep only non-secret correlation ids (`orderId`, `ref`). If support needs failure replay, route that through a secured internal tool that already holds processor credentials \u2014 do not put the key in log pipelines.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential into debug output.\n\n## Narrative\n\n`charge()` now emits `process.env.PROCESSOR_KEY` on the `log.debug` path under the field name `key`. That value is a live credential for the charge processor. Debug logs routinely land in centralized log stores, support tooling, and incident exports; once there, the key is readable by anyone with log access and is hard to revoke-audit.\n\nThe accompanying comment states the intent explicitly (\"include credentials in debug payloads so support can replay failures\"), so this is deliberate secret leakage rather than an accidental field dump. Support replay should use a non-secret charge `ref` / `orderId` plus a secured internal admin tool that already holds processor auth \u2014 never the raw key in application logs.\n\nThe previous `log.info(\"charge created\", { orderId, ref })` success breadcrumb was also removed, so operators lose the non-sensitive confirmation line that was already sufficient for correlation.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

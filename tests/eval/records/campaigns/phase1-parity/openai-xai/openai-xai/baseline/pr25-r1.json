@@ -1,0 +1,113 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 9,
+  "tool_calls": 44,
+  "seconds": 258.2,
+  "setup_seconds": 2.0,
+  "total_seconds": 260.2,
+  "usage": {
+    "in": 229917,
+    "cache_read": 375552,
+    "cache_write": 0,
+    "out": 3412,
+    "source": "api"
+  },
+  "cost_usd": 0.555416,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity": "warning",
+      "body": "Step 3.5 sits **after** the tag push (Step 3) and **before** GitHub Release creation (Steps 4\u20135), with no `continue-on-error` and no pin to the tag just published.\n\nTwo concrete failure modes:\n\n1. **Release half-published:** if `npx skills update` fails (registry lag past the 5s sleep, npm outage, skills CLI error), the job dies with `vX.Y.Z` already on the remote and **no** GitHub Release / notes. Consumers see a bare tag; operators have to finish the release by hand.\n2. **False-green smoke test:** `npx skills update ai-diff-reviewer` is unpinned. If the new tag is not visible yet, the CLI can no-op on the previous contents, `git diff --quiet` succeeds, and the step prints \u201calready at ${NEW_VERSION}\u201d even though nothing was verified against that tag.\n\n**Fix:** pin the install to the tag you just pushed and fail closed on mismatch, and keep dogfood from blocking the Marketplace release artifact \u2014 e.g. run the release (Steps 4\u20135) first, then dogfood; or `continue-on-error` only around dogfood after the release exists. Prefer something like:\n\n```bash\nnpx --yes skills add \"DailybotHQ/ai-diff-reviewer@${NEW_VERSION}\" --skill ai-diff-reviewer -y\n# then assert skills-lock / frontmatter version matches ${NEW_VERSION#v}\n```\n\nA fixed sleep is not a substitute for pinning + asserting the resolved version."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 86,
+      "severity": "warning",
+      "body": "The new `[Unreleased]` bullets cover auto-release Step 3.5 and the first-time vendored skill, but this PR also lands the first real `.review/extension.md` and wires `prompt-extension-file: .review/extension.md` into `self-review.yml` for every provider leg.\n\nThat is the runtime half of the dogfooding story (Rule #10 pillar A enhanced) and is user/contributor-visible behavior: every self-review now layers repo-specific severity overrides. Without a CHANGELOG entry, release notes will omit it and future bisects will not see when CI started enforcing those rules.\n\nAdd a third `### Added` bullet for the extension file + self-review wiring (and optionally note that local skill auto-detect and CI now share the same path)."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity": "info",
+      "body": "Two small content defects in the vendored skill snapshot this PR introduces:\n\n1. **Duplicate heading** \u2014 `**Option A \u2014 \\`.review/extension.md\\`** (recommended):` is printed twice (lines 358 and 360).\n2. **Non-English example path** \u2014 the tree uses `mi-repo/` (Spanish). This repo\u2019s own extension escalates non-English copy to `warning` (Rule #1 / global audience).\n\nDo **not** hand-fix the vendored tree (DON\u2019T #14). Fix the source-of-truth copies under `skills/ai-diff-reviewer/**` (same defects are already there) so the next release\u2019s Step 3.5 refresh picks them up."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfooding infrastructure \u2014 the two-pillar Rule #10 model and the first real `.review/extension.md` are the right shape \u2014 but Step 3.5 needs hardening before it is safe as a release-critical gate, and the CHANGELOG under-documents half of what this PR ships.\n\n## Narrative\n\n**What works well**\n\n- **Pillar B wiring is coherent:** `skills-lock.json` entry, AGENTS.md Rule #10 + DON\u2019T #14, and auto-release Step 3.5 form a closed loop that matches how consumers actually install (`npx skills \u2026`). The `[skip release]` / `chore(release):` job guard already prevents re-entry loops.\n- **Pillar A enhancement is correct:** `self-review.yml` pointing `prompt-extension-file` at `.review/extension.md` is the right local\u2194CI parity move, and the extension itself is strongly code-anchored (stdlib-only, `shell=True`, `safe_repo_path`, CLI env allowlist, marker contracts, type hints, etc.).\n- **No runtime / public-contract breakage:** `action.yml` and `scripts/reviewer.py` are untouched; this is CI + docs + vendored artifacts + review config.\n- **Security posture of the new step is fine on the usual axes:** no `${{ github.event.pull_request.* }}` shell interpolation, explicit `permissions: contents: write` already present, argv-style `npx` (no `shell=True` string build).\n\n**Main concern \u2014 Step 3.5 ordering and smoke-test strength**\n\nStep 3.5 runs *after* the annotated + major tags are pushed and *before* Steps 4\u20135 create the GitHub Release. With `set -euo pipefail` and no `continue-on-error`, any `npx skills` failure leaves a bare tag on the remote and no Marketplace release artifact. Separately, `npx skills update ai-diff-reviewer` is **unpinned**: if the new tag is not visible yet, a no-op update + `git diff --quiet` can exit 0 and print \u201calready at ${NEW_VERSION}\u201d without ever proving that tag installs. That undercuts the \u201cfails loudly if the just-published tag doesn\u2019t install\u201d claim in Rule #10 B / the PR description.\n\nPrefer: pin to `DailybotHQ/ai-diff-reviewer@${",
+  "verification": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 86,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 3,
+    "changed_files": 12
+  }
+}

@@ -76,8 +76,8 @@ exist today.
 |---|---|---|---|---|---|---|
 | 0 | floor re-measurement, default config, 7 PRs × 3 | 21 | ≈ $10 | ≈ $0 | ≈ $10 | in-process first-party lanes, Bedrock, Codex/Azure, Cursor |
 | 0 | fixture-tree baseline, 66 trees × 3 | 198 | ≈ $60 (assumption) | ≈ $0 | ≈ $60 | same |
-| 1 | runner parity: in-process vs CLI on 7 PRs × 3 × 2 arms — **needs an in-process lane** | 42 | ≈ $20 (grok via `openai` runner on xAI **is** in-process — the one in-process lane measurable with XAI) | — | ≈ $20 | anthropic in-process (needs `ANTHROPIC_API_KEY`) — D-03 can be decided on the xAI in-process lane first |
-| 1 | verifier precision on the critical corpus, 21 cases × 3 × 2 arms | 126 | ≈ $40 (assumption) + verifier ≈ $5 | ≈ $0 | ≈ $45 | — |
+| 1 | runner parity: in-process vs CLI on 7 PRs × 3 × 2 arms — **needs an in-process lane** | 42 | ≈ $20 (grok via `openai` runner on xAI **is** in-process — the one in-process lane measurable with XAI) → **measured 2026-09-24: $7.44 for the 21 in-process runs; the CLI arm is Phase 0's `phase0-floor/grok` ($12.67), not re-bought** | — | ≈ $20 → **$7.44** | anthropic in-process (needs `ANTHROPIC_API_KEY`) — D-03 decided on the xAI in-process lane (see § Phase 1 parity) |
+| 1 | verifier precision on the critical corpus, 21 cases × 3 × 2 arms | 126 | ≈ $40 (assumption) + verifier ≈ $5 → **measured 2026-09-24: $13.41 incl. verifier $0.62** (tree runs cost ≈ $0.10, a third of the assumption) | ≈ $0 | ≈ $45 → **$13.41** | — |
 | 2 | consolidation on the dogfood thread set (offline fixtures) + 10 live PRs | live only | ≈ $15 | ≈ $0 | ≈ $15 | third leg (needs another secret; fixture-tested otherwise) |
 | 3–4 | multi-round fixtures 4 × 3 × 2 rounds × 2 arms; per-tier recall guard on the corpus | 48 + 219 | ≈ $25 + $65 (assumption) | ≈ $0 | ≈ $90 | — |
 | **Total** | | | | | **≈ $240** at grok-4.5 list price, dominated by fixture-tree assumptions | |
@@ -102,7 +102,7 @@ contract name their `BC-nn`.
 | D-00 | Accept the RFC set as the v3 direction? | accept / revise / reject | **accept**; an RFC moves to *Accepted* only via this row | RFC-00 P-1..P-4 | — | accepted (recommended) — 2026-09-23 |
 | D-01 | Where run records and verdicts live (RFC-01 Q-01) | committed under `tests/eval/records/`; records branch; release assets | verdicts committed (small), raw records as artifacts (90 d) + monthly squash to a records branch | X-02 | BC-01 | accepted (recommended) — 2026-09-23 |
 | D-02 | Promote `analysis_results/baseline_metrics.py` into `tests/eval/` (RFC-01 Q-05; Task 2 skills entry T2-001) | promote / keep plan-local | **promote** as the determinism computation of the gate | Task 2 | — | accepted (recommended) — 2026-09-23 |
-| D-03 | In-process `anthropic`/`openai` lanes: rebuild or retire for code review (RFC-02 Q-10; BC-06) | rebuild on the unified loop / retire, keep as verifier engine | **rebuild**, decide retire after Phase 1 measurement: retire if recall stays > 3 defects below the CLI band across two lanes | E-09, E-10, H-02 | BC-06 | accepted (recommended: rebuild) — 2026-09-23; retire-or-keep decided by measurement in PLAN_v3_implementation Task 19 |
+| D-03 | In-process `anthropic`/`openai` lanes: rebuild or retire for code review (RFC-02 Q-10; BC-06) | rebuild on the unified loop / retire, keep as verifier engine | **rebuild**, decide retire after Phase 1 measurement: retire if recall stays > 3 defects below the CLI band across two lanes | E-09, E-10, H-02, **Phase 1 parity table (below)** | BC-06 | accepted (recommended: rebuild) — 2026-09-23; **keep — decided 2026-09-24 by measurement** (PLAN_v3_implementation Task 19): the rebuilt in-process `openai` runner on xAI matched the grok CLI band on the 7 historical PRs × 3 (recall gap 0.33 defects per repetition, threshold > 3); single-lane limitation stated — `anthropic` in-process needs `ANTHROPIC_API_KEY`. BC-06 stays non-breaking; D-12 moot |
 | D-04 | Promotion factor 1.0 × median spread (RFC-01 Q-02) | 1.0 / 1.5 / CI-only | 1.0 now; revisit after the Phase 0 re-measurement; never lower | E-14a | — | accepted (recommended) — 2026-09-23 |
 | D-05 | Fixture-tree scoring mode (RFC-01 Q-03) | `run_eval.py --tree` worktree / synthetic PRs | `--tree` | E-18 | — | accepted (recommended) — 2026-09-23 |
 | D-06 | Verifier placement on multi-leg runs (RFC-03 Q-11, RFC-02 Q-09) | per leg / once in the aggregator; CLI-side inside the CLI / runtime-side | once in the aggregator; runtime-side with in-process tools for CLI lanes | P-3 | — | accepted (recommended) — 2026-09-23 |
@@ -111,7 +111,7 @@ contract name their `BC-nn`.
 | D-09 | `v2` maintenance window (RFC-07 Q-31) | 3 / 6 / 12 months | 6 months, security + catalog fixes, `release/v2` | Rule #8 | — | accepted (recommended) — 2026-09-23 |
 | D-10 | Ship `v3.0.0-rc.1`? (RFC-07 Q-32) | yes / no | yes, after Phase 2, ≥ 10 dogfood PRs, no moving tag | BC-02 | — | accepted (recommended) — 2026-09-23 |
 | D-11 | Transition knobs lifetime (RFC-07 Q-34; RFC-03 Q-12; RFC-06 Q-29) | one minor / whole major | one minor cycle; removal version stated in MIGRATION_v3 | — | BC-18, BC-19 | accepted (recommended) — 2026-09-23 |
-| D-12 | Retire BC-06 lane before `v3.0.0` or in `v3.1` (RFC-07 Q-33) | before / after | before `v3.0.0` if D-03 says retire — a major is the only place to do it | Rule #4 | BC-06 | accepted (recommended) — 2026-09-23 |
+| D-12 | Retire BC-06 lane before `v3.0.0` or in `v3.1` (RFC-07 Q-33) | before / after | before `v3.0.0` if D-03 says retire — a major is the only place to do it | Rule #4 | BC-06 | accepted (recommended) — 2026-09-23; **not triggered** — D-03 decided *keep* on 2026-09-24 |
 | D-13 | `MIGRATION_v2.md` forward pointer (RFC-07 Q-35) | add one line / leave | add one line | — | — | accepted (recommended) — 2026-09-23 |
 | D-14 | Base-ref file reads: new tool or `ref` argument (RFC-02 Q-06) | new tool / `ref ∈ {base, head}` | `ref` argument | — | — | accepted (recommended) — 2026-09-23 |
 | D-15 | `MAX_PATCH_CHARS` (RFC-02 Q-07) and `MAX_REVIEW_OUTPUT_BYTES` (RFC-05 Q-23) | 40 000 / 4 MB | 40 000; 4 MB | E-26 | — | accepted (recommended) — 2026-09-23 |
@@ -128,6 +128,47 @@ contract name their `BC-nn`.
 | D-26 | Adjudicator for precision samples (RFC-01 Q-04) | maintainer blinded / external | maintainer, blinded to the arm, per-finding record | E-20 | — | accepted (recommended) — 2026-09-23 |
 | D-27 | Promote the plan-local RFC gate (`check_rfc.py`) into the repository? | promote as a docs check / keep plan-local | keep plan-local; the RFCs become *Accepted* records, not living docs — re-evaluate if RFC sets recur | — | — | accepted (recommended) — 2026-09-23 |
 | D-28 | Additional provider secrets for measurement | none / `ANTHROPIC_API_KEY` / + AWS / + OpenAI | `ANTHROPIC_API_KEY` first (decides D-03 on the default lane) | Evaluation budget | — | accepted (recommended) — 2026-09-23 |
+
+## Phase 1 parity — in-process runner vs CLI band (D-03 evidence)
+
+Measured in PLAN_v3_implementation Task 19 (2026-09-24). Candidate: the
+rebuilt in-process `openai` runner on xAI (`api-base https://api.x.ai/v1`,
+`balanced` → grok-4.5), `phase1-parity` manifest, 7 historical PRs × 3
+repetitions, v3.0 prompt, `.review/extension.md`. Band: Phase 0's grok CLI
+cells on the same PRs (`phase0-floor/grok`, v2 prompt — the only CLI
+replication available; same model). Recall is scored against the labelled
+must-find defects of the historical corpus (5 per repetition).
+
+| PR (head branch) | labelled defects | CLI recall (3 reps) | in-process recall (3 reps) | CLI cost mean | in-process cost mean | CLI wall-clock s | in-process wall-clock s |
+|---|---|---|---|---|---|---|---|
+| `chore/bootstrap-review-extension (#46)` | 0 | [0, 0, 0] | [0, 0, 0] | $0.481 | $0.453 | 175 | 249 |
+| `ci/self-review-complexity-labels (#45)` | 1 | [1, 1, 1] | [1, 1, 1] | $0.416 | $0.199 | 130 | 101 |
+| `docs/skill-local-ci-companion (#43)` | 1 | [0, 0, 0] | [1, 0, 0] | $0.376 | $0.236 | 173 | 214 |
+| `feat/author-association-permission-gate (#37)` | 1 | [0, 0, 1] | [0, 0, 1] | $0.522 | $0.382 | 279 | 368 |
+| `feat/complexity-labels-all-providers (#25)` | 2 | [2, 2, 2] | [0, 2, 2] | $0.625 | $0.263 | 236 | 283 |
+| `feat/iteration-aware-review (#15)` | 0 | [0, 0, 0] | [0, 0, 0] | $1.462 | $0.723 | 445 | 324 |
+| `test/self-review-skip-status (#39)` | 0 | [0, 0, 0] | [0, 0, 0] | $0.341 | $0.225 | 254 | 487 |
+
+Summed over three repetitions: CLI 10 vs in-process 9 of 15 labelled defect-repetitions; best-of-three per PR: CLI 4 vs in-process 5. In-process lane floor on these 7 cells: cost spread median 0.41, worst 1.22 (PR #15, 13-turn runs), recall swing 2 (one cell). Cost per run mean $0.354 in-process vs $0.603 CLI (Phase 0).
+
+**Decision D-03 = keep (rebuild confirmed).** The retire threshold was "recall
+> 3 defects below the CLI band across two lanes"; the measured gap is
+0.33 defects per repetition (CLI 10 vs in-process 9 summed over three
+repetitions; best-of-three per PR 4 vs 5 — the in-process runner found the
+`docs/skill-local-ci-companion` defect once where the CLI never did, and
+missed `feat/complexity-labels-all-providers` once where the CLI never did).
+Cost per PR is lower in-process (no CLI install, no agent-runner overhead;
+the CLI band carried its own v2-era first message), wall-clock is comparable.
+**Limitations stated:** (1) one in-process lane only — `anthropic` in-process
+needs `ANTHROPIC_API_KEY` and was not measurable (D-28); the decision applies to
+the loop, which both runners share (`drive_review`), not to a vendor;
+(2) the band is v2-prompt CLI vs v3-prompt in-process, so prompt and loop are
+confounded in the band's favour or against it by at most the prompt effect,
+which the tree campaigns measured as recall-neutral; (3) one in-process run
+crashed in the GitHub fetch (`IncompleteRead`, before any provider call —
+`failed` record, re-bought under campaign resume). BC-06 therefore stays
+**non-breaking** (`provider: anthropic|openai` keep resolving and keep
+reviewing); D-12 is not triggered.
 
 ## Risks
 

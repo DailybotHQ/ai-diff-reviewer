@@ -1,0 +1,92 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.3,
+  "usage": {
+    "in": 16861,
+    "cache_read": 100864,
+    "cache_write": 0,
+    "out": 2065,
+    "source": "cli"
+  },
+  "cost_usd": 0.0763712,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "**Issue:** Every request Origin is echoed as `Access-Control-Allow-Origin` while `Access-Control-Allow-Credentials` is always `true`. Any malicious site can make credentialed cross-origin calls and read the API response (session cookies / auth the browser attaches automatically).\n\n**Failure mode:** Attacker page at `https://evil.example` sends a credentialed `fetch` to this API. The browser includes the victim\u2019s cookies; this middleware returns `Access-Control-Allow-Origin: https://evil.example` + credentials, so the attacker script can read the body.\n\n**Fix:** Keep an explicit allowlist. Extend it only with known mobile WebView origins if needed. CORS does not apply to pure native HTTP clients \u2014 do not open reflection for them.\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    },
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "When `origin` is `null`, this sets `Access-Control-Allow-Origin: *` together with `Access-Control-Allow-Credentials: true`. Browsers reject that combination per the Fetch/CORS spec, so credentialed clients that omit Origin still fail preflight/response checks. Prefer omitting CORS allow headers (or using a concrete allowlisted origin) when Origin is absent \u2014 native apps typically do not need CORS headers at all."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this PR turns a strict origin allowlist into reflect-any-origin CORS with credentials, which lets any website read credentialed API responses.\n\n## Analysis\n\n`corsHeaders` previously only emitted `Access-Control-Allow-Origin` (and credentials) when the request `Origin` was in a fixed allowlist (`https://app.example.com`). The new code always returns:\n\n- `Access-Control-Allow-Origin: <request Origin or *>`\n- `Access-Control-Allow-Credentials: true`\n\nThat combination is the classic CORS misconfiguration: a malicious page can trigger a credentialed cross-origin request (cookies / auth headers the browser attaches automatically) and **read the response**, because the browser sees its own origin echoed back as allowed.\n\nThe PR rationale (\u201cnative mobile clients do not send a fixed origin\u201d) does not justify this. CORS is enforced by browsers/WebViews; native HTTP clients are not subject to it. Missing or non-allowlisted origins should stay denied (empty headers), or legitimate WebView origins should be added to the allowlist.\n\nSecondary issue: when `origin` is `null`, the response is `ACA-Origin: *` together with `ACA-Credentials: true`, which the Fetch spec forbids and browsers reject \u2014 so the null-origin path is both insecure in intent and non-functional for credentialed calls.\n\n`Vary: Origin` is fine on its own but does not mitigate the open reflection.\n\n## Recommendation\n\nRestore an explicit allowlist (extend it if mobile WebViews use known origins). Never pair `Access-Control-Allow-Credentials: true` with a reflected or `*` origin outside that list.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `corsHeaders` always echoes the request Origin (or `*`) and sets `Access-Control-Allow-Credentials: true`, removing the prior allowlist. That enables any site to make credentialed cross-origin requests and read responses, matching a critical CORS misconfiguration."
+    },
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.81,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2533,
+      "out": 345
+    },
+    "cost_usd": 0.008109
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

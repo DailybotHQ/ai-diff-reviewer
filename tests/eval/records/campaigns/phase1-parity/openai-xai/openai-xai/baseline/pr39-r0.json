@@ -1,0 +1,146 @@
+{
+  "pr": 39,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 16,
+  "tool_calls": 47,
+  "seconds": 471.9,
+  "setup_seconds": 2.4,
+  "total_seconds": 474.4,
+  "usage": {
+    "in": 496806,
+    "cache_read": 1321984,
+    "cache_write": 0,
+    "out": 4001,
+    "source": "api"
+  },
+  "cost_usd": 1.282015,
+  "changed_files": [
+    ".agents/agents/prompt-engineer.md",
+    ".agents/agents/reviewer.md",
+    ".agents/docs/skills_agents_catalog.md",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/ARCHITECTURE.md",
+    "docs/ITERATION_AWARENESS.md",
+    "docs/PERFORMANCE.md",
+    "docs/PRODUCT_SPEC.md",
+    "docs/PROMPTS.md",
+    "docs/README.md",
+    "docs/SECURITY.md",
+    "docs/STRICTNESS.md",
+    "docs/TESTING_GUIDE.md",
+    "docs/TRIGGER_MODES.md",
+    "examples/README.md",
+    "examples/iteration-aware.yml",
+    "examples/skip-review-label.yml",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_iar_dedup.py",
+    "tests/test_iar_dispatch.py",
+    "tests/test_iar_failure_fallback.py",
+    "tests/test_iar_generation_tracking.py",
+    "tests/test_iar_observability.py",
+    "tests/test_iar_policies.py",
+    "tests/test_iar_state_layer.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity": "warning",
+      "body": "`skipped` still says \u201cskipped by the label gate\u201d after this PR extended the output to cover the `skip-review-label` emergency bypass as well.\n\n`action.yml` and `README.md` already describe both paths; the setup skill is the local companion manual (AGENTS.md Rule #7 / extension \u201caction.yml change must be mirrored in setup/reference.md\u201d). Agents answering \u201cwhen is `skipped` true?\u201d will miss the bypass path.\n\n```suggestion\n| `skipped` | Whether the run was skipped without invoking the LLM (`true`/`false`). Set when the label/author gate suppressed the run **or** the configured `skip-review-label` emergency bypass fired. |\n```\n"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 293,
+      "severity": "warning",
+      "body": "This NO-OP case is stale after the three-signal OR for `reviewed_label_applied`.\n\nIf a **prior successful** run already armed the bit and stamped the label, a later **blocked** follow-up does **not** clear it: `compute_reviewed_label_applied` keeps `prior_bit` / `label_currently_on_pr`. Condition (c) still holds, so removing the reviewed label after a blocked follow-up **does** fire `USER_FORCED_RESET`.\n\nAs written, a maintainer running the smoke test after a blocked re-review will misdiagnose a real reset as a regression. Narrow the NO-OP to \u201cprevious run never successfully armed the bit (e.g. first-ever review was blocked, or no prior successful stamp)\u201d \u2014 matching `docs/ITERATION_AWARENESS.md` \u00a7 8.5."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6232,
+      "severity": "warning",
+      "body": "The empty-`bot_login` fallback is documented here (and in the matching test) as \u201cover-review, never under-surface.\u201d That is incorrect for IAR marker fetch.\n\nWith `bot_login=\"\"`, `_fetch_latest_marker_body` accepts **any** author. Under default `collapse-previous: true`, a non-bot comment carrying `REVIEW_MARKER` + a forged `open_fingerprints_this_gen` list can win tier 1 and **silence non-critical findings** \u2014 under-surface, not over-review. Criticals still pass the \u00a7 7.1 rail; warnings/infos do not.\n\n`gh_get_authenticated_login` almost always returns a login (tier-4 default), so this path is rare \u2014 but the comment trains the wrong failure mode. Prefer: \u201cfilter off \u2192 pre-round-10 forgery window for non-criticals; prefer failing closed or defaulting `bot_login` to `DEFAULT_WORKFLOW_BOT_LOGIN` instead of `\"\"`.\u201d"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 1,
+      "severity": "info",
+      "body": "`scripts/reviewer.py` is now ~6836 LOC after the IAR landing \u2014 well past the ~4500 soft ceiling in `docs/STANDARDS.md` \u00a7 File size.\n\nNot a merge blocker (extension de-escalates this to info; the split is a scheduled decision). Worth tracking as its own PR so the single-file stdlib runtime invariant can be reviewed deliberately rather than growing another 3k LOC on the next feature."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, high-stakes IAR + skip-review landing. Runtime invariants (critical-always-surfaces, five-condition `USER_FORCED_RESET`, three-tier marker fetch, label-stamp-before-embed, try/except fallback, skip short-circuit before side effects, collision guard) look correct and are locked by a large unit suite. Remaining issues are operator-facing drift and one mislabeled security fallback \u2014 nothing that should block merge if you treat the warnings as polish before tag.\n\n## What I verified\n\n- **Public contract:** 4 IAR inputs + 5 outputs + `skip-review-label` wired through `action.yml` \u2192 env \u2192 `main()`; no removals of existing inputs/outputs.\n- **Safety rails:** `dedupe_findings_against_prior` critical branch; `_sort_findings_criticals_first` before both truncation sites; `label_stamped` observed before state embed; `label_fetch_ok` on reset; escape skipped on `USER_FORCED_RESET`; three-dot range hash / safety-net denominator.\n- **Security surfaces:** stdlib-only imports; argv-list `subprocess`; `safe_repo_path` on `git show`; hardcoded `IAR_EXHAUSTIVE_PROMPT_ADDENDUM`; marker author + provider filters; parser coercion for fingerprints / history / `reviewed_label_applied`; skip path does not stamp `applied-label` or touch IAR state.\n- **Docs/examples:** `examples/skip-review-label.yml` and `iteration-aware.yml` use `env`-safe patterns and explicit `permissions:`; self-review dogfoods IAR + skip.\n\n## Findings posted\n\n1. **warning** \u2014 `skills/.../setup/reference.md`: `skipped` output still \u201clabel gate only\u201d while `action.yml`/`README` include emergency bypass (Rule #7 drift).\n2. **warning** \u2014 `self-review.yml` smoke NO-OP: claims a blocked prior run always leaves `reviewed_label_applied=False`; three-signal OR preserves arming after a successful stamp + blocked follow-up.\n3. **warning** \u2014 `main()` empty-`bot_login` comment/test claim \u201cover-review only\u201d; empty filter actually re-opens non-critical silencing via forged markers (rare path; `gh_get_authenticated_lo",
+  "verification": [
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 293,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6232,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 1,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 3,
+    "changed_files": 32
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 112.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 112.9,
+  "usage": {
+    "in": 33111,
+    "cache_read": 119040,
+    "cache_write": 0,
+    "out": 3623,
+    "source": "cli"
+  },
+  "cost_usd": 0.123672,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`0008` depends on `(\"billing\", \"0007_add_reason\")`, but this PR deletes `migrations/0007_add_reason.py`. Django builds the graph from migration files on disk, so the loader will fail with `NodeNotFoundError` (or similar) on `migrate` / `showmigrations` \u2014 nothing in the tree provides `0007_add_reason` or a replacement edge from `0006_initial`.\n\n**Fix:** If `0007` has been applied anywhere, restore that file and keep this `RemoveField` migration as a normal forward drop. If `0007` was never applied anywhere, drop this file entirely and only delete `0007` (no `0008` needed)."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "body": "Deleting an existing numbered migration rewrites history. Any database that already applied `billing.0007_add_reason` will have that row in `django_migrations` and the `void_reason` column present, while the codebase no longer ships the migration file \u2014 Django then cannot reconcile recorded history with the graph (missing node, inconsistent plan).\n\nEven when the column is unused in the UI, the safe contract is: leave `0007` in place and add a new `RemoveField` migration. Only delete `0007` if you have proof it was never applied on any shared or local DB, and in that case do not add a follow-up `0008` that depends on it."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "`RemoveField` drops the column and permanently discards any stored values. The comment only claims the field was never shown in the UI \u2014 that does not prove the column is empty in production or that no API/admin/shell wrote to it.\n\nBefore merging a forward drop (with `0007` restored), confirm no rows rely on `void_reason`, or accept explicit data loss in the PR risks section. If the add never shipped, delete `0007` instead of running `RemoveField`."
+    }
+  ],
+  "summary": "## Verdict\n\nDo not merge \u2014 the migration graph is broken and will fail on every environment that runs `migrate`.\n\n## What went wrong\n\nThis PR deletes `migrations/0007_add_reason.py` (the migration that added `invoice.void_reason`) and adds `migrations/0008_drop_reason.py`, which still declares:\n\n```python\ndependencies = [(\"billing\", \"0007_add_reason\")]\n```\n\nDjango loads the graph from files on disk. With `0007` gone, `0008` points at a missing node, so `manage.py migrate` / `showmigrations` raises `NodeNotFoundError` (or an equivalent loader error). The working tree after this PR contains only `0008_drop_reason.py`, so there is no path from `0006_initial` either.\n\n## Correct approaches\n\nPick one based on whether `0007` has ever been applied:\n\n1. **Already applied anywhere (prod, staging, a teammate DB):** restore `0007_add_reason.py` and ship only `0008` as a forward `RemoveField`. Never delete a migration that may be recorded in `django_migrations`.\n2. **Never applied anywhere:** delete `0007` only and do **not** add `0008`. There is nothing to drop if the add never ran.\n\nThe comment that `void_reason` was never surfaced in the UI does not justify rewriting history; UI absence does not mean the column is empty on applied databases, and `RemoveField` still drops whatever values exist.\n\n## Secondary note\n\nNo model, app package, or earlier migrations are in this repo slice, so application-level references could not be fully audited beyond a repo-wide search (no remaining `void_reason` hits outside the new migration). The graph break is independently fatal.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`0008_drop_reason.py` depends on `(\"billing\", \"0007_add_reason\")`, but this PR deletes `0007_add_reason.py` and nothing else on disk provides that node, so Django\u2019s migration loader will fail."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base still has billing.0007_add_reason (AddField void_reason); head deletes that file while adding 0008_drop_reason that depends on billing.0007_add_reason and RemoveField void_reason. That rewrites applied history and leaves a missing graph node, so Django cannot reconcile DBs that already recorded"
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 39.49,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 9042,
+      "out": 997
+    },
+    "cost_usd": 0.026012
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 42.8,
+  "setup_seconds": 0.1,
+  "total_seconds": 42.8,
+  "usage": {
+    "in": 17327,
+    "cache_read": 101632,
+    "cache_write": 0,
+    "out": 1474,
+    "source": "cli"
+  },
+  "cost_usd": 0.0739876,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "`process.env.PROCESSOR_KEY` is included in the `log.debug` payload. That ships a live payment-processor credential into whatever sink backs `log` (stdout, aggregated logs, third-party APM). Anyone with log read access \u2014 and any retention/backup of those logs \u2014 can recover the key and replay or forge processor calls.\n\nRemove `key` from the logged object. Keep `orderId` and `ref` for support correlation. If support truly needs to act as the processor, retrieve the key from the secrets manager at investigation time; do not persist it in debug output.\n\n```suggestion\n  log.debug(\\\"charge context\\\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change writes the payment processor credential into application logs.\n\n## Narrative\n\n`charge()` previously logged only `orderId` and `ref` at info level. The new code replaces that with a debug payload that includes `process.env.PROCESSOR_KEY`, and the inline comment states the goal is to put credentials in debug payloads for support replay.\n\n`PROCESSOR_KEY` is a secret. Once it reaches logs it is typically retained by log aggregators, retained in backups, visible to anyone with log read access, and often shipped to third-party observability vendors. That expands the blast radius far beyond the payment process itself: a leaked key can be used to create charges or otherwise act as the merchant against the processor.\n\nThere is no redaction layer visible in this repository for the `log` helper (the `../observability` import has no implementation in-tree), so the value would be emitted as-is.\n\nSupport can already correlate failures with `orderId` and `ref`. Replay and investigation should use a secrets manager or a break-glass path that never writes the raw key into durable log storage.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `charge.ts` explicitly passes `key: process.env.PROCESSOR_KEY` into `log.debug`, and the patch shows this replaced a prior log that only included `orderId` and `ref`. That is a real credential-leak into whatever backs `log`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.11,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2375,
+      "out": 388
+    },
+    "cost_usd": 0.008486
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

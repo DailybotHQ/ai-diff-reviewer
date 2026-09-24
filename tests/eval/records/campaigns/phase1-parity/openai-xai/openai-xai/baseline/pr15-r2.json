@@ -1,0 +1,117 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 9,
+  "tool_calls": 27,
+  "seconds": 445.6,
+  "setup_seconds": 1.7,
+  "total_seconds": 447.3,
+  "usage": {
+    "in": 28648,
+    "cache_read": 322304,
+    "cache_write": 0,
+    "out": 3366,
+    "source": "api"
+  },
+  "cost_usd": 0.141953,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nEmpty `MATRIX` always fails the gate, but this workflow re-fires on **every** `labeled` event (not only `ready`). After a successful `ready` review turns `Self-review gate` green on SHA N, adding `bug` / `dependencies` / `self-reviewed:anthropic` re-runs the workflow, `scope` emits `matrix=[]`, and this branch fails the gate again. Branch protection keeps the **latest** check run for that name+SHA, so the prior green is clobbered and merge is blocked until someone re-toggles `ready`.\n\nFix options (pick one):\n1. **Event-aware no-op:** when `github.event.action == 'labeled'` and the label is not `ready`, exit 0 (or skip the gate job) so an unrelated label does not rewrite the required check.\n2. **Honor a prior success on this SHA:** if `MATRIX` is empty, query check-runs for `Self-review gate` on `github.event.pull_request.head.sha` and pass when a successful conclusion already exists (needs `permissions.checks: read`).\n3. Narrow `on.pull_request.types` so non-gate labels cannot re-enter this workflow (harder if you still want `opened` + `labeled` for `ready` only \u2014 GitHub cannot filter by label name at the `on:` layer).\n\nAlso mirror the same fix in the consumer recipe in `docs/TRIGGER_MODES.md` technique 3."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 132,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe published recipe has the same failure mode as `self-review.yml`: technique 1 subscribes to all `labeled` events, technique 2 correctly skips the review job for non-`ready` labels, and technique 3 then **fails** the required check whenever `MATRIX` is `[]`. Consumers who copy this pattern will see a green gate after `ready`, then a red gate again the moment Dependabot or a human adds any other label on the same head SHA.\n\nWhen you fix the workflow gate, update this snippet in the same PR \u2014 either skip/pass on non-gate `labeled` events, or document that the gate must consult a prior successful check-run on the head SHA before failing empty-matrix."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity": "warning",
+      "body": "The comment says the only empty-matrix path (with secrets configured) is a missing `ready` label, and the `::error::` tells maintainers to apply `ready`. That is incomplete: if `ready` is present but `ANTHROPIC_API_KEY` (and the other provider secrets) are unset, `scope` still emits `matrix=[]` and the gate fails with the same message. Prefer distinguishing \"label gate closed\" vs \"no provider secret configured\" in the error text so a misconfigured repo is not chased as a label-toggle problem."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 64,
+      "severity": "warning",
+      "body": "This PR renames the recipe heading to **\"Recipe: run once when labelled `ready`, block merge until it passes\"**, but `README.md:291` still links to the old heading **\"\u2026and show Skipped (not green)\"**. GitHub heading anchors follow the current title, so the Marketplace-facing deep link is now a dead section reference. Update the README sentence in the same PR (and optionally mention the new merge-gate behaviour)."
+    }
+  ],
+  "summary": "## Verdict\n\nI'd recommend **not merging** until the merge-gate job stops clobbering a prior green `Self-review gate` on non-`ready` `labeled` events \u2014 the core idea is right, but the current implementation breaks the gate after a successful review.\n\n## What works\n\nThe diagnosis is correct and important: GitHub branch protection treats a **Skipped** required check as passing, so requiring the dynamic `Self-review \u2014 <provider>` legs never actually blocked merge. A stable-named final job with `if: always()` is the right shape.\n\nAlso solid:\n- `needs: [scope, self-review]` + `if: always()` so the gate still runs when `self-review` is skipped\n- Scope-result check before trusting the matrix\n- `fail-fast: false` awareness when requiring `REVIEW_RESULT == success`\n- Env-mapped values (no `${{ pull_request.* }}` shell interpolation)\n- Explicit `permissions:` block already present\n- CHANGELOG + TRIGGER_MODES updates for the new recipe name\n\n## Blocking issue\n\n**Gate clobber on unrelated labels.** Workflow `on: types: [opened, labeled]` fires for *any* label. After a successful `ready` review paints `Self-review gate` green on head SHA N, adding `bug`, `dependencies`, or even `self-reviewed:anthropic` re-runs the workflow. `scope` correctly emits `matrix=[]`, and the new gate step **fails** that empty matrix. Branch protection keeps the **latest** check-run for the name+SHA, so the prior success is replaced by failure and merge stays blocked until someone re-toggles `ready`.\n\nThe same pattern is copy-pasted into the consumer recipe in `docs/TRIGGER_MODES.md` technique 3 \u2014 fix both together.\n\nPractical fixes (any one is enough):\n1. Event-aware pass/skip when `labeled` and the label \u2260 `ready`\n2. On empty matrix, look up an existing successful `Self-review gate` check-run on the head SHA (`checks: read`)\n3. Otherwise document a different outer trigger that cannot re-enter on non-gate labels\n\n## Other notes\n\n- Empty-matrix `::error::` always blames a missing `ready` label; missing ",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 132,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 64,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 4,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

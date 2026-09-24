@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 65.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 65.3,
+  "usage": {
+    "in": 18354,
+    "cache_read": 131584,
+    "cache_write": 0,
+    "out": 3339,
+    "source": "cli"
+  },
+  "cost_usd": 0.0962172,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Prototype pollution:** removing this blocklist lets malicious JSON patches mutate `Object.prototype`.\n\nThe PR rationale (\"JSON.parse never yields dangerous keys\") is incorrect. `JSON.parse(\"{\\\"__proto\\\": {\\\"polluted\\\": true}}\")` yields an own enumerable `__proto__` key; `Object.entries` returns it. Assignment via `(base as any)[k] = v` / `??= {}` then triggers the `__proto__` setter. The `constructor`/`prototype` path is worse \u2014 recursive merge of `{\"constructor\":{\"prototype\":{\"hacked\":1}}}` sets `Object.prototype.hacked`, so every subsequent object inherits it.\n\nRestore the blocklist (or switch to `Object.create(null)` targets + `Object.defineProperty` / `Object.hasOwn` checks that never assign through `__proto__`). Do not merge without an equivalent guard."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical prototype-pollution regression** \u2014 do not merge until the key blocklist is restored (or an equivalent safe-merge is used).\n\n## Narrative\n\nThis PR removes the `BLOCKED` set (`__proto__`, `constructor`, `prototype`) and the `BLOCKED.has(k)` skip inside `deepMerge`, on the claim that \"JSON.parse never yields dangerous keys.\"\n\nThat claim is false. `JSON.parse(\"{\\\"__proto\\\": {\\\"polluted\\\": true}}\")` produces an **own enumerable** `__proto__` property (via `CreateDataProperty`, not the setter). `Object.entries` therefore surfaces it, and the remaining merge body assigns through normal property access:\n\n- `(base)[k] = v` / `(base)[k] ??= {}` with `k === \"__proto__\"` invokes the inherited setter and rewrites the object's prototype.\n- A patch like `{\"constructor\": {\"prototype\": {\"hacked\": 1}}}` recursively writes `Object.prototype.hacked`.\n\nVerified in Node against this exact merge body: after merging a JSON-parsed `__proto__` patch, `{}.polluted === true`; after a `constructor.prototype` patch, `{}.hacked === 1`. Pollution is process-global.\n\n`deepMerge` is typed to accept any `Record<string, unknown>` patch \u2014 config files, API payloads, or CLI JSON all flow through the same path. Removing the allowlist-style key filter reopens a classic pollution gadget with no replacement mitigation (`Object.create(null)` bases, `Object.hasOwn` + `DefineProperty`, key allowlists, etc.).\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

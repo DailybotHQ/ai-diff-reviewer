@@ -1,0 +1,29 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase1-precision-on",
+  "repetitions": 3,
+  "cells": [
+    "grok|verifier-on|C001",
+    "grok|verifier-on|C002",
+    "grok|verifier-on|C003",
+    "grok|verifier-on|C004",
+    "grok|verifier-on|C005",
+    "grok|verifier-on|C006",
+    "grok|verifier-on|C008",
+    "grok|verifier-on|C009",
+    "grok|verifier-on|C010",
+    "grok|verifier-on|C011",
+    "grok|verifier-on|C012",
+    "grok|verifier-on|C013",
+    "grok|verifier-on|C014",
+    "grok|verifier-on|C016",
+    "grok|verifier-on|C019",
+    "grok|verifier-on|C020",
+    "grok|verifier-on|C021",
+    "grok|verifier-on|C022",
+    "grok|verifier-on|C068",
+    "grok|verifier-on|C069",
+    "grok|verifier-on|C070"
+  ],
+  "budget_usd": 70.0
+}

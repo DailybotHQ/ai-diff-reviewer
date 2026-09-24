@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 22.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 22.8,
+  "usage": {
+    "in": 29781,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1462,
+    "source": "cli"
+  },
+  "cost_usd": 0.085614,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe previous `os.path.basename(name)` guard is gone, and `request.args.get(\"path\", name)` is joined straight into `send_file` with no containment check.\n\nAny client can pass `?path=../../etc/passwd` (or another `../` escape) and read arbitrary files the service account can open under `/srv/reports/../...`. The fallback `name` route segment is also unsanitized now.\n\nKeep nested subpaths, but normalize and enforce a prefix under `REPORTS` before sending:\n\n```suggestion\n    candidate = request.args.get(\"path\", name)\n    root = os.path.realpath(REPORTS)\n    full = os.path.realpath(os.path.join(root, candidate))\n    if os.path.commonpath([root, full]) != root:\n        return (\"Not found\", 404)\n    return send_file(full)\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change replaces path sanitization with an unsanitized user-controlled path and enables arbitrary file read on the server.\n\n## Analysis\n\n`download` previously constrained the file name with `os.path.basename(name)` before joining under `REPORTS`. The new code takes `request.args.get(\"path\", name)` and joins it directly into `send_file(...)`.\n\nConcrete failure mode: a request such as `GET /reports/x?path=../../etc/passwd` (or any `../` chain that escapes `/srv/reports`) causes `os.path.join(REPORTS, path)` to resolve outside the reports root. Flask `send_file` will then serve that file if the process can read it.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) is a valid goal, but the path must still be confined under `REPORTS` after normalization (resolve + commonpath/prefix check, or equivalent). Query-param path input is especially sensitive because it is fully attacker-controlled and bypasses the route segment entirely.\n\n## Recommendation\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

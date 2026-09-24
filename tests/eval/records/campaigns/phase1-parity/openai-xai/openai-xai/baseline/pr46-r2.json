@@ -1,0 +1,111 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 40,
+  "seconds": 472.8,
+  "setup_seconds": 1.7,
+  "total_seconds": 474.6,
+  "usage": {
+    "in": 232617,
+    "cache_read": 269440,
+    "cache_write": 0,
+    "out": 4167,
+    "source": "api"
+  },
+  "cost_usd": 0.544124,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "`_read_github_event_repo_visibility()` only reads `repository.visibility`. When that field is missing/empty it returns `unknown`, and both the write-tier override and private fail-open require `private|internal` \u2014 so `unknown` behaves like public and the under-report fix never fires.\n\nGitHub event payloads have long included the boolean `repository.private`, and Actions also exposes `GITHUB_REPOSITORY_VISIBILITY`. Prefer `visibility`, then fall back to `private: true/false`, then the env var, before `unknown`. Add a unit test for the fallback path."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6413,
+      "severity": "warning",
+      "body": "`main()` calls `gh_get_collaborator_permission` whenever the webhook association misses the allow-list, with no visibility guard. On public repos the enhanced resolver never lets permission override the association, so this is a wasted REST round-trip on every external PR \u2014 and it contradicts `docs/SECURITY.md`, which says the lookup happens only on private/internal when the webhook mismatches.\n\nGate the call with `_is_private_or_internal_visibility(repo_visibility)` (after fixing the visibility reader above). Public denies stay association-only and keep the zero-API cheapest-first property."
+    },
+    {
+      "path": "examples/open-source-safe.yml",
+      "line": 34,
+      "severity": "info",
+      "body": "This example still says empty `author-association` is \u201conly sensible for private repos,\u201d but the rest of the PR (SECURITY/README/setup) now recommends keeping the default on private repos and using `''` only to fully disable the gate. Worth a one-line doc sync so copy-paste consumers don\u2019t reintroduce the old workaround."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid fix for the private-org webhook under-report, with good docs/tests coverage \u2014 two gate-path warnings should land before merge so the permission fallback actually fires and stays cheapest-first on public repos.\n\n## Narrative\n\nThe core design is right: keep public repos association-only, allow `admin`/`maintain`/`write` to override a weak webhook association only on private/internal, fail-open there and fail-closed on public, and emit an actionable log line. `resolve_author_association_gate_enhanced` matches that contract, and the pure-logic tests cover the main matrix (private admin/write allow, private none deny, public no override, empty gate, fail-open/closed, internal).\n\nTwo implementation gaps undercut the private-repo fix and the documented cost model:\n\n1. **Visibility detection is brittle.** `_read_github_event_repo_visibility()` only reads `repository.visibility`. If that field is absent, visibility becomes `unknown`, which is treated like public \u2014 so neither the permission override nor private fail-open runs. Prefer `visibility`, then `repository.private`, then `GITHUB_REPOSITORY_VISIBILITY`.\n2. **Permission lookup is not visibility-gated in `main()`.** Every allow-list miss (including public external PRs) hits the collaborators/permission API even though the enhanced resolver never uses the result on public repos. That contradicts `docs/SECURITY.md` (\u201cone GitHub permission lookup on private/internal\u2026\u201d) and weakens the cheapest-first abuse gate.\n\nAlso worth a small doc sync: `examples/open-source-safe.yml` still frames `author-association: ''` as the private-repo recommendation while README/SECURITY/setup now say the default is fine.\n\n## What looks good\n\n- No public-contract break (`author-association` semantics extended, not renamed/removed).\n- Stdlib-only, typed helpers, broad `except` with `# noqa: BLE001` + WHY.\n- Username path-segment quoting via `urllib.parse.quote`.\n- Docs + setup skill + CHANGELOG updated in lockstep with the behavi",
+  "verification": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6413,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "examples/open-source-safe.yml",
+      "line": 34,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 8
+  }
+}

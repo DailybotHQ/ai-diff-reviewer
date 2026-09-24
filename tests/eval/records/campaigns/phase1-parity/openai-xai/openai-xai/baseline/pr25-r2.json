@@ -1,0 +1,139 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 50,
+  "seconds": 289.3,
+  "setup_seconds": 1.7,
+  "total_seconds": 291.0,
+  "usage": {
+    "in": 148657,
+    "cache_read": 583168,
+    "cache_write": 0,
+    "out": 3576,
+    "source": "api"
+  },
+  "cost_usd": 0.435404,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity": "warning",
+      "body": "If Step 3.5 fails (`npx skills` lag, install error, non-fast-forward push), GitHub Actions skips every later step by default \u2014 including Step 4 (notes) and Step 5 (`softprops/action-gh-release`). The version + major tags are already pushed in Step 3, so you get a published tag with **no GitHub Release** and no release notes.\n\nThat is worse than the PR Risks note (\u201ctag is already published even if 3.5 fails\u201d): Marketplace/Release automation stops mid-flight.\n\nFix options (pick one):\n1. Move dogfood to **after** Step 5, or\n2. Set `continue-on-error: true` on Step 3.5 and surface a hard log/`::warning::`, or\n3. Give Steps 4\u20135 `if: always() && steps.version.outputs.skip == 'false'` (and still require Step 3 success).\n\nDogfooding should not be able to abort release publication."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`allowed-tools` includes write-capable `Bash`, and Step 5 instructs the agent to write `.review/extension.md` / `.github/prompts/pr-review.md`, but there is no `## Step 0 \u2014 Trust boundary` section (Step 0 is only \u201cConfirm mode\u201d). Parent `SKILL.md` and `setup/SKILL.md` both document an explicit trust boundary; this sub-skill does not.\n\nskills.sh Gen Agent Trust Hub treats \u201celevated tools without a consent/write-scope contract\u201d as unsafe skill scope. Add a Step 0 trust boundary (mirror `setup/SKILL.md`: exact paths written, per-write consent, no commit/push/secrets) before the mode question \u2014 fix in `skills/ai-diff-reviewer/generate-extension/SKILL.md` (source of truth); don\u2019t hand-patch only the vendored copy long-term."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity": "warning",
+      "body": "Example tree uses `mi-repo/` (\u201cmy repo\u201d in Spanish). Rule #1 and this repo\u2019s extension escalate any non-English user-facing copy to `warning` \u2014 global consumers copy these examples verbatim.\n\n```suggestion\nmy-repo/\n```\n\nSame string lives in `skills/ai-diff-reviewer/SKILL.md` (source of truth); fix there so the next Step 3.5 refresh stays clean."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity": "info",
+      "body": "\u201cOption A \u2014 `.review/extension.md` (recommended):\u201d is duplicated on consecutive lines (358 and 360). Harmless but looks like a bad merge and will ship to every `npx skills add` consumer.\n\nDrop one of the two headings. Fix in `skills/ai-diff-reviewer/SKILL.md` as well so source and vendored copies stay aligned."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 80,
+      "severity": "warning",
+      "body": "`[Unreleased]` documents Step 3.5 and the first-time vendor, but this PR also adds `.review/extension.md` and wires `prompt-extension-file: .review/extension.md` into `self-review.yml` \u2014 the other half of the dogfooding story in the PR body.\n\nWithout those entries, release notes will under-describe a behavior change every self-review leg now depends on (missing file \u2192 review hard-fails at prompt load). Add short `### Added` bullets for the extension bootstrap and the self-review wiring."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfooding direction (Rule #10 A+B + real `.review/extension.md`), but one **critical** skill-audit gap and a **release-pipeline** failure mode should be fixed before merge.\n\n## Narrative\n\nThis PR does three useful things well: vendors the companion skill the way consumers install it, teaches `auto-release` to refresh that copy after every tag, and layers a concrete repo extension into `self-review.yml` so CI and local review share one rule file. The extension content is largely code-anchored and matches AGENTS/SECURITY conventions; `prompt-extension-file` is a real action input and missing-file load correctly fails the run.\n\nHighest-priority issues:\n\n1. **`generate-extension` ships `Bash` without a Trust boundary** \u2014 parent + setup skills document write scope/consent; this sub-skill\u2019s Step 0 is only \u201cconfirm mode\u201d while Step 5 writes files. That is exactly the skills.sh elevated-tools pattern called out as always-critical. Fix in **`skills/\u2026` (source of truth)**; the vendored tree is a snapshot and should not be the only edit long-term (DON\u2019T #14 / Rule #10 B).\n2. **Step 3.5 can abort GitHub Release creation** \u2014 tags are pushed in Step 3; a failed `npx skills update` / push then skips Steps 4\u20135 under default job semantics. Dogfood smoke is valuable; it must not strand a tag without a Release.\n3. **Changelog under-documents half the PR** \u2014 extension bootstrap + `self-review` wiring are load-bearing for the next dogfood run and are absent from `[Unreleased]`.\n4. **Skill copy nits that will ship to every consumer install** \u2014 Spanish `mi-repo/` (Rule #1) and a duplicated Option A heading. Same strings exist under `skills/ai-diff-reviewer/`; fix source so Step 3.5 does not reintroduce them.\n\nAlso noted (no separate inline): first vendor of `.agents/skills/ai-diff-reviewer/**` on a feature branch is intentional bootstrap and is what DON\u2019T #14 is about going forward \u2014 fine for this PR once source fixes land. `~4000 LOC` in the extension matches `docs/STA",
+  "verification": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 80,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 4,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 5,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 4,
+    "changed_files": 12
+  }
+}

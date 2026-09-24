@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.8,
+  "usage": {
+    "in": 30052,
+    "cache_read": 86528,
+    "cache_write": 0,
+    "out": 1535,
+    "source": "cli"
+  },
+  "cost_usd": 0.0952724,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `log.debug` includes `process.env.PROCESSOR_KEY` in the structured payload. Debug logs routinely land in aggregators, support exports, and retained artifacts \u2014 anyone with log read access gets a live payment-processor credential and can create charges.\n\n**Failure mode:** A single failed-charge investigation (or a debug-level bump in prod) exfiltrates `PROCESSOR_KEY` to every sink that stores that line. The comment on line 6 makes the credential leak intentional.\n\n**Fix:** Log non-secret charge context only (`orderId`, `ref`, error codes). Keep the processor key in env/secret manager and never pass it into log fields. If support needs replay, use a server-side path that reads the secret in-process without printing it.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change writes the payment processor credential into application logs.\n\n## What went wrong\n\n`charge()` previously logged only `orderId` and `ref` at info level. The new code replaces that with a debug payload that includes `process.env.PROCESSOR_KEY`, and the inline comment states the intent is to put credentials in debug payloads so support can replay failures.\n\nAny log sink that retains debug output (// support tooling, log aggregators, CI artifacts, crash dumps) becomes a credential store. Processor keys are high-value secrets: possession allows unauthorized charges and refunds against the merchant account.\n\n## What support actually needs\n\nOrder id, charge ref, processor error codes/messages, amount/currency, and a correlation id are enough to investigate failures. Replay belongs behind a controlled admin/support path that never prints the raw key.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

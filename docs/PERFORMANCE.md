@@ -293,6 +293,18 @@ Since v3 every run writes a `run-record/3.0` file (`.aiprr/run-record.json`) wit
 
 What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 27 % on a paired comparison is inside the noise and is not promotable; a recall claim needs a net gain of 3 defects; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.40) or any cell exceeds 1.0. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
 
+### Verifier cost (v3, measured)
+
+The verifier ([RFC-03](rfc/v3/03-verification-and-evidence.md), input `verifier`, default on) re-reads the anchor of every claimed critical and a 30 % sample of warnings with the `economy` alias and at most four tool calls. Measured on the Phase 1 precision campaign (Task 19, 2026-09-24; 70 verifications over 62 grok-4.5 reviews of the 21 critical fixture trees, verifier = grok-4.5 on xAI):
+
+| Per verified finding | Per tree review ($0.104 mean) | Per PR-class review (projected from the Phase 0 grok floor: 0.10 criticals + 1.86 warnings → ≈ 0.65 verifications) |
+|---|---|---|
+| ≈ 3.0 k input + 0.36 k output tokens, 10.1 s, $0.0088 (max 6.5 k / 20 s / $0.016) | +$0.010 ≈ +9.6 % | ≈ +$0.006 ≈ +1 % of $0.60 |
+
+Verifier wall-clock is serial after the review loop (`timings.verifier_seconds` in the run record), so a PR with three claimed criticals adds ≈ 30 s. The knobs are `verifier: off` (claimed criticals then publish as annotated warnings — see [STRICTNESS](STRICTNESS.md)), `verifier-model` (an explicit id or alias) and `strict-unverified-criticals`.
+
+**Prompt-cache lottery in the cost floor.** On xAI-backed lanes the same review repeated three times routinely differs by a third in cost while its token *totals* are near-identical: the cached share of input swings between ≈ 35 % and ≈ 90 % from one repetition to the next (Phase 0 trees: cache-normalised token spread median 0.02 versus real-cost spread 0.29). Cost spreads in this document therefore mix provider-side cache warmth with genuine behaviour; the v3.0 prompt and first message also widened the *behavioural* part on the tree corpus (cache-normalised spread 0.24–0.28, turns 3–9 where v2 used 3–4) at unchanged recall — recorded as a Stage Gate B item in the plan, not folded into the thresholds.
+
 ## Complete token accounting and focused context
 
 Token totals include all input partitions (uncached, cache-read and cache-write) plus output, exactly once. OpenAI and Codex report cached input as a subset of input; Anthropic reports disjoint input/cache partitions. The displayed cache ratio uses total input as its denominator. Cost estimates remain indicative, not billing records.

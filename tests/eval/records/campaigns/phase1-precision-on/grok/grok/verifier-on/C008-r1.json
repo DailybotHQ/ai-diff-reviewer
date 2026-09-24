@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.3,
+  "usage": {
+    "in": 16847,
+    "cache_read": 100608,
+    "cache_write": 0,
+    "out": 1916,
+    "source": "cli"
+  },
+  "cost_usd": 0.0753724,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `ALLOWED_HOSTS` and posting directly to the caller-supplied `url` enables server-side request forgery. A customer- or attacker-controlled endpoint can make this runner POST event payloads to cloud metadata (`169.254.169.254`), localhost, or internal RFC1918 hosts; `urllib.request.urlopen` also follows redirects by default, which widens the blast radius.\n\nRestore an egress allow policy before merge: HTTPS-only, resolve and block private/link-local/metadata IPs (including after redirects), and keep a configurable allowlist or equivalent safe-customer-endpoint validator. Do not ship open `urlopen` on untrusted URLs."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on webhook delivery and turns `deliver()` into an open SSRF primitive.\n\n## Analysis\n\n`webhooks.py` previously restricted outbound POSTs to `ALLOWED_HOSTS` (`hooks.internal.example`). The PR deletes that check and posts to whatever `url` the caller supplies, with only a comment noting customer endpoints.\n\nAny attacker-controlled or loosely validated customer URL can now target:\n- cloud metadata (`http://169.254.169.254/...`)\n- localhost / link-local / RFC1918 admin panels\n- internal service mesh hosts\n- non-HTTP schemes `urllib` may still open\n\n`urllib.request.urlopen` also follows redirects by default, so even a future hostname allowlist is insufficient without post-redirect re-validation and private-IP blocking.\n\nSupporting customer webhooks is a product need; it requires an explicit egress policy (HTTPS-only, DNS rebinding-safe IP checks, block list for link-local/metadata/private ranges, redirect handling, size/time limits), not deletion of the gate.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the hostname check that previously rejected non-allowlisted webhook URLs, so deliver() now POSTs via urllib.request.urlopen to any caller-supplied url with no egress controls\u2014enabling SSRF to metadata/internal hosts as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.513,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2472,
+      "out": 397
+    },
+    "cost_usd": 0.008248
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

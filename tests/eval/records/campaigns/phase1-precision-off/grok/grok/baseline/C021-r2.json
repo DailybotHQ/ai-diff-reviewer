@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 42.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 42.4,
+  "usage": {
+    "in": 31114,
+    "cache_read": 117760,
+    "cache_write": 0,
+    "out": 2323,
+    "source": "cli"
+  },
+  "cost_usd": 0.111494,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThis swaps the known package `tar-stream` for `tar-streem` (^1.0.0) \u2014 a one-character misspelling of a popular tar utility. That is the classic npm typosquat pattern: the name is confusable in review, the version resets to 1.0.0 (inconsistent with a drop-in upgrade of ^3.1.6), and nothing in the repo shows a deliberate migration to a maintained fork or alternate API.\\n\\nIf this name is not a vetted, intentionally chosen package under your org\\u2019s control, `npm install` will pull and trust an attacker-controlled tarball. Restore `tar-stream` (or another known-good package with a lockfile integrity hash) and reject lookalike names without a written supply-chain review."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nAdding `\\\"postinstall\\\": \\\"tar-streem-setup\\\"` makes every `npm install` (local and CI) execute a binary shipped by the new dependency. Combined with the `tar-streem` name swap, this is the standard malicious-package pattern: typosquat + install hook for immediate code execution (credential harvest, env exfiltration, further payload download).\\n\\nRemove the postinstall script entirely. Install-time setup from an unvetted package must not run automatically; any legitimate native binding install should be pinned by hash and reviewed before enablement."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the maintained `tar-stream` package with a lookalike name `tar-streem` and adds an automatic `postinstall` hook that executes `tar-streem-setup` on every install.\n\n## Why this is dangerous\n\n1. **Typosquatting:** `tar-streem` is one character away from the widely used `tar-stream` (^3.1.6). The PR reframes that swap as \"dependency cleanup,\" which is a common social-engineering cover for registry typosquats.\n2. **Install-time code execution:** `\"postinstall\": \"tar-streem-setup\"` runs whatever binary/script the new package ships, with the privileges of whoever runs `npm install` (developers and CI). That is the standard delivery path for token theft, reverse shells, and lockfile/poisoning follow-on attacks.\n3. **No compensating controls in-repo:** There is no lockfile pin, no integrity hash, no script that imports the new API, and no evidence the replacement is a real maintained fork. `scripts/pack.js` is referenced but absent from the tree, so this change cannot be validated as a functional migration.\n\nAny environment that installs devDependencies would execute the new package immediately. Treat the package name and the postinstall hook as hostile until proven otherwise on the registry (maintainer identity, publish date, tarball contents, and identical API).\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

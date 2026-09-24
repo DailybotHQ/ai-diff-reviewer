@@ -1,0 +1,79 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 95.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 95.0,
+  "usage": {
+    "in": 16944,
+    "cache_read": 101248,
+    "cache_write": 0,
+    "out": 1884,
+    "source": "cli"
+  },
+  "cost_usd": 0.0755664,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nBoth admin handlers are registered without `middleware.RequireRole(\"admin\")`, which the previous routes applied via `authz(...)`. After this change, `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` run `listUsers` / `editRoles` with no admin role gate \u2014 any client that can reach the server can list users and modify roles.\n\nRestore the middleware on the subrouter (or wrap each handler again), for example:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tauthz := middleware.RequireRole(\"admin\")\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nAlternatively: `v2.Use(middleware.RequireRole(\"admin\"))` if that helper returns mux-compatible middleware."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization regression: moving the admin routes under `/api/v2` also dropped the `middleware.RequireRole(\"admin\")` wrapper, so `listUsers` and `editRoles` are reachable with no admin role check.\n\n## Analysis\n\n`cmd/server/routes.go` previously constructed `authz := middleware.RequireRole(\"admin\")` and wrapped both handlers. The new `PathPrefix(\"/api/v2\")` subrouter registers the same handlers as bare `http.HandlerFunc` values. Path versioning does not replace role enforcement; without `authz` (or an equivalent `v2.Use(...)`), any caller who can hit the process can list users and edit roles.\n\nThe `/api/v2` prefix itself is a coherent versioning step, but it must keep the same authorization boundary the old `/admin/*` routes had.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

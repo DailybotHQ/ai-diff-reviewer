@@ -248,6 +248,29 @@ verifier follows (RFC-01 measures both). RFC-01's precision metric on the
 critical corpus is the confirmation; the run record's `verifier_seconds`
 and `budget.verifier_runs` make the cost visible per run.
 
+**Re-stamped from measurement (PLAN_v3_implementation Task 19, 2026-09-24;
+`tests/eval/records/campaigns/phase1-precision-on/`, 63 runs, grok-4.5 CLI
+review + `economy` verifier = grok-4.5 on xAI).** 70 verifications over 62
+reviews (every claimed critical plus the 30 % warning sample): **≈ 3.0 k input
++ 0.36 k output tokens, 10.1 s and $0.0088 per verified finding** (max 6.5 k
+tokens, 20 s, $0.016) — an order of magnitude under the $0.02–0.05 assumption,
+because the verifier's anchor read plus one or two greps stay far below the
+≤ 4-tool ceiling. Per review the verifier added **$0.010 ≈ 9.6 % of a $0.104
+tree review**; on PR-class reviews (Phase 0 grok floor: 0.10 claimed criticals
+and 1.86 warnings per review → ≈ 0.65 verifications) the projection is
+**≈ $0.006 per PR, ≈ 1 % of $0.60** — well inside the "10–30 %" ceiling the
+model allowed. Precision under blinded adjudication (D-26, n = 65 verified
+critical claims, `records/adjudications/phase1-precision-on.json`): 65 / 65
+true before and after the verifier; no claim was refuted or downgraded.
+**Limitation stated:** the critical corpus is all-positive (Phase 0 already
+adjudicated 82 / 82 claims true), so it cannot show the false-critical
+removal H-01 predicts; the refute path is evidenced by the Task 14 live
+smoke (a false critical refuted in 14 s) and by unit tests, and its field
+rate will come from dogfood PRs (RFC-01 R-03 basis). Recall on the corpus
+was unchanged with the verifier on (62 / 63; one grok CLI run ended
+`incomplete` without writing its findings file — the same rate as the
+verifier-off arm).
+
 ## Alternatives considered
 
 | Alternative | Why not |

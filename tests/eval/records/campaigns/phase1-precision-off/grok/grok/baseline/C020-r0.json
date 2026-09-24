@@ -1,0 +1,92 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 63.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.4,
+  "usage": {
+    "in": 31861,
+    "cache_read": 117248,
+    "cache_write": 0,
+    "out": 3242,
+    "source": "cli"
+  },
+  "cost_usd": 0.1183484,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `account` is interpolated into the SQL string with `fmt.Sprintf`, so user-controlled input becomes part of the statement. A value like `x' OR '1'='1` or `x' UNION SELECT ... --` can read or modify data beyond the intended account row.\n\n**Failure mode:** any caller that passes UI/API-supplied account text into `Balance` executes attacker-controlled SQL under the DB role used by this service.\n\n**Fix:** keep the value parameterized and only add wildcards around the bound parameter:\n\n```go\nerr := db.QueryRow(\n    \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\",\n    account,\n).Scan(&cents)\n```\n\nOr bind the full pattern: `pattern := \"%\" + escapeLike(account) + \"%\"` with `WHERE number LIKE $1` (and escape `%`/`_` in user input if literal match is required)."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "**Issue:** Switching from exact `number = $1` to `LIKE '%\u2026%'` means multiple rows can match, but the code still uses `QueryRow().Scan(...)`, which expects exactly one row.\n\n**Failure mode:** a partial number that matches two accounts returns `sql.ErrMultipleRows` (Go `database/sql`) after reading one row, so the UI partial-search path errors instead of returning a balance or a deliberate ambiguous result.\n\n**Fix:** after using a parameterized LIKE, either require a unique match explicitly (`LIMIT 2` and error if len != 1), or change the API to return a list of matches for the partial-number UI."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `ledger/query.go` by interpolating the `account` argument into the query string.\n\n## Narrative\n\n`Balance` previously used a parameterized predicate (`number = $1`). The partial-match UI goal is reasonable, but the implementation builds the SQL with `fmt.Sprintf` and embeds `account` directly inside the `LIKE` pattern. Any value that reaches this function (UI input, API query param, agent tool arg) can break out of the string literal and alter the statement \u2014 for example terminating the quote and appending a `UNION`/`DROP`/`--` payload.\n\nPartial match does not require string-built SQL. Keep the value bound as a query parameter and put the wildcards in the bound value, or concatenate wildcards in SQL around `$1` so the driver still sends `account` out-of-band.\n\nA secondary correctness concern once injection is fixed: `QueryRow` + `Scan` assumes a single row. A partial `LIKE` can match multiple accounts; callers will see `sql.ErrMultipleRows` rather than a defined multi-match policy.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

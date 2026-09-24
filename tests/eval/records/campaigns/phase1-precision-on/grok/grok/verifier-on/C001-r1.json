@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 51.1,
+  "usage": {
+    "in": 30922,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2121,
+    "source": "cli"
+  },
+  "cost_usd": 0.1008356,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization at all. Any client that can reach the app can delete any user (including admins) and get `204`.\n\nThe 403s on cleanup jobs come from `require_role` checking the **path** `user` against `ROLES`, so targets with role `viewer` always fail \u2014 that is a broken caller-vs-target check, not a reason to drop the guard.\n\nRestore an access check that authorizes the **caller** (admin session, service account, or scoped API key). If cleanup needs non-interactive delete rights, grant that principal an explicit role and enforce it here before `USERS.remove(user)`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only access control on `DELETE /users/<user>`, leaving user deletion fully open to any caller who can reach the endpoint.\n\n## Analysis\n\n`app.py` has a single destructive route and a single guard: `@require_role(\"admin\")`. There is no other authentication middleware, session check, or service-account gate in the codebase. Dropping that decorator means any client can permanently remove entries from `USERS` and receive `204`.\n\nThe PR description says cleanup jobs running as the viewer account were getting 403s. That symptom is real under the current decorator shape: `require_role` compares `ROLES.get(user)` where `user` is the **path parameter** (the account being deleted), so deleting `bob` (`viewer`) always 403s while deleting `alice` (`admin`) is allowed. That is broken authorization design, but stripping the decorator is the wrong fix \u2014 it trades a confused role check for **unauthenticated destructive access**, including the ability to delete admin users.\n\n## What to do instead\n\nKeep a guard on the route and authorize the **caller** (API key, service role, or admin session), not the target username in the path. If cleanup jobs need a dedicated identity, give them an explicit principal with delete permission and check that principal inside `require_role` / a sibling decorator.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, leaving `delete_user` with no auth check before `USERS.remove(user)`, so any reachable client can delete users and get 204. That matches the claimed critical unauthenticated-delete regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.817,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2493,
+      "out": 382
+    },
+    "cost_usd": 0.008225
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

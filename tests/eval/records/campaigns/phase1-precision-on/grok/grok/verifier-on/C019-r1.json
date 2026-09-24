@@ -1,0 +1,106 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 94.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 94.7,
+  "usage": {
+    "in": 31907,
+    "cache_read": 87808,
+    "cache_write": 0,
+    "out": 3096,
+    "source": "cli"
+  },
+  "cost_usd": 0.1087324,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`dependencies = [(\"billing\", \"0007_add_reason\")]` points at a migration node this PR deletes (`migrations/0007_add_reason.py`). Django's loader will raise `NodeNotFoundError` (or equivalent) when building the graph, so `migrate` cannot run on a clean tree.\n\n**Failure mode:** any environment that checks out this commit and runs migrations fails before applying 0008. Envs that already applied 0007 also desync: `django_migrations` references a file that no longer exists.\n\n**Fix:** restore `0007_add_reason.py` and keep this 0008 as a forward `RemoveField` migration only. If 0007 was never applied anywhere, drop both the add migration and this remove migration instead of leaving a dangling dependency."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "body": "Deleting `0007_add_reason` removes the migration that introduced `void_reason` from the repo history. If any database has already run 0007, Django will see a recorded migration with no matching file, and the new 0008 cannot attach to a real parent node.\n\n**Failure mode:** production/staging that applied 0007 cannot migrate forward; local DBs that never applied it cannot resolve 0008's dependency either (see sibling finding).\n\n**Fix:** do not delete 0007. Leave the add migration in place and ship only a new `RemoveField` migration (0008). Only rewrite/delete 0007 if you can guarantee it was never applied in any shared environment \u2014 and in that case omit 0008 entirely."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "`RemoveField` issues DROP COLUMN for `invoice.void_reason`. The comment says the field was never surfaced in the UI, which is useful product context, but it does not prove every environment's column is empty (admin, shells, support scripts, or partial writes could still have values).\n\nBefore applying in production, confirm with a count/query that no rows store a non-empty `void_reason`, or accept explicit data loss in the PR risks section. The migration graph fix above is still the merge blocker; this is the residual ops caution once 0007 is restored."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken migration graph \u2014 do not merge until the dependency chain is restored.\n\n## Narrative\n\nThis PR tries to drop `invoice.void_reason` by deleting `migrations/0007_add_reason.py` and adding `migrations/0008_drop_reason.py`. That combination cannot work under Django's migration loader.\n\n`0008_drop_reason` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but the only file that defines node `billing.0007_add_reason` is removed in the same commit. Fresh databases and any environment that has not yet applied 0007 will fail at plan time with a missing-node / `NodeNotFoundError`. Environments that already applied 0007 keep a `django_migrations` row for a module that no longer exists on disk, so `migrate` and `showmigrations` also break.\n\nThe safe shape for an unused column is: **keep** `0007_add_reason` in history, and ship a new `0008` that only `RemoveField`s. If 0007 has truly never been deployed anywhere (no shared DBs, no other clones), delete 0007 and do **not** add a follow-up remove \u2014 there is nothing to drop. The current diff does neither correctly.\n\n`RemoveField` is destructive DDL (DROP COLUMN). The PR claim that the field was never shown in the UI does not by itself prove the column is empty in every environment; worth a quick check before applying in production, but the blocker here is the broken graph, not the drop itself.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`0008_drop_reason.py` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but this PR deletes `migrations/0007_add_reason.py` and no 0007 node remains on head, so Django\u2019s migration loader cannot build the graph."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch deletes migrations/0007_add_reason.py while the new 0008_drop_reason.py still depends on (\"billing\", \"0007_add_reason\"), so any DB that applied 0007 (or any graph that must resolve that parent) cannot migrate cleanly. Leaving 0007 and only shipping RemoveField is the correct fix; the claim"
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 40.395,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7792,
+      "out": 994
+    },
+    "cost_usd": 0.023033
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

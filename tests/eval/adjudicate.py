@@ -142,6 +142,18 @@ def item_id(case_id: str, finding: dict[str, Any]) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
+def _claimed_severity(finding: dict[str, Any], claimed_by_anchor: dict[str, str]) -> str:
+    """The severity the reviewer claimed. The v3 severity policy publishes an
+    unverified critical as a warning; the eval payload's `verification` list
+    (and each `refuted` entry) carries `severity_claimed`, so the adjudicator
+    judges every claim at the severity it was made."""
+    claimed: Any = finding.get("severity_claimed")
+    if claimed:
+        return str(claimed)
+    anchor: str = json.dumps([finding.get("path"), finding.get("line")], sort_keys=True)
+    return claimed_by_anchor.get(anchor) or str(finding.get("severity") or "")
+
+
 def build_worksheet(results: list[dict[str, Any]], *, seed: int = 7) -> dict[str, Any]:
     """Blinded items: no provider, model, arm or source — those stay in a sealed `key` the seal step re-joins."""
     items: dict[str, dict[str, Any]] = {}
@@ -149,11 +161,27 @@ def build_worksheet(results: list[dict[str, Any]], *, seed: int = 7) -> dict[str
     for res in results:
         case_id: str = str(res["case"])
         case: dict[str, Any] | None = load_case(case_id)
-        for finding in res["findings"]:
+        # v3: refuted claims (removed by the verifier) are adjudicated too, blind to
+        # the verifier's verdict — that verdict only goes into the sealed key, so the
+        # precision-after number can be computed on the same evidence as before.
+        verdicts: dict[str, str] = {}
+        claimed_by_anchor: dict[str, str] = {}
+        for v in res.get("verification") or []:
+            if isinstance(v, dict):
+                anchor: str = json.dumps([v.get("path"), v.get("line")], sort_keys=True)
+                verdicts[anchor] = str(v.get("status") or "")
+                if v.get("severity_claimed"):
+                    claimed_by_anchor[anchor] = str(v["severity_claimed"])
+        claims: list[tuple[dict[str, Any], str]] = [(f, "published") for f in res["findings"]]
+        claims += [({**rf, "severity": rf.get("severity_claimed") or rf.get("severity")}, "refuted") for rf in (res.get("refuted") or [])]
+        for finding, disposition in claims:
+            finding = {**finding, "severity": _claimed_severity(finding, claimed_by_anchor)}
             iid: str = item_id(case_id, finding)
-            k: dict[str, Any] = key.setdefault(iid, {"lanes": [], "arms": [], "sources": [], "occurrences": 0})
+            k: dict[str, Any] = key.setdefault(iid, {"lanes": [], "arms": [], "sources": [], "occurrences": 0, "dispositions": [], "verifier": []})
             k["occurrences"] += 1
-            for field, value in (("lanes", res.get("_lane", "")), ("arms", res.get("_arm", "")), ("sources", res.get("_source", ""))):
+            status: str = "refuted" if disposition == "refuted" else verdicts.get(json.dumps([finding.get("path"), finding.get("line")], sort_keys=True), "")
+            for field, value in (("lanes", res.get("_lane", "")), ("arms", res.get("_arm", "")), ("sources", res.get("_source", "")),
+                                 ("dispositions", disposition), ("verifier", status)):
                 if value and value not in k[field]:
                     k[field].append(value)
             if iid in items:
@@ -188,6 +216,7 @@ def seal(worksheet: dict[str, Any], *, adjudicator: str, campaign_id: str, notes
             "id": it["id"], "case": it["case"], "path": it["path"], "line": it["line"], "severity": it["severity"],
             "ground_truth": it["ground_truth"], "verdict": it["verdict"], "note": it.get("note", ""),
             "lanes": k.get("lanes", []), "arms": k.get("arms", []), "occurrences": k.get("occurrences", 0),
+            "dispositions": k.get("dispositions", []), "verifier": k.get("verifier", []),
             "body_sha256": hashlib.sha256(str(it.get("body") or "").encode("utf-8")).hexdigest(),
         })
     record: dict[str, Any] = {
@@ -202,14 +231,26 @@ def seal(worksheet: dict[str, Any], *, adjudicator: str, campaign_id: str, notes
 
 
 def precision(record: dict[str, Any]) -> dict[str, Any]:
-    """Per lane and overall: adjudicated-true / (true + false); `overstated` counts as true, reported apart."""
+    """Per lane and overall: adjudicated-true / (true + false); `overstated` counts as true, reported apart.
+
+    v3 adds `per_verifier` (the verifier's verdict on the claim — `verified`,
+    `refuted`, `downgraded`, `unverified`, `skipped` — against the blinded
+    adjudication) and `published` / `refuted` buckets, so precision before the
+    verifier (every claim) and after it (published claims only) come from one
+    sealed record."""
     per_lane: dict[str, dict[str, int]] = {}
+    per_verifier: dict[str, dict[str, int]] = {}
+    per_disposition: dict[str, dict[str, int]] = {}
     overall: dict[str, int] = {"true": 0, "false": 0, "overstated": 0}
     for f in record["findings"]:
         overall[f["verdict"]] += 1
         for lane in f.get("lanes") or ["?"]:
             bucket: dict[str, int] = per_lane.setdefault(lane, {"true": 0, "false": 0, "overstated": 0})
             bucket[f["verdict"]] += 1
+        for status in f.get("verifier") or []:
+            per_verifier.setdefault(status, {"true": 0, "false": 0, "overstated": 0})[f["verdict"]] += 1
+        for disposition in f.get("dispositions") or []:
+            per_disposition.setdefault(disposition, {"true": 0, "false": 0, "overstated": 0})[f["verdict"]] += 1
 
     def ratio(b: dict[str, int]) -> float | None:
         pos: int = b["true"] + b["overstated"]
@@ -221,6 +262,8 @@ def precision(record: dict[str, Any]) -> dict[str, Any]:
         "findings": len(record["findings"]),
         "overall": {**overall, "precision": ratio(overall)},
         "per_lane": {lane: {**b, "precision": ratio(b)} for lane, b in sorted(per_lane.items())},
+        "per_verifier": {status: {**b, "precision": ratio(b)} for status, b in sorted(per_verifier.items())},
+        "per_disposition": {d: {**b, "precision": ratio(b)} for d, b in sorted(per_disposition.items())},
     }
 
 

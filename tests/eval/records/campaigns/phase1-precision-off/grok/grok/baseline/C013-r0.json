@@ -1,0 +1,79 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 51.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.0,
+  "usage": {
+    "in": 62778,
+    "cache_read": 120704,
+    "cache_write": 0,
+    "out": 2584,
+    "source": "cli"
+  },
+  "cost_usd": 0.1772712,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nPassword reset tokens must be unguessable. This replaces `randomBytes(32)` (256 bits of CSPRNG output) with `Math.floor(Math.random() * 1e12).toString(36)`, which yields at most \\(10^{12}\\) values (~40 bits) from a non-cryptographic PRNG. An attacker can brute-force reset tokens and take over accounts.\n\n`Math.random` is the wrong tool for secrets even when edge-compatible APIs are needed. Use the Web Crypto API, which is available on edge runtimes:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nThat keeps 256-bit CSPRNG tokens without importing Node's `crypto` module."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a 256-bit CSPRNG password-reset token with a `Math.random()` value of roughly 40 bits of non-cryptographic entropy, which is trivially brute-forceable and enables account takeover.\n\n## Analysis\n\n`newResetToken()` previously returned `randomBytes(32).toString(\"hex\")` (64 hex chars, 256 bits from Node's CSPRNG). The new implementation:\n\n- Draws from `Math.random() * 1e12`, so the token space is at most \\(10^{12}\\) distinct values (~40 bits).\n- Uses a PRNG that is **not** a CSPRNG and is unsuitable for secrets (reset links, session tokens, API keys).\n- Produces ~9-character base36 strings \u2014 short enough to online- or offline-enumerate if an attacker can attempt resets or has a token oracle.\n\nEdge runtimes (Cloudflare Workers, Vercel Edge, Deno) expose the Web Crypto API. The portable fix is `crypto.getRandomValues()` (global in edge / browsers; `require('crypto').webcrypto` in older Node), not `Math.random()`.\n\n## Recommendation\n\n**request-changes** \u2014 restore cryptographic randomness before merge. No other files in the PR; the single hunk is the entire risk surface.\n",
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

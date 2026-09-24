@@ -1,0 +1,29 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase1-precision-off",
+  "repetitions": 3,
+  "cells": [
+    "grok|baseline|C001",
+    "grok|baseline|C002",
+    "grok|baseline|C003",
+    "grok|baseline|C004",
+    "grok|baseline|C005",
+    "grok|baseline|C006",
+    "grok|baseline|C008",
+    "grok|baseline|C009",
+    "grok|baseline|C010",
+    "grok|baseline|C011",
+    "grok|baseline|C012",
+    "grok|baseline|C013",
+    "grok|baseline|C014",
+    "grok|baseline|C016",
+    "grok|baseline|C019",
+    "grok|baseline|C020",
+    "grok|baseline|C021",
+    "grok|baseline|C022",
+    "grok|baseline|C068",
+    "grok|baseline|C069",
+    "grok|baseline|C070"
+  ],
+  "budget_usd": 55.0
+}

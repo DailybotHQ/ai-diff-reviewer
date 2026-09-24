@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 34.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.5,
+  "usage": {
+    "in": 29781,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1343,
+    "source": "cli"
+  },
+  "cost_usd": 0.0849,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Issue:** `SMTP_PASSWORD` now defaults to the literal `smtp-prod-backup-77` when the env var is unset. That string is a real credential shape living in source: it is committed to git, readable by anyone with repo access, and used automatically whenever cron (or any other caller) lacks the mounted secret.\n\n**Failure mode:** Missing/unmounted `SMTP_PASSWORD` no longer fails closed. The process logs into `smtp.internal.example` with the backup password from the repo. Rotating the real secret does not help until this default is removed from history; anyone who cloned the repo can relay as `notifications`.\n\n**Fix:** Require the secret from the environment and fail clearly if absent. Configure cron with the secret mount/injection instead of a code fallback.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n\nIf you need softer local/dev behavior, gate a non-prod default behind an explicit dev-only flag and never ship a production password in the default path."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default login password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), so a missing secret failed closed at login. The patch switches to `os.environ.get(..., \"smtp-prod-backup-77\")`, which means any process without the env var still authenticates to `smtp.internal.example` with a known backup password checked into the repo.\n\nThat is a hard-coded credential: it lands in git history, is visible to anyone with repo read access, and will appear in forks, CI logs, and static scans. The comment says the goal is keeping cron mail working when the secret is not mounted; the secure fix is to mount/inject `SMTP_PASSWORD` in those cron environments (or fail with a clear error and alert), not to bake a prod password into the default.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 now uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), replacing the base fail-closed os.environ[\"SMTP_PASSWORD\"]. That commits a production-shaped SMTP credential and uses it whenever the env var is unset."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.415,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2196,
+      "out": 298
+    },
+    "cost_usd": 0.006641
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 30.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.8,
+  "usage": {
+    "in": 30628,
+    "cache_read": 87296,
+    "cache_write": 0,
+    "out": 1566,
+    "source": "cli"
+  },
+  "cost_usd": 0.0968408,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** Removing `escapeHtml` and feeding `body` straight into `dangerouslySetInnerHTML` turns every comment into executable HTML. A body like `<img src=x onerror=\"alert(document.cookie)\">` or `<script>\u2026</script>` runs in the browser of anyone who views the comment.\n\n**Failure mode:** Any user-controlled or attacker-influenced `body` gets full DOM XSS in the viewer\u2019s origin (session theft, UI rewrite, drive-by actions as the victim).\n\n**Fix:** Do not assign raw `body` to `__html`. Either (1) render plain text / structured React nodes from a markdown parser with an allowlist, or (2) sanitize with a library such as DOMPurify before `dangerouslySetInnerHTML`. Restoring `escapeHtml` alone restores safety but drops rich formatting \u2014 pair escaping/sanitization with a real formatter if bold/links are required.\n\n```suggestion\n  return <div className=\"comment\">{body}</div>;\n```\n\n(If rich HTML is required, replace the suggestion with sanitization + allowlisted tags rather than raw `body`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical XSS regression** \u2014 do not merge until comment HTML is sanitized or rendered safely.\n\n## What went wrong\n\n`Comment` previously escaped `&`, `<`, and `>` before injecting into `dangerouslySetInnerHTML`, which made user/comment text safe as plain text. This PR deletes `escapeHtml` and passes `body` through raw. Any comment author (or anyone who can influence `body`) can inject script, event handlers, or malicious links that run in every viewer\u2019s session.\n\nThere is no markdown parser and no HTML sanitizer in the tree \u2014 the change does not implement \u201cbold/links\u201d; it implements arbitrary HTML execution.\n\n## Fix direction\n\n- Prefer React text/`markdown-to-react` with an allowlist (e.g. bold/italic/links only), **or**\n- Keep `dangerouslySetInnerHTML` only after a well-tested sanitizer (DOMPurify or equivalent) with a strict allowlist.\n- Add a regression test: `<img src=x onerror=alert(1)>` and `<script>` must not execute / must be stripped or escaped.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

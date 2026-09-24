@@ -1,0 +1,91 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 8,
+  "tool_calls": 20,
+  "seconds": 584.0,
+  "setup_seconds": 1.5,
+  "total_seconds": 585.6,
+  "usage": {
+    "in": 85273,
+    "cache_read": 223232,
+    "cache_write": 0,
+    "out": 2906,
+    "source": "api"
+  },
+  "cost_usd": 0.232628,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity": "warning",
+      "body": "Empty `matrix=[]` always fails the gate, but the workflow also fires on *every* `labeled` event (`on.pull_request.types: [opened, labeled]`). After a successful `ready` review, adding `bug` / `dependencies` / any other label re-runs `scope` with `should_run=false` \u2192 `matrix=[]` \u2192 this job goes red and blocks merge again \u2014 even though HEAD was already reviewed. `concurrency.cancel-in-progress: true` can also cancel an in-flight ready review when that happens.\n\nFix: when matrix is empty, only hard-fail if the PR still needs a review. If `ready` is present *and* a prior leg stamped `self-reviewed:*`, treat the prior success as still valid for this HEAD (re-applying `ready` still forces a fresh run via `should_run=true`). Pass `LABELS_JSON` into this step the same way `scope` does."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity": "info",
+      "body": "The comment and error message claim the only empty-matrix path (with secrets configured) is a missing `ready` label. That is incomplete: `should_run=true` still yields `matrix=[]` when no provider secret is set (Anthropic baseline is gated on `HAS_ANTHROPIC`). Maintainers then get told to re-apply `ready`, which will not help.\n\nConsider branching the message: missing `ready` vs. \"no eligible provider secret / empty matrix after should_run\". Same nuance belongs in the docs recipe snippet."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid fix for the real GitHub gotcha (Skipped required checks don't block merge). The stable-named `Self-review gate` + `if: always()` pattern is the right shape \u2014 but as written the gate is **too eager to fail on later non-`ready` label events**, which will re-block merge after a successful review.\n\n## What works\n\n- Correct diagnosis: branch protection treats **Skipped** as non-blocking; only failure/pending gates merge.\n- `needs: [scope, self-review]` + `if: always()` is the right way to observe a skipped matrix job.\n- Scope-result check is a good fail-closed addition vs. the thinner docs snippet.\n- `env:` mapping (not `${{ }}` in the shell string) keeps PR metadata out of command injection.\n- Workflow already has explicit `permissions:`; no new third-party actions; CHANGELOG + `TRIGGER_MODES.md` stay in sync with the recipe rename.\n\n## Findings\n\n1. **warning \u2014 post-success label churn fails the gate** (`.github/workflows/self-review.yml` empty-matrix branch). Workflow fires on every `labeled` event; only `label == ready` builds a matrix. After a green ready review, adding `bug` / Dependabot labels / etc. re-enters with `matrix=[]` and the gate exits 1, turning the required check red again. Same path can cancel an in-flight ready run via `cancel-in-progress: true`. Fix by treating empty matrix as OK when `ready` is still present *and* a prior leg left `self-reviewed:*` (re-adding `ready` still forces a fresh review).\n\n2. **info \u2014 empty-matrix copy over-claims \"missing ready\"**. `matrix=[]` also happens when `should_run=true` but no provider secret is configured; the error then misdirects maintainers.\n\n## Ops note (not in diff)\n\nBranch protection must require **only** `Self-review gate` and drop the dynamic `Self-review \u2014 <provider>` names \u2014 called out in the PR body; worth confirming on the repo settings when this lands. Until that switch, this PR's own verification story (\"gate red without ready\") depends on that config existing.\n\n## Release decision\n",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 3
+  }
+}

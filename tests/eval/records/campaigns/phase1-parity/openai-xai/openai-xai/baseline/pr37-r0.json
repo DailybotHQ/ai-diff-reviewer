@@ -1,0 +1,130 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 13,
+  "tool_calls": 46,
+  "seconds": 292.7,
+  "setup_seconds": 3.2,
+  "total_seconds": 295.9,
+  "usage": {
+    "in": 61087,
+    "cache_read": 554496,
+    "cache_write": 0,
+    "out": 4689,
+    "source": "api"
+  },
+  "cost_usd": 0.261207,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThis frontmatter rewrites the router as **four** capabilities and drops `apply-review`, while also setting `version: \"1.6.2\"`. On `main` (`ref: base`) the same fields are **five** capabilities including apply-review and `version: \"2.5.1\"`. Merging this branch as written would publish a stale skill contract: agents stop routing \u201cwhat did the CI review say?\u201d / \u201capply the AI review\u2019s fixes\u201d to the apply-review sub-skill, and the shipped skill version jumps backward. Rebase onto current `main` and re-apply only the narrative edits on top of the five-capability text."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 41,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe capabilities table stops at `#4 open-pr` under \u201c**Four** coordinated capabilities\u201d. On `main` this is \u201c**Five** coordinated capabilities\u201d with row `#5 apply-review` (`\u2601\ufe0f CI \u2192 \ud83d\udda5\ufe0f Local`). That row is how dual-surface consumers close the loop after CI posts findings; removing it is a product-surface regression, not a docs polish. Restore row 5 (and the Five/four wording) when rebasing."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity": "warning",
+      "body": "Version-parity guidance tells consumers that pinning `@v1.4.2` on both surfaces \u201cguarantees identical reviews\u201d. Current `main` pins `@v2.1.0` and explicitly notes IAR may shorten CI round-2+ finding sets vs a local full pass. Shipping the v1.4.2 pin misdirects Marketplace/skill consumers onto an obsolete major and overstates local\u2194CI identity. Use the current major pin and keep the IAR caveat from `main`."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 98,
+      "severity": "warning",
+      "body": "Install examples say \u201cLatest **v1.x**\u201d and `npx skills add \u2026@v1.4.2`. On `main` the same block is \u201cLatest **v2.x**\u201d / `@v2.1.0`. Copy-paste from this skill would pin consumers to the old major after the v2 line is current. Update the comments and pin to the live major when rebasing."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 190,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe new \u201cDefault flow\u201d header says Steps 0\u20135 cover only capability #1 and lists **three** sibling sub-skills (`generate-extension`, `setup`, `open-pr`). On `main` the same section lists **four** siblings and includes [`apply-review/SKILL.md`](apply-review/SKILL.md). Dropping that pointer orphans the apply-review flow from the parent skill\u2019s navigation even if the sub-skill directory still exists on `main`. Restore the fourth bullet (and \u201cfour sibling sub-skills\u201d) after rebase."
+    }
+  ],
+  "summary": "I'd recommend not merging until this branch is rebased onto current `main` \u2014 as written it regresses the parent skill from the live five-capability / v2.x contract back to a four-capability / v1.6.x snapshot.\n\n## What went wrong\n\nThe PR description frames this as a pure narrative reframe of an older \u201cLocal Companion\u201d opening, with Steps 0\u20135 left byte-identical. Against the review base (`main` @ `38c6144`), that is not what the head tree contains:\n\n| Surface | `main` (base) | This branch (head) |\n|---|---|---|\n| Frontmatter `version` | `2.5.1` | `1.6.2` |\n| Capabilities | **Five**, including `apply-review` | **Four**, stops at `open-pr` |\n| Install pin | `Latest v2.x` / `@v2.1.0` | `Latest v1.x` / `@v1.4.2` |\n| Default-flow siblings | four (`\u2026` + `apply-review`) | three |\n| CI-only surfaces (IAR / skip-review-label / follow-up) | present | absent from the rewritten intro/flows area |\n\n`skills/ai-diff-reviewer/apply-review/SKILL.md` exists on base as a first-class sub-skill; the head worktree under review has no `apply-review/` path at all. Merging this branch would therefore not only mis-document the router \u2014 it would publish a skill package that no longer routes \u201cwhat did the CI review say?\u201d / \u201capply the AI review\u2019s fixes\u201d and would teach consumers obsolete `@v1.4.2` pins.\n\nThe intended editorial wins (Two audiences frame, Surface column, flows-before-install order, explicit Default-flow header) are still worth doing \u2014 but only as a rebase of those edits onto current `main`, preserving five capabilities, v2 pins, apply-review activation/triggers, and the CI-only surfaces section.\n\n## Also missing vs main (not all re-posted inline)\n\nBeyond the five anchored findings: Flow A/B rows no longer mention `apply-review`; Activation lost the apply-review trigger block and the PR-marker disambiguation heuristic; the Parity paragraph lost the IAR \u201cshorter on round 2+\u201d caveat. Treat those as part of the same stale-base fix rather than separate nits.\n\n## What looks fine\n\n- No ru",
+  "verification": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 41,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 98,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 190,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 5,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

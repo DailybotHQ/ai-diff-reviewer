@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.3,
+  "usage": {
+    "in": 61300,
+    "cache_read": 87296,
+    "cache_write": 0,
+    "out": 1973,
+    "source": "cli"
+  },
+  "cost_usd": 0.1606268,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization. Any client can delete any user (`USERS.remove(user)` \u2192 204) with no role or caller check.\n\nCleanup jobs that need delete access should authenticate as a privileged principal (service account, cleanup role, or admin credentials), or `require_role` should authorize the **caller** from the request\u2014not the path `user`\u2014so viewers can be deleted by an allowed actor without opening the route publicly.\n\nRestore the decorator (or an equivalent gate) before merge; do not ship an unauthenticated destructive endpoint."
+    }
+  ],
+  "summary": "## Verdict\n\nRemoving `@require_role(\"admin\")` from `DELETE /users/<user>` leaves user deletion completely unauthenticated and unauthorized. Any caller can delete any user.\n\n## Analysis\n\n`app.py` previously gated `delete_user` with `@require_role(\"admin\")`. That decorator is the only access control on this destructive route. After this change the handler runs with no role check, no caller identity check, and no other guard \u2014 only `USERS.remove(user)` and a 204.\n\nThe PR goal (cleanup jobs under the viewer account) needs a scoped fix: a dedicated service identity, an explicit cleanup role, or job-level credentials that still enforce authorization. Stripping the decorator grants that capability to every client.\n\nNote: `require_role` compares `ROLES.get(user)` for the **path** `user`, not an authenticated caller from `request`. That subject mix-up likely caused the viewer cleanup 403s when deleting non-admin accounts. Fix the identity source (caller vs target) rather than deleting the gate.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, leaving `delete_user` with no authz; any client can call `USERS.remove(user)` and get 204. Base still had the decorator, so this is a real unauthenticated destructive regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.384,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2277,
+      "out": 284
+    },
+    "cost_usd": 0.006719
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

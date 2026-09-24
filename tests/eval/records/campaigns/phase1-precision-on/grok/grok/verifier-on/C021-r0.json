@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 72.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 72.6,
+  "usage": {
+    "in": 17986,
+    "cache_read": 101760,
+    "cache_write": 0,
+    "out": 2584,
+    "source": "cli"
+  },
+  "cost_usd": 0.082004,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Typosquat dependency:** `tar-stream` (legitimate, widely used) is replaced with `tar-streem` \u2014 a one-character misspelling \u2014 at `^1.0.0` instead of `^3.1.6`.\n\nOn `npm install`, this resolves an entirely different package name. Combined with the new `postinstall` hook, that package\u2019s code runs in CI and on developer machines (env, tokens, SSH keys). The \u201cunmaintained; bundles its installer\u201d framing matches known malicious-package lures.\n\nRevert to `tar-stream` (or another known-good maintained library such as `tar`) and verify the package name character-by-character against the official npm listing before merging any tar-related swap."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Install-time arbitrary code execution:** `postinstall` runs `tar-streem-setup` on every `npm install` / `npm ci`, including CI runners and developer laptops.\n\nLifecycle scripts inherit the full process environment (cloud tokens, `NODE_AUTH_TOKEN`, GitHub Actions secrets exposed as env, SSH agent). A brand-new `^1.0.0` typosquat package that \u201cbundles its installer\u201d is the highest-risk place to put that hook \u2014 no integrity pin, no reviewed source, automatic execution.\n\nRemove the `postinstall` script. If setup is truly required, it must be an explicit, reviewed, opt-in step \u2014 never a dependency lifecycle script from an untrusted package name."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the maintained `tar-stream` package with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a classic npm supply-chain compromise pattern (typosquat + install-time code execution).\n\n## Why this is blocking\n\n1. **Typosquat dependency swap** \u2014 `tar-stream` \u2192 `tar-streem` (single-character misspelling). The version also drops from `^3.1.6` to `^1.0.0`, which is inconsistent with a routine \u201cunmaintained package\u201d upgrade and consistent with a different, unknown package.\n2. **Automatic installer on `postinstall`** \u2014 `tar-streem-setup` runs with the developer\u2019s/CI user\u2019s privileges whenever anyone runs `npm install`. The PR description\u2019s claim that \u201cthe new package bundles its installer\u201d is exactly the social-engineering cover used by malicious packages that exfiltrate env vars, tokens, or drop a payload at install time.\n3. **No supporting code in-repo** \u2014 the tree only contains `package.json`; there is no lockfile pin, no vendor review, and no change to `scripts/pack.js` justifying a tar library swap.\n\n## Residual notes\n\n- Even if `tar-streem` were later shown to be benign, adding an unreviewed `postinstall` binary from a brand-new `^1.0.0` dependency is unacceptable without provenance (exact resolved version, integrity hash, source repo, and a diff against `tar-stream`\u2019s API).\n- Restore `tar-stream` (or another known-good maintained tar library such as `tar`) and drop the `postinstall` script entirely.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces legitimate tar-stream@^3.1.6 with tar-streem@^1.0.0 and adds a postinstall script that runs tar-streem-setup, which is a classic typosquat supply-chain pattern that executes attacker code on install."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds both a typosquat devDependency `tar-streem@^1.0.0` and a `postinstall` script that runs `tar-streem-setup`, so every npm install/ci will execute that untrusted binary with the full process environment. That matches the claimed install-time arbitrary code execution risk at critical "
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 13.502,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6155,
+      "out": 641
+    },
+    "cost_usd": 0.016642
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

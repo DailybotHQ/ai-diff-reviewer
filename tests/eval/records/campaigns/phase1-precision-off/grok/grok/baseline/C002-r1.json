@@ -1,0 +1,79 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.8,
+  "usage": {
+    "in": 30540,
+    "cache_read": 87424,
+    "cache_write": 0,
+    "out": 2062,
+    "source": "cli"
+  },
+  "cost_usd": 0.0996792,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nUntrusted `email` is interpolated into the SQL string, so a value like `' OR 1=1--` can change the query predicate and return or mutate unintended rows. The previous `?` placeholder bound the value safely.\n\nFor partial-match support search, keep a bound parameter and use a LIKE/pattern predicate instead of building SQL with an f-string:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nAlso note the comment claims partial-match but `=` still requires a full exact value \u2014 LIKE (or equivalent) is what actually implements fragment search."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by interpolating `email` directly into the query string.\n\n## Analysis\n\n`get_orders` previously used a parameterized query (`WHERE email = ?` with `(email,)`). The new code builds the SQL via an f-string that embeds `email` inside a single-quoted literal. Any caller-controlled value can break out of that literal and alter the statement (filter bypass, UNION reads, or destructive SQL if the connection permits it). That is a production security defect on a data-access path.\n\nThe comment says the goal is partial-match search for support, but the predicate is still equality (`=`), so the stated product need is not met either. Partial match should keep parameterization \u2014 for example `WHERE email LIKE ?` with a bound pattern such as `'%' + fragment + '%'`, or `instr(email, ?)` \u2014 and must not build SQL with string formatting.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

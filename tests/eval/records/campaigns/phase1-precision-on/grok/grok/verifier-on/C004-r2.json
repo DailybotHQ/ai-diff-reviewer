@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.4,
+  "usage": {
+    "in": 30482,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 2025,
+    "source": "cli"
+  },
+  "cost_usd": 0.099226,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** `request.args.get(\"path\", name)` is attacker-controlled and is joined to `REPORTS` with no sanitization. The previous `os.path.basename(name)` guard is gone.\n\n`GET /reports/x?path=../../etc/passwd` or `?path=/etc/passwd` can make `send_file` serve files outside `/srv/reports` (`os.path.join` discards the base when the second part is absolute).\n\nKeep subfolder support by resolving the path and enforcing it stays under `REPORTS`:\n\n```suggestion\n    candidate = request.args.get(\"path\", name)\n    root = os.path.realpath(REPORTS)\n    full = os.path.realpath(os.path.join(root, candidate))\n    if not full.startswith(root + os.sep) and full != root:\n        abort(400)\n    return send_file(full)\n```\n\n(Also import `abort` from Flask, or return a 400 Response equivalently.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical path-traversal regression: this change removes the only path sanitization and feeds a fully attacker-controlled value into `send_file`.\n\n## Analysis\n\nThe previous handler used `os.path.basename(name)`, which confined downloads to a single filename under `/srv/reports`. The new code takes `request.args.get(\"path\", name)` and passes it straight to `os.path.join(REPORTS, \u2026)` with no normalization, prefix check, or basename/segment filter.\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves under `/srv/reports/../../etc/passwd` and can read host files outside the reports tree.\n2. **Absolute path hijack:** `GET /reports/x?path=/etc/passwd` \u2014 `os.path.join(\"/srv/reports\", \"/etc/passwd\")` returns `/etc/passwd` because an absolute second segment discards the base.\n3. **Route param fallback:** even without `?path=`, if the framework ever delivers a slash-containing `name` (or a future route change), the same join is unsanitized.\n\nSupporting nested reports (e.g. `2024/q3/summary.pdf`) is a reasonable goal, but it needs a safe join: resolve the candidate under `REPORTS`, then require `Path(full).resolve().is_relative_to(Path(REPORTS).resolve())` (or an equivalent prefix check after resolve), and reject anything that escapes.\n\nNo tests accompany the change; a traversal unit test would have caught this immediately.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `os.path.basename(name)` with unsanitized `request.args.get(\"path\", name)` joined into `send_file`, so `?path=../../etc/passwd` or an absolute path can read outside `/srv/reports`. That is a real critical arbitrary-file-read regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.228,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4144,
+      "out": 301
+    },
+    "cost_usd": 0.010171
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

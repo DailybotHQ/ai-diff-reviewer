@@ -1,0 +1,120 @@
+{
+  "pr": 39,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 9,
+  "tool_calls": 42,
+  "seconds": 185.0,
+  "setup_seconds": 13.7,
+  "total_seconds": 198.6,
+  "usage": {
+    "in": 111993,
+    "cache_read": 797440,
+    "cache_write": 0,
+    "out": 2611,
+    "source": "api"
+  },
+  "cost_usd": 0.39914,
+  "changed_files": [
+    ".agents/agents/prompt-engineer.md",
+    ".agents/agents/reviewer.md",
+    ".agents/docs/skills_agents_catalog.md",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/ARCHITECTURE.md",
+    "docs/ITERATION_AWARENESS.md",
+    "docs/PERFORMANCE.md",
+    "docs/PRODUCT_SPEC.md",
+    "docs/PROMPTS.md",
+    "docs/README.md",
+    "docs/SECURITY.md",
+    "docs/STRICTNESS.md",
+    "docs/TESTING_GUIDE.md",
+    "docs/TRIGGER_MODES.md",
+    "examples/README.md",
+    "examples/iteration-aware.yml",
+    "examples/skip-review-label.yml",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_iar_dedup.py",
+    "tests/test_iar_dispatch.py",
+    "tests/test_iar_failure_fallback.py",
+    "tests/test_iar_generation_tracking.py",
+    "tests/test_iar_observability.py",
+    "tests/test_iar_policies.py",
+    "tests/test_iar_state_layer.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity": "warning",
+      "body": "The `skipped` output description still says it only covers the label gate, but this PR expands skip semantics to include the `skip-review-label` emergency bypass (and `action.yml` / `README.md` already say so).\n\nAgents answering setup questions from this reference will mis-describe when `skipped=true`. Align it with `action.yml`:\n\n> Whether the run was skipped without invoking the LLM (`true`/`false`). Set when the label/author gate suppressed the run **or** `skip-review-label` short-circuited."
+    },
+    {
+      "path": "README.md",
+      "line": 602,
+      "severity": "info",
+      "body": "The walkthrough lists **Fetch PR** then **IAR pre-LLM**, but `main()` runs `run_iar_pre_llm()` *before* `fetch_pr_context()` (system prompt \u2192 IAR pre-LLM \u2192 fetch + agentic loop).\n\nFunctionally fine (pre-LLM only needs git/markers/labels), but operators debugging from this section will look for the wrong order in logs. Swap steps 5 and 6 (or note that IAR pre-LLM intentionally runs before the PR diff fetch)."
+    }
+  ],
+  "summary": "Looks good \u2014 runtime IAR / skip-review / USER_FORCED_RESET contracts hold; one setup-reference drift warning and a small README order nit.\n\n## Verdict\n\nSolid, high-stakes landing of unconditional IAR, user-forced reset, and the opt-in `skip-review-label` bypass. The load-bearing safety rails I re-checked in `scripts/reviewer.py` match the contracts in `.review/extension.md` and the long self-review fix history in the CHANGELOG.\n\n## What I verified (no inline findings)\n\n- **Stdlib-only / subprocess:** no new third-party imports; IAR git calls are argv-list (`shell=False`); `load_code_context` routes paths through `safe_repo_path`.\n- **Critical-always-surfaces:** hardcoded in `dedupe_findings_against_prior`; round-1 exhaustive and agent-runner cap paths sort criticals first before truncation.\n- **USER_FORCED_RESET:** five-condition guard (`applied_label`, prior state, `reviewed_label_applied`, `label_fetch_ok`, label absent via `_labels_contain_ci`); `label_stamped` observed before state embed; `compute_reviewed_label_applied` three-signal OR; escape-label skipped on reset in `dispatch_policy`.\n- **Marker trust boundary:** author filter + provider isolation + tier-2 minimized fallback; parser coerces fingerprints/history and rejects stringy `reviewed_label_applied`.\n- **Skip path:** runs after trigger, before collapse/tracking/IAR/LLM; does not stamp `applied-label`; `write_all_outputs(skipped=True)` keeps IAR outputs empty; collision guard vs gate/applied/escape; tracking body keeps `REVIEW_MARKER` + provider marker.\n- **Public contract:** new optional inputs/outputs wired in `action.yml` \u2192 env \u2192 `build_iar_config` / main; examples + SECURITY/TRIGGER_MODES coverage look consistent.\n- **Failure fallback:** pre/post IAR wrapped in `try/except` at `main()` with empty IAR outputs via `write_all_outputs`.\n\nKnown limitations already documented (agent-runner overflow fingerprinting, `iteration-tokens-used` placeholder `\"0\"`, ~6.8k LOC file size) \u2014 not re-flagged.\n\n## Findin",
+  "verification": [
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "README.md",
+      "line": 602,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 32
+  }
+}

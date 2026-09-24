@@ -1,0 +1,63 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 7,
+  "tool_calls": 25,
+  "seconds": 175.0,
+  "setup_seconds": 1.6,
+  "total_seconds": 176.5,
+  "usage": {
+    "in": 105061,
+    "cache_read": 174208,
+    "cache_write": 0,
+    "out": 3472,
+    "source": "api"
+  },
+  "cost_usd": 0.265796,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nI'd recommend **not merging** until this branch is rebased onto current `main` and re-done as a true delta \u2014 head `SKILL.md` is a **stale v1.6.2 / four-capability** snapshot that would regress the shipped parent skill contract on `main` (`2.5.1`, five capabilities including `apply-review`).\n\n## Narrative\n\nThe PR description frames this as a light narrative reframe of today's skill (\"Local Companion\" \u2192 \"Local & CI Companion\", 522 \u2192 511 lines, Steps 0\u20135 byte-identical to `main`). That does **not** match the tree this PR would land against:\n\n| Surface | `main` (base `38c6144\u2026`) | This branch (head) |\n|---|---|---|\n| Frontmatter `version` | `2.5.1` | `1.6.2` |\n| Capabilities | **Five**, incl. [`apply-review`](skills/ai-diff-reviewer/apply-review/SKILL.md) | **Four** \u2014 `apply-review` absent from router + worktree |\n| Pin examples | `@v2.1.0` / `uses: \u2026@v2` | `@v1.4.2` / (stale) `@v1` in the workflow sample on this tip |\n| Parity text | methodology + severity; IAR may shorten CI round 2+ | \"identical reviews\" |\n| Extra sections on `main` | CI-only surfaces (IAR, `skip-review-label`, incremental/usage), apply-review activation + disambiguation, check-status vs recommendation | missing |\n\nImportantly, **current `main` already has** the H1 \"Local & CI Companion Skill\", the \"Two audiences, same skill\" frame, the Surface column, flows-before-install ordering, and the \"Default flow\" header. The interesting editorial work in this PR is largely already on `main` (and `main` went further). The three-dot diff looks small only because the branch forked from a **pre-`apply-review` / pre-v2** ancestor; it is not a safe patch on today's file.\n\nIf this tip were taken as the resolution of a merge conflict on `skills/ai-diff-reviewer/SKILL.md`, consumers' coding agents would stop routing \"what did CI say?\" / \"apply the review\" to `apply-review`, get wrong major pins, and lose the IAR parity caveats. That is a public skill-contract break, not a docs nit.\n\n**What to do instead**",
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

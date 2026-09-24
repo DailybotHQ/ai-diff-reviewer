@@ -1,0 +1,106 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 63.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.1,
+  "usage": {
+    "in": 33123,
+    "cache_read": 120320,
+    "cache_write": 0,
+    "out": 3413,
+    "source": "cli"
+  },
+  "cost_usd": 0.12282,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`dependencies` points at `(\"billing\", \"0007_add_reason\")`, but this PR deletes `migrations/0007_add_reason.py`. Django will fail to build the graph (`NodeNotFoundError`) because the dependency node no longer exists.\n\n**Failure mode:** `manage.py migrate` / `showmigrations` cannot load the app on a fresh clone of this branch. Environments that already applied `0007` also get inconsistent history (row in `django_migrations`, file missing).\n\n**Fix:**  \n- If `0007` was ever applied: restore `0007_add_reason.py` and keep this `RemoveField` as `0008`.  \n- If `0007` never shipped: drop this file too and only delete `0007` (no `RemoveField` needed)."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nDeleting an already-committed migration rewrites history. Any database that ran `0007_add_reason` still has a `django_migrations` row and (likely) a `void_reason` column, but the replacement chain cannot load without the `0007` module.\n\nEven when the intent is \"never use this column,\" the safe ship is: keep `0007`, add a forward `0008` that `RemoveField`s. Only squash/delete `0007` if you can prove it was never applied in any persistent environment and you are not replacing it with a child migration."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "`RemoveField` drops the column and permanently discards any stored values. The comment only asserts the field was not shown in the UI \u2014 it does not prove nothing wrote to it (admin, shell, API, fixtures).\n\nAfter restoring a valid migration graph, confirm production/staging have no non-empty `void_reason` values (or accept explicit data loss) before applying `0008`."
+    }
+  ],
+  "summary": "## Verdict\n\nDo not merge \u2014 this change breaks the Django migration graph and will fail on every environment that runs `migrate`.\n\n## What went wrong\n\n`migrations/0008_drop_reason.py` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but the same commit deletes `migrations/0007_add_reason.py`. Django's loader requires every dependency node to exist as a migration module; with `0007` gone, plan/migrate raises `NodeNotFoundError` (or an inconsistent-history error on databases that already recorded `0007`).\n\n## Correct approaches\n\n**If `0007_add_reason` has been applied anywhere** (shared dev DBs, staging, production): restore `0007_add_reason.py` and ship only the new `0008` `RemoveField`. Applied migrations must remain in the tree forever.\n\n**If `0007` never landed outside this branch:** delete `0007` and do **not** add `0008`. There is no column to drop; the additive migration simply never ships.\n\nThe PR description (\"field never rendered\") does not change either path \u2014 migration history is about what was applied to databases, not UI surface area.\n\n## Secondary note\n\n`RemoveField` is a destructive schema change. Even with the graph fixed, confirm no writers (admin, API, scripts) populated `void_reason` before dropping it in production.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

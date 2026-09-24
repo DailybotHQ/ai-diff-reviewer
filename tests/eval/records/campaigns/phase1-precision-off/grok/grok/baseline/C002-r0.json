@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 41.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.3,
+  "usage": {
+    "in": 60168,
+    "cache_read": 59520,
+    "cache_write": 0,
+    "out": 2781,
+    "source": "cli"
+  },
+  "cost_usd": 0.154878,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe query embeds `email` directly into SQL with an f-string, replacing the previous `?` parameter binding. Attacker- or support-controlled input such as `' OR '1'='1` changes the predicate and can return all rows (or worse). Restore a bound parameter and never concatenate user text into the SQL string.\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nIf partial match is required, use `LIKE` with a bound pattern (and escape `%`/`_` in the user fragment). Keep the value out of the SQL source text."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The new comment says partial-match search, but the predicate remains `email = '...'`. Pasting a fragment (e.g. `alice@` or a domain) will still return no rows for full addresses. Use a parameterized `LIKE` (or equivalent) if substring search is the goal; equality will not satisfy the support workflow described in the PR."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `get_orders` and does not implement the stated partial-match behavior.\n\n## Narrative\n\n`store.py` previously bound `email` with a `?` placeholder. The PR inlines the value via an f-string into the SQL text. Any caller-controlled `email` (support paste, query param, ticket field) can break out of the quotes and alter the statement \u2014 for example `' OR 1=1--` returns every order. That is a production security defect on a data-access helper.\n\nSeparately, the comment and PR title say partial-match search, but the predicate is still exact equality (`email = ...`). A fragment such as `user@` will not match `user@example.com`. The safe approach for substring search is parameterized `LIKE` with escaped wildcards (bound `%fragment%`), keeping the value out of the SQL text.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

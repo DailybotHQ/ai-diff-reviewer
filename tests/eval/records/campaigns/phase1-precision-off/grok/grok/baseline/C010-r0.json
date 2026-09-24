@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 31763,
+    "cache_read": 118912,
+    "cache_write": 0,
+    "out": 1899,
+    "source": "cli"
+  },
+  "cost_usd": 0.1105936,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nAny authenticated caller can set `body.accountId` and read that account; nothing verifies support-staff role or that `id === caller.accountId`.\n\nFailure mode: a normal user sends `{\"accountId\":\"<victim>\"}`, passes `auth(req)`, and gets the victim row from `db.accounts.findUnique`.\n\nFix: keep self-lookup as the default path, and only honor an explicit account id after an authorization check (e.g. `caller.isSupport` / role claim). Example:\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string = body.accountId ?? caller.accountId;\n  if (id !== caller.accountId && !caller.isSupport) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\nAdapt `isSupport` to whatever staff signal `auth()` already exposes."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a clear IDOR (insecure direct object reference) on account read.\n\n## Narrative\n\n`getAccount` previously scoped the lookup strictly to `caller.accountId` from `auth(req)`. The new code prefers `body.accountId` whenever it is present, with only a comment claiming the caller is support staff. There is no role check, no allowlist, and no comparison that the requested id belongs to the caller.\n\nAny authenticated client can therefore POST/PUT a body like `{\"accountId\": \"<victim>\"}` and receive that account record as JSON. That is a broken authorization boundary on a sensitive object.\n\nSecondary notes (not filed as separate findings): consuming `req.json()` on a handler named `getAccount` is unusual for GET-style routes (many stacks never parse a body on GET), and a non-string `accountId` would still be passed through to the ORM. Those are secondary to the missing authorization check.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30193,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1663,
+    "source": "cli"
+  },
+  "cost_usd": 0.0963992,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection:** `email` is interpolated into the query with an f-string, so a value like `' OR '1'='1` returns all rows (or worse). The previous `?` placeholder binding prevented this.\n\nRestore a bound parameter. For the stated partial-match need, use `LIKE` with the pattern passed as a parameter (and escape `%`/`_` in the user fragment):\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nDo not build SQL with f-strings, `+`, or `.format()` for user-influenced values."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment says partial-match search was requested, but the SQL still uses `email = '...'`, which only matches the full string. Pasting an email fragment will not find orders unless the fragment equals the whole address.\n\nAfter fixing injection, switch to a parameterized `LIKE` (or `instr`/`contains`) so fragment search actually works."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection vulnerability and does not implement the stated partial-match behavior.\n\n## Narrative\n\n`get_orders` previously bound `email` with a parameterized placeholder (`?`). The PR interpolates `email` directly into the SQL string via an f-string. Any caller that passes user- or support-controlled input (the PR description says support pastes email fragments) can break out of the quoted literal and alter the query \u2014 e.g. `' OR '1'='1` returns every order, or `'; DROP TABLE orders;--`-style payloads depending on the SQLite execution path.\n\nThe comment claims partial-match search, but the predicate is still `email = '...'` (exact equality). Even a safe fix needs `LIKE` with escaped wildcards (or equivalent) **and** bound parameters, e.g. `WHERE email LIKE ?` with a bound `f\"%{fragment}%\"` after escaping `%`/`_` in the fragment.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head replaces the safe `?` binding with an f-string that embeds `email` directly into the SQL (`WHERE email = '{email}'`), which is a classic SQL injection regression from the base version. Severity critical is appropriate."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.468,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5935,
+      "out": 293
+    },
+    "cost_usd": 0.013782
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

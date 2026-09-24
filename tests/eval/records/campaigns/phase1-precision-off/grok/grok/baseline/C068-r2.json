@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 43.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.5,
+  "usage": {
+    "in": 45375,
+    "cache_read": 103424,
+    "cache_write": 0,
+    "out": 2692,
+    "source": "cli"
+  },
+  "cost_usd": 0.1379292,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `load_session` deserializes the session blob with `pickle.loads` after only base64-decoding. Pickle executes attacker-controlled object construction during load; a crafted session string yields arbitrary code execution on the server.\n\n**Failure mode:** An attacker sets or forges the session cookie (or whatever carries `raw`) to a base64-encoded pickle payload whose `__reduce__` runs shell commands when the app calls `load_session`.\n\n**Fix:** Keep a data-only format on the wire (JSON, or msgpack without custom ext types). If the cart plugin needs richer types, decode JSON then explicitly construct trusted objects from a whitelist of fields. If pickle were used only for trusted internal storage, require an HMAC/signature verify before unpickle and keep the signing key server-side \u2014 still prefer avoiding pickle entirely.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(Restore `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a remote code execution sink by decoding session blobs with `pickle.loads`.\n\n## Narrative\n\n`load_session` previously used `json.loads` on base64-decoded input, which is a safe data-only parse. Replacing that with `pickle.loads` means any client-supplied session string can instantiate arbitrary Python objects and run attacker-controlled `__reduce__` / opcode payloads during deserialization.\n\nThere is no signature, HMAC, or trust boundary in this function: the only step before unpickle is `base64.urlsafe_b64decode`. Session tokens are typically attacker-controlled (cookies, headers, query params), so this is a production RCE class bug, not a stylistic preference.\n\nPlugin richer object needs should be met with an explicit allowlisted schema (JSON plus typed reconstruction, or a restricted serializer). Pickle must not be used on the wire for session data.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

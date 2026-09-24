@@ -180,7 +180,7 @@ Targets `python3.10+`. Most contributors will have `python3` from the system; th
 
 ## Run the test suite
 
-The runtime has a standard-library `unittest` suite (1042 tests across 49 files as of the v3 Phase 0 work, no install needed):
+The runtime has a standard-library `unittest` suite (1049 tests across 50 files as of the v3 Phase 1 work, no install needed):
 
 ```bash
 python3 -m unittest discover -s tests
@@ -223,6 +223,9 @@ python3 tests/eval/campaign.py run --manifest tests/eval/campaigns/phase0-floor.
 # One review against a labelled fixture tree (no GitHub access) or a real PR
 XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
   --tree tests/eval/cases/C001.json --out /tmp/C001.json
+# … with the v3 verifier + severity policy after the review (the campaign arm sets `"verifier": "on"`):
+XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
+  --tree tests/eval/cases/C001.json --verifier on --out /tmp/C001.json
 GH_TOKEN=$(gh auth token) XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
   --repo DailybotHQ/ai-diff-reviewer --pr 46 --worktree /path/to/worktree-at-pr-head --out /tmp/pr46.json
 

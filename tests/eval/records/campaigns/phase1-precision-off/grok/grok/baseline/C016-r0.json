@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.3,
+  "usage": {
+    "in": 30623,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1591,
+    "source": "cli"
+  },
+  "cost_usd": 0.0967888,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`InsecureSkipVerify: true` is set for every `NewClient()` caller with no staging/prod gate. Despite the comment about a staging self-signed cert, production (and any other environment) will also skip certificate verification, enabling MITM on ledger traffic\u2014attackers can present any cert and intercept or modify requests/responses.\n\nGate this behind an explicit non-production config that defaults to verify-on, or better: load the staging CA into `tls.Config.RootCAs` so verification stays enabled. Do not ship skip-verify as the default client transport."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every caller of `NewClient()`, including production.\n\n## Analysis\n\n`internal/ledger/client.go` sets `tls.Config{InsecureSkipVerify: true}` on the default `http.Transport` with no environment, build-tag, or configuration gate. The comment and ticket acknowledge staging-only intent and a prod follow-up, but the runtime path always skips verify. Any network path to the ledger (staging *or* prod) becomes vulnerable to MITM: an attacker who can intercept traffic can present any certificate and read or alter ledger requests and responses.\n\nA staging self-signed cert should be handled by trusting that cert explicitly (custom `RootCAs` / file-mounted CA), or by gating skip-verify behind an explicit non-prod config that defaults to secure.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

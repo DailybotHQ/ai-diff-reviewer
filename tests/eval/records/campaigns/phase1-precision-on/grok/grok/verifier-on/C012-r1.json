@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 74.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 74.8,
+  "usage": {
+    "in": 18428,
+    "cache_read": 161280,
+    "cache_write": 0,
+    "out": 3472,
+    "source": "cli"
+  },
+  "cost_usd": 0.106072,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The deleted `BLOCKED` check skipped `__proto__`, `constructor`, and `prototype`. Without it, hostile keys from `JSON.parse` (or any `Record` patch) reach `(base as any)[k] ??= {}` / assignment and can write `Object.prototype`.\n\nFailure mode (verified): `deepMerge({}, JSON.parse('{\"constructor\":{\"prototype\":{\"polluted\":true}}}'))` makes `({}).polluted === true`. The same holds for a top-level `\"__proto__\"` patch. `JSON.parse` **does** emit these as own enumerable keys \u2014 the PR rationale is wrong.\n\nRestore the blocklist (or equivalent safe-key guard) before every recursive step and assignment:\n\n```suggestion\n  for (const [k, v] of Object.entries(patch)) {\n    if (k === \"__proto__\" || k === \"constructor\" || k === \"prototype\") continue;\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Analysis\n\nThe PR claim that `JSON.parse` never yields dangerous keys is incorrect. `JSON.parse('{\"__proto__\":{\"x\":1}}')` creates an **own** enumerable `\"__proto__\"` property, and `JSON.parse('{\"constructor\":{\"prototype\":{\"polluted\":true}}}')` yields ordinary `\"constructor\"` / `\"prototype\"` keys. `Object.entries` surfaces both.\n\nWith the blocklist gone, this merge path walks those keys via `(base as any)[k] ??= {}` and plain assignment. Verified on this head:\n\n- `deepMerge({}, JSON.parse('{\"constructor\":{\"prototype\":{\"polluted\":true}}}'))` \u2192 `({}).polluted === true`\n- `deepMerge({}, JSON.parse('{\"__proto__\":{\"polluted2\":true}}'))` \u2192 `({}).polluted2 === true`\n\nThe function also accepts any `Record<string, unknown>`, so the patch is not limited to `JSON.parse` output (object literals, parsed YAML, merged user input, etc.).\n\nThe previous `BLOCKED` set (`__proto__`, `constructor`, `prototype`) was the mitigation for exactly this class of bug. Restoring it (or switching to `Object.create(null)` targets + `Object.hasOwn` / safe key checks on every assignment) is required before merge.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base version blocked `__proto__`/`constructor`/`prototype`; head removed that guard while still doing `(base as any)[k] ??= {}` and assignment from `Object.entries(patch)`, so hostile keys can pollute `Object.prototype`. That is a real critical prototype-pollution regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 15.52,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2706,
+      "out": 433
+    },
+    "cost_usd": 0.00952
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

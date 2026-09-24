@@ -1,0 +1,93 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 64.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 64.5,
+  "usage": {
+    "in": 19483,
+    "cache_read": 103936,
+    "cache_write": 0,
+    "out": 3067,
+    "source": "cli"
+  },
+  "cost_usd": 0.0885488,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`dependencies = [(\"billing\", \"0007_add_reason\")]` points at a migration this PR deletes. Django must load `0007_add_reason` to build the graph before it can apply `0008_drop_reason`.\n\n**Failure mode:** `manage.py migrate` raises `NodeNotFoundError` (or equivalent) on fresh DBs; environments that already recorded `0007_add_reason` in `django_migrations` diverge from the repo and fail history consistency checks.\n\n**Fix:** restore `migrations/0007_add_reason.py` and keep this file as a forward `RemoveField` migration only. Do not delete intermediate migrations that later nodes still depend on."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nDeleting `0007_add_reason` removes the migration that created `invoice.void_reason` from the repo while `0008` still expects that node and issues `RemoveField`.\n\n**Failure mode:** any database that already ran 0007 has the column (and a `django_migrations` entry) but the project no longer ships the matching file \u2014 migrate/CI breaks. Databases that never ran 0007 cannot apply 0008 either because the parent is missing. The column drop never runs reliably.\n\n**Fix:** put `0007_add_reason.py` back unchanged; ship only the new `0008` removal migration on top of it."
+    }
+  ],
+  "summary": "## Verdict\n\nThis change breaks the Django migration graph and should not merge as-is.\n\n## Why\n\n`migrations/0008_drop_reason.py` depends on `(\"billing\", \"0007_add_reason\")`, but this PR **deletes** `migrations/0007_add_reason.py`. With the parent node missing:\n\n- **Fresh databases** cannot resolve `0008`'s dependency (`NodeNotFoundError` / missing migration).\n- **Environments that already applied 0007** keep a `django_migrations` row for a file that no longer exists, so `migrate` / CI history checks fail inconsistently with fresh installs.\n\nDropping an unused column is fine; deleting the migration that added it while a later migration still names it as a dependency is not.\n\n## Correct approach\n\n1. **Restore** `migrations/0007_add_reason.py` (leave history intact).\n2. **Keep** `migrations/0008_drop_reason.py` as a forward `RemoveField` on top of 0007.\n\nOnly squash/rewrite 0007 away if you are certain it was never applied anywhere and you replace the chain with a coherent single migration that does not leave dangling dependencies \u2014 that is not what this PR does.\n\n## Data note\n\n`RemoveField` will drop any values already stored in `void_reason`. The PR claims the field was never UI-surfaced; confirm no API/admin/shell writers before applying in production. Secondary to the broken graph.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 58.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 58.9,
+  "usage": {
+    "in": 31845,
+    "cache_read": 118016,
+    "cache_write": 0,
+    "out": 3192,
+    "source": "cli"
+  },
+  "cost_usd": 0.1182468,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe removed `BLOCKED` check was the only guard against prototype pollution. `JSON.parse` *does* yield dangerous keys: `Object.entries(JSON.parse({\"__proto__\":{\"polluted\":true}}))` returns `[[\"__proto__\", {...}]]`, and the assignment `(base as any)[k] = v` / `(base as any)[k] ??= {}` then writes through the `__proto__` setter onto `Object.prototype`. The nested `constructor` \u2192 `prototype` path pollutes the same way.\n\nVerified on Node: after merging those payloads, `({}).polluted` and `({}).hacked` are `true`. Restore the blocklist (or merge via `Object.defineProperty` / null-prototype targets) and add regression tests for both gadgets."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Analysis\n\nThe PR claim that \"JSON.parse never yields dangerous keys\" is incorrect. `JSON.parse(\"{\\\"__proto__\\\": {\\\"polluted\\\": true}}\")` produces an own property named `__proto__`, and `Object.entries` surfaces it. The same applies to nested `constructor` / `prototype` keys.\n\nWithout the blocklist, assignment paths in this merge are exploitable:\n\n- `base[\"__proto__\"] = { polluted: true }` invokes the inherited setter and writes `Object.prototype`\n- `base[\"constructor\"][\"prototype\"][\"hacked\"] = true` pollutes via the constructor gadget\n\nI verified both on current Node: after `deepMerge({}, JSON.parse(...))`, plain `({}).polluted` / `({}).hacked` become `true`.\n\n`deepMerge` is also an exported generic helper (`patch: Record<string, unknown>`). Even if today some caller only passes `JSON.parse` output, the function contract does not enforce that, and JSON input is already enough to trigger the bug.\n\n## Recommendation\n\nRestore the blocklist (or equivalent defenses: `Object.hasOwn` checks plus `Object.create(null)` targets, or `Object.defineProperty` for assignments that skip `__proto__` setters). Add a unit test that asserts `__proto__` and `constructor.prototype` patches do not touch `Object.prototype`.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

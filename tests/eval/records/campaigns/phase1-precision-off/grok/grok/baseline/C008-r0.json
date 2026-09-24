@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 33.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.5,
+  "usage": {
+    "in": 31080,
+    "cache_read": 87296,
+    "cache_write": 0,
+    "out": 1862,
+    "source": "cli"
+  },
+  "cost_usd": 0.0995208,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving the `ALLOWED_HOSTS` check makes `deliver()` issue a server-side POST to any caller-supplied `url`. A customer- or attacker-controlled value such as `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:2375/` is fetched from the application/runtime network with no host, scheme, or private-IP validation.\n\nRestore an egress policy before merging: HTTPS-only, resolve and reject loopback/link-local/private/metadata ranges (and DNS rebinding), and keep a configurable allowlist or equivalent per-tenant destination policy. A bare `urlopen` on untrusted input is not safe for multi-tenant webhook delivery."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns `deliver()` into an open SSRF primitive.\n\n## Analysis\n\n`webhooks.py` previously restricted destinations to `ALLOWED_HOSTS` (`hooks.internal.example`) before `urllib.request.urlopen`. The PR deletes that check and posts to whatever `url` the caller supplies, with only a 5s timeout left as protection.\n\nAny caller that passes a customer- or attacker-controlled URL can hit:\n- cloud metadata (`169.254.169.254`), link-local, and RFC1918 hosts\n- localhost / sidecar admin ports on the runner or app network\n- non-HTTP schemes `urllib` will follow, depending on handler registration\n\nSupporting customer webhook endpoints is a valid product goal, but it needs an explicit egress policy (HTTPS-only, DNS rebinding-safe IP checks, block private/link-local/metadata ranges, optional per-tenant allowlist), not deletion of the existing gate.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

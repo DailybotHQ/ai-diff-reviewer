@@ -1,0 +1,91 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 8,
+  "tool_calls": 30,
+  "seconds": 119.2,
+  "setup_seconds": 3.6,
+  "total_seconds": 122.7,
+  "usage": {
+    "in": 64360,
+    "cache_read": 357120,
+    "cache_write": 0,
+    "out": 2740,
+    "source": "api"
+  },
+  "cost_usd": 0.216584,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity": "warning",
+      "body": "`label-gate` (and the matching scope-job checks) rename the dogfood trigger from `ready` to `AIReview`, but that rename is not in the PR summary/test plan and leaves the rest of the repo pointing at `ready`.\n\nFailure mode: after merge, maintainers following `AGENTS.md` (\u201clabel-gated on `ready`\u201d), `docs/TRIGGER_MODES.md` (recipe still titled `ready`, still cites this file as the reference), or this PR\u2019s own test plan (\u201capply the `ready` label\u201d) will not fire self-review. The header comment that points at TRIGGER_MODES \u00a7 \u201clabelled `AIReview`\u201d is also a broken anchor \u2014 that section title is still `ready`.\n\nFix: either (a) keep `ready` here and only add the complexity inputs, or (b) keep `AIReview` and update `AGENTS.md`, the TRIGGER_MODES recipe/cross-links, and the PR test plan in the same change so the operational contract stays one name."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 333,
+      "severity": "warning",
+      "body": "Comment says chat-completions legs are `(anthropic, codex)` and will apply `complexity:*`, but `codex` is an `AgentRunnerProvider` \u2014 same family as `claude-code` / `cursor`.\n\nFailure mode: with `complexity-labels-enabled: true`, the codex leg logs the agent-runner no-op WARNING and never calls `set_pr_complexity` (`docs/PR_METADATA_CHECKS.md` provider matrix; `build_agent_runner_noop_warning` in `scripts/reviewer.py`). Only `provider: anthropic` performs the assessment today. The PR description repeats the same mistake.\n\n```suggestion\n          # \u00a7 `complexity-labels-enabled`. The model calls `set_pr_complexity`\n          # and applies `complexity:low|medium|high`. Chat-completions legs\n          # (anthropic only) perform the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n          complexity-labels-enabled: true\n          complexity-label-prefix: 'complexity:'\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\nUseful dogfood of `complexity-labels-enabled`, but two correctness/docs issues should be fixed before merge \u2014 one will mislead operators about which legs label complexity, and one renames the self-review gate without updating the documented contract.\n\n## What looks good\n\n- Enabling `complexity-labels-enabled: true` + default `complexity-label-prefix: 'complexity:'` on the local `uses: ./` path is the right Rule #10 dogfood surface for `docs/PR_METADATA_CHECKS.md`.\n- Permissions stay least-privilege (`contents: read`, `pull-requests: write`); no new secrets, no shell interpolation of PR content, no third-party action pin changes.\n- Scope/gate empty-reason plumbing (`no-gate-label`) stays internally consistent within the workflow file.\n- Complexity labeling itself is best-effort and already guarded for agent-runners via `build_agent_runner_noop_warning` \u2014 turning it on here will not break legs.\n\n## Findings\n\n1. **`codex` is not chat-completions** (`.github/workflows/self-review.yml` comment + PR body). Only `anthropic` will apply `complexity:*` today; `codex`/`claude-code`/`cursor` no-op with a WARNING. Fix the comment (and PR description) so the dogfood expectation matches `docs/PR_METADATA_CHECKS.md`.\n\n2. **`ready` \u2192 `AIReview` rename is incomplete.** The workflow, gate `if:`, and operator messages all switch, but `AGENTS.md` still says label-gated on `ready`, `docs/TRIGGER_MODES.md` still documents the recipe as `ready` while citing this file as the reference, and this PR\u2019s test plan still says \u201capply the `ready` label\u201d. That will strand maintainers who follow docs/test plan after merge. Prefer either dropping the rename from this PR or landing the doc/test-plan updates with it.\n\n## Notes (no inline)\n\n- `complexity-label-prefix: 'complexity:'` is redundant with the action default \u2014 fine as living docs, not a defect.\n- Multi-provider matrix + shared `complexity:*` prefix: last successful chat-completions leg wins the label. Acceptable for dogfood; worth ",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 333,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 36.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.9,
+  "usage": {
+    "in": 17451,
+    "cache_read": 100608,
+    "cache_write": 0,
+    "out": 1764,
+    "source": "cli"
+  },
+  "cost_usd": 0.0756684,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `ALLOWED_HOSTS` and the hostname check means any caller-supplied `url` is fetched directly via `urllib.request.urlopen`. A malicious or compromised customer endpoint value such as `http://169.254.169.254/latest/meta-data/` (cloud instance metadata), `http://127.0.0.1:<internal-port>/`, or an RFC1918 admin service will be requested from the server with the event payload as the body.\n\nRestore an egress policy before merge: keep a deny-by-default host allowlist (or per-tenant registered callback URLs), require `https`, resolve DNS and reject private/link-local/metadata literal IPs (including after redirect), and do not follow redirects to blocked ranges. Product support for customer endpoints must be layered on that policy \u2014 deleting the guard is not sufficient."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change opens unrestricted server-side request forgery (SSRF) on the webhook delivery path.\n\n## Narrative\n\n`deliver()` previously refused any host outside `ALLOWED_HOSTS`. This PR deletes that allowlist and posts the event to whatever `url` the caller supplies. On a runner or app server that can reach link-local metadata, localhost, or RFC1918 services, a customer-controlled (or attacker-influenced) endpoint can make the process fetch internal resources and return status (and potentially response-driven side effects) from those targets.\n\nSupporting customer-owned webhook URLs is a valid product goal, but it needs an egress policy \u2014 HTTPS-only, DNS rebinding-safe resolution, block private/link-local/metadata ranges, and ideally an allowlist or per-tenant registered endpoint \u2014 not a raw `urlopen` on the supplied string.\n\nNo other files in the repo add compensating controls; this is the entire delivery surface.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

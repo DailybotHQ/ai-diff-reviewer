@@ -1,0 +1,95 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "run-openai-xai-feat-complex-1790211176-6399f1ac",
+  "recorded_at": "2026-09-24T00:52:56Z",
+  "runner": "in-process",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "model_alias": null,
+  "runtime_sha": "4e469f0c6687d1e3421d9bbeade5412cace10d18",
+  "prompt_sha256": "166a8e4b0bf91ffc78d53a2df61332b71ae47e1cd12626b4181df6e71d9582c0",
+  "extension_sha256": null,
+  "sampling": {
+    "requested": {
+      "temperature": 0.0,
+      "seed": 42
+    },
+    "sent": {
+      "temperature": 0.0,
+      "seed": 42
+    },
+    "stripped": []
+  },
+  "context": {
+    "repo_kind": "pull_request",
+    "head_sha": "feat/complexity-labels-all-providers",
+    "base_sha": "",
+    "corpus_case_id": null,
+    "corpus_sha256": null,
+    "changed_files": 10,
+    "omitted_files": 0,
+    "diff_chars": 45944,
+    "diff_truncated": false,
+    "iar_mode": "none",
+    "instruction_files_read": [
+      "AGENTS.md",
+      ".review/extension.md"
+    ]
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 9,
+    "tool_calls": 36,
+    "risk_tier": "unclassified",
+    "verifier_runs": 0
+  },
+  "outcome": {
+    "findings_total": 5,
+    "findings_by_severity": {
+      "critical": 0,
+      "warning": 4,
+      "info": 1
+    },
+    "findings_verified": 0,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "lenient",
+      "passed": true
+    },
+    "score": {
+      "must_find_total": 2,
+      "must_find_hits": 2,
+      "false_positives": 0,
+      "unlabelled": 4,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 64732,
+    "cache_read_tokens": 413440,
+    "cache_write_tokens": 0,
+    "output_tokens": 3029,
+    "source": "vendor"
+  },
+  "cost_usd": 0.230326,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 1.686,
+    "provider_seconds": 298.02,
+    "verifier_seconds": null,
+    "total_seconds": 299.722
+  },
+  "status": "completed",
+  "failure_class": null,
+  "campaign": {
+    "id": "phase1-parity",
+    "cell": "openai-xai|baseline|pr45",
+    "repetition": 1,
+    "arm": "baseline"
+  }
+}

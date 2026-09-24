@@ -1,0 +1,133 @@
+{
+  "pr": 39,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 13,
+  "tool_calls": 62,
+  "seconds": 294.6,
+  "setup_seconds": 5.3,
+  "total_seconds": 299.9,
+  "usage": {
+    "in": 99214,
+    "cache_read": 1318400,
+    "cache_write": 0,
+    "out": 4277,
+    "source": "api"
+  },
+  "cost_usd": 0.48777,
+  "changed_files": [
+    ".agents/agents/prompt-engineer.md",
+    ".agents/agents/reviewer.md",
+    ".agents/docs/skills_agents_catalog.md",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/ARCHITECTURE.md",
+    "docs/ITERATION_AWARENESS.md",
+    "docs/PERFORMANCE.md",
+    "docs/PRODUCT_SPEC.md",
+    "docs/PROMPTS.md",
+    "docs/README.md",
+    "docs/SECURITY.md",
+    "docs/STRICTNESS.md",
+    "docs/TESTING_GUIDE.md",
+    "docs/TRIGGER_MODES.md",
+    "examples/README.md",
+    "examples/iteration-aware.yml",
+    "examples/skip-review-label.yml",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_iar_dedup.py",
+    "tests/test_iar_dispatch.py",
+    "tests/test_iar_failure_fallback.py",
+    "tests/test_iar_generation_tracking.py",
+    "tests/test_iar_observability.py",
+    "tests/test_iar_policies.py",
+    "tests/test_iar_state_layer.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "line": 256,
+      "severity": "warning",
+      "body": "The USER_FORCED_RESET branch in this diagram only lists applied_label + prior stamp + label absent. Runtime `run_iar_pre_llm` also requires `label_fetch_ok` (PR-labels REST succeeded) so a GitHub 5xx empty list cannot wipe fingerprint memory. Operators copying this diagram will miss the fifth guard that `docs/ITERATION_AWARENESS.md` \u00a7 8.5 treats as load-bearing.\n\n```suggestion\n\u2502   \u251c\u2500\u2500 (USER_FORCED_RESET override) \u2190 only when ALL FIVE hold:\n\u2502   \u2502                                    applied_label configured, prior_state\n\u2502   \u2502                                    exists, prior_state.reviewed_label_applied,\n\u2502   \u2502                                    label_fetch_ok (PR-labels REST succeeded),\n\u2502   \u2502                                    and applied_label absent from the returned\n\u2502   \u2502                                    list. Clears prior_state to None and\n\u2502   \u2502                                    forces new_lines_pct=0.0.\n```"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity": "warning",
+      "body": "`skipped` is still described as label-gate only, but this PR adds `skip-review-label` and both `action.yml` and `README.md` already say the output covers label/author gate **or** the emergency bypass. Setup-skill drift breaks the \u201cany agent can answer setup questions\u201d promise (AGENTS.md Rule #7).\n\n```suggestion\n| `skipped` | Whether the run was skipped without invoking the LLM (`true`/`false`). Set when EITHER the label/author gate suppressed the run OR the configured `skip-review-label` emergency bypass fired. |\n```"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "line": 281,
+      "severity": "info",
+      "body": "\u201cbaseline (IAR-off) path\u201d reads like the removed opt-out switch. After unconditional IAR, failure degrades to a baseline review with empty IAR outputs / no marker annotation \u2014 not an off mode. Worth aligning with the rest of this PR\u2019s wording sweep.\n\n```suggestion\n- **Never crashes the reviewer.** Both `run_iar_pre_llm` and `run_iar_post_llm` are wrapped in `try/except` at the call site in `main()`. On any IAR failure the reviewer falls back to the baseline review path (no IAR marker annotation / empty IAR outputs) and logs the exception \u2014 the CI check still gets a review, IAR just skips this run.\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, high-stakes feature landing. Runtime IAR / skip-label / USER_FORCED_RESET invariants look correct and well locked by tests; remaining issues are operator-facing doc/contract drift, not merge-blocking security bugs.\n\n## What I verified\n\n**Security / contract rails (pass):**\n- Stdlib-only imports; no `shell=True`; `git show` paths go through `safe_repo_path`.\n- Marker contracts preserved (`REVIEW_MARKER`, provider marker, IAR state tags).\n- New optional inputs only (`skip-review-label` + 4 IAR knobs + 5 IAR outputs) \u2014 no removals/renames of existing public surface.\n- Secrets still registered; skip path does not stamp `applied-label`, does not mutate IAR state, runs before collapse/LLM.\n- Skip-label collision guard covers gate / applied / escape (case-insensitive).\n- USER_FORCED_RESET five-condition guard is present in code (`reviewed_label_applied` + `label_fetch_ok` + configured/absent/prior).\n- Critical-always-surfaces rail is hardcoded in `dedupe_findings_against_prior`; cap truncation uses `_sort_findings_criticals_first` on both exhaustive and agent-runner paths.\n- Marker fetch keeps tier-2 minimized-with-state fallback, author filter, and provider isolation.\n- `try/except` wraps both IAR pre/post call sites; `write_all_outputs` always empties the 5 IAR outputs first.\n- `reviewed_label_applied` is written after observed `gh_apply_label` via `compute_reviewed_label_applied` three-signal OR.\n- Escape short-circuit is skipped on `USER_FORCED_RESET` in `dispatch_policy`.\n- Three-dot range hash / safety-net denominator match the PR-visible diff contract.\n\n**Coverage:** dedicated IAR suites + skip renderer/collision tests + failure-fallback suite look aligned with the load-bearing contracts. Manual smoke tests for reset/skip are still open in the PR body (expected for dogfood).\n\n## Findings posted\n\n1. **warning** \u2014 `docs/ARCHITECTURE.md` USER_FORCED_RESET flow diagram still omits `label_fetch_ok` (runtime + ITERATION_AWARENESS already require five co",
+  "verification": [
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "line": 256,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 464,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "line": 281,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 3,
+    "coverage_paths": 2,
+    "changed_files": 32
+  }
+}
