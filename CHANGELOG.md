@@ -24,6 +24,8 @@ The breaking rows of the v3 ledger ([RFC-07](docs/rfc/v3/07-breaking-change-ledg
 
 - **Artifact actions bumped (Dependabot PR #62, folded into the v3 branch):** `actions/upload-artifact` v4.6.2 → v7.0.1 and `actions/download-artifact` v4.3.0 → v8.0.1 in `action.yml` (SHA-pinned, verified against the upstream tags) and `eval-campaign.yml`. The aggregate step reads the downloaded leg directory recursively, so the layout change between majors does not affect it; the dogfood self-review on this PR exercises both steps.
 
+- **Final Review fixes (Task 32 security pass):** the budget matrix's output-token cap now reaches the chat-completions request body (`max_tokens` / `max_completion_tokens`), and the raw diff is kept up to 200 000 characters — the largest tier's patch budget — so `elevated` / `critical` PRs are no longer pre-truncated at 120 kB before the per-tier budget applies.
+
 - **Stored-records file cap raised 1 000 → 2 500 (`records_validate.py`).** The Phase 4 campaigns (261 runs, payload + record each) took `tests/eval/records/` past the old loop guard; the per-file 1 MB cap is unchanged.
 
 - **`api-key` is optional wherever the lane has environment credentials (BC-16).** The v2.5.0 Bedrock exception becomes the rule (AWS today; future OIDC lanes follow it) — `action.yml`, README and the skill reference say so; no runtime change. **BC-06 closed as "keep"** (RFC-08 D-03, Phase 1 measurement): `provider: anthropic` / `openai` stay supported for code review, rebuilt on the unified loop (BC-03).

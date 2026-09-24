@@ -192,7 +192,7 @@ class RequestShapeTests(unittest.TestCase):
         self.assertNotIn("api-key", headers)
         body = json.loads(req.data)
         self.assertEqual(body["model"], "gpt-5.6-luna")
-        self.assertEqual(body["max_completion_tokens"], reviewer.OPENAI_MAX_TOKENS)
+        self.assertEqual(body["max_completion_tokens"], reviewer.OPENAI_MAX_TOKENS)  # no budget cap set
         self.assertNotIn("max_tokens", body)
         self.assertEqual(body["tool_choice"], "auto")
         self.assertEqual(body["messages"][0], {"role": "system", "content": "S"})
@@ -217,8 +217,23 @@ class RequestShapeTests(unittest.TestCase):
                 self.assertTrue(req.full_url.startswith(base))
                 self.assertTrue(req.full_url.endswith("/chat/completions"))
                 body = json.loads(req.data)
-                self.assertEqual(body["max_tokens"], reviewer.OPENAI_MAX_TOKENS)
+                self.assertEqual(body["max_tokens"], reviewer.OPENAI_MAX_TOKENS)  # no budget cap set
                 self.assertNotIn("max_completion_tokens", body)
+
+    def test_budget_matrix_output_cap_reaches_the_body(self) -> None:
+        # RFC-06 (Final Review fix): `set_output_token_cap` binds the
+        # chat-completions body too, on the kind's parameter name.
+        for base, model in (("https://api.openai.com/v1", "gpt-5.6-luna"), ("https://api.x.ai/v1", "grok-4.3")):
+            with self.subTest(base=base):
+                prof = reviewer.resolve_endpoint_profile(base, "openai")
+                prov = reviewer.OpenAIProvider(api_key="k", model=model, profile=prof)
+                reviewer.set_output_token_cap(4096)
+                try:
+                    body = prov.build_request_body(system_prompt="s", messages=[{"role": "user", "content": "x"}], tools=[])
+                finally:
+                    reviewer.set_output_token_cap(0)
+                param = reviewer.OPENAI_MAX_TOKENS_PARAM_BY_KIND.get(prof.kind, reviewer.OPENAI_MAX_TOKENS_PARAM_DEFAULT)
+                self.assertEqual(body[param], 4096)
 
     def test_no_tools_means_no_tool_fields(self) -> None:
         prov = reviewer.OpenAIProvider(api_key="k", model="m")

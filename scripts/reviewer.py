@@ -1085,7 +1085,7 @@ OPENAI_OPTIONAL_SAMPLING_PARAMS: tuple[str, ...] = (
 # diffs are truncated with a pointer to the read_file tool.
 # Ceiling on the diff kept on `PRContext` (v3: equal to the first-message
 # patch budget — the embedding rule is per file, see `render_user_prompt`).
-MAX_DIFF_CHARS: int = FIRST_MESSAGE_PATCH_BYTES
+MAX_DIFF_CHARS: int = 200_000   # the largest BUDGET_MATRIX patch_bytes — the per-tier budget (or the fixed profile) selects what the first message embeds; this ceiling only bounds the raw diff kept in memory
 
 # Diff shaping (v2.1.0+): lock / minified / generated / vendored files carry
 # near-zero review value but dominate PR diffs and are re-sent on every
@@ -3812,7 +3812,7 @@ class OpenAIProvider(Provider):
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": anthropic_messages_to_openai(system_prompt, messages),
-            max_param: OPENAI_MAX_TOKENS,
+            max_param: OUTPUT_TOKEN_CAP or OPENAI_MAX_TOKENS,
         }
         # Sampling knobs are endpoint-kind-scoped (unit-tested per kind in
         # tests/test_openai_provider.py::RequestShapeTests):
