@@ -40,7 +40,7 @@ doesn't have it yet.
 | 2 | Author repo-specific overrides (`.review/extension.md`) | [`generate-extension`](generate-extension/SKILL.md) | 🖥️ Local **+** ☁️ CI (shared file) |
 | 3 | Install the GitHub Action + write `pr-review.yml` | [`setup`](setup/SKILL.md) | ☁️ CI |
 | 4 | Draft the PR title + body from the diff | [`open-pr`](open-pr/SKILL.md) | 🖥️ Local → GitHub |
-| 5 | Read the CI review on the PR + walk through findings to apply/defer/skip | [`apply-review`](apply-review/SKILL.md) | ☁️ CI → 🖥️ Local |
+| 5 | Read the CI review on the PR (the v3 structured-output artifact first, review threads as the fallback) + walk through findings to apply/defer/skip | [`apply-review`](apply-review/SKILL.md) | ☁️ CI → 🖥️ Local |
 
 Sub-skill 3 (`setup`) also doubles as the **reference manual** for
 every `action.yml` input via [`setup/reference.md`](setup/reference.md)
@@ -257,7 +257,7 @@ four sibling sub-skills have their own procedures in their respective
 - [`generate-extension/SKILL.md`](generate-extension/SKILL.md) — author `.review/extension.md`
 - [`setup/SKILL.md`](setup/SKILL.md) — install the GitHub Action
 - [`open-pr/SKILL.md`](open-pr/SKILL.md) — author the PR title + body
-- [`apply-review/SKILL.md`](apply-review/SKILL.md) — read + apply the CI review posted on the PR
+- [`apply-review/SKILL.md`](apply-review/SKILL.md) — read + apply the CI review posted on the PR (artifact-first since v3: the `review-output/3.0` document carries findings, verification, refuted findings and the prior ledger; threads are the fallback)
 
 ---
 
