@@ -171,6 +171,8 @@ def run_eval_command(manifest: dict[str, Any], r: RunPlan) -> list[str]:
         argv += ["--extension", str(ROOT / arm["extension"])]
     if arm.get("verifier"):
         argv += ["--verifier", str(arm["verifier"])]
+    if arm.get("round"):
+        argv += ["--round", str(arm["round"])]
     if r.cell["kind"] == "pr":
         wt: Path = Path(str(r.cell["worktree"]))
         if not wt.is_absolute():

@@ -1,0 +1,53 @@
+{
+  "campaign_id": "phase3-incremental",
+  "repetitions": 3,
+  "lanes": {
+    "grok": {
+      "provider": "grok",
+      "model": "balanced",
+      "api_key_env": "XAI_API_KEY",
+      "indicative_max_cost_usd": 1.0
+    }
+  },
+  "arms": [
+    {
+      "name": "full",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md",
+      "verifier": "on"
+    },
+    {
+      "name": "incremental",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md",
+      "verifier": "on",
+      "round": "2"
+    },
+    {
+      "name": "nochange",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md",
+      "verifier": "on",
+      "round": "nochange"
+    }
+  ],
+  "cells": [
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C091.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C092.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C093.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C094.json"
+    }
+  ],
+  "note": "Phase 3 (RFC-06 \u00a7 Measurable targets): the 4 multi-round fixtures \u00d7 3 reps \u00d7 {full round base\u2192head, incremental round 2 (delta round1\u2192head + round-1 findings as priors, RFC-06 budget), verifier-only round (round1\u2192round1)} on the grok CLI. Targets: \u221250 % input tokens on the incremental arm vs full, 0 review turns on nochange, recall unchanged."
+}
