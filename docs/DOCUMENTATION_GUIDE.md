@@ -96,7 +96,7 @@ python3 -m py_compile scripts/reviewer.py
 ```
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
 ```
 ````
 

@@ -342,7 +342,7 @@ jobs:
           fetch-depth: 0        # required — the action runs `git diff origin/<base>...HEAD`
           <agent-runners only: persist-credentials: false   # the CLI must never find the GITHUB_TOKEN in .git/config>
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         <agent-runners only: if: github.event.pull_request.head.repo.full_name == github.repository   # trusted (non-fork) PRs>
         with:
           provider: <PROVIDER>

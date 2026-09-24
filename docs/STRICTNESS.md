@@ -144,7 +144,7 @@ The `severity` and `blocked` outputs are available to subsequent steps in the sa
 
 ```yaml
 - id: review
-  uses: DailybotHQ/ai-diff-reviewer@v2
+  uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

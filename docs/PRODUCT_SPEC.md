@@ -81,7 +81,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 ### GitHub Action
 
 - **License:** MIT.
-- **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v2`.
+- **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v3`.
 - **Repo path:** `DailybotHQ/ai-diff-reviewer`.
 - **Versioning:** SemVer. Default pin is the moving major `@v2` (tracks latest `v2.x.y`).
 - **Runners × backends:** as of `v2.1.0` the action ships **six runners** across two families, and an optional `api-base` input that points a runner at another backend:
@@ -94,7 +94,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 - **License:** MIT (same repository).
 - **Channel:** [skills.sh](https://skills.sh) via `npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer` — a one-liner that vendors the skill into `.agents/skills/ai-diff-reviewer/` and records the pinned version in `skills-lock.json`.
-- **Versioning:** the skill package's `version:` frontmatter is bumped in lockstep with the Action's tag by [`auto-release.yml`](../.github/workflows/auto-release.yml). Pinning `DailybotHQ/ai-diff-reviewer@v2.0.0` on both surfaces guarantees the exact same review methodology on both.
+- **Versioning:** the skill package's `version:` frontmatter is bumped in lockstep with the Action's tag by [`auto-release.yml`](../.github/workflows/auto-release.yml). Pinning `DailybotHQ/ai-diff-reviewer@v3.0.0` on both surfaces guarantees the exact same review methodology on both.
 - **Agent support:** any coding agent that reads the Open Agent Skills format — Cursor, Claude Code, Codex CLI, Gemini CLI, GitHub Copilot's agent mode, Cline, Windsurf, OpenClaw.
 - **Dogfooded install:** this repo also vendors its own skill copy at [`.agents/skills/ai-diff-reviewer/`](../.agents/skills/ai-diff-reviewer/) using the exact same `npx skills` install path, refreshed automatically after every release by `auto-release.yml` Step 3.5.
 
@@ -111,7 +111,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 
 ## Current major + roadmap (not a commitment)
 
-**Current major: v2** — pin `uses: DailybotHQ/ai-diff-reviewer@v2`. See [`MIGRATION_v2.md`](MIGRATION_v2.md).
+**Current major: v2** — pin `uses: DailybotHQ/ai-diff-reviewer@v3`. See [`MIGRATION_v2.md`](MIGRATION_v2.md).
 
 | Version | Headline |
 |---|---|

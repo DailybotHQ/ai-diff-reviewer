@@ -82,7 +82,7 @@ Keep branch names short. Long branches show up in `gh pr view` and break termina
 - **Default prompt:** `prompts/default.md`. Keep one. Don't fork into multiple defaults.
 - **User-facing docs:** `docs/STRICTNESS.md`, `docs/PROMPTS.md`, `docs/PROVIDERS.md`. Each ~300–500 lines max; split if longer.
 - **Contributor docs:** `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, etc.
-- **Examples:** `examples/<scenario>.yml`. One file per scenario, with comments explaining the intent. Keep them runnable as-is — they pin `DailybotHQ/ai-diff-reviewer@v2`.
+- **Examples:** `examples/<scenario>.yml`. One file per scenario, with comments explaining the intent. Keep them runnable as-is — they pin `DailybotHQ/ai-diff-reviewer@v3`.
 - **AI-agent config:** `.agents/`. Edit there, never at `.claude/...`. The `.claude` symlink is for back-compat only.
 
 ## English only

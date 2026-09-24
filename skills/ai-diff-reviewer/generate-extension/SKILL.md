@@ -298,7 +298,7 @@ After writing, tell the developer:
    sync:
    ```yaml
    # .github/workflows/pr-review.yml
-   - uses: DailybotHQ/ai-diff-reviewer@v2
+   - uses: DailybotHQ/ai-diff-reviewer@v3
      with:
        api-key: ${{ secrets.ANTHROPIC_API_KEY }}
        github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -316,7 +316,7 @@ After writing, tell the developer:
 2. Reference the file in your workflow with `prompt-file:` (NOT
    `prompt-extension-file:` — this is the full replacement):
    ```yaml
-   - uses: DailybotHQ/ai-diff-reviewer@v2
+   - uses: DailybotHQ/ai-diff-reviewer@v3
      with:
        api-key: ${{ secrets.ANTHROPIC_API_KEY }}
        github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: anthropic
           model: economy
@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: anthropic
           model: deep
@@ -119,7 +119,7 @@ Like Cursor's subscription model, `provider: claude-code` can bill reviews again
    It prints a long-lived OAuth token (starts with `sk-ant-oat…`).
 2. Store that token as a repository secret and pass it as the action's `api-key`:
    ```yaml
-   - uses: DailybotHQ/ai-diff-reviewer@v2
+   - uses: DailybotHQ/ai-diff-reviewer@v3
      with:
        provider: claude-code
        api-key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # sk-ant-oat… token
@@ -559,7 +559,7 @@ The `provider: cursor` leg has a materially different cost profile from the chat
 - **`auto` is the built-in default for `provider: cursor`** (empty `model:` resolves to it). You only need to set it explicitly if you want to be self-documenting:
 
   ```yaml
-  - uses: DailybotHQ/ai-diff-reviewer@v2
+  - uses: DailybotHQ/ai-diff-reviewer@v3
     with:
       provider: cursor
       api-key: ${{ secrets.CURSOR_API_KEY }}

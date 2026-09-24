@@ -139,7 +139,7 @@ distinction only matters at first-time setup.
 npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-diff-reviewer@v2.1.0 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v3.1.0 --skill ai-diff-reviewer
 ```
 
 This vendors the skill into `.agents/skills/ai-diff-reviewer/` in the
@@ -540,7 +540,7 @@ The **same file** should be referenced from your CI workflow's
 
 ```yaml
 # .github/workflows/pr-review.yml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}

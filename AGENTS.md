@@ -229,7 +229,7 @@ The current values are:
 - `branding.icon: 'check-circle'`
 - `branding.color: 'purple'`
 
-**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` and copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v2`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
+**Repo slug ≠ Marketplace slug.** The git repo lives at `DailybotHQ/ai-diff-reviewer` and copy-paste examples pin against that path (`uses: DailybotHQ/ai-diff-reviewer@v3`). The Marketplace listing is a separate slug derived from `name:` — currently `ai-diff-reviewer`. The two are decoupled by design: consumers see the friendly name in Marketplace search; their workflows keep using the stable repo path.
 
 The [Marketplace rename decision log](docs/STANDARDS.md#marketplace-rename-decision-log) records the release history and rationale.
 

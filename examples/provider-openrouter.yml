@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0   # required: the runtime diffs origin/<base>...HEAD
           persist-credentials: false   # never leave GITHUB_TOKEN in .git/config
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: openai
           api-base: https://openrouter.ai/api/v1

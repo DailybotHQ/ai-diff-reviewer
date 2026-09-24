@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
 
       - id: review
-        uses: DailybotHQ/ai-diff-reviewer@v2
+        uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}

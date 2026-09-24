@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false   # never leave GITHUB_TOKEN in .git/config
 
       # ---- OpenAI (default backend) ----------------------------------------
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: openai
           api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -43,7 +43,7 @@ jobs:
           # model: economy                 # one-word cost profile (economy | balanced | deep)
 
       # ---- Azure Foundry (v1 endpoint) --------------------------------------
-      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      # - uses: DailybotHQ/ai-diff-reviewer@v3
       #   with:
       #     provider: openai
       #     api-base: https://<resource>.services.ai.azure.com/openai/v1
@@ -52,7 +52,7 @@ jobs:
       #     model: gpt-5.4-mini-azure        # your DEPLOYMENT name
 
       # ---- xAI Grok -----------------------------------------------------------
-      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      # - uses: DailybotHQ/ai-diff-reviewer@v3
       #   with:
       #     provider: openai
       #     api-base: https://api.x.ai/v1
@@ -61,7 +61,7 @@ jobs:
       #     model: grok-4.5                  # grok-4.6 for a deeper pass
 
       # ---- Z.ai GLM (Coding Plan, OpenAI-compatible) -------------------------
-      # - uses: DailybotHQ/ai-diff-reviewer@v2
+      # - uses: DailybotHQ/ai-diff-reviewer@v3
       #   with:
       #     provider: openai
       #     api-base: https://api.z.ai/api/coding/paas/v4

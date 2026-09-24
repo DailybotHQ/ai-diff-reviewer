@@ -40,7 +40,7 @@ jobs:
           # in-process, so the CLI never needs git credentials.
           persist-credentials: false
 
-      - uses: DailybotHQ/ai-diff-reviewer@v2
+      - uses: DailybotHQ/ai-diff-reviewer@v3
         with:
           provider: codex
           api-key: ${{ secrets.OPENAI_API_KEY }}

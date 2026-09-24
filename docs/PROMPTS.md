@@ -149,7 +149,7 @@ You have three levers, from least to most invasive:
 ### Example — extend the default
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     prompt-extension-file: examples/prompts/python-strict.md
 ```
@@ -157,7 +157,7 @@ You have three levers, from least to most invasive:
 ### Example — full replacement
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     prompt-file: .github/prompts/our_review_rules.md
 ```
@@ -232,7 +232,7 @@ The action ships a companion **local review skill** ([`skills/ai-diff-reviewer/`
 npx skills add DailybotHQ/ai-diff-reviewer --skill ai-diff-reviewer
 
 # Or pin to a specific tag for reproducibility
-npx skills add DailybotHQ/ai-diff-reviewer@v2.0.0 --skill ai-diff-reviewer
+npx skills add DailybotHQ/ai-diff-reviewer@v3.0.0 --skill ai-diff-reviewer
 
 # Bump to latest published action tag later
 npx skills update ai-diff-reviewer
@@ -284,7 +284,7 @@ The first time the review flow activates on a repo without an extension file, th
 Reference the same file from your CI workflow so both surfaces produce the same review:
 
 ```yaml
-- uses: DailybotHQ/ai-diff-reviewer@v2
+- uses: DailybotHQ/ai-diff-reviewer@v3
   with:
     api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
