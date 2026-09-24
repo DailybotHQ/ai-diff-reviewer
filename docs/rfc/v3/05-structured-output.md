@@ -102,6 +102,8 @@ and `verification.status`, `refuted[].severity_claimed`, `prior_findings.retired
 `gate.strictness`, `legs[].status`, `change_inventory.files[].status` and
 `risk_class`, `usage.source` (adds `aggregated`).
 
+> Amendment (2026-09-24, PLAN_v3_implementation Task 17): `run.status` also admits `skipped`, matching the RFC-01 run-record amendment — a run that ended before any model call still writes its document.
+
 Field groups and their producers:
 
 | Group | Producer | Notes |
