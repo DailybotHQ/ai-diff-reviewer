@@ -471,8 +471,9 @@ For the full collaboration model — when to spawn sub-agents, how to coordinate
 This repository **dogfoods itself**: every PR is reviewed by the action it ships, via `.github/workflows/self-review.yml`. When applying review feedback:
 
 - Skip `isMinimized == true` comments (those are previous reviews collapsed by `collapse-previous`).
-- Anchor on the most recent `<!-- ai-pr-reviewer-marker -->` comment to identify the authoritative review SHA.
+- Anchor on the most recent `<!-- ai-pr-reviewer-marker -->` comment to identify the authoritative review SHA. Since v3 the self-review runs the RFC-04 ensemble topology: the provider legs emit artifacts and post nothing, and **one** aggregate job publishes the review — its body and tracking comment carry `<!-- ai-pr-reviewer-aggregate -->` beside the marker, one `self-reviewed` label replaces the per-provider labels, and each finding says how many legs reported it.
 - The action collapses prior reviews on every push, so reading all comments blindly will mix live and stale feedback.
+- Prefer the structured artifact (`review-output/3.0`, uploaded by the aggregate job) over scraping the body: it carries the findings with evidence, verification and agreement, the refuted list and the legs block.
 
 Full workflow + ready-to-copy GraphQL query: [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md).
 

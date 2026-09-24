@@ -96,6 +96,8 @@ jobs:
       # on the repo, so nothing can review). Empty when the matrix is
       # non-empty.
       empty_reason: ${{ steps.decide.outputs.empty_reason }}
+      # RFC-04: the leg ids the aggregate job waits for (see the decide step).
+      expected_legs: ${{ steps.decide.outputs.expected_legs }}
     steps:
       # No checkout: the decision only reads event context and secret presence,
       # never the diff (full coverage = every provider on every ready PR).
@@ -222,6 +224,27 @@ jobs:
           fi
           echo "::notice::Self-review matrix: $matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          # RFC-04: the leg ids the aggregate job waits for —
+          # `<provider>|<endpoint_kind>|<resolved model>` exactly as each leg's
+          # run record will carry them (resolved by the runtime's own functions,
+          # so the list can never drift from what the legs produce).
+          expected_legs=$(MATRIX_JSON="$matrix" python3 - <<'PY'
+          import importlib.util, json, os, sys
+          spec = importlib.util.spec_from_file_location("reviewer", "scripts/reviewer.py")
+          r = importlib.util.module_from_spec(spec); sys.modules["reviewer"] = r; spec.loader.exec_module(r)
+          legs = []
+          for leg in json.loads(os.environ["MATRIX_JSON"]):
+              base = r.validate_api_base(leg.get("api_base") or "")
+              profile = r.resolve_endpoint_profile(base, leg["provider"])
+              model = r.resolve_model(leg["provider"], profile, leg.get("model") or "")
+              legs.append(r.leg_id_of(leg["provider"], profile.kind, model))
+          # the runtime logs model resolution on stdout; the sentinel keeps the capture clean
+          print("LEGS=" + ",".join(legs))
+          PY
+          )
+          expected_legs=$(printf '%s\n' "$expected_legs" | sed -n 's/^LEGS=//p' | tail -n1)
+          echo "::notice::Expected legs: $expected_legs"
+          echo "expected_legs=$expected_legs" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # One matrix leg per ELIGIBLE provider (built by `scope`). The job-level
@@ -275,7 +298,14 @@ jobs:
           # been observed for a couple of weeks (we've been on `lenient` for
           # months and the false-positive rate on `critical` is near zero).
           strictness: block-on-critical
-          applied-label: ${{ matrix.label }}
+          # RFC-04 reference topology (BC-09/BC-10): every leg EMITS its
+          # `review-output/3.0` document as an artifact and posts nothing;
+          # the `aggregate` job below consolidates the legs, verifies once and
+          # publishes ONE review with one marker and one label. Per-leg
+          # `self-reviewed:<provider>` labels are retired — provenance lives in
+          # the structured output and the job summary.
+          mode: emit
+          expected-legs: ${{ needs.scope.outputs.expected_legs }}
           # Layer THIS repo's own review overrides on top of the shipped
           # default prompt so self-review sees the repo-specific rules
           # (stdlib-only, no `shell=True`, marker preservation, symlink
@@ -412,9 +442,57 @@ jobs:
   # `failure` if ANY leg fails), so we count successful legs from this run's
   # jobs via the API. See docs/TRIGGER_MODES.md § "Recipe: run once when
   # labelled `ready`, block merge until it passes".
+  # ---------------------------------------------------------------------------
+  # The aggregate job (RFC-04 § Topology): downloads every leg's artifact for
+  # this head, consolidates (dedup by anchor, agreement, max claim), runs the
+  # verifier ONCE over the consolidated set, and publishes one review with the
+  # aggregate marker. `always()` so a timed-out leg does not erase the others'
+  # work — the missing leg is named in the review and the job summary.
+  # ---------------------------------------------------------------------------
+  aggregate:
+    name: 'Self-review — aggregate'
+    needs: [scope, self-review]
+    if: always() && needs.scope.result == 'success' && needs.scope.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Aggregate the emitted legs and publish one review
+        uses: ./
+        with:
+          mode: aggregate
+          expected-legs: ${{ needs.scope.outputs.expected_legs }}
+          # The verifier lane of the aggregate job: the grok CLI's in-process
+          # twin (`openai` on xAI) with the same credential (D-06). With the
+          # secret absent the verifier fails open — claimed criticals publish
+          # as annotated warnings and the log says why.
+          provider: grok
+          api-key: ${{ secrets.XAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          label-gate: ready
+          strictness: block-on-critical
+          # One label for the consolidated review (BC-10).
+          applied-label: self-reviewed
+          min-agreement: 1
+          require-all-legs: false
+          prompt-extension-file: .review/extension.md
+          convergence-policy: first-pass-exhaustive
+          iteration-escape-label: full-review-please
+          skip-review-label: skip-ai-review
+          complexity-labels-enabled: true
+          complexity-label-prefix: 'complexity:'
+
   gate:
     name: 'Self-review gate'
-    needs: [scope, self-review]
+    needs: [scope, self-review, aggregate]
     # Run the gate ONLY when this specific event was a review-request event,
     # authoritatively decided by the scope job's should_run logic and exposed
     # via `empty_reason`. `no-ready-label` means "this run wasn't gated on a
@@ -442,6 +520,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SCOPE_RESULT: ${{ needs.scope.result }}
+          AGGREGATE_RESULT: ${{ needs.aggregate.result }}
           MATRIX: ${{ needs.scope.outputs.matrix }}
           EMPTY_REASON: ${{ needs.scope.outputs.empty_reason }}
           REPO: ${{ github.repository }}
@@ -462,18 +541,12 @@ jobs:
             echo "::error::Self-review did not run — a review was requested (via 'ready' label) but no provider secret is configured on this repo. Set at least one of ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, CURSOR_API_KEY, OPENAI_API_KEY, XAI_API_KEY, ZAI_CODING_API_KEY, or AZURE_OPENAI_API_KEY (+ AZURE_OPENAI_BASE_URL variable) as a repo secret to unblock the merge gate."
             exit 1
           fi
-          # Count the `Self-review — <provider>` legs of THIS run that concluded
-          # success. Match by "starts with Self-review" and exclude this gate job
-          # by name (robust to the em-dash in the leg names). `>= 1` → gate green.
-          passed=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs" --paginate \
-            --jq '[.jobs[]
-                   | select(.name != "Self-review gate")
-                   | select(.name | startswith("Self-review"))
-                   | select(.conclusion == "success")] | length')
-          echo "Self-review legs that passed: ${passed:-0}"
-          if [ "${passed:-0}" -ge 1 ]; then
-            echo "At least one self-review leg passed — merge gate satisfied."
+          # RFC-04: the merge gate is the AGGREGATE job's outcome — it publishes
+          # the one review and runs the strictness gate over the consolidated,
+          # verified set (a leg that timed out is named there, not fatal).
+          if [ "$AGGREGATE_RESULT" = "success" ]; then
+            echo "Aggregate review published and its gate passed — merge gate satisfied."
           else
-            echo "::error::No self-review leg passed — at least one provider must run and pass before merge. Fix findings / rerun (toggle the 'ready' label)."
+            echo "::error::The aggregate self-review did not pass (result=$AGGREGATE_RESULT). Read the consolidated review on the PR; fix findings / rerun (toggle the 'ready' label)."
             exit 1
           fi

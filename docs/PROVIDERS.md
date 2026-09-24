@@ -604,7 +604,9 @@ Most consumers run **one provider per PR** — that's the common case and needs 
 
 **`collapse-previous` is scoped per-provider.** Every review body and tracking comment carries an invisible per-provider marker (`<!-- ai-pr-reviewer-provider: <id> -->`). When `collapse-previous` runs (default `true`), it only minimizes *this provider's own* prior artefacts — it will **not** collapse a different provider's review, even though all jobs share one `github-token` (author `github-actions[bot]`). So each provider keeps a single live review, and re-running a provider outdates only its own previous run.
 
-To run multiple providers cleanly:
+**v3 — one consolidated review instead of one per provider.** Run each provider as a matrix leg with `mode: emit` and add one `mode: aggregate` job: the legs post nothing (read permissions only), the aggregate merges duplicates by anchor, records agreement per finding, verifies once and publishes one review with one marker and one label ([`examples/ensemble-matrix.yml`](../examples/ensemble-matrix.yml), [PR_REVIEW_WORKFLOW § Aggregated reviews](PR_REVIEW_WORKFLOW.md#aggregated-reviews-v3-mode-aggregate)). This repo's [`self-review.yml`](../.github/workflows/self-review.yml) is the reference topology. The per-provider pattern below still works for consumers who want separate reviews.
+
+To run multiple providers cleanly (separate reviews):
 
 1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
 2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.

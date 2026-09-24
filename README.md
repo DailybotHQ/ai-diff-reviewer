@@ -238,6 +238,11 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
+
+### Several providers, one review (v3)
+
+Run each provider as a matrix leg with `mode: emit` and one `mode: aggregate` job after them: the legs review and upload their `review-output/3.0` document without touching the PR, the aggregate merges duplicates by anchor, records how many legs agree on each finding, verifies the criticals once and publishes **one** review with one marker and one label. Knobs: `expected-legs`, `min-agreement`, `require-all-legs`. Copy [`examples/ensemble-matrix.yml`](examples/ensemble-matrix.yml); the reading rules are in [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md#aggregated-reviews-v3-mode-aggregate).
+
 ### Bill Claude Code against a subscription (instead of API tokens)
 
 Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. Run `claude setup-token` on a machine logged into your plan, store the resulting `sk-ant-oat…` token as a secret, and pass it as `api-key` — the action auto-detects the prefix and uses subscription auth:
