@@ -1418,6 +1418,11 @@ INLINE_FINDING_MARKER_CLOSE: str = " -->"
 IAR_INCREMENTAL_MIN_CAP: int = 3
 IAR_INCREMENTAL_MIN_TURNS: int = 6
 IAR_INCREMENTAL_MIN_DELTA_RATIO: float = 0.1
+# RFC-06 § Incremental rounds (BC-13, incremental half): the follow-up round's
+# turn budget is derived from the delta, not from a ratio of the full cap.
+INCREMENTAL_TURN_FLOOR: int = 4            # inventory, rules, one look at each prior finding, submit
+INCREMENTAL_TURNS_PER_FILE: float = 1.5    # per changed file in the delta
+INCREMENTAL_TURNS_PER_OPEN: float = 1.0    # per outstanding prior finding (the verifier re-reads anchors separately)
 PRIOR_FINDINGS_MAX_LISTED: int = 40
 PRIOR_FINDING_STATUS_RESOLVED: str = "resolved"
 PRIOR_FINDING_STATUS_OPEN: str = "open"
@@ -7618,6 +7623,15 @@ def select_iar_mode(
     )
 
 
+def incremental_budget(delta_files: int, outstanding: int, tier_ceiling: int) -> int:
+    """RFC-06: `clamp(floor + k_files·|Δfiles| + k_open·|outstanding|, floor, ceiling)`.
+    `tier_ceiling` is the round's full budget (the configured `max-turns` until
+    the risk tiers land); a ceiling below the floor yields the ceiling."""
+    raw: float = INCREMENTAL_TURN_FLOOR + INCREMENTAL_TURNS_PER_FILE * max(0, delta_files) + INCREMENTAL_TURNS_PER_OPEN * max(0, outstanding)
+    turns: int = max(INCREMENTAL_TURN_FLOOR, int(-(-raw // 1)))
+    return max(1, min(turns, tier_ceiling)) if tier_ceiling > 0 else turns
+
+
 def scale_incremental_budget(
     *, base_cap: int, base_turns: int, delta_ratio: float, prior_critical: int
 ) -> tuple[int, int]:
@@ -7660,6 +7674,9 @@ class IARPreLLMContext:
     delta: IncrementalDelta | None = None
     prior_findings: tuple[PriorFinding, ...] = ()
     effective_max_turns: int = 0  # 0 = leave the caller's max_turns as is
+    # RFC-06: an incremental round with no changed file is a verifier-only
+    # round — no review turns, the outstanding anchors are re-read instead.
+    verifier_only: bool = False
     # review_sha → files changed between that SHA and HEAD (v2.3.1); see
     # `compute_changed_since_raised`. Both reconciliation call sites and the
     # prompt's "file changed since?" column read this same map.
@@ -8979,17 +8996,23 @@ def run_iar_pre_llm(
         delta=delta,
     )
     effective_max_turns: int = 0
+    verifier_only: bool = False
     if mode == IAR_MODE_INCREMENTAL and delta is not None:
         prior_critical: int = sum(
             1 for pf in prior_findings if pf.severity == SEVERITY_CRITICAL
         )
-        cap, turns = scale_incremental_budget(
+        cap, _ratio_turns = scale_incremental_budget(
             base_cap=base_max_inline_comments,
             base_turns=max_turns,
             delta_ratio=delta.delta_ratio,
             prior_critical=prior_critical,
         )
-        effective_max_turns = turns if max_turns else 0
+        # RFC-06 (BC-13): the turn budget follows the delta and the outstanding
+        # findings, capped by the round's full budget (the tier ceiling).
+        effective_max_turns = incremental_budget(len(delta.changed_files), len(prior_findings), max_turns) if max_turns else 0
+        verifier_only = not delta.changed_files
+        if verifier_only:
+            mode_reason = f"no code changes since {delta.prior_head_sha[:8]} — verifier-only round over {len(prior_findings)} outstanding finding(s)"
         # Replace the exhaustive addendum (if any) with the incremental one
         # and the cap with the delta-scaled one; the policy label is kept
         # so dedup semantics downstream are unchanged.
@@ -9028,7 +9051,67 @@ def run_iar_pre_llm(
         prior_findings=tuple(prior_findings),
         effective_max_turns=effective_max_turns,
         changed_since_raised=changed_since_raised,
+        verifier_only=verifier_only,
     )
+
+
+def verify_outstanding_findings(
+    prior_findings: tuple["PriorFinding", ...],
+    *,
+    policy: VerifierPolicy,
+    provider: "Provider | None",
+    model: str,
+    alias: str,
+    endpoint_kind: str,
+    unavailable_reason: str,
+    inventory: "ChangeInventory | None",
+) -> tuple[VerifierReport, list[tuple["PriorFinding", FindingVerification]]]:
+    """The verifier-only round (RFC-06): re-read every outstanding prior
+    finding's anchor with the verifier — no review turns. Returns the report
+    and the per-finding verdicts; nothing is retired here (no code changed,
+    so corroboration cannot hold): a refuted anchor is surfaced for the
+    maintainer in the summary."""
+    report: VerifierReport = VerifierReport(model=model, alias=alias, endpoint_kind=endpoint_kind, reason=unavailable_reason)
+    verdicts: list[tuple[PriorFinding, FindingVerification]] = []
+    started: float = time.monotonic()
+    for pf in prior_findings:
+        finding: Finding = Finding(path=pf.path, line=pf.line, body=pf.body_excerpt, severity=pf.severity, title=pf.body_excerpt[:MAX_FINDING_TITLE_CHARS])
+        finding.severity_claimed = pf.severity
+        finding.fingerprint = pf.fingerprint
+        if provider is None or not policy.enabled:
+            verdict: FindingVerification = FindingVerification(status=VERIFICATION_UNVERIFIED, reason=unavailable_reason or "verifier off")
+            report.unverified += 1
+        else:
+            try:
+                verdict = verify_finding(provider, finding, inventory=inventory, max_turns=policy.max_turns_per_finding, usage=report.usage)
+                report.runs += 1
+            except Exception as exc:  # noqa: BLE001 — fail open into visibility
+                verdict = FindingVerification(status=VERIFICATION_UNVERIFIED, reason=f"verifier error: {type(exc).__name__}")
+                report.unverified += 1
+            if verdict.status == VERIFICATION_VERIFIED:
+                report.verified += 1
+            elif verdict.status == "refuted":
+                report.refuted += 1
+            elif verdict.status == "downgraded":
+                report.downgraded += 1
+            elif verdict.status == VERIFICATION_UNVERIFIED:
+                report.unverified += 1
+        verdicts.append((pf, verdict))
+    report.seconds = round(time.monotonic() - started, 3)
+    return report, verdicts
+
+
+def render_verifier_only_narrative(verdicts: list[tuple["PriorFinding", FindingVerification]], *, prior_head: str) -> str:
+    """The narrative of a verifier-only round: what the re-read found."""
+    if not verdicts:
+        return f"No code changed since `{prior_head[:8]}` and no prior finding is outstanding — nothing to re-verify."
+    lines: list[str] = [f"No code changed since `{prior_head[:8]}`, so this round spent no review turns and re-read the {len(verdicts)} outstanding finding(s) with the verifier instead:", ""]
+    for pf, v in verdicts:
+        lines.append(f"- `{pf.path}:{pf.line}` ({pf.severity}) — **{v.status}**" + (f": {v.reason[:200]}" if v.reason else ""))
+    refuted: int = sum(1 for _, v in verdicts if v.status == "refuted")
+    if refuted:
+        lines += ["", f"{refuted} outstanding finding(s) no longer hold at the anchor per the verifier; they stay open until the maintainer resolves the thread (no code changed, so nothing is retired automatically)."]
+    return "\n".join(lines)
 
 
 def run_iar_post_llm(
@@ -14403,8 +14486,9 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
                 f"adequate={description_verdict.is_adequate}"
             )
 
+        verifier_only_round: bool = bool(iar_pre_context is not None and iar_pre_context.verifier_only)
         provider: Provider | AgentRunnerProvider | None = None
-        if mode != MODE_AGGREGATE:
+        if mode != MODE_AGGREGATE and not verifier_only_round:
             provider = build_provider(
                 provider_id, api_key=api_key, model=model, api_base=api_base
             )
@@ -14425,7 +14509,13 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             log(agent_runner_warning)
 
         aggregate_report: AggregateReport | None = None
-        if mode == MODE_AGGREGATE:
+        if verifier_only_round and iar_pre_context is not None:
+            # RFC-06 verifier-only round: no code changed since the last
+            # reviewed head — no model review, the outstanding anchors are
+            # re-read by the verifier below; the review body is the ledger.
+            log(f"IAR: verifier-only round — {iar_pre_context.mode_reason}")
+            result = ReviewResult(findings=[], summary="", overall_severity=SEVERITY_NONE)
+        elif mode == MODE_AGGREGATE:
             # Aggregate role (RFC-04): no model call — the "review" is the
             # consolidation of the emitted leg documents for this head.
             result, aggregate_report = run_aggregate_stage(artifact_dir=artifact_dir, head_sha=head_sha, expected_legs=expected_legs)
@@ -14734,10 +14824,17 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             )
             if v_reason:
                 log(f"verifier: {v_reason}")
-        verifier_report = run_verifier(
-            result, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
-            endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
-        )
+        if verifier_only_round and iar_pre_context is not None:
+            verifier_report, outstanding_verdicts = verify_outstanding_findings(
+                iar_pre_context.prior_findings, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
+                endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
+            )
+            result.summary = render_verifier_only_narrative(outstanding_verdicts, prior_head=iar_pre_context.delta.prior_head_sha if iar_pre_context.delta else "")
+        else:
+            verifier_report = run_verifier(
+                result, policy=verifier_policy, provider=v_provider, model=v_model, alias=v_alias,
+                endpoint_kind=v_kind, unavailable_reason=v_reason, inventory=pr_ctx.inventory,
+            )
     except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
         log(f"verifier crashed: {type(exc).__name__}: {exc} — publishing claimed criticals as annotated warnings")
         verifier_report = VerifierReport(reason=f"verifier crashed: {type(exc).__name__}")

@@ -850,7 +850,9 @@ The review summary ends with `Since last review (<prior> → <head>): resolved N
 
 ### 14.5 Budget scaling
 
-`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)` and `max-turns = max(6, ceil(max-turns × delta ratio))`, both capped at the base values; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+`effective cap = max(3, ceil(base cap × delta ratio), prior open criticals)`, capped at the base value; the delta ratio is the new-lines percentage of the generation (floor 10 %). Prior critical findings are always re-listed first, so they can never starve.
+
+**Turn budget (v3, RFC-06 § Incremental rounds — BC-13):** `turns = clamp(4 + 1.5 × |changed files in the delta| + 1 × |outstanding prior findings|, 4, ceiling)` where the ceiling is the round's full budget (`max-turns`; the risk tier's ceiling once tiers land). Examples: 1–2 files with 3 outstanding → 10 turns; 6 files with 5 outstanding → 18; a delta with **no changed file** is a **verifier-only round**: no review turns at all — the verifier re-reads each outstanding anchor (`budget.turns_used = 0`, `verifier_runs = n` in the run record), the review body is the ledger plus the re-read results, and nothing is retired automatically because no code changed (a refuted anchor is surfaced for the maintainer). The rails are unchanged: the escape label, the 30 % new-lines safety net and a new generation force a full round with the full-round budget.
 
 ### 14.6 Failure semantics
 

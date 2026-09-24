@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking (v3)
 
+- **BC-13 (incremental half) — follow-up rounds are budgeted by the delta.** Round 2+ of a generation gets `clamp(4 + 1.5 × changed files + 1 × outstanding findings, 4, max-turns)` review turns instead of a ratio of the full cap (≈ 8–12 turns on a 1–3-file push); a push with **no code change** runs a verifier-only round — zero review turns, the outstanding anchors re-read by the verifier, the ledger posted as the body. Cost expectations for follow-ups change (down); the escape label, the 30 % safety net and a new generation still force a full round. The tiered full-round budgets land with Phase 4.
 The breaking rows of the v3 ledger ([RFC-07](docs/rfc/v3/07-breaking-change-ledger.md)) shipped in this line: **BC-03**, **BC-04**, **BC-07**, **BC-17** (below); **BC-13** (tiered turn budgets) lands with Phase 4. Migration: [docs/MIGRATION_v3.md](docs/MIGRATION_v3.md).
 
 - **BC-17 — the "byte-identical" promise ends.** `MIGRATION_v2.md`'s "an empty `api-base` keeps every existing runner byte-identical" no longer holds for the in-process runners (BC-03) — pin `@v2` for the old wire shape. Behavioural, non-breaking rows in this line: BC-05 (documented-rules step), BC-08 (anchor re-read retirement), BC-09/BC-10 (ensemble mode, dogfood labels), BC-11/BC-12 (structured output, findings-file superset), BC-18 (verifier inputs).
