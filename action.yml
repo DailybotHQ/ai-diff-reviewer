@@ -31,7 +31,7 @@ branding:
 
 inputs:
   api-key:
-    description: 'Provider API key. Required for every provider except AWS Bedrock: with `provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base` it may stay empty and the action signs with the AWS credentials from the environment (OIDC), or you can pass the packed `KEY:SECRET[:SESSION]` format instead.'
+    description: 'Provider API key. Optional wherever the lane has environment credentials (v3 rule) — today AWS Bedrock: with `provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base` it may stay empty and the action signs with the AWS credentials from the environment (OIDC), or you can pass the packed `KEY:SECRET[:SESSION]` format instead. Required for every other provider.'
     required: false
   github-token:
     description: 'Token used to read the PR diff and post the review. Needs `pull-requests: write` and `contents: read`. Pass either the default `secrets.GITHUB_TOKEN` or a PAT/automation token if you want the review attributed to a specific bot account.'
@@ -427,9 +427,9 @@ runs:
       # artifacts the emit legs uploaded for this head. Every artifact of the
       # run is downloaded into one sub-directory each; the runtime keys on the
       # head SHA inside the documents and ignores other heads. Pinned by SHA
-      # (v4.3.0).
+      # (v8.0.1).
       if: inputs.mode == 'aggregate'
-      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         pattern: ai-diff-reviewer-*
         path: ${{ runner.temp }}/ai-diff-reviewer-legs
@@ -515,9 +515,9 @@ runs:
       # RFC-05: the document is the input of the aggregator, the eval gate and
       # the apply-review skill. `always()` so a failed or skipped run still
       # ships its (minimal) document; the step is a no-op when nothing was
-      # written. Pinned by SHA (v4.6.2).
+      # written. Pinned by SHA (v7.0.1).
       if: always() && steps.review.outputs.structured-output-path != ''
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: ${{ steps.review.outputs.structured-output-artifact }}
         path: ${{ steps.review.outputs.structured-output-path }}
