@@ -290,8 +290,12 @@ Since v3 every run writes a `run-record/3.0` file (`.aiprr/run-record.json`) wit
 | 21 critical fixture trees (`phase0-trees-critical`) | 21 | 0.294 | 0.680 | 0 | $0.093 |
 | 7 historical PRs, Claude Code on Z.ai `glm-5.3-flash` (`phase0-floor` glm) | 7 | 0.206 | 0.305 | 2 defects (2 of 7 cells) | $1.50 (range $0.89–$3.47, list price) |
 | **All baseline lanes** | **35** | **0.268** | **0.680** | **2** | — |
+| *v3 re-stamp (2026-09-24)* — 7 historical PRs, in-process `openai` runner on xAI (`phase1-parity`) | 7 | 0.410 | 1.221 | 2 | $0.354 |
+| 21 critical trees, v3.0 prompt, verifier off / on (`phase1-precision-off` / `-on`) | 21 / 21 | 0.405 / 0.312 | 0.801 / 0.954 | 1 / 1 | $0.109 / $0.104 |
+| 21 critical trees, release-candidate runtime, verifier on (`phase2-rc`) | 21 | 0.387 | 0.927 | 1 | $0.114 |
+| **All v3-prompt lanes (the floor in force)** | **70** | **0.370** | **1.22** | **2** | — |
 
-What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 27 % on a paired comparison is inside the noise and is not promotable; a recall claim needs a net gain of 3 defects; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.40) or any cell exceeds 1.0. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
+What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 38 % on a paired comparison is inside the noise and is not promotable (v3 re-stamp; v2 said 27 %); a recall claim needs a net gain of 3 defects; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.56) or any cell exceeds 1.3. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
 
 ### Verifier cost (v3, measured)
 

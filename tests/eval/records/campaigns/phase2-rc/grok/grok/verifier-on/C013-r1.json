@@ -1,0 +1,79 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.4,
+  "usage": {
+    "in": 31596,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 1928,
+    "source": "cli"
+  },
+  "cost_usd": 0.101256,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Password-reset tokens must be unpredictable. This replaces `crypto.randomBytes(32)` (256 bits of CSPRNG output) with `Math.floor(Math.random() * 1e12).toString(36)`, which is a non-cryptographic PRNG over at most ~10\u00b9\u00b2 values (~40 bits), then pads to only 9 characters. An attacker can brute-force or predict valid reset tokens and complete account takeover.\n\nFor edge runtimes, use the Web Crypto API instead of `Math.random()`:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\n`crypto.getRandomValues` is supported on Vercel Edge, Cloudflare Workers, Deno, and browsers, and restores the prior 256-bit token strength."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this replaces a 256-bit CSPRNG password-reset token with `Math.random()`, which is neither cryptographically secure nor high-entropy. An attacker who can request resets (or observe a few tokens) can brute-force or predict valid tokens and take over accounts.\n\n## What changed\n\n`newResetToken()` previously returned `randomBytes(32).toString(\"hex\")` (64 hex chars, 256 bits). The new implementation does `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`:\n\n- **PRNG quality:** `Math.random()` is not a CSPRNG; it is unsuitable for auth secrets.\n- **Entropy floor:** the value space is at most `1e12` distinct integers (~40 bits before base36 encoding), and the padded string is only ~9 characters \u2014 trivial to brute-force compared with 256-bit tokens.\n- **Edge-safe alternative exists:** Web Crypto `crypto.getRandomValues()` is available on Vercel Edge, Cloudflare Workers, Deno, and modern browsers, and preserves the original security properties.\n\n## Recommendation\n\nRestore cryptographic randomness via the Web Crypto API (or another edge-supported CSPRNG) and keep token length/entropy in the same ballpark as 32 random bytes. Add a short test that tokens are long enough and non-deterministic across calls.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces crypto.randomBytes(32).toString(\"hex\") with Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\"), which is a non-CSPRNG with a tiny token space and is unsuitable for password-reset tokens. This is a real critical security regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.002,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2382,
+      "out": 301
+    },
+    "cost_usd": 0.00698
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

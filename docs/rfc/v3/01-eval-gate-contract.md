@@ -113,14 +113,33 @@ and `campaigns/summary.json`; the constants live in `tests/eval/determinism.py`.
 
 | Verdict | Rule | Number today | Why this number |
 |---|---|---|---|
-| **Promotable — cost** | paired relative cost difference, CI excludes 0 **and** point estimate ≥ 1.0 × median cell spread | ≥ 0.27 (≈ 27 %) | anything smaller is inside one cell's typical repetition spread (`noise_floor.cost_relative_spread_median` = 0.268, n = 35) |
+| **Promotable — cost** | paired relative cost difference, CI excludes 0 **and** point estimate ≥ 1.0 × median cell spread | ≥ 0.38 (≈ 38 %) — v3 re-stamp 2026-09-24 (was 0.27 on the v2 floor) | anything smaller is inside one cell's typical repetition spread (`noise_floor.cost_relative_spread_median` = 0.370, n = 70 v3-prompt cells) |
 | **Promotable — recall** | net additional must-find hits across the corpus, CI excludes 0 **and** net ≥ (max observed repetition swing + 1) | ≥ 3 defects | the largest swing between identical runs was 2 (`noise_floor.recall_delta_max`, glm lane; the default lane swung 1) |
 | **Promotable — precision** | false-positive findings per case reduced, CI excludes 0, ≥ 20 adjudicated positive cases in the sample | ≥ 20 % fewer FP per case | S7 "Claim improved quality only with separate evidence: ≥ 20 % fewer false-positive findings per PR" |
 | **Blocking — recall regression** | lane recall on the pinned corpus below the stored baseline by more than the swing | > 2 defects below baseline | E-15a; swing 2 re-measured in Phase 0 |
 | **Blocking — unadjudicated critical** | any `critical_positive` label with `adjudication.status != adjudicated` in the scored set | 0 tolerated | `corpus_validate.py` F7 rule, extended to the reviewer scorer |
-| **Blocking — determinism widened** | lane median spread > 1.5 × stored baseline median, or worst > 1.0 | median > 0.40 or worst > 1.0 | baseline median 0.268, worst 0.680 (Phase 0) |
+| **Blocking — determinism widened** | lane median spread > 1.5 × stored baseline median, or worst > 1.0 | median > 0.56 or worst > 1.3 — v3 re-stamp (was 0.40 / 1.0) | baseline median 0.370, worst 1.22 (v3 floor: Phase 1 parity + precision arms + the rc campaign, 70 cells) |
 | **Blocking — instrument** | any run record invalid against the schema; any first-party lane run with `usage_known = false`; a cell missing a repetition | 0 tolerated | P-7; S7 F4 |
 | **Descriptive only** | n < 3 per cell, or a lane with fewer than 4 cases | — | E-17 |
+
+**v3 re-stamp (PLAN_v3_implementation Task 25, 2026-09-24, Stage Gate B decision).**
+The v3.0 prompt and budgeted first message widen the per-run trajectory on
+the tree corpus (cache-normalised token spread 0.24–0.28 where v2 measured
+0.02) at unchanged recall, so the v2 floor no longer describes the shipped
+state. The baseline is now the all-lane **v3 floor, n = 70 replicated
+cells** (`phase1-parity`, `phase1-precision-off`, `phase1-precision-on`,
+`phase2-rc`): median 0.370, mean 0.422, worst 1.22 (the in-process PR
+lane, 13-turn runs), recall swing 2. Constants: promotable cost ≥
+0.38, blocking median > 0.56 (1.5 ×), blocking worst > 1.3 (above the
+measured worst; the v2 value 1.0 sat below it), recall constants unchanged
+(swing still 2). Per campaign:
+
+| Campaign | Cells | Median spread | Worst | Recall swing | Mean cost / run |
+|---|---|---|---|---|---|
+| `phase1-parity` | 7 | 0.410 | 1.221 | 2 | $0.354 |
+| `phase1-precision-off` | 21 | 0.405 | 0.801 | 1 | $0.109 |
+| `phase1-precision-on` | 21 | 0.312 | 0.954 | 1 | $0.104 |
+| `phase2-rc` | 21 | 0.387 | 0.927 | 1 | $0.114 |
 
 The promotion factor 1.0 × median spread is deliberately conservative and
 cheap to explain; the decision log may raise it, never lower it. Phase 0

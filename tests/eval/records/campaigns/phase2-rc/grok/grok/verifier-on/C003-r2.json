@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.3,
+  "usage": {
+    "in": 30743,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2026,
+    "source": "cli"
+  },
+  "cost_usd": 0.0999076,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded production SMTP password in source.** `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` puts a real credential in the repo and uses it whenever the env var is unset (exactly the cron path this PR targets). Anyone with repo access can authenticate as `notifications` on the internal SMTP host; the secret also persists in git history after rotation.\n\nFail closed when the secret is missing, and load the password only from the environment or a secret store:\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is required\")\n        s.login(\"notifications\", password)\n```\n\nRotate `smtp-prod-backup-77` immediately if it was ever a live credential."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a login fallback.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), which fails closed when the secret is missing. The PR switches to `os.environ.get(..., \"smtp-prod-backup-77\")`, so any cron/runtime without the env var authenticates with a password now committed to the repo.\n\nThat is a hard-coded credential in version control: it will live in git history, appear in clones and CI logs that print diffs, and lets anyone with repo read access authenticate as `notifications` on `smtp.internal.example`. The comment confirms the intent is production continuity when the secret is not mounted \u2014 exactly the case where a missing secret should fail loudly, not fall back to a shared backup password in code.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 hard-codes `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`, and the patch shows this replaced a fail-closed `os.environ[\"SMTP_PASSWORD\"]` lookup. That embeds a live-looking credential in source and uses it whenever the env var is unset, matching the critical security claim."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.38,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2718,
+      "out": 319
+    },
+    "cost_usd": 0.007683
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

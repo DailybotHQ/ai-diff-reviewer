@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 75.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 75.6,
+  "usage": {
+    "in": 33621,
+    "cache_read": 153600,
+    "cache_write": 0,
+    "out": 2824,
+    "source": "cli"
+  },
+  "cost_usd": 0.130266,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Credential leak:** `process.env.PROCESSOR_KEY` is written into the log payload on every successful charge. Anyone with access to debug/application logs (aggregators, support exports, incident dumps) receives a live payment-processor secret that can create charges.\n\nDebug level does not make this safe \u2014 debug is commonly on in staging and during incident work, which is when support would read these lines. The comment on the previous line confirms the intent is deliberate credential logging.\n\nLog only non-secret charge context (`orderId`, `ref`, processor error codes). Keep `PROCESSOR_KEY` in the secret store/env and out of log records.\n\n```suggestion\n  log.info(\"charge created\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change writes the payment processor credential (`PROCESSOR_KEY`) into application logs on every successful charge.\n\n## Narrative\n\n`charge()` previously logged a safe success event (`orderId`, `ref`). The new code replaces that with a debug payload that includes `process.env.PROCESSOR_KEY`, and the inline comment states the intent is to put credentials in debug payloads for support replay.\n\nThat is a credential leak, not a debuggability improvement. Log aggregators, CI artifacts, support exports, and anyone with log read access would receive a live secret that can create charges. Debug-level logging does not mitigate this: debug is routinely enabled in staging and during incident response, which is exactly when support would look at these lines.\n\nSafe charge context for support is non-secret identifiers already present (`orderId`, `ref`), plus processor response codes/ids and redacted error metadata. Replay of a failed charge must use a secured break-glass path or a server-side tool that reads the secret from the environment/secret store \u2014 never from log lines.\n\nAlso note the prior `log.info(\"charge created\", \u2026)` success breadcrumb is removed, so normal operational visibility regresses while the secret exposure is added.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `src/payments/charge.ts:7` logs `process.env.PROCESSOR_KEY` in the charge debug payload (replacing a prior non-secret `log.info`), which is a live payment-processor credential leak into application logs."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.268,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2040,
+      "out": 306
+    },
+    "cost_usd": 0.006377
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

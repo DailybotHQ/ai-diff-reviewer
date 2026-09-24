@@ -1,0 +1,79 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 69.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 69.4,
+  "usage": {
+    "in": 32797,
+    "cache_read": 118272,
+    "cache_write": 0,
+    "out": 3578,
+    "source": "cli"
+  },
+  "cost_usd": 0.1225436,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "This always sets `Access-Control-Allow-Origin` to the caller-supplied `origin` (or `*`) while also sending `Access-Control-Allow-Credentials: true`.\n\n**Failure mode:** any malicious site can make a credentialed cross-origin request to this API; the browser will attach cookies and expose the response body because ACAO echoes that site's origin. That removes the previous allowlist gate on `https://app.example.com`.\n\nNative mobile HTTP clients do not enforce CORS, so they did not need this change. Mobile webviews that need access should be added to an explicit allowlist (or a tight origin pattern), with credentials emitted only for matched origins.\n\nAlso, `ACAO: *` + `Credentials: true` is invalid per the CORS spec when `origin` is null \u2014 browsers reject it \u2014 so the null-origin branch does not help credentialed clients either.\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  // Extend ALLOWED with known mobile-webview origins rather than reflecting arbitrary Origin.\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change turns a fixed-origin CORS allowlist into reflect-any-origin with credentials, which lets any website read authenticated API responses in the browser.\n\n## What went wrong\n\nPreviously `corsHeaders` only emitted `Access-Control-Allow-Origin` (and credentials) when the request `Origin` was in `ALLOWED` (`https://app.example.com`). The new code always returns:\n\n- `Access-Control-Allow-Origin: <request Origin>` (or `*` when `origin` is null)\n- `Access-Control-Allow-Credentials: true`\n\nThat combination is the classic CORS misconfiguration exploit path: a malicious page at `https://evil.example` sends a credentialed `fetch`/`XHR` to the API; the browser includes cookies; the response is readable because ACAO echoes `evil.example`.\n\n## Why the mobile rationale does not hold\n\nCORS is enforced by browsers and webviews, not by native HTTP stacks (URLSession, OkHttp, etc.). Native clients that omit `Origin` never needed ACAO to call the API. For mobile webviews that do send an origin, the safe fix is to extend the allowlist (or match a known app-origin pattern), rather than trusting every origin.\n\nSecondary issue on the same lines: `Access-Control-Allow-Origin: *` together with `Access-Control-Allow-Credentials: true` is invalid per the Fetch CORS spec; browsers will fail those responses, so the null-origin branch does not unlock credentialed access either.\n\n## Recommendation\n\nRestore an explicit allowlist (or origin pattern) for browser/webview clients. Keep credentials only when the reflected origin is on that list. Native non-browser clients need no CORS change.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `corsHeaders` always sets `Access-Control-Allow-Origin` to the request origin (or `*`) together with `Access-Control-Allow-Credentials: true`, while base only did so for `https://app.example.com`. That is a real critical CORS credentialed-reflection regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.518,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1633,
+      "out": 337
+    },
+    "cost_usd": 0.006542
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

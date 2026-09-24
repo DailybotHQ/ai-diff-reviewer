@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 39.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.2,
+  "usage": {
+    "in": 29999,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1526,
+    "source": "cli"
+  },
+  "cost_usd": 0.0864724,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` issue a server-side POST to any caller-supplied `url`. A hostile or compromised tenant can target cloud metadata (`169.254.169.254`), localhost, or internal RFC1918 services from the runner and exfiltrate the event payload (and any ambient credentials the response path exposes).\n\nRestore host allowlisting (or an equivalent egress policy): HTTPS-only, deny private/link-local/metadata IPs, and validate with `urllib.parse.urlsplit` *before* `urlopen`. Customer endpoints should be opt-in per host/domain, not unbounded.\n\n```suggestion\nALLOWED_HOSTS = {\"hooks.internal.example\"}\n\ndef deliver(event: dict, url: str) -> int:\n    host = urllib.parse.urlsplit(url).hostname or \"\"\n    if host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only SSRF guard on outbound webhook delivery and lets the runner POST arbitrary event payloads to any customer-supplied URL.\n\n## Analysis\n\n`deliver()` previously resolved the URL hostname and rejected anything outside `ALLOWED_HOSTS`. That check is gone. With a controllable `url`, an attacker (or a misconfigured tenant) can point delivery at:\n\n- Cloud metadata endpoints (`169.254.169.254`, etc.)\n- localhost / link-local / RFC1918 services reachable from the runner\n- Non-HTTP schemes that `urllib.request` will still open\n\nThe PR description frames this as an enterprise feature, but opening the host set requires an explicit allowlist, HTTPS-only policy, private-IP block, or egress proxy \u2014 not deletion of the gate.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the urlsplit hostname check from deliver(), so urlopen now POSTs to any caller-supplied URL with no host restriction\u2014an SSRF regression matching the claim."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.535,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4051,
+      "out": 289
+    },
+    "cost_usd": 0.009913
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

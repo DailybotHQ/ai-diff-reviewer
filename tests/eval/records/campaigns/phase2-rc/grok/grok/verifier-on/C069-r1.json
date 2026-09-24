@@ -1,0 +1,79 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 60.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 60.9,
+  "usage": {
+    "in": 31218,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2380,
+    "source": "cli"
+  },
+  "cost_usd": 0.1029816,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "Both admin handlers are registered without `middleware.RequireRole(\"admin\")`. On the base revision, `authz := middleware.RequireRole(\"admin\")` wrapped `a.listUsers` and `a.editRoles`; this change drops that wrap while only relocating the paths under `/api/v2`.\n\nFailure mode: any authenticated or unauthenticated caller who can hit `GET /api/v2/admin/users` or `POST /api/v2/admin/roles` reaches user listing and role mutation without the admin role check. No other file in the repo applies `RequireRole` or defines those handlers with an alternate gate.\n\nRestore the middleware on the subrouter handlers, for example:\n\n```go\nauthz := middleware.RequireRole(\"admin\")\nv2 := r.PathPrefix(\"/api/v2\").Subrouter()\nv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\nv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization regression: moving the admin routes under `/api/v2` dropped the `middleware.RequireRole(\"admin\")` wrapper, so both admin handlers are registered without the role check they had before.\n\n## Narrative\n\nThe PathPrefix subrouter move itself is straightforward and matches the PR intent. The failure mode is in how the handlers are attached. On the base revision, every admin route was wrapped:\n\n```go\nauthz := middleware.RequireRole(\"admin\")\nr.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\nr.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nOn head, `authz` is gone and the bare `http.HandlerFunc` values are passed to `v2.Handle`. Nothing else in this repository re-applies `RequireRole` on a parent router or inside `listUsers` / `editRoles` (those symbols are only referenced from `routes.go`). Any caller who can reach `GET /api/v2/admin/users` or `POST /api/v2/admin/roles` now bypasses the admin role gate.\n\nRestore the same wrap on each handler (or `v2.Use` with an equivalent mux middleware adapter if that is the project pattern) before merge. The path relocation can stay.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base revision wrapped listUsers and editRoles with middleware.RequireRole(\"admin\"); head registers both under /api/v2 with bare http.HandlerFunc and no other RequireRole (or alternate gate) exists in the repo. This is a real critical authz regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 18.697,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7950,
+      "out": 420
+    },
+    "cost_usd": 0.018958
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

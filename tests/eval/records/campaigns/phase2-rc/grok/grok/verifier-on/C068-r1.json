@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 85.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.8,
+  "usage": {
+    "in": 30165,
+    "cache_read": 86528,
+    "cache_write": 0,
+    "out": 1546,
+    "source": "cli"
+  },
+  "cost_usd": 0.0955644,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `pickle.loads` deserializes the base64-decoded session blob. Session `raw` values are typically client-supplied (cookies/headers). Pickle executes attacker-controlled object constructors during load, so a crafted session string yields remote code execution on the server.\n\n**Failure mode:** An attacker sets a session cookie to `base64(pickle.dumps(malicious_object))`. On the next request, `load_session` runs the payload inside the app process (file read, reverse shell, credential theft).\n\n**Fix:** Keep a safe format for the wire (JSON) and reconstruct any cart-plugin objects in application code after validation. If binary compatibility with an existing pickle-based plugin is mandatory, only unpickle after HMAC/signature verification with a server-side secret *and* a strict unpickler allowlist \u2014 and document that unsigned pickle must never touch the request path.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(Restoring `import json` and dropping `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces safe JSON session decoding with `pickle.loads` on attacker-controlled input, which is a classic remote code execution (RCE) primitive.\n\n## Analysis\n\n`load_session(raw: str)` decodes a base64 payload and deserializes it. Session blobs almost always arrive from the client (cookie, header, or form field). With `json.loads`, the worst case is malformed data or unexpected structure. With `pickle.loads`, a crafted payload can execute arbitrary Python during unpickling (`__reduce__`, etc.).\n\nThe cart-plugin rationale does not make pickle safe: richer object graphs need an explicit, allowlisted schema (e.g. JSON + typed reconstruction, `dataclasses.asdict`/`from_dict`, or a signed session store), not an unsafe deserializer.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `load_session` runs `pickle.loads` on base64-decoded `raw` session input, replacing the base `json.loads` path. That is a classic RCE sink for client-controlled session cookies/headers; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.95,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1117,
+      "out": 385
+    },
+    "cost_usd": 0.005722
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

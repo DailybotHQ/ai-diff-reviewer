@@ -1,0 +1,92 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 94.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 94.3,
+  "usage": {
+    "in": 31460,
+    "cache_read": 116480,
+    "cache_write": 0,
+    "out": 2052,
+    "source": "cli"
+  },
+  "cost_usd": 0.110176,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "Both admin handlers are registered as bare `http.HandlerFunc` values after the `/api/v2` move. Previously each route was wrapped with `authz := middleware.RequireRole(\"admin\")`, so only admin-role callers could list users or edit roles.\n\n**Failure mode:** any authenticated or unauthenticated client that can hit `GET /api/v2/admin/users` or `POST /api/v2/admin/roles` now reaches `listUsers` / `editRoles` with no role gate at the router. That is privilege escalation on the admin surface.\n\n**Fix:** keep the PathPrefix move, but re-apply the admin middleware on the subrouter or each handle:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tauthz := middleware.RequireRole(\"admin\")\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nAlternatively `v2.Use(middleware.RequireRole(\"admin\"))` if that helper returns gorilla-compatible middleware."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 5,
+      "severity": "warning",
+      "body": "Moving `/admin/users` and `/admin/roles` to `/api/v2/admin/...` changes the public route contract. Existing clients, reverse-proxy rules, and monitors still calling the old paths will get 404 after deploy.\n\nIf this is intentional versioning, document the break and consider keeping the old paths temporarily as authenticated aliases or a redirect. Confirm callers are updated in the same release."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization regression: admin endpoints were moved under `/api/v2` and the `RequireRole(\"admin\")` wrapper was removed in the same change.\n\n## Narrative\n\n`cmd/server/routes.go` previously wrapped both handlers with `middleware.RequireRole(\"admin\")` before registering them. The new subrouter only rebinds the paths:\n\n- `GET /api/v2/admin/users` \u2192 `a.listUsers`\n- `POST /api/v2/admin/roles` \u2192 `a.editRoles`\n\nNo `Use()` middleware is attached to the `v2` subrouter, and the per-route `authz(...)` wrapper is gone. In this repository snapshot there is no other registration site for these handlers, so role enforcement is no longer applied at the routing layer.\n\nThat means any caller who can reach the server can list users and edit roles unless some unshown outer middleware still enforces admin (nothing in-tree shows that). Path versioning is fine; the missing authz is not.\n\nAlso note the public URL change (`/admin/...` \u2192 `/api/v2/admin/...`) is a breaking contract shift for existing clients; coordinate that separately if consumers still call the old paths.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base routes wrapped both admin handlers with middleware.RequireRole(\"admin\"); head moved them under /api/v2 but registers bare HandlerFuncs with no role gate, so the admin surface is unguarded at the router."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 5,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Base registered `/admin/users` and `/admin/roles`; head only mounts them under `/api/v2` with no redirect or alias, so old clients hit 404. Repo grep shows no remaining old-path callers or compatibility routes."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 55.441,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7249,
+      "out": 750
+    },
+    "cost_usd": 0.01992
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

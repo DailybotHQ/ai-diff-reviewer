@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 48.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 48.7,
+  "usage": {
+    "in": 31100,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 2003,
+    "source": "cli"
+  },
+  "cost_usd": 0.1002532,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hardcoded on the shared `NewClient()` path with no environment, build-tag, or config gate. Despite the staging-only comment, every consumer of this client \u2014 including production \u2014 will accept any certificate, enabling MITM on ledger traffic (read/modify balances, inject responses, steal bearer tokens on the wire).\n\nA ticket note does not scope runtime behavior. Gate the skip (e.g. explicit staging opt-in) or, better, trust the staging CA via `RootCAs` so verification stays enabled.\n\n```suggestion\n\t\tTransport: &http.Transport{\n\t\t\tTLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerifyFromEnv()}, // must be false in prod\n\t\t},\n```\n\n(Prefer loading a pinned CA over `InsecureSkipVerify` even in staging.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 TLS certificate verification is disabled unconditionally for every ledger HTTP client, including production.\n\n## Analysis\n\n`NewClient()` now installs a custom `http.Transport` with `tls.Config{InsecureSkipVerify: true}`. The comment frames this as a staging workaround (self-signed cert, TICKET-77), but nothing in the function gates the skip on environment, build tag, or config. Any caller of `NewClient()` inherits full MITM exposure: a network adversary can present any certificate and intercept or modify ledger traffic (balances, transfers, auth-bearing requests).\n\nA ticket reference and \"revisit before prod\" comment do not constrain runtime behavior. Once this ships on a shared branch or image, production picks it up the same way staging does.\n\n## Recommended fix direction\n\nGate the insecure path explicitly, for example:\n\n- only when `ENV == \"staging\"` (or a dedicated `LEDGER_TLS_INSECURE=1` opt-in), **or**\n- pin the staging CA / server cert via `tls.Config.RootCAs` (preferred \u2014 keeps verification on).\n\nIf a custom `Transport` is required, clone `http.DefaultTransport` settings (proxy, dialer, HTTP/2) rather than replacing with a bare `&http.Transport{}` so non-TLS behavior stays intact.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() hardcodes tls.Config{InsecureSkipVerify: true} with only a staging comment/ticket note and no env, build-tag, or config gate. The base version used default TLS verification, so this is a real unconditional MITM bypass on the shared client constructor."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.469,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2894,
+      "out": 346
+    },
+    "cost_usd": 0.008683
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

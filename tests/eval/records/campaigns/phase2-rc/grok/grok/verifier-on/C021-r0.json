@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 54.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 54.0,
+  "usage": {
+    "in": 30573,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 2049,
+    "source": "cli"
+  },
+  "cost_usd": 0.0907968,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "The maintained package `tar-stream` is replaced with `tar-streem` (`stream` \u2192 `streem`), a one-letter misspelling, pinned to an unrelated `^1.0.0` line. That is the standard npm typosquatting shape: consumers and CI resolve a different publisher under a near-identical name.\n\nRestore `tar-stream` (or another known-maintained tar library such as `tar`) after verifying the package name on the registry. Do not adopt `tar-streem` without an independent supply-chain review of its publisher, source repo, and tarball contents."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "`postinstall` invokes `tar-streem-setup`, so any `npm install` (local or CI) executes a binary shipped by the new dependency with the installer's privileges. Combined with the `tar-streem` typosquat, this is an automatic code-execution vector on every clean install \u2014 the PR description's \"bundles its installer\" framing matches known malicious package patterns.\n\nRemove the `postinstall` script entirely. A tar helper does not need an install-time setup binary; if native bindings were ever required, they belong behind an explicit, reviewed install path \u2014 not a dependency lifecycle hook from an unknown package."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the maintained `tar-stream` package with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a classic npm supply-chain / typosquatting pattern.\n\n## Why this is blocking\n\n1. **Typosquat name:** `tar-streem` is one character off `tar-stream` (ee vs ea). Legitimate tar streaming in the Node ecosystem is `tar-stream` (currently at 3.x as the removed pin shows). A jump to an unrelated `^1.0.0` package under a near-identical name is not a routine dependency bump.\n2. **Automatic installer on install:** `postinstall: tar-streem-setup` executes whatever binary that package ships whenever anyone runs `npm install` / `yarn` / `pnpm install` in this repo (CI included). Lifecycle scripts are a well-documented malware delivery path; bundling an \"installer\" is not a justification for a tar helper.\n3. **Unrelated to the stated chore:** A dependency cleanup that truly moved to a maintained tar library would name a known package (e.g. stay on `tar-stream`, or use `tar` / `node-tar`) and would not need a global setup binary run at install time.\n\n## Residual notes\n\n- `scripts.package` still points at `scripts/pack.js`, which is absent from the tree in this workshop snapshot \u2014 the only runtime change in-diff is the dependency + hook.\n- No lockfile is present in the diff, so the exact tarball resolved by `^1.0.0` is unconstrained.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced the real `tar-stream` ^3.1.6 dependency with the one-letter misspelling `tar-streem` ^1.0.0 and added a `postinstall` hook running `tar-streem-setup`, which matches a classic npm typosquat/supply-chain pattern."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds both the tar-streem dependency and a postinstall script that runs tar-streem-setup on every npm install, which is an automatic code-execution path matching the claimed critical issue."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 16.783,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4373,
+      "out": 646
+    },
+    "cost_usd": 0.013953
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

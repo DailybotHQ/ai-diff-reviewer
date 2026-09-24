@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.7,
+  "usage": {
+    "in": 31401,
+    "cache_read": 88448,
+    "cache_write": 0,
+    "out": 2725,
+    "source": "cli"
+  },
+  "cost_usd": 0.1056864,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` directly under `REPORTS` lets any client read arbitrary files the process can open.\n\n**Failure mode:** `GET /reports/x?path=../../../etc/passwd` \u2192 `send_file` opens `/etc/passwd` (and similarly any readable path on the host).\n\n**Fix:** resolve the candidate path, require it stay under `REPORTS`, then send only that file. Example:\n\n```python\n@app.route(\"/reports/<path:name>\")\ndef download(name: str):\n    root = os.path.realpath(REPORTS)\n    candidate = os.path.realpath(os.path.join(root, name))\n    if candidate != root and not candidate.startswith(root + os.sep):\n        abort(400)\n    return send_file(candidate)\n```\n\nUse the route path (with `<path:name>` for nested folders) rather than an unsanitized `?path=` query value. If a query param is required, run it through the same realpath-prefix check."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical path-traversal regression: this change removes the only path sanitization and feeds a client-controlled query parameter straight into `send_file`.\n\n## Analysis\n\nPreviously `download()` constrained the route parameter with `os.path.basename(name)` before joining it under `REPORTS`, so only a single filename under `/srv/reports` could be served. The new code:\n\n1. Drops that basename guard entirely.\n2. Prefers `request.args.get(\"path\", name)` \u2014 an untrusted query string \u2014 as the path segment.\n3. Passes the result of `os.path.join(REPORTS, ...)` to `send_file` with no resolve-and-prefix check.\n\nA request such as `GET /reports/x?path=../../../etc/passwd` yields `os.path.join(\"/srv/reports\", \"../../../etc/passwd\")` \u2192 `/srv/reports/../../../etc/passwd`, which `send_file` opens as `/etc/passwd` (or any other file the process can read). Even without the `path` query param, a crafted `name` is no longer basename-filtered.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) needs a safe join: resolve the candidate under `REPORTS`, reject paths that escape the root (symlink-aware), and only then call `send_file`. Do not take a raw filesystem relative path from the query string without that check.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removed `os.path.basename` and now does `send_file(os.path.join(REPORTS, request.args.get(\"path\", name)))` with no realpath/prefix check, so `?path=../../../etc/passwd` (or similar) can escape `/srv/reports` and read arbitrary files the process can open. That matches a critical path-traver"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.386,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2461,
+      "out": 338
+    },
+    "cost_usd": 0.007411
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

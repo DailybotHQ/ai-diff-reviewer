@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 48.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 48.4,
+  "usage": {
+    "in": 30619,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1745,
+    "source": "cli"
+  },
+  "cost_usd": 0.0977816,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check means `deliver()` will POST to any caller-supplied `url` via `urllib.request.urlopen`. A customer (or any input that reaches `url`) can target internal addresses such as `http://127.0.0.1:...`, `http://169.254.169.254/...`, or RFC1918 hosts and read status/timing from the server's network vantage point.\n\nCustomer-configured endpoints need an egress policy that still blocks private, link-local, and metadata ranges (HTTPS-only, resolve-then-validate IP, deny DNS rebinding)\u2014not an unrestricted open fetch.\n\nRestore a host allowlist, or replace it with equivalent SSRF controls before calling `urlopen`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only webhook host allowlist and opens `deliver()` to server-side request forgery (SSRF) against any URL the caller supplies.\n\n## Narrative\n\n`webhooks.py` previously rejected hosts outside `ALLOWED_HOSTS` before issuing a POST. The patch deletes that gate and documents the intent as supporting customer-configured endpoints. Supporting external endpoints is a valid product goal; doing it by accepting arbitrary `url` values with no replacement controls is not.\n\nWith the guard gone, a crafted customer URL can make the runner (or app host) request:\n\n- cloud metadata endpoints (e.g. `169.254.169.254`)\n- loopback and link-local services\n- internal RFC1918 hosts reachable only from the server's network\n\n`urllib.request.urlopen` will follow the scheme/host as given; there is no HTTPS-only requirement, no private-IP block, no DNS-rebinding mitigation, and no allowlist/denylist left in this function.\n\nA safe path for customer webhooks is an explicit egress policy: HTTPS-only, resolved-address checks that reject private/link-local/metadata ranges (with re-check after DNS), optional per-tenant host allowlists, and still no requests to internal service discovery names. Until one of those lands, this is a production security regression.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously rejected non-allowlisted hosts, so deliver() now POSTs via urllib.request.urlopen to any caller-supplied URL with no SSRF controls\u2014confirming unrestricted server-side fetch to internal/metadata ranges."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.342,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3057,
+      "out": 385
+    },
+    "cost_usd": 0.009218
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

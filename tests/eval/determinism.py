@@ -46,12 +46,12 @@ BOOTSTRAP_SEED: int = 42
 
 # RFC-01 § Thresholds — Jev-campaign figures until Phase 0 re-measures them
 # (PLAN_v3_implementation Task 8 re-stamps these constants and RFC-01 together).
-PROMOTABLE_COST_REL_DELTA: float = 0.27        # ≥ 1.0 × median cell spread (0.268, Phase 0 re-measurement, n = 35 cells, all lanes)
-PROMOTABLE_RECALL_NET_DEFECTS: int = 3         # > max observed repetition swing (2 — glm lane, Phase 0; default lane swung 1)
+PROMOTABLE_COST_REL_DELTA: float = 0.38        # ≥ 1.0 × median cell spread (0.370, v3 floor, n = 70 cells, all v3-prompt lanes, 2026-09-24)
+PROMOTABLE_RECALL_NET_DEFECTS: int = 3         # > max observed repetition swing (2, v3 floor)
 BLOCKING_RECALL_DROP_DEFECTS: int = 2          # recall below baseline by more than the swing (2)
-BASELINE_SPREAD_MEDIAN: float = 0.268          # phase0-floor (grok + glm) + phase0-trees-critical, 35 cells, 2026-09-23
+BASELINE_SPREAD_MEDIAN: float = 0.370          # v3 floor: phase1-parity + phase1-precision-off/on + phase2-rc, 70 cells, 2026-09-24 (Phase 0 v2 floor was 0.268 / 35 cells)
 BLOCKING_SPREAD_MEDIAN_FACTOR: float = 1.5     # median > 1.5 × baseline median blocks
-BLOCKING_SPREAD_WORST: float = 1.0
+BLOCKING_SPREAD_WORST: float = 1.3          # measured worst 1.22 (in-process PR lane, 13-turn runs); v2 floor worst was 0.68
 FIRST_PARTY_KINDS: frozenset[str] = frozenset({"anthropic", "openai"})
 
 

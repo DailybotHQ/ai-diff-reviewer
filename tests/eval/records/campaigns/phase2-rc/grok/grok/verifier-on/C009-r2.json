@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 51.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.9,
+  "usage": {
+    "in": 31220,
+    "cache_read": 147712,
+    "cache_write": 0,
+    "out": 2431,
+    "source": "cli"
+  },
+  "cost_usd": 0.1213396,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `escapeHtml` and passing `body` straight into `dangerouslySetInnerHTML` lets any comment payload execute HTML/JS in readers' browsers. Example input: `<img src=x onerror=alert(document.cookie)>` \u2014 previously escaped to text, now runs as markup.\n\nThere is no markdown parser or sanitizer in this change (or the repo); the comment about bold/links does not implement safe formatting.\n\n**Fix:** keep escaping for plain text, or render a constrained markdown subset to React nodes, or sanitize with a vetted library before setting `__html`:\n\n```suggestion\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: escapeHtml(body) }} />;\n```\n\n(Re-add `escapeHtml`, or replace this path with sanitization / safe markdown rendering.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a straightforward stored XSS by feeding unsanitized comment text into `dangerouslySetInnerHTML`.\n\n## Narrative\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning to `__html`, which made the dangerous API safe for plain text. This PR deletes `escapeHtml` and passes `body` through unchanged. There is no markdown renderer and no HTML sanitizer in the tree; the new comment only claims rich formatting. Any comment author (or anyone who can influence `body`) can supply markup such as `<img onerror=...>` or `<script>...` and run script in the session of every reader.\n\nRestoring rich bold/links needs a deliberate path: parse a constrained markdown subset to React elements, or sanitize HTML with a maintained library (e.g. DOMPurify) before `dangerouslySetInnerHTML`. Raw string passthrough is not that path.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes comment body straight into dangerouslySetInnerHTML with no sanitizer or markdown renderer in the repo, so arbitrary HTML/JS in body executes in readers\u2019 browsers. Critical severity is appropriate for stored XSS via user comment content."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.882,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4328,
+      "out": 332
+    },
+    "cost_usd": 0.011211
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

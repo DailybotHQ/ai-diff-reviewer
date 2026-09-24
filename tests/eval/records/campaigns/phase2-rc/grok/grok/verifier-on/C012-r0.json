@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 85.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 85.8,
+  "usage": {
+    "in": 33801,
+    "cache_read": 151424,
+    "cache_write": 0,
+    "out": 4645,
+    "source": "cli"
+  },
+  "cost_usd": 0.1408992,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The removed `BLOCKED` guard (`__proto__`, `constructor`, `prototype`) was the only protection against prototype pollution. The rationale that JSON.parse never yields those keys is false: `JSON.parse('{\"__proto__\": {\"isAdmin\": true}}')` defines an **own** enumerable `\"__proto__\"` property, so `Object.entries(patch)` still yields it.\n\nWith the guard gone, this loop pollutes `Object.prototype` \u2014 e.g. recursive merge of `{\"__proto__\": {\"isAdmin\": true}}` writes onto `(base)[\"__proto__\"]` (the real prototype), and `{\"constructor\": {\"prototype\": {\"pwned\": true}}}` does the same via the constructor path. Any later `{}` then inherits attacker-controlled properties.\n\nRestore the blocklist (or merge only via `Object.hasOwn` + `Object.defineProperty` onto `Object.create(null)` bases) before merging untrusted config."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Narrative\n\nThe PR claim that \"JSON.parse never yields dangerous keys\" is incorrect. `JSON.parse('{\"__proto__\": {\"isAdmin\": true}}')` creates an **own** enumerable property named `__proto__`. `Object.entries` returns that pair, and the unguarded merge then either:\n\n1. Recurses into `(base)[\"__proto__\"]` (i.e. `Object.prototype`) and writes attacker-controlled fields onto it, or\n2. Assigns `(base)[k] = v` for dangerous keys, or\n3. Follows `constructor` \u2192 `prototype` and pollutes `Object.prototype` the same way.\n\nVerified locally against the post-change function: both `__proto__` and `constructor.prototype` payloads set properties visible on `{}` afterward.\n\n`deepMerge` is a generic exported helper (`patch: Record<string, unknown>`). Even if today's only caller is config JSON, that is exactly the untrusted-input path this guard was for. Restore the blocklist (or use `Object.create(null)` + `Object.hasOwn` / `Object.defineProperty` that never touches `[[Prototype]]`).\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removed the only BLOCKED guard for `__proto__`/`constructor`/`prototype`, leaving `deepMerge` to assign attacker-controlled keys onto `base` (including via `(base)[k] ??= {}` then recursive merge). That reintroduces classic prototype pollution; severity critical is appropriate for this sin"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 21.594,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7059,
+      "out": 479
+    },
+    "cost_usd": 0.017632
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
