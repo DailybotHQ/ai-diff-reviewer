@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.1.1] — 2026-09-24
+
 ### Added
 
 - **New sub-skill `address-review` — the one-invocation review loop.** The sentence developers otherwise repeat every round (*"resolve the reviewer's comments and toggle the ready label"*) is now one consented skill: it finds the branch's open PR(s), waits for a review fresh for the current head (marker SHA, or the `review-output/3.0` artifact), presents the findings with an apply/defer/skip plan, then — on one yes — applies, commits (small Conventional Commits batches), pushes, and re-arms the reviewer the way the repo triggers it (label-gated → toggle off/on or add the label; push-triggered → confirm the new run; no workflow → offers the local review). Unlike `apply-review` it commits and pushes. (`skills/ai-diff-reviewer/address-review/`)
