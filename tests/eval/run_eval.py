@@ -142,6 +142,60 @@ def case_labels_as_corpus_entry(case: dict[str, Any]) -> dict[str, Any]:
     return {"must_find": must, "acceptable": acceptable, "must_not_flag": must_not}
 
 
+def apply_verifier(
+    r: Any,
+    result: Any,
+    *,
+    policy: Any,
+    provider_id: str,
+    api_key: str,
+    api_base: str,
+    review_model: str,
+    inventory: Any,
+    verifier_provider: Any = None,
+) -> Any:
+    """Verifier + severity policy exactly as `main` runs them (Task 14):
+    build the in-process verifier provider for the lane (or use the one
+    passed by tests), verify the selected findings, publish per the policy
+    table. Returns the `VerifierReport`."""
+    reason = ""
+    model, alias, kind = "", "", ""
+    prov = verifier_provider
+    if prov is None and policy.enabled:
+        prov, model, alias, kind, reason = r.build_verifier_provider(
+            provider_id=provider_id, api_key=api_key, api_base=api_base, requested_model=policy.model, review_model=review_model,
+        )
+    elif prov is not None:
+        model, alias, kind = getattr(prov, "model", "fake"), "fake", getattr(getattr(prov, "profile", None), "kind", "fake")
+    report = r.run_verifier(result, policy=policy, provider=prov, model=model, alias=alias, endpoint_kind=kind,
+                            unavailable_reason=reason or ("verifier off" if not policy.enabled else ""), inventory=inventory)
+    r.apply_severity_policy(result, strict_unverified_criticals=policy.strict_unverified_criticals)
+    return report
+
+
+def verifier_payload(r: Any, result: Any, report: Any) -> dict[str, Any]:
+    """The verification facets of a result payload (both eval paths)."""
+    return {
+        "verification": [{"path": f.path, "line": f.line, "severity_claimed": f.severity_claimed, "status": f.verification.status,
+                          "reason": f.verification.reason[:300]} for f in result.findings],
+        "refuted": [{"path": f.path, "line": f.line, "severity_claimed": f.severity_claimed, "title": f.effective_title(),
+                     "reason": f.verification.reason[:300], "body": f.body[:8000]} for f in result.refuted],
+        "verifier": {"runs": report.runs, "seconds": report.seconds, "verified": report.verified, "refuted": report.refuted,
+                     "downgraded": report.downgraded, "unverified": report.unverified, "skipped": report.skipped,
+                     "model": report.model, "alias": report.alias, "endpoint_kind": report.endpoint_kind, "reason": report.reason,
+                     "usage": {"in": report.usage.input_tokens, "out": report.usage.output_tokens},
+                     "cost_usd": (r.estimate_cost_usd(report.model, report.usage) if report.runs and report.model else None)},
+    }
+
+
+def stamp_verifier_record(record: Any, report: Any, counts: dict[str, int]) -> None:
+    record.verifier_runs = report.runs
+    record.verifier_seconds = report.seconds if report.runs else None
+    record.findings_verified = counts.get("verified", 0)
+    record.findings_downgraded = counts.get("downgraded", 0)
+    record.findings_refuted = counts.get("refuted", 0)
+
+
 def run_case(
     *,
     case_path: Path,
@@ -154,8 +208,15 @@ def run_case(
     model: str,
     api_base: str = "",
     campaign: dict[str, Any] | None = None,
+    verifier_policy: Any = None,
+    verifier_provider: Any = None,
+    api_key: str = "",
 ) -> dict[str, Any]:
     """Review one fixture-tree case with an already-built provider.
+
+    `verifier_policy` (a `VerifierPolicy`, default off) runs the Task 14
+    verifier + severity policy after the review — the precision arm of the
+    Phase 1 campaigns; `verifier_provider` lets tests inject a fake.
 
     Testable without GitHub, a token or a vendor key: callers pass the
     provider (a fake in tests). Writes the result payload to `out` and a
@@ -211,6 +272,13 @@ def run_case(
                 usage = state.usage
                 turns = usage.turns
                 tool_calls = state.tool_call_count
+            # Verifier + severity policy (Task 14) inside the tree checkout so
+            # the read-only tools see the fixture at head.
+            vpolicy = verifier_policy if verifier_policy is not None else r.VerifierPolicy(enabled=False)
+            r.complete_finding_evidence(result, state=state, head_sha=head_sha, run_id=record.ensure_run_id(),
+                                        provider_id=provider_id, endpoint_kind=record.endpoint_kind, model=model)
+            report = apply_verifier(r, result, policy=vpolicy, provider_id=provider_id, api_key=api_key, api_base=api_base,
+                                    review_model=model, inventory=ctx.inventory, verifier_provider=verifier_provider)
         finally:
             os.chdir(cwd)
         record.provider_seconds = round(time.time() - t0, 3)
@@ -220,6 +288,7 @@ def run_case(
             record.instruction_files_read = list(getattr(provider, "last_instruction_files_read", ()))
         record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=max_turns)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
+        stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
     payload = {
         "case": case.get("id"), "pr": case.get("id"), "repo": "fixture", "provider": provider_id, "api_base": api_base,
         "model": model, "prompt": "composed", "extension": False,
@@ -233,6 +302,7 @@ def run_case(
         "changed_files": [f.get("path") for f in ctx.changed_files],
         "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
         "summary": (result.summary or "")[:2000],
+        **verifier_payload(r, result, report),
     }
     payload["score"] = score_run(payload, corpus_entry=case_labels_as_corpus_entry(case))
     sc = payload["score"]
@@ -291,7 +361,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         payload = run_case(
             case_path=Path(args.tree), provider=provider, runtime=r, system_prompt=system_prompt,
             max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=model,
-            api_base=api_base,
+            api_base=api_base, verifier_policy=r.VerifierPolicy(enabled=(args.verifier or "off").lower() == "on"), api_key=key,
         )
         print(fmt_row(payload))
         return payload
@@ -368,6 +438,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         record.populate_from_run(provider=provider, state=None if isinstance(provider, r.AgentRunnerProvider) else state,
                                  result=result, usage=_usage_obj, max_turns=args.max_turns)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
+        vpolicy = r.VerifierPolicy(enabled=(args.verifier or "off").lower() == "on")
+        r.complete_finding_evidence(result, state=None if isinstance(provider, r.AgentRunnerProvider) else state, head_sha=r._git_sha("HEAD"),
+                                    run_id=record.ensure_run_id(), provider_id=args.provider, endpoint_kind=record.endpoint_kind, model=args.model or "")
+        report = apply_verifier(r, result, policy=vpolicy, provider_id=args.provider, api_key=key, api_base=api_base,
+                                review_model=args.model or "", inventory=ctx.inventory)
+        stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
         payload = {
             "pr": args.pr, "repo": args.repo, "provider": args.provider, "api_base": api_base, "model": args.model or "",
             "prompt": os.path.basename(args.prompt), "extension": bool(args.extension), "runtime_head": subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip(),
@@ -382,6 +458,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             # 400 chars so scoring/adjudication sees the whole finding body.
             "findings": [{"path": f.path, "line": f.line, "severity": f.severity, "body": f.body[:8000]} for f in result.findings],
             "summary": (result.summary or "")[:2000],
+            **verifier_payload(r, result, report),
         }
         payload["score"] = score_run(payload)
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -436,11 +513,14 @@ def score_run(payload: dict[str, Any], corpus_entry: dict[str, Any] | None = Non
 
 def fmt_row(p: dict[str, Any]) -> str:
     s = p["score"]; u = p.get("usage") or {}
+    v = p.get("verifier") or {}
+    vtag = (f" verifier {v.get('verified', 0)}v/{v.get('downgraded', 0)}d/{v.get('refuted', 0)}r {v.get('runs')} runs "
+            f"${(v.get('cost_usd') or 0):.3f} |") if v.get("runs") else ""
     cost = f"${p['cost_usd']:.3f}" if p.get("cost_usd") is not None else "n/a"
     return (f"| #{p['pr']} | {p['provider']}/{p['model'] or 'default'} | {len(p['findings'])} findings | "
             f"recall {s['must_find_hits']}/{s['must_find_total']} | FP {len(s['false_positives'])} | unlabelled {s['unlabelled_findings']} | "
             f"sev-match {s['severity_matches']}/{s['must_find_total']} | summary {'yes' if s['summary_present'] else 'NO'} | sugg {s['suggestion_blocks']} | "
-            f"turns {p['turns']} | in {u.get('in', 0) + u.get('cache_read', 0)} out {u.get('out', 0)} | {cost} | {p['seconds']}s |")
+            f"turns {p['turns']} | in {u.get('in', 0) + u.get('cache_read', 0)} out {u.get('out', 0)} | {cost} | {p['seconds']}s |{vtag}")
 
 
 def score_cmd(paths: list[str]) -> None:
@@ -450,17 +530,22 @@ def score_cmd(paths: list[str]) -> None:
         p = json.loads(Path(path).read_text()); p["score"] = score_run(p); print(fmt_row(p))
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     rp = sub.add_parser("run")
     rp.add_argument("--repo"); rp.add_argument("--pr", type=int); rp.add_argument("--worktree")
     rp.add_argument("--tree", help="corpus case JSON with a `trees` fixture (no GitHub access needed)")
     rp.add_argument("--base-ref", default="main"); rp.add_argument("--provider", required=True); rp.add_argument("--api-base", default="")
-    rp.add_argument("--model", default=""); rp.add_argument("--api-key-env", required=True); rp.add_argument("--prompt", default=str(ROOT / "prompts/default.md"))
+    rp.add_argument("--model", default=""); rp.add_argument("--api-key-env", default=""); rp.add_argument("--prompt", default=str(ROOT / "prompts/default.md"))
     rp.add_argument("--extension", default=""); rp.add_argument("--max-turns", type=int, default=30); rp.add_argument("--out", required=True)
+    rp.add_argument("--verifier", default="off", choices=["on", "off"], help="run the v3 verifier + severity policy after the review (Task 14)")
     sp = sub.add_parser("score"); sp.add_argument("paths", nargs="+")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> None:
+    args = build_parser().parse_args()
     if args.cmd == "run":
         run(args)
     else:

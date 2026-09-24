@@ -1,0 +1,65 @@
+{
+  "campaign_id": "phase1-parity",
+  "repetitions": 3,
+  "lanes": {
+    "openai-xai": {
+      "provider": "openai",
+      "model": "balanced",
+      "api_base": "https://api.x.ai/v1",
+      "api_key_env": "XAI_API_KEY",
+      "indicative_max_cost_usd": 1.5
+    }
+  },
+  "arms": [
+    {
+      "name": "baseline",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md"
+    }
+  ],
+  "cells": [
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 46,
+      "worktree": "tmp/worktrees/pr-46"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 45,
+      "worktree": "tmp/worktrees/pr-45"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 43,
+      "worktree": "tmp/worktrees/pr-43"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 37,
+      "worktree": "tmp/worktrees/pr-37"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 25,
+      "worktree": "tmp/worktrees/pr-25"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 15,
+      "worktree": "tmp/worktrees/pr-15"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 39,
+      "worktree": "tmp/worktrees/pr-39"
+    }
+  ],
+  "note": "Phase 1 runner parity (RFC-02 acceptance 5, D-03): the in-process `openai` runner on xAI (grok-4.5, the one in-process lane measurable with XAI) on the 7 historical PRs \u00d7 3; the CLI band is Phase 0's `phase0-floor/grok` cells (same PRs, same model, grok CLI). Worktrees as in phase0-floor."
+}

@@ -1,0 +1,108 @@
+{
+  "campaign_id": "phase1-precision-on",
+  "repetitions": 3,
+  "lanes": {
+    "grok": {
+      "provider": "grok",
+      "model": "balanced",
+      "api_base": "",
+      "api_key_env": "XAI_API_KEY",
+      "indicative_max_cost_usd": 1.0
+    }
+  },
+  "arms": [
+    {
+      "name": "verifier-on",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md",
+      "verifier": "on"
+    }
+  ],
+  "cells": [
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C001.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C002.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C003.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C004.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C005.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C006.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C008.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C009.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C010.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C011.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C012.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C013.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C014.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C016.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C019.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C020.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C021.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C022.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C068.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C069.json"
+    },
+    {
+      "kind": "tree",
+      "case": "tests/eval/cases/C070.json"
+    }
+  ],
+  "note": "Phase 1 precision, verifier ON: same cells and prompt as phase1-precision-off, plus the Task 14 verifier (economy alias \u2192 grok-4.5 on xAI) and the severity policy; published findings + refuted list per run feed the blinded adjudication (D-26, n \u2265 20 critical claims)."
+}
