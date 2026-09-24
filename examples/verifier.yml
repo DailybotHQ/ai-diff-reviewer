@@ -11,8 +11,9 @@
 # output. The verifier fails OPEN: an error, a timeout or a lane without an
 # in-process backend never blocks and never hides a finding.
 #
-# Cost: ≈ $0.02–0.05 per verified finding on the economy tier; every
-# claimed critical plus a deterministic 30 % sample of warnings is checked.
+# Cost (measured, Phase 1 campaign): ≈ 3 k tokens, 10 s and $0.009 per
+# verified finding — about 1 % of a PR review; every claimed critical plus a
+# deterministic 30 % sample of warnings is checked.
 # See docs/STRICTNESS.md § "Verified criticals (v3)".
 
 name: PR review (verified criticals)

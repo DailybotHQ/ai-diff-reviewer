@@ -266,6 +266,13 @@ jobs:
     # Higher timeout because agent-runner providers can take longer than the
     # chat-completions Anthropic path.
     timeout-minutes: 25
+    # RFC-04: emit legs never write to the PR — the transport guard refuses
+    # every mutation, and the job token is scoped to reads so a prompt-injected
+    # leg has nothing to write with either. Only `aggregate` holds
+    # `pull-requests: write`.
+    permissions:
+      contents: read
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:

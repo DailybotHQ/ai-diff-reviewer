@@ -145,6 +145,36 @@ class HappyPath(unittest.TestCase):
         self.assertTrue(all("comments" in p or "labels" in p for _, p in posts), posts)
 
 
+class RoundTwoFixes(unittest.TestCase):
+    """Findings of the first live ensemble round on PR #61."""
+
+    def test_aggregate_artifact_name_carries_the_role_and_is_never_read_back(self) -> None:
+        rec = reviewer.RunRecord(); rec.provider, rec.endpoint_kind, rec.model, rec.head_sha = "grok", "xai", "grok-4.5", HEAD
+        leg_name = reviewer.review_output_artifact_name(rec)
+        agg_name = reviewer.review_output_artifact_name(rec, reviewer.MODE_AGGREGATE)
+        self.assertEqual(agg_name, f"ai-diff-reviewer-{HEAD[:12]}-aggregate")
+        self.assertNotEqual(leg_name, agg_name, "the aggregate job's own document must not collide with the grok leg's artifact")
+        with tempfile.TemporaryDirectory() as td:
+            legs = Path(td); (legs / "a").mkdir(); (legs / "b").mkdir()
+            (legs / "a" / "review-output.json").write_text(json.dumps(_document(A, [_finding("a.py", 1, "warning", "Real")])))
+            agg = _document(A, [_finding("a.py", 9, "critical", "Stale aggregate output", status="verified")]); agg["role"] = "aggregate"
+            (legs / "b" / "review-output.json").write_text(json.dumps(agg))
+            docs, invalid = reviewer.load_leg_documents(legs)
+        self.assertEqual(([d.source for d in docs], invalid), (["a/review-output.json"], []))
+
+    def test_aggregate_gate_keeps_the_prior_finding_escalation(self) -> None:
+        # a still-open prior critical must keep block-on-critical red even when this round's legs
+        # only report warnings (the knobs decide over the consolidated set only)
+        result = reviewer.ReviewResult(findings=[_finding("a.py", 1, "warning", "Lone warning")], summary="s")
+        prior = reviewer.PriorFinding(thread_id="T", comment_id="C", comment_database_id=1, path="p.py", line=3, severity="critical",
+                                      fingerprint="p" * 16, body_excerpt="open critical", is_outdated=False, is_minimized=False)
+        pre = type("Pre", (), {"prior_findings": (prior,)})()
+        self.assertEqual(reviewer.prior_open_severity(result, pre), "critical")
+        result.prior_reconciliation = type("R", (), {"resolved": [prior]})()
+        self.assertEqual(reviewer.prior_open_severity(result, pre), "none")
+        self.assertEqual(reviewer.prior_open_severity(result, None), "none")
+
+
 class FailureModes(unittest.TestCase):
     def test_timeout_leg_publishes_with_n_minus_one_and_require_all_legs_blocks(self) -> None:
         docs = [("l1", _document(A, [_finding("a.py", 1, "warning", "Lone warning")])),

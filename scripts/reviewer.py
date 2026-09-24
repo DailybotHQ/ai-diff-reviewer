@@ -8290,6 +8290,18 @@ def apply_severity_policy(result: "ReviewResult", *, strict_unverified_criticals
     return counts
 
 
+def prior_open_severity(result: "ReviewResult", pre_context: Any) -> str:
+    """The highest severity among prior findings still open (verified-resolved
+    excluded) — the IAR escalation that any gate severity must carry."""
+    prior_findings: list[Any] = list(getattr(pre_context, "prior_findings", None) or []) if pre_context is not None else []
+    if not prior_findings:
+        return SEVERITY_NONE
+    resolved: set[str] = set()
+    if result.prior_reconciliation is not None:
+        resolved = {pf.fingerprint for pf in result.prior_reconciliation.resolved}
+    return overall_severity([pf.severity for pf in prior_findings if pf.fingerprint not in resolved])
+
+
 def restore_prior_severity_escalation(result: "ReviewResult", pre_context: Any) -> str:
     """Re-fold still-open prior findings into `overall_severity` after the
     severity policy recomputed it from the published findings only.
@@ -12885,10 +12897,16 @@ def _normalise_retired_reason(reason: str) -> str:
     return RETIRED_REASON_VERIFIED_FIXED
 
 
-def review_output_artifact_name(record: "RunRecord") -> str:
-    """`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>` (artifact names may not contain `/`)."""
+def review_output_artifact_name(record: "RunRecord", role: str = REVIEW_OUTPUT_ROLE_REVIEW) -> str:
+    """`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>` for a review / emit
+    leg; `ai-diff-reviewer-<head12>-aggregate` for the aggregate job, so its own
+    document never collides with (or is read back as) a leg's. Artifact names
+    may not contain `/`."""
+    head: str = (record.head_sha or "nohead")[:12]
+    if role == MODE_AGGREGATE:
+        return f"{REVIEW_OUTPUT_ARTIFACT_PREFIX}-{head}-{AGGREGATE_SCOPE}"[:120]
     leg: str = re.sub(r"[^a-z0-9]+", "-", f"{record.provider}-{record.endpoint_kind}-{record.model}".lower()).strip("-")
-    return f"{REVIEW_OUTPUT_ARTIFACT_PREFIX}-{(record.head_sha or 'nohead')[:12]}-{leg or 'leg'}"[:120]
+    return f"{REVIEW_OUTPUT_ARTIFACT_PREFIX}-{head}-{leg or 'leg'}"[:120]
 
 
 def build_review_output(
@@ -13083,7 +13101,7 @@ def write_review_output_for_run(
         path, digest = written
         write_action_output(STRUCTURED_OUTPUT_PATH_OUTPUT, str(path))
         write_action_output(STRUCTURED_OUTPUT_SHA256_OUTPUT, digest)
-        write_action_output(STRUCTURED_OUTPUT_ARTIFACT_OUTPUT, review_output_artifact_name(record))
+        write_action_output(STRUCTURED_OUTPUT_ARTIFACT_OUTPUT, review_output_artifact_name(record, ctx.role))
         log(f"Structured output written: {REVIEW_OUTPUT_REL} ({len(text.encode('utf-8'))} bytes, sha256 {digest[:12]}…)")
     except Exception as exc:  # noqa: BLE001 — never turns a finished review into a failure
         log(f"review output skipped: {type(exc).__name__}: {exc}")
@@ -13529,7 +13547,11 @@ def load_leg_documents(artifact_dir: Path) -> tuple[list[LegDocument], list[str]
             raw: bytes = path.read_bytes()
             if len(raw) > MAX_REVIEW_OUTPUT_BYTES:
                 raise ValueError(f"{rel}: {len(raw)} bytes exceed MAX_REVIEW_OUTPUT_BYTES")
-            docs.append(parse_leg_document(json.loads(raw.decode("utf-8")), source=rel))
+            doc: Any = json.loads(raw.decode("utf-8"))
+            if isinstance(doc, dict) and doc.get("role") == MODE_AGGREGATE:
+                log(f"aggregate: ignoring {rel} — an aggregate document, not a leg")
+                continue
+            docs.append(parse_leg_document(doc, source=rel))
         except (ValueError, OSError, UnicodeDecodeError) as exc:
             invalid.append(f"{rel}: {exc}")
     return docs, invalid
@@ -14706,7 +14728,9 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     aggregate_decision: AggregateGateDecision | None = None
     if mode == MODE_AGGREGATE and aggregate_report is not None:
         aggregate_decision = apply_aggregate_gate_knobs(result, aggregate_report, min_agreement=min_agreement, require_all_legs=require_all_legs)
-        gate_severity = aggregate_decision.severity
+        # The knobs decide over this round's consolidated findings; still-open
+        # prior findings keep escalating the gate exactly as on a single leg.
+        gate_severity = overall_severity([aggregate_decision.severity, prior_open_severity(result, iar_pre_context)])
         if aggregate_decision.warnings_below_agreement:
             log(f"aggregate: {aggregate_decision.warnings_below_agreement} warning(s) below min-agreement={min_agreement} do not gate")
     blocked, block_reason = compute_check_gate(

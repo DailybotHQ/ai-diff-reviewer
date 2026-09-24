@@ -29,6 +29,9 @@ permissions:
 jobs:
   review:
     name: 'Review — ${{ matrix.provider }}'
+    # Fork PRs cannot read repo secrets; skip them instead of failing (same
+    # gate as the other shipped examples).
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -64,7 +67,7 @@ jobs:
     needs: review
     # `always()`: a leg that timed out must not erase the others' work — the
     # aggregate publishes with the delivered legs and names the missing one.
-    if: always()
+    if: always() && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read

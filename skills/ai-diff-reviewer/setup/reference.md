@@ -756,6 +756,19 @@ downstream steps to consume.
 
 The `review-output/3.0` document every run writes to `.aiprr/review-output.json` (run record, change inventory, findings with evidence and verification, refuted findings, prior-findings ledger, generated summary whose `rendered_markdown` is the posted body, gate, usage, cost), its SHA-256, and the name of the workflow artifact that carries it (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90 days). Written on every exit path — success, skip, failure. Read the file (verify the digest) instead of scraping review threads; the `apply-review` sub-skill does so when the artifact exists.
 
+
+### `legs-expected` / `legs-delivered` / `duplicates-removed` / `agreement-histogram` (v3, aggregate)
+
+- **What they are:** set by a `mode: aggregate` step (RFC-04); empty
+  strings on review / emit runs. `legs-expected` — comma-separated leg ids
+  the aggregate waited for; `legs-delivered` — the ones that delivered a
+  complete document for this head; `duplicates-removed` — findings merged
+  away by the dedup key; `agreement-histogram` — JSON
+  `{"<legs reporting>": <findings>}` over the consolidated findings.
+- **Typical use:** a follow-up step that fails the workflow when
+  `legs-delivered` is shorter than `legs-expected`, or that posts the
+  histogram to a dashboard.
+
 ## Related docs (in the action repo)
 
 - `README.md` — quick-start, provider overview, feature matrix.
