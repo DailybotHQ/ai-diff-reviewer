@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.4,
+  "usage": {
+    "in": 30912,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 1663,
+    "source": "cli"
+  },
+  "cost_usd": 0.097722,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` POST to any caller-supplied URL via `urllib.request.urlopen`, which is classic SSRF.\n\nIf `url` is customer- or user-controlled, a value such as `http://169.254.169.254/latest/meta-data/` or `http://127.0.0.1:8371/internal` makes the runner fetch cloud metadata or internal services and can leak responses/timing into the delivery path.\n\nRestore an egress policy before merge: HTTPS-only, resolve-and-pin host validation that rejects private/link-local/metadata ranges (and DNS rebinding), deny unexpected schemes, and disable or cap redirects. A configurable allowlist/suffix list for enterprise endpoints can replace the hard-coded host set without opening the network."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical SSRF regression** \u2014 this change removes the only host allowlist on outbound webhook delivery and posts to whatever URL the caller supplies.\n\n## Analysis\n\n`deliver()` previously resolved the URL hostname and rejected anything outside `ALLOWED_HOSTS` (`hooks.internal.example`). That guard is gone. `urllib.request.urlopen` now follows a fully attacker-influenced (or customer-influenced) URL with no scheme, host, or private-network checks.\n\nConcrete failure modes if `url` is customer- or user-controlled:\n\n- Cloud metadata exfiltration (`http://169.254.169.254/\u2026`, `http://metadata.google.internal/\u2026`)\n- Reachability of internal services (`http://127.0.0.1:\u2026`, RFC1918 ranges, link-local)\n- Non-HTTP scheme abuse depending on opener handlers (`file://`, `ftp://`, etc.)\n\nEnterprise \u201cbring your own endpoint\u201d is a valid product goal, but it needs an explicit egress policy (HTTPS-only, DNS rebinding-safe resolution, block private/link-local/metadata ranges, optional allowlist/denylist, redirect policy), not deletion of the existing check.\n\n## Release decision\n\nDo not merge until outbound URL validation is restored in a form that still supports customer hosts safely.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously rejected non-allowlisted hosts before urlopen; head deliver() now POSTs to any caller-supplied URL, which is SSRF. Base code confirms the guard existed and was deleted."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.55,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3121,
+      "out": 402
+    },
+    "cost_usd": 0.009448
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

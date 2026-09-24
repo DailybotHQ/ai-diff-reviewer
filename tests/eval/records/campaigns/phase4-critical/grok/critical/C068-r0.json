@@ -1,0 +1,95 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.1,
+  "usage": {
+    "in": 30058,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2458,
+    "source": "cli"
+  },
+  "cost_usd": 0.11864,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`pickle.loads` on the session blob is remote code execution: a crafted base64 payload can run arbitrary Python during unpickling (typical `__reduce__` gadget). `raw` is an unauthenticated `str` with no signature check in this module, so a client-supplied cookie or header is enough.\n\nDecode with `json.loads` after verifying a signature (or another safe, non-code-executing codec) and represent cart plugin state as JSON-serializable dicts.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```"
+    }
+  ],
+  "summary": "Unsafe pickle deserialization of session data is remote code execution on any client-supplied cookie or token. I would not merge until `load_session` uses a safe codec (JSON or equivalent) and, if integrity matters, a signed payload.\n\n`web/session.py` is the only changed file. The previous decoder was `json.loads` over base64; that cannot execute code. `pickle.loads` reconstructs arbitrary Python objects, including ones whose `__reduce__` runs attacker-chosen callables during unpickling. Nothing in this tree signs, HMACs, or otherwise authenticates `raw` before it reaches the loader, and the function name/signature (`load_session(raw: str) -> dict`) is the usual cookie/header path.\n\nPlugin-rich session objects can stay JSON-serializable dicts (or a documented schema) without pickle. If a cart plugin currently pickles on disk, keep that isolated from the HTTP session boundary.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `load_session` unpickles base64-decoded `raw` with no signature check, and the patch replaced the prior safe `json.loads` path with `pickle.loads`, which enables arbitrary code execution via crafted payloads. Critical severity is appropriate for unauthenticated remote code execut"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.429,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2458,
+      "out": 432
+    },
+    "cost_usd": 0.008378
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

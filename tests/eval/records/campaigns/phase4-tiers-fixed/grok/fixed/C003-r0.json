@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 33.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.9,
+  "usage": {
+    "in": 29960,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1398,
+    "source": "cli"
+  },
+  "cost_usd": 0.0943432,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Issue:** `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` embeds a production SMTP credential as the default when the env var is unset. The comment confirms this is intentional for cron when the secret is not mounted.\n\n**Failure mode:** Anyone with repo read access obtains a working mailbox login for `notifications` on `smtp.internal.example`. Missing secrets no longer fail closed \u2014 cron silently authenticates with the checked-in backup password, and the credential lives forever in git history.\n\n**Fix:** Require the secret from the environment (or fail/skip send with a logged error). Provision `SMTP_PASSWORD` in the cron job\u2019s secret mount. Rotate `smtp-prod-backup-77` immediately if it was ever a real password.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default login password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), so a missing secret failed loudly at login. The PR replaces that with `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`.\n\nThat default is a real-looking production backup password, checked into the repo and immortalized in git history. Anyone with read access to the code (or a leaked clone, CI log of the file, or fork) can authenticate as `notifications` on `smtp.internal.example`. Cron jobs without the secret mounted will keep sending mail under that shared credential, which also hides misconfiguration instead of failing closed.\n\nThe right fix for \u201ccron without SMTP_PASSWORD\u201d is operational: mount the secret in the cron environment, or skip/no-op send with a clear log when the variable is absent \u2014 never bake a password into the default argument.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 hardcodes `smtp-prod-backup-77` as the default for `SMTP_PASSWORD`, and the comment plus the base\u2192head diff show this was intentionally added so cron still authenticates when the secret is unset. That is a real credential-in-source failure that fails open instead of closed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.254,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2082,
+      "out": 314
+    },
+    "cost_usd": 0.006509
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

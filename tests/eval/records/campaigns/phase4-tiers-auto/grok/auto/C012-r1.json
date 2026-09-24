@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 71.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 71.8,
+  "usage": {
+    "in": 20210,
+    "cache_read": 136448,
+    "cache_write": 0,
+    "out": 3972,
+    "source": "cli"
+  },
+  "cost_usd": 0.1051864,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The removed `BLOCKED` guard was the only protection against prototype pollution. The claim that `JSON.parse` never yields dangerous keys is false: `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` yields an own enumerable `\"__proto__\"` key, and `Object.entries` returns it.\n\nWith that payload, `base[\"__proto__\"] ??= {}` resolves to `Object.prototype` (truthy, so no new `{}`), and the recursive merge writes into `Object.prototype`. Confirmed on Node 24: after merge, `({}).polluted === true`. The same holds for `{\"constructor\":{\"prototype\":{\"polluted\":true}}}`.\n\nRestore the blocklist (or equivalent safe assignment). Minimal fix:\n\n```suggestion\n  for (const [k, v] of Object.entries(patch)) {\n    if (k === \"__proto__\" || k === \"constructor\" || k === \"prototype\") continue;\n```\n\nAlso add regression tests for both payloads so this cannot be dropped again on the same incorrect premise."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist re-introduces classic prototype pollution in `deepMerge`. The PR rationale (\u201cJSON.parse never yields dangerous keys\u201d) is incorrect.\n\n## What I verified\n\n`JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an own enumerable `\"__proto__\"` key. Without the guard, this implementation does:\n\n```js\ndeepMerge(base[k] ??= {}, v)  // k === \"__proto__\" \u2192 merges into Object.prototype\n```\n\nReproduced on Node 24: after `deepMerge({}, JSON.parse('{\"__proto__\": {\"polluted\": true}}'))`, `({}).polluted === true`. The `constructor` / `prototype` path also pollutes. With the previous `BLOCKED` set, the same payload leaves `Object.prototype` clean.\n\nEven if today\u2019s callers only pass trusted config, `deepMerge` is a shared helper (`Record<string, unknown>` patch). Any future JSON/YAML/HTTP merge through this function becomes a pollution gadget. The three-key blocklist is cheap and load-bearing.\n\n## Recommendation\n\nRestore the blocklist (or switch assignments to `Object.hasOwn` + `Object.defineProperty` / `Object.create(null)` bases so `__proto__` cannot walk the chain). Add a unit test for the `__proto__` and `constructor.prototype` payloads so this cannot be deleted again on the same premise.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removed the only BLOCKED guard (`__proto__`/`constructor`/`prototype`) from `deepMerge`, leaving recursive assignment via `(base as any)[k] ??= {}` that pollutes `Object.prototype` for those keys. Base had the blocklist; head does not, so this is a real critical prototype-pollution regress"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.361,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2918,
+      "out": 381
+    },
+    "cost_usd": 0.009044
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

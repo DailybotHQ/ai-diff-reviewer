@@ -1,0 +1,93 @@
+{
+  "case": "C047",
+  "pr": "C047",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 92.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 92.2,
+  "usage": {
+    "in": 34565,
+    "cache_read": 188416,
+    "cache_write": 0,
+    "out": 4443,
+    "source": "cli"
+  },
+  "cost_usd": 0.1523128,
+  "changed_files": [
+    ".github/workflows/test.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "warning",
+      "body": "Adding `'24'` only duplicates the job. Nothing in this workflow reads `${{ matrix.node }}`, so both matrix legs run `npm test` on the runner image default and never install or select Node 20 vs 24.\n\nWire the matrix into setup-node (and add checkout) so each leg actually runs on the intended runtime:\n\n```yaml\nruns-on: ubuntu-latest\nsteps:\n  - uses: actions/checkout@v4\n  - uses: actions/setup-node@v4\n    with:\n      node-version: ${{ matrix.node }}\n  - run: npm test\n```\n\nWithout that, CI can report two passing jobs while Node 24 remains untested."
+    }
+  ],
+  "summary": "## Verdict\n\nThe matrix update does not actually exercise Node 24 \u2014 `matrix.node` is never consumed, so both legs run the same runner default.\n\n## Narrative\n\nThis PR expands `strategy.matrix.node` from `['20']` to `['20', '24']` under the intent of covering the Node 24 LTS line. The workflow still has a single step (`run: npm test`) and never references `${{ matrix.node }}`. There is no `actions/setup-node` (or equivalent) step, so GitHub Actions will schedule two identical jobs on whatever Node the image already provides. Green checks on both legs would not mean Node 24 was tested.\n\nThat is the only issue introduced by this diff line. The job was already a stub before this change (no `runs-on`, no checkout, no `permissions:` block, no setup-node). Those gaps still block a working multi-version CI story and should be fixed in the same pass if the goal is real LTS coverage, but they are pre-existing rather than regressions from adding `'24'`.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

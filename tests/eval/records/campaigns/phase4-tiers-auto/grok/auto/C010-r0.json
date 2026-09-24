@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.5,
+  "usage": {
+    "in": 17458,
+    "cache_read": 101760,
+    "cache_write": 0,
+    "out": 2064,
+    "source": "cli"
+  },
+  "cost_usd": 0.077828,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Issue:** `body.accountId` is trusted and used as the DB lookup key with no authorization check. Any authenticated caller can pass an arbitrary `accountId` and read that account; previously lookup was hard-bound to `caller.accountId`.\n\n**Failure mode:** `POST/PUT` (or any method that parses JSON) with `{\"accountId\":\"victim-id\"}` and a valid session returns the victim account payload \u2014 classic IDOR / broken object-level authorization.\n\n**Fix:** Only honor a client-supplied id after an explicit staff/privilege check; otherwise force `caller.accountId` (and 403 if a non-staff caller tries to override).\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const requestedId = typeof body.accountId === \"string\" ? body.accountId : undefined;\n  if (requestedId !== undefined && requestedId !== caller.accountId) {\n    // require a real staff check from auth() \u2014 e.g. caller.isSupport === true\n    if (!caller.isSupport) {\n      return Response.json({ error: \"forbidden\" }, { status: 403 });\n    }\n  }\n  const id: string = requestedId ?? caller.accountId;\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\nWire `isSupport` (or equivalent) from `auth`; do not ship the override without it."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical IDOR (insecure direct object reference) on account lookup.\n\n## What went wrong\n\n`getAccount` previously scoped the query to `caller.accountId` from `auth(req)`. The new code prefers `body.accountId` whenever it is present, with **no** check that the caller is support staff, has an elevated role, or is otherwise allowed to read another tenant's account.\n\nAny authenticated user who can hit this route can send `{\"accountId\": \"<victim>\"}` and receive that account's JSON. The comment documents intent for staff tools; the code implements unrestricted cross-account read.\n\n## What to fix\n\nBefore using a client-supplied id, gate on an explicit authorization signal from `auth` (e.g. `caller.isSupport` / `caller.role === \"support\"`), and reject with 403 when a non-privileged caller passes `accountId` different from `caller.accountId`. Keep the default path as `caller.accountId` only.\n\n## Notes\n\n- `auth` / `db` are not in this tree, so role field names could not be verified \u2014 the absence of *any* authorization branch on the new path is still definitive from the diff.\n- Consider also validating `accountId` type/shape and whether this handler is a GET (body semantics are unreliable on GET); those are secondary to the authz hole.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses `body.accountId ?? caller.accountId` with no privilege check before `findUnique`, while base always looked up `caller.accountId` only\u2014so any authenticated caller can read another account by supplying an id in the body."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.718,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1457,
+      "out": 349
+    },
+    "cost_usd": 0.006262
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

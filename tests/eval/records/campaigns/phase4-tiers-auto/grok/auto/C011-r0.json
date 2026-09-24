@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.8,
+  "usage": {
+    "in": 31170,
+    "cache_read": 87808,
+    "cache_write": 0,
+    "out": 1535,
+    "source": "cli"
+  },
+  "cost_usd": 0.0978924,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Issue:** `log.debug` includes `process.env.PROCESSOR_KEY` in the structured payload on every charge. The comment on the line above states this is intentional so support can replay failures.\n\n**Failure mode:** Once debug logging is enabled (or logs are shipped to a central store), the processor API key is retained in log systems, support exports, and any system with log read access. That key can be reused to create charges outside this service.\n\n**Fix:** Log only non-secret charge context (`orderId`, `ref`, and any processor response ids/codes). Restore the previous info-level success log without credentials. If support needs to replay a charge, use a secured internal tool that reads the key from the secret store at call time \u2014 never from log lines.\n\n```suggestion\n  log.info(\"charge created\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential (`PROCESSOR_KEY`) into debug payloads on every successful charge.\n\n## Narrative\n\n`charge()` previously emitted a normal info log with `orderId` and `ref`. The patch replaces that with a debug log that deliberately includes `process.env.PROCESSOR_KEY`, and the inline comment states the intent is to put credentials in debug payloads so support can replay failures.\n\nThat is a credential leak into whatever sink `log.debug` writes to (stdout on the runner/app host, log aggregators, support tooling). Anyone with log read access gets a reusable processor key. There is no redaction layer visible in this tree, and even with one, explicitly shipping secrets into log fields is unsafe: keys end up in retained log stores, incident exports, and third-party observability backends.\n\nSupport replay does not require the raw key in application logs. Keep charge context to non-secret identifiers (`orderId`, `ref`, amount, decline codes) and resolve credentials only inside the secured processor client.\n\nSecondary effect: dropping the `log.info(\"charge created\", \u2026)` line also removes the operational breadcrumb that charge creation succeeded, so success-path visibility gets worse while secrecy is broken.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `charge.ts` line 7 logs `process.env.PROCESSOR_KEY` in the debug payload on every charge; base only logged `orderId` and `ref`. That is a real credential-leak regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.594,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 900,
+      "out": 296
+    },
+    "cost_usd": 0.004293
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

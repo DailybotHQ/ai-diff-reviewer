@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 101.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 102.0,
+  "usage": {
+    "in": 62609,
+    "cache_read": 91392,
+    "cache_write": 0,
+    "out": 4436,
+    "source": "cli"
+  },
+  "cost_usd": 0.19753,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "The handler looks up whichever `accountId` the client puts in the JSON body, with no check that the caller is staff or owns that account. An authenticated user who posts `{\"accountId\":\"<victim-id>\"}` receives that account's record.\n\nAuthorize the override: honor `body.accountId` only when `auth()` shows the caller is staff (or has an equivalent account-read grant); otherwise always look up `caller.accountId` and return 403 for a cross-account request."
+    }
+  ],
+  "summary": "Any authenticated caller can now load another account by putting `accountId` in the JSON body. `getAccount` still authenticates, then uses that client-supplied id with no staff or ownership check, so this is an IDOR on a previously self-scoped lookup.\n\nThe comment on `src/routes/account.ts:6` describes a staff-tools use case, but the handler never inspects a role or permission from `auth()`. This workspace has no router or `auth` implementation to confine the endpoint to staff, so the override is reachable by whoever can call `getAccount`.\n\nHonor `body.accountId` only after an explicit staff/authorization check from `auth()`; otherwise keep looking up `caller.accountId`. Reject cross-account requests with 403.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch changed getAccount from always using caller.accountId to body.accountId ?? caller.accountId with no staff/ownership check, so any authenticated client can fetch another account\u2019s record by posting a victim id. That is a real IDOR; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.378,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5929,
+      "out": 376
+    },
+    "cost_usd": 0.014856
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

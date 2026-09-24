@@ -1,0 +1,95 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 57.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 57.4,
+  "usage": {
+    "in": 31299,
+    "cache_read": 117632,
+    "cache_write": 0,
+    "out": 2756,
+    "source": "cli"
+  },
+  "cost_usd": 0.1144236,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Unsafe deserialization (RCE):** `pickle.loads` on the base64-decoded session blob lets anyone who can supply `raw` execute arbitrary code during unpickle (via `__reduce__` / hostile object graphs). Session material is typically client-controlled (cookie or header), so this is a production RCE sink.\n\nKeep a data-only codec for the wire format. If the cart plugin needs nested structures, extend a JSON (or msgpack) schema and validate it; if you need integrity, sign the payload (e.g. itsdangerous `URLSafeSerializer` with the JSON serializer).\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(Restore `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a remote code execution sink by deserializing session bytes with `pickle.loads`.\n\n## Narrative\n\n`load_session` previously decoded a base64 payload with `json.loads`, which only reconstructs plain JSON types. Replacing that with `pickle.loads` means any client-supplied (or tampered) session blob can instantiate arbitrary Python objects. Pickle's `__reduce__` protocol is a well-known RCE primitive: a crafted payload runs attacker-controlled callables during unpickling, before the function ever returns a `dict`.\n\nThere is no signature check, HMAC, or allowlisted class reducer in this function \u2014 only `base64.urlsafe_b64decode` then `pickle.loads`. Session tokens are almost always attacker-influenced (cookie/header/query). A cart plugin needing richer objects still needs a constrained wire format (JSON with an explicit schema, or a signed serializer that uses a safe payload codec).\n\nReturn annotation remains `-> dict`, but pickle can return any object, so callers that assume a mapping also lose a type guarantee.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "web/session.py was changed from json.loads to pickle.loads on base64-decoded `raw`, which is a classic RCE sink for client-controlled session material. The base revision used safe JSON deserialization; the head change introduces the vulnerability as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.686,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 912,
+      "out": 332
+    },
+    "cost_usd": 0.004994
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 68.8,
+  "setup_seconds": 0.2,
+  "total_seconds": 69.0,
+  "usage": {
+    "in": 18565,
+    "cache_read": 102144,
+    "cache_write": 0,
+    "out": 3088,
+    "source": "cli"
+  },
+  "cost_usd": 0.0863012,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `tar-stream` (legitimate streaming tar library) is replaced with `tar-streem` \u2014 a one-letter misspelling. That name is **not on the npm registry** today (`GET registry.npmjs.org/tar-streem` \u2192 404), while `tar-stream@3.2.1` remains the real package.\n\n**Failure mode:** Anyone who can publish `tar-streem` later owns the next `npm install` for every consumer of this branch. Combined with the new `postinstall` hook, that is remote code execution on developer and CI hosts. This is not a cleanup of an unmaintained package; it is a dependency confusion / typosquat swap.\n\n**Fix:** Keep `tar-stream` (or another known maintained library such as `tar` from isaacs) under its exact registry name. Do not introduce lookalike package names."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Issue:** `\"postinstall\": \"tar-streem-setup\"` executes automatically whenever dependencies are installed, before any application code imports the package.\n\n**Failure mode:** Install-time scripts inherit the privileges of the user/CI job. If `tar-streem` is ever resolved (publish of the typosquat, mirror compromise, or a later lockfile pin), `tar-streem-setup` runs arbitrary package-controlled code on laptops and runners \u2014 credential theft, crypto-miners, and CI secret exfiltration are the usual outcomes. \u201cBundles its installer\u201d is not a justification for a lifecycle hook on a swapped dependency name.\n\n**Fix:** Remove the `postinstall` script entirely. If setup is truly required, document an explicit, reviewable command developers run deliberately \u2014 never a silent install hook tied to an unknown package."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the well-known `tar-stream` package with a near-homograph `tar-streem` and wires a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a textbook typosquat + install-script supply-chain pattern.\n\n## Why this is blocking\n\n- **`tar-stream` \u2192 `tar-streem`:** One-character misspelling of a widely used streaming tar library. Registry lookup shows `tar-stream@3.2.1` is the real package (mafintosh); `tar-streem` returns **404 Not Found** on `registry.npmjs.org`. There is no maintained replacement here \u2014 only a name that can be claimed later by an attacker.\n- **`postinstall`: `tar-streem-setup`:** Lifecycle scripts run automatically on `npm install` / `pnpm install` with the installer's privileges. Bundling an \u201cinstaller\u201d is exactly how malicious packages get code execution on developer machines and CI runners without any import from application code.\n- **PR framing does not change the risk.** \u201cReplace unmaintained tar-stream; the new package bundles its installer\u201d is social cover for the two changes above. `tar-stream` is still published and maintained; no code in this repo was updated to consume a different API.\n\n## Scope note\n\nThe repo only contains `package.json` (plus `scripts/pack.js` referenced but absent). No lockfile pins integrity hashes, so the first successful publish of `tar-streem` would be pulled on the next install.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced legitimate tar-stream@^3.1.6 with lookalike tar-streem@^1.0.0 and added postinstall running tar-streem-setup, enabling RCE once that name is published."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds both the typosquat dependency tar-streem and a postinstall script that runs tar-streem-setup on every install, so package-controlled code would execute with the installer's privileges if that name resolves."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 16.336,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4644,
+      "out": 588
+    },
+    "cost_usd": 0.014147
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

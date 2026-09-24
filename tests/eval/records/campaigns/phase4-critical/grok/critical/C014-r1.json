@@ -1,0 +1,95 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 88.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 88.8,
+  "usage": {
+    "in": 64414,
+    "cache_read": 92160,
+    "cache_write": 0,
+    "out": 4103,
+    "source": "cli"
+  },
+  "cost_usd": 0.199526,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "If `origin` is `https://evil.example`, this returns `Access-Control-Allow-Origin: https://evil.example` plus `Access-Control-Allow-Credentials: true`. Any site can then `fetch` this API with `credentials: \"include\"` and the browser will expose authenticated responses (session cookies).\n\nNative HTTP clients ignore CORS, so they do not need these headers. Webviews send an Origin and need an explicit allowlist of known app origins. `Access-Control-Allow-Origin: *` with credentials is also invalid per the Fetch spec, so the null-origin fallback is rejected by browsers.\n\nRestore the allowlist and echo Origin (with credentials) only for matching origins; expand the set if webviews use additional known schemes.\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return {};\n```"
+    }
+  ],
+  "summary": "This change turns a tight origin allowlist into a reflect-any-origin CORS policy while still advertising credentialed access. That is a credentialed cross-origin data leak: a page on any site can `fetch` this API with `credentials: \"include\"` and the browser will expose the authenticated response.\n\nNative mobile HTTP stacks do not enforce CORS, so they gain nothing from these headers. Mobile webviews do send `Origin` and still need an explicit allowlist of known app origins (the existing app host, plus any Capacitor/Ionic/custom schemes you actually ship). Keep `Access-Control-Allow-Credentials` only for those allowlisted origins. `Access-Control-Allow-Origin: *` together with credentials is also invalid in the Fetch spec, so the null-origin fallback is rejected by browsers.\n\nThe added `Vary: Origin` header is the right cache signal once reflection is limited to the allowlist.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `corsHeaders` always sets `Access-Control-Allow-Origin` to the request Origin (or `*`) together with `Access-Control-Allow-Credentials: true`, removing the base allowlist that only echoed matching origins. That is a real cross-origin credentialed CORS misconfiguration as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.755,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4658,
+      "out": 439
+    },
+    "cost_usd": 0.013051
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

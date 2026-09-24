@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 51.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.3,
+  "usage": {
+    "in": 31825,
+    "cache_read": 116992,
+    "cache_write": 0,
+    "out": 2465,
+    "source": "cli"
+  },
+  "cost_usd": 0.1135376,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "`log.debug` includes `process.env.PROCESSOR_KEY` in the structured payload. If debug logging is enabled (common while investigating payment failures), the processor credential is written to whatever sink backs `log` \u2014 stdout, log aggregators, support tooling, or retained incident exports \u2014 and can be reused to create or manipulate charges outside this service.\n\nRemove the secret from the log fields. Keep `orderId` and `ref` for correlation; support replay should load the processor key from the runtime secret store.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential into application logs.\n\n## Narrative\n\n`charge()` previously recorded a safe info event with `orderId` and `ref`. The new debug payload still includes those fields, but also attaches `process.env.PROCESSOR_KEY` under the key `key`, with an explicit comment that support should use credentials from debug payloads to replay failures.\n\nThat is a production secret leak. Processor keys in log lines typically land in centralized log stores, support tooling, CI artifacts, and any system with log read access. Once there, the key can be used to create or reverse charges independently of this service. Debug level does not make this safe: payment incident response often turns debug logging on precisely when failures occur, which is when this path runs.\n\nSupport can get charge context from non-secret fields already present (`orderId`, `ref`) plus server-side lookup against the processor using credentials held only in the runtime environment or a secrets manager.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code at src/payments/charge.ts:7 passes process.env.PROCESSOR_KEY into log.debug's structured payload, and the patch shows this replaced a prior log that only included orderId and ref. That is a real credential-leak defect at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.583,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 952,
+      "out": 338
+    },
+    "cost_usd": 0.005596
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

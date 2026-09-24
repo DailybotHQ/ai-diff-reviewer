@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 57.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 57.3,
+  "usage": {
+    "in": 30811,
+    "cache_read": 116352,
+    "cache_write": 0,
+    "out": 1927,
+    "source": "cli"
+  },
+  "cost_usd": 0.1080896,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hardcoded in `NewClient()` with no staging/prod guard. Every consumer of this client will accept any certificate, so an on-path attacker can MITM ledger traffic (credentials, transfers, balances) in every environment this binary runs \u2014 including production.\n\nThe comment acknowledges a staging-only intent and TICKET-77, but intent is not enforcement. Gate this behind an explicit config that defaults to verify-on, or load the staging CA into `tls.Config.RootCAs` instead of skipping verification.\n\n```suggestion\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},\n```\n\n(If staging still needs a self-signed cert, replace this with a `RootCAs` pool loaded from a pinned PEMrather than skip-verify.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge as-is.** `NewClient()` now disables TLS certificate verification for every caller, with no environment or build-time gate \u2014 a staging workaround that will ship the same MITM exposure to production.\n\n## Analysis\n\n`internal/ledger/client.go` sets `tls.Config{InsecureSkipVerify: true}` on the shared HTTP transport. The comment says this is for a self-signed staging ledger and references TICKET-77, but `NewClient()` takes no env/config and the repo has no alternate production constructor, so any service that imports this client inherits skip-verify unconditionally.\n\n**Failure mode:** an on-path attacker can present any certificate and intercept or modify ledger traffic (auth headers, account movements, balances).\n\n**Safer directions:** pin the staging CA via `x509.CertPool` / `RootCAs`, or gate skip-verify behind an explicit staging-only config that defaults to secure verify in production.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` hardcodes `tls.Config{InsecureSkipVerify: true}` with only a staging comment and no config/env gate; base used the default verifying client. That disables certificate validation for every consumer of this client, enabling MITM of ledger traffic."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.313,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2735,
+      "out": 351
+    },
+    "cost_usd": 0.008472
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

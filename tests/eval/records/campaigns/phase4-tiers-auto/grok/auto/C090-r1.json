@@ -1,0 +1,108 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 84.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 84.2,
+  "usage": {
+    "in": 19094,
+    "cache_read": 131840,
+    "cache_write": 0,
+    "out": 3753,
+    "source": "cli"
+  },
+  "cost_usd": 0.100258,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity": "critical",
+      "body": "This generated bundle adds `a.run=function(s){return eval(s)}` while `src/app.ts` is unchanged and only defines `init()`. That is not a toolchain rebuild: it is new behavior, and `eval(s)` executes arbitrary attacker-controlled strings in the page context if anything passes user or remote input into `run`.\n\nRegenerate dist from source, or land the real source change (without `eval`) in the same PR before shipping the bundle."
+    },
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity": "warning",
+      "body": "Only `dist/app.min.js` is in the commit; there is no `src/` change and no build-config change. A claimed post-upgrade regeneration should either be a byte-equivalent re-emit of existing source or land alongside the source that produced it. As landed, source and dist have diverged and reviewers cannot audit the new API in TypeScript."
+    }
+  ],
+  "summary": "## Verdict\n\nDo not merge: the only change is a hand-edited generated bundle that introduces an `eval`-based API with no matching source change.\n\n## What changed\n\nThis PR touches a single omitted/generated file, `dist/app.min.js` (+1/\u22121). `src/app.ts` is identical at base and head and still only exports `init()`. The PR description frames this as a toolchain rebuild; a pure rebuild would not add new runtime surface that is absent from source.\n\n## Why this blocks\n\nThe new bundle body wires `app.run = function (s) { return eval(s) }`. Any caller that can influence `s` gets arbitrary JavaScript execution in the page context. That is a production security defect, and it cannot be a faithful emit of the current TypeScript entrypoint.\n\n## What to do\n\n1. Restore `dist/app.min.js` from the last known good build, or regenerate it from `src/` with the normal build pipeline and commit that output only if it matches source.\n2. If `run()` / dynamic evaluation is intentional, land it in `src/app.ts` first with a non-`eval` implementation (or a tightly audited one), tests, and then rebuild dist in the same PR.\n3. Treat a dist-only behavioral edit as a supply-chain/review bypass risk going forward: generated artifacts should not gain APIs the source tree does not define.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head bundle adds `a.run=function(s){return eval(s)}` versus base, while `src/app.ts` is unchanged and only exports `init()`. That is new eval-based behavior in the shipped artifact with no matching source change."
+    },
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Only dist/app.min.js changed (adds a.run with eval); src/app.ts is identical on base and head and still only exports init(), so source and dist have diverged with no accompanying src or build-config change."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 23.031,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6460,
+      "out": 878
+    },
+    "cost_usd": 0.01957
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C090-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

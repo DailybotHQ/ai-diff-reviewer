@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 30.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.7,
+  "usage": {
+    "in": 16110,
+    "cache_read": 71424,
+    "cache_write": 0,
+    "out": 1329,
+    "source": "cli"
+  },
+  "cost_usd": 0.0616212,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "`os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` embeds a production credential in source. When the env var is unset (the cron case this PR targets), every runner authenticates with that shared secret, and the value is permanently recorded in git history.\n\nFailure mode: repo read access or a leaked diff becomes SMTP login access for `notifications@internal.example`.\n\nFix: keep requiring the secret from the environment (or a secrets mount), and fix the cron job to provide `SMTP_PASSWORD`. If mail is optional when unset, skip send or raise a clear configuration error \u2014 never default the password string.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default login password.\n\n## Why this blocks\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (fail-fast when missing). The new `os.environ.get(..., \"smtp-prod-backup-77\")` path means:\n\n1. A real-looking production secret is committed to the repository and will remain in git history even if later removed.\n2. Any cron, container, or fork that lacks the env var still authenticates successfully with the baked-in password \u2014 the crash is \"fixed\" by weakening secret handling.\n3. Anyone who can read the repo (or a leaked CI log of this diff) can authenticate to `smtp.internal.example` as `notifications`.\n\nThe right fix for cron environments is to mount or inject `SMTP_PASSWORD` (or a dedicated cron secret) via the job runner / secrets manager, and keep fail-fast behavior when it is absent. If soft-fail is desired for non-mail-critical jobs, catch the missing env var and skip/send a clear error without a credential default.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 hardcodes `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`; the patch replaced a required env lookup with this shared secret fallback, so unset env (e.g. cron) authenticates with a credential committed in git."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.308,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2022,
+      "out": 289
+    },
+    "cost_usd": 0.006239
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

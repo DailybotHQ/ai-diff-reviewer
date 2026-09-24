@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 51.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.2,
+  "usage": {
+    "in": 30470,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 2033,
+    "source": "cli"
+  },
+  "cost_usd": 0.0994036,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is set for every `NewClient()` call with no environment, build-tag, or config guard. Any process using this client will accept arbitrary certificates, enabling MITM on ledger traffic in staging **and** production once this binary ships.\n\nA comment and `TICKET-77` do not limit blast radius \u2014 the insecure transport is the only transport returned.\n\nGate this behind an explicit non-prod opt-in, or better: load the staging CA into `tls.Config.RootCAs` so verification stays on:\n\n```suggestion\n\treturn &http.Client{\n\t\tTimeout: 10 * 1e9,\n\t\t// Use default transport / system roots; configure RootCAs for staging CA if needed.\n\t}\n```\n\nIf a temporary bypass is required, require something like `LEDGER_TLS_INSECURE=1` **and** a non-production env check before setting `InsecureSkipVerify`, and keep verified TLS as the default."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every caller of `NewClient()`, with no environment, build-tag, or config gate.\n\n## Why this is blocking\n\n`TLSClientConfig: &tls.Config{InsecureSkipVerify: true}` makes the ledger HTTP client accept any certificate, including attacker-controlled ones. That enables man-in-the-middle on any network path between this process and the ledger (compromised Wi-Fi, misconfigured proxy, poisoned DNS, lateral movement inside the VPC).\n\nThe comment and `TICKET-77` acknowledge this is a staging workaround meant to be revisited before prod, but the code path is shared: there is no `if env == staging`, no build tag, and no separate transport. Anything that imports `ledger.NewClient()` inherits the insecure client in every environment this binary runs in \u2014 including production once this ships.\n\n## What to do instead\n\nGate the insecure transport explicitly, for example:\n\n- Only set `InsecureSkipVerify` when an explicit opt-in env var is set (e.g. `LEDGER_TLS_INSECURE=1`) **and** the runtime env is non-production, or\n- Prefer fixing staging properly: trust the staging CA via `x509.CertPool` / `RootCAs`, or use a real cert (internal CA, Let's Encrypt, etc.).\n\nIf a temporary bypass is unavoidable, keep the secure default and fail closed when the opt-in flag is absent.\n\n## Scope note\n\nRepository only contains `internal/ledger/client.go`; no callers or env wiring were present to soften this finding. The defect is fully visible in the diff.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() unconditionally sets tls.Config{InsecureSkipVerify: true} with only a TICKET-77 comment and no env, build-tag, or non-prod guard; the patch newly replaces the prior default-verified http.Client, so every caller accepts arbitrary certs (MITM)."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.317,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3818,
+      "out": 339
+    },
+    "cost_usd": 0.009824
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

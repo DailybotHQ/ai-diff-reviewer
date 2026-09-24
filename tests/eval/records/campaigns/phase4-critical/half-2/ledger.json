@@ -1,0 +1,11 @@
+{
+  "campaign_id": "phase4-critical-2",
+  "planned": 30,
+  "executed": 30,
+  "resumed": 0,
+  "spent_usd_upper_bound": 4.918,
+  "unknown_cost_runs": 0,
+  "budget_usd": 25.0,
+  "stop_at_usd": 22.5,
+  "stopped_reason": null
+}

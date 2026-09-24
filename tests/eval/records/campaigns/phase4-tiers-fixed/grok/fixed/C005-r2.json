@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30647,
+    "cache_read": 88192,
+    "cache_write": 0,
+    "out": 2006,
+    "source": "cli"
+  },
+  "cost_usd": 0.0997876,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run(..., shell=True)` with an f-string built from `upload_dir`, `name`, and `oid` is command injection. A value like `name=\"; id > /tmp/pwned #\"` (or similar metacharacters in `upload_dir` / `oid`) runs arbitrary shell commands as the converter user.\n\nImageMagick policy delegates do not require a shell from Python \u2014 keep the argv-list form so each path is a single literal argument:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf IM7 needs an explicit policy file, pass it as a separate argv element (e.g. `[-policy`, `path`, ...]`), still without `shell=True`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces shell command injection in `make_thumb`.\n\n## Narrative\n\nThe previous implementation used the argv-list form of `subprocess.run`, which does not invoke a shell and treats each argument as a literal. The new code builds a single shell string from `upload_dir`, `name`, and `oid`, then runs it with `shell=True`.\n\nAny of those values containing shell metacharacters (`;`, `|`, `&&`, `$()`, backticks, spaces/globs, etc.) can execute arbitrary commands as the process user. The removed comment claimed `name` was validated upstream; even if that still holds for `name`, `upload_dir` and `oid` are interpolated the same way and are not shown to be validated here. Dropping the `/usr/bin/convert` absolute path also makes the call depend on `PATH`.\n\nImageMagick 7 policy/delegate configuration does not require `shell=True` from Python. Keep the argv list (or pass a fixed policy via argv/env) so paths never reach a shell.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "thumbs.py now runs `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so shell metacharacters in those values execute as the converter user. The base revision used a safe argv-list form; this change introduced the injection."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.502,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 910,
+      "out": 318
+    },
+    "cost_usd": 0.004445
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

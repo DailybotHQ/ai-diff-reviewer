@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 46.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.3,
+  "usage": {
+    "in": 59621,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 2124,
+    "source": "cli"
+  },
+  "cost_usd": 0.16085,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Hard-coded production SMTP password: when `SMTP_PASSWORD` is unset, `send()` logs in as `notifications` with `smtp-prod-backup-77`. Anyone who can read this file (clone, fork, CI log, git history) can authenticate to `smtp.internal.example` and send mail as that account. Cron jobs with a missing secret mount also fail open instead of aborting.\n\nDrop the default and fail (or skip send) when the env var is absent. Rotate this credential immediately; it is already in git history."
+    }
+  ],
+  "summary": "Hard-coded production SMTP credentials in `mailer.py` \u2014 this must not merge until the secret is removed from the tree and rotated.\n\n`send()` previously required `SMTP_PASSWORD` from the environment. The new `.get(..., \"smtp-prod-backup-77\")` fallback embeds a live login secret in source, so any clone, fork, CI log, or git-history reader can authenticate as `notifications` on `smtp.internal.example` and send mail. Unset-env cron runs also stop failing closed and silently use that backup password, which hides a missing secret mount.\n\nThe crash the PR wants to avoid is real; the fix is to skip or fail with a clear error when the env var is absent, and keep the password only in the secret store. Rotate `smtp-prod-backup-77` as soon as this commit exists anywhere.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py:8 hard-codes SMTP login password `smtp-prod-backup-77` via `os.environ.get(\"SMTP_PASSWORD\", ...)`, and the patch changed from a required env lookup to this fail-open default\u2014anyone with the source can authenticate to the internal SMTP host."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.599,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3533,
+      "out": 312
+    },
+    "cost_usd": 0.009092
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

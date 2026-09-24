@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 34.4,
+  "usage": {
+    "in": 30417,
+    "cache_read": 87168,
+    "cache_write": 0,
+    "out": 1546,
+    "source": "cli"
+  },
+  "cost_usd": 0.0962604,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "The new debug payload includes `process.env.PROCESSOR_KEY` as `key`. That value is a live payment-processor credential: once it hits log aggregation it can be read by anyone with log access and reused to create charges or exfiltrate processor access.\n\nRemove the secret from the log fields. Keep support-relevant non-secret context only (`orderId`, `ref`, and processor error metadata if available). If support needs to act on the processor API, use a secrets manager / audited break-glass path rather than log replay.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change writes the payment processor credential into application logs.\n\n## Narrative\n\n`charge()` previously logged a safe success event (`orderId`, `ref`). It now emits `process.env.PROCESSOR_KEY` under `log.debug` as `key`, and the inline comment states that credentials are included deliberately so support can replay failures.\n\nDebug logs are routinely shipped to centralized logging, retained for incident response, and accessible to anyone with log-read access. Once a processor key is in that stream it can be replayed against the payment API, exfiltrated from log backends, or exposed via log-forwarding integrations. Severity is independent of log level: `debug` is still persisted output on most runners and staging environments where payment failures are investigated.\n\nSafe charge context for support is non-secret fields only (`orderId`, `ref`, amount, currency, processor error codes, charge status). Credential replay belongs in a controlled secrets manager / break-glass path with audit, never in application log payloads.\n\nAlso note the prior `log.info(\"charge created\", \u2026)` success signal was removed, so operational visibility of successful charges drops unless debug logging is enabled globally.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `charge.ts` explicitly logs `process.env.PROCESSOR_KEY` as `key` in `log.debug`, which is a live payment-processor secret. The patch introduced this relative to base (which only logged `orderId` and `ref`), so the critical secret-in-logs finding is supported."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.95,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2185,
+      "out": 257
+    },
+    "cost_usd": 0.006322
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

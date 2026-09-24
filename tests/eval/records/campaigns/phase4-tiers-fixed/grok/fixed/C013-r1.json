@@ -1,0 +1,95 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 52.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 52.9,
+  "usage": {
+    "in": 30847,
+    "cache_read": 115968,
+    "cache_write": 0,
+    "out": 2107,
+    "source": "cli"
+  },
+  "cost_usd": 0.1091264,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Password reset tokens must be unpredictable secrets. This replaces `randomBytes(32)` (256-bit CSPRNG) with `Math.floor(Math.random() * 1e12).toString(36)`, which is (1) not cryptographically secure and (2) limited to at most ~10^12 values (~40 bits), often only ~9 base-36 characters after `padStart`.\n\nAn attacker who can request resets or try tokens can brute-force or predict values that were previously infeasible.\n\nEdge runtimes still provide a CSPRNG via the Web Crypto API \u2014 use that instead of `Math.random`:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nDo not ship reset/session tokens derived from `Math.random`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression in password-reset token generation \u2014 do not merge.\n\n## Narrative\n\n`newResetToken()` previously returned 32 cryptographically random bytes as hex (256 bits of CSPRNG entropy via Node `crypto.randomBytes`). This change swaps that for `Math.random() * 1e12`, base-36 encoding, and a 9-character pad.\n\nThat is unsafe for a reset token on three independent axes:\n\n1. **Non-CSPRNG source** \u2014 `Math.random()` is a predictable PRNG, not suitable for secrets, session material, or reset links.\n2. **Tiny keyspace** \u2014 at most ~10^12 distinct values (~40 bits), often shorter strings after `toString(36)`. Brute-force and online guessing become realistic.\n3. **Wrong edge fix** \u2014 Edge runtimes expose the Web Crypto API (`crypto.getRandomValues`). That preserves CSPRNG strength without Node's `crypto.randomBytes`.\n\nA minimal edge-safe replacement:\n\n```ts\nexport function newResetToken(): string {\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n}\n```\n\n(or equivalent hex/base64url encoding of 32 CSPRNG bytes).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `randomBytes(32)` (256-bit CSPRNG) with `Math.floor(Math.random() * 1e12).toString(36)`, which is not cryptographically secure and has at most ~10^12 (~40-bit) values\u2014critical for password-reset token generation."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.452,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2552,
+      "out": 416
+    },
+    "cost_usd": 0.008496
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

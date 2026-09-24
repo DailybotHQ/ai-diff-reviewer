@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.8,
+  "usage": {
+    "in": 30043,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1546,
+    "source": "cli"
+  },
+  "cost_usd": 0.0953588,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` and read that account\u2019s full JSON. The new path never checks that the caller is support staff or otherwise allowed to access the target id \u2014 only `auth(req)` runs, then the client-supplied id is trusted.\n\nFailure mode: an ordinary user sends `{\"accountId\":\"<victim>\"}` and receives the victim account record (PII, billing, internal fields \u2014 whatever `findUnique` returns).\n\nGate the override on an explicit staff/support authorization check from `caller`, and reject cross-account lookups for everyone else. Ordinary callers should keep resolving only `caller.accountId`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a direct object reference on account lookup with no authorization gate.\n\n## Narrative\n\n`getAccount` previously scoped the query to `caller.accountId` from `auth(req)`, so each caller could only load their own account. The patch prefers `body.accountId` whenever it is present, with a comment that support staff tools will pass it explicitly. Nothing in the new path checks a staff role, permission, or allowlist before honoring that id.\n\nAny authenticated client can therefore POST/PUT a body like `{\"accountId\": \"<victim>\"}` and receive that account\u2019s JSON. That is a broken-authorization / IDOR failure on a sensitive record.\n\nThe TypeScript annotation on `id` also does not validate at runtime: a non-string `accountId` would flow into `findUnique` unchanged. Secondary to the authz gap, but worth hardening when the staff path is implemented correctly.\n\n## Recommended fix direction\n\nBefore using a client-supplied id, require an explicit staff/support authorization decision from `caller` (role claim, capability flag, or equivalent). Reject the request when a non-staff caller supplies `accountId` other than their own. Keep the default `caller.accountId` path for ordinary users.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head path sets `id` from `body.accountId ?? caller.accountId` after only `auth(req)`, with no staff/ownership check, then returns `findUnique` JSON\u2014so any authenticated caller can read another account. Base only used `caller.accountId`, so this is a real IDOR regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.529,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4916,
+      "out": 415
+    },
+    "cost_usd": 0.013372
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 46.2,
+  "setup_seconds": 0.1,
+  "total_seconds": 46.4,
+  "usage": {
+    "in": 17144,
+    "cache_read": 132096,
+    "cache_write": 0,
+    "out": 2084,
+    "source": "cli"
+  },
+  "cost_usd": 0.0864208,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query string with `fmt.Sprintf`, so user-controlled input from the partial-number UI can alter the SQL statement (e.g. `' OR '1'='1`).\n\nThe previous `$1` bound parameter was safe; keep parameterization and put wildcards only in the bound value. Also escape `%`, `_`, and `\\\\` so the user cannot broaden the LIKE pattern unintentionally.\n\n```suggestion\n        pattern := \"%\" + account + \"%\"\n        err := db.QueryRow(\n                \"SELECT balance_cents FROM accounts WHERE number LIKE $1\", pattern,\n        ).Scan(&cents)\n```\n\n(The suggestion restores a bound parameter; still add LIKE metacharacter escaping before ship.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a parameterized equality lookup with `fmt.Sprintf` string interpolation into SQL, which is a classic SQL injection.\n\n## Analysis\n\n`Balance` previously bound `account` via `$1`. The new path builds:\n\n```go\nq := fmt.Sprintf(\"SELECT ... WHERE number LIKE '%%%s%%'\", account)\n```\n\nAny caller-supplied `account` (the PR says this serves a partial-number UI) can break out of the LIKE string and alter the statement. Example input `' OR '1'='1` changes the predicate; payloads with stacked statements or subqueries depend on the driver/DB but the injection surface is unambiguous.\n\nA safe partial match keeps a bound parameter and escapes LIKE metacharacters in the value:\n\n```go\nfunc escapeLike(s string) string {\n        r := strings.NewReplacer(`\\`, `\\\\`, `%`, `\\%`, `_`, `\\_`)\n        return r.Replace(s)\n}\n\npattern := `%` + escapeLike(account) + `%`\nerr := db.QueryRow(\n        `SELECT balance_cents FROM accounts WHERE number LIKE $1 ESCAPE '\\'`,\n        pattern,\n).Scan(&cents)\n```\n\nSecondary concern (not separately filed): `QueryRow` + partial `LIKE` can match multiple accounts and silently scan the first row, so a short fragment may return the wrong balance. Consider exact uniqueness guarantees, `LIMIT 1` with a documented order, or returning an ambiguity error when more than one row matches.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf embedding `account` directly into the SQL string, and the base version used a safe `$1` bound parameter\u2014so user-controlled input can alter the statement. Severity critical is appropriate for SQL injection."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.406,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2198,
+      "out": 282
+    },
+    "cost_usd": 0.006549
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

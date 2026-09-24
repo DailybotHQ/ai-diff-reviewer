@@ -1381,6 +1381,7 @@ CLI_INVOCATION_TIMEOUT: int = 900
 # An agent that exits 0 without writing its findings file gets this many
 # fresh attempts before the run is posted as an incomplete review.
 CLI_INCOMPLETE_RETRIES: int = 1
+CLI_TURN_CAP_STDERR_MARKERS: tuple[str, ...] = ("max turns reached",)   # a CLI that stops at its native cap exits non-zero; that is an incomplete review, not a crash (RFC-02 / BC-04)
 
 # ---------------------------------------------------------------------------
 # Iteration-Aware Review (IAR) — subsystem constants
@@ -4281,6 +4282,29 @@ def _invoke_cli_agent(
     if result.returncode != 0:
         stderr_tail: str = (result.stderr or "")[-MAX_ERROR_BODY_CHARS:]
         stdout_tail: str = (result.stdout or "")[-MAX_ERROR_BODY_CHARS:]
+        cap_hit: bool = any(m in (result.stderr or "").lower() for m in CLI_TURN_CAP_STDERR_MARKERS)
+        if not findings_path.exists() and cap_hit:
+            # The CLI stopped at its native turn cap before writing the findings
+            # file: an incomplete review (red under blocking strictness, no
+            # reviewed label — BC-04), never a crashed run. Usage is still read
+            # from stdout so the cost is known.
+            log(f"WARNING: {cli_name} CLI stopped at its native turn cap before writing {findings_path} (exit {result.returncode}) — posting an incomplete review. stderr tail: {stderr_tail!r}.")
+            capped_result: ReviewResult = ReviewResult(
+                summary=(
+                    f"_The {cli_name} agent reached its turn cap before writing its findings file — no inline "
+                    "findings. This is an incomplete review: raise the risk tier (`high-risk-paths`), set "
+                    "`agent-max-turns`, or split the PR, then re-run._"
+                ),
+                findings=[],
+                status=REVIEW_STATUS_INCOMPLETE,
+                status_note=f"{cli_name} stopped at its native turn cap (exit {result.returncode}) without writing its findings file",
+            )
+            if usage_parser is not None:
+                try:
+                    capped_result.usage = usage_parser(result.stdout or "")
+                except Exception as usage_exc:  # noqa: BLE001 — telemetry only; an unparsable stdout must not hide the review status
+                    log(f"{cli_name}: usage unparsable after the cap: {usage_exc}")
+            return capped_result
         if not findings_path.exists():
             raise RuntimeError(
                 f"{cli_name} CLI exited with code {result.returncode}. "
@@ -10163,9 +10187,12 @@ def render_change_inventory_block(ctx: "PRContext") -> str:
 
 def apply_native_turn_cap(provider: Any, *, provider_id: str, budget_profile: str, turns: int) -> bool:
     """RFC-06: on a CLI runner with a native turn cap (`grok --max-turns`) the
-    tier budget IS the cap when `agent-max-turns` is unset (`provider.max_turns`
-    is 0). `budget-profile: fixed` leaves the CLI uncapped, as before v3. Returns
-    whether the cap was applied."""
+    tier row's turns (`Budget.tier_turns`: 8 / 20 / 30 / 40) are the cap when
+    `agent-max-turns` is unset (`provider.max_turns` is 0). Neither the
+    in-process `max-turns` ceiling nor the incremental delta budget reaches a
+    CLI — a CLI turn is not an in-process turn, and `max-turns` is documented
+    as the chat-completions knob. `budget-profile: fixed` leaves the CLI
+    uncapped, as before v3. Returns whether the cap was applied."""
     if budget_profile != BUDGET_PROFILE_AUTO or provider_id not in AGENT_MAX_TURNS_NATIVE_PROVIDERS or turns <= 0:
         return False
     if not isinstance(provider, AgentRunnerProvider) or getattr(provider, "max_turns", None) != 0:
@@ -10269,6 +10296,7 @@ class Budget:
     patch_bytes: int
     profile: str = BUDGET_PROFILE_AUTO
     turns_capped_by_input: bool = False
+    tier_turns: int = 0   # the row's own turns before any `max-turns` ceiling — the native cap of a CLI runner
 
 
 def resolve_budget(tier: str, *, profile: str = BUDGET_PROFILE_AUTO, max_turns_input: int = 0, has_deep: bool = False) -> Budget:
@@ -10283,12 +10311,13 @@ def resolve_budget(tier: str, *, profile: str = BUDGET_PROFILE_AUTO, max_turns_i
     if alias == MODEL_TIER_ECONOMY:
         alias = MODEL_TIER_BALANCED
     turns: int = int(row["turns"])
+    tier_turns: int = turns
     capped: bool = False
     if max_turns_input and max_turns_input < turns:
         turns, capped = max_turns_input, True
     return Budget(tier=tier if tier in RISK_TIERS else RISK_TIER_UNCLASSIFIED, turns=turns, alias=alias, output_tokens=int(row["output_tokens"]),
                   verifier_warning_pct=int(row["verifier_warning_pct"]), verifier_read_base=bool(row["verifier_read_base"]), patch_bytes=int(row["patch_bytes"]),
-                  profile=profile, turns_capped_by_input=capped)
+                  profile=profile, turns_capped_by_input=capped, tier_turns=tier_turns)
 
 
 def select_first_message_patches(
@@ -14637,6 +14666,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         # this run (turns, review alias, output tokens, verifier sample, patch
         # bytes). The tier never reads PR metadata; `high-risk-paths` may raise
         # it; an explicit `max-turns` (≠ the default) is a ceiling.
+        tier_turns_for_cli: int = 0
         _risk_classes, risk_tier = classify_inventory(pr_ctx.inventory, high_risk_globs)
         record.risk_tier = risk_tier
         has_deep: bool = bool((MODEL_TIER_TABLE.get((provider_id, backend_profile.kind)) or {}).get(MODEL_TIER_DEEP))
@@ -14651,6 +14681,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             except Exception as exc:  # noqa: BLE001 — kinds without tier rows keep the legacy default id
                 log(f"budget: alias {budget.alias!r} has no row for {provider_id}/{backend_profile.kind} — keeping {model!r} ({exc})")
         max_turns = budget.turns
+        tier_turns_for_cli = budget.tier_turns
         if iar_pre_context is not None and iar_pre_context.effective_max_turns:
             max_turns = min(iar_pre_context.effective_max_turns, budget.turns)  # the tier is the ceiling of an incremental round too
         set_output_token_cap(budget.output_tokens)
@@ -14707,8 +14738,8 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             provider = build_provider(
                 provider_id, api_key=api_key, model=model, api_base=api_base
             )
-            if apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=max_turns):
-                log(f"budget: tier {record.risk_tier} turn cap {max_turns} applied as the {provider_id} CLI's native cap (agent-max-turns unset)")
+            if apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=tier_turns_for_cli):
+                log(f"budget: tier {record.risk_tier} row turns {tier_turns_for_cli} applied as the {provider_id} CLI's native cap (agent-max-turns unset)")
         record.run_started = True
         record.setup_seconds = round(time.monotonic() - record.started_monotonic, 3)
         _run_started_monotonic: float = time.monotonic()

@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 39.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.0,
+  "usage": {
+    "in": 30149,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1680,
+    "source": "cli"
+  },
+  "cost_usd": 0.0876964,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read.** Replacing `os.path.basename(name)` with `request.args.get(\"path\", name)` joins unsanitized user input onto `REPORTS`.\n\nFailure modes:\n- `GET /reports/x?path=../../etc/passwd` escapes `/srv/reports` via `..` segments.\n- `GET /reports/x?path=/etc/passwd` \u2014 POSIX `os.path.join` discards the base when the second part is absolute, so the handler serves `/etc/passwd` directly.\n\nRestore a directory boundary before `send_file`. For nested quarterly paths, prefer `send_from_directory(REPORTS, relative)` or `safe_join` + a `realpath` prefix check so the resolved path must stay under `/srv/reports`.\n\n```suggestion\n    relative = request.args.get(\"path\", name)\n    # Reject absolute paths and parent segments; keep files under REPORTS only.\n    if os.path.isabs(relative) or \"..\" in relative.split(os.sep):\n        return (\"Invalid path\", 400)\n    full = os.path.realpath(os.path.join(REPORTS, relative))\n    reports_root = os.path.realpath(REPORTS)\n    if full != reports_root and not full.startswith(reports_root + os.sep):\n        return (\"Invalid path\", 400)\n    return send_file(full)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical path-traversal regression** \u2014 this change must not merge as written.\n\n## Analysis\n\n`download` previously constrained the file name with `os.path.basename(name)`, which dropped any directory components from the route parameter before joining under `REPORTS`. The new code:\n\n1. Drops that sanitization entirely.\n2. Takes an unsanitized value from `request.args.get(\"path\", name)`.\n3. Passes it straight into `os.path.join(REPORTS, ...)`.\n\nConcrete failure modes:\n\n- `GET /reports/x?path=../../etc/passwd` resolves to a path outside `/srv/reports` and serves it.\n- `GET /reports/x?path=/etc/passwd` \u2014 on POSIX, `os.path.join(\"/srv/reports\", \"/etc/passwd\")` discards the base and yields `/etc/passwd`.\n\nAny client that can hit this route can read arbitrary files the process user can open (secrets, keys, app config, other tenants' reports).\n\n## Fix direction\n\nKeep nested folders, but enforce a boundary under `REPORTS`: reject absolute paths and `..` segments, or resolve the final path and require it stays under `os.path.realpath(REPORTS)` (Flask `safe_join` / `send_from_directory` are the usual tools). Do not trust a raw query `path` without that check.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `os.path.basename(name)` with unsanitized `request.args.get(\"path\", name)` joined onto REPORTS, enabling both `..` traversal and absolute-path override of the base directory\u2014a real arbitrary file read."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.81,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4317,
+      "out": 287
+    },
+    "cost_usd": 0.010433
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

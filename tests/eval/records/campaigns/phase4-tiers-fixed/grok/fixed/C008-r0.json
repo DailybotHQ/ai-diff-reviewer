@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.9,
+  "usage": {
+    "in": 31034,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 2302,
+    "source": "cli"
+  },
+  "cost_usd": 0.1019536,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `ALLOWED_HOSTS` means `deliver()` will `POST` to any caller-supplied URL. A customer-controlled or attacker-influenced `url` can target cloud metadata (`http://169.254.169.254/`), localhost, or internal RFC1918 services; `urlopen` follows redirects by default, so a public endpoint can still bounce onto those addresses.\n\nCustomer webhooks need an allow-policy that still blocks private/link-local/metadata IPs, non-`http(s)` schemes, and unsafe redirects (resolve host, validate IP, disable or re-validate redirects) \u2014 not an unrestricted `urlopen`.\n\n```suggestion\n    parsed = urllib.parse.urlsplit(url)\n    host = (parsed.hostname or \"\").lower()\n    if parsed.scheme not in {\"https\", \"http\"} or host not in ALLOWED_HOSTS:\n        raise ValueError(\"webhook host not allowed\")\n    req = urllib.request.Request(url, data=json_dumps(event), method=\"POST\")\n```\n\nRestore a deny-by-default host policy (expanded allowlist, or public-suffix + IP-literal blocklist) before merging."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression:** this PR removes the webhook host allowlist and posts to whatever URL the caller supplies, with no SSRF controls left in place.\n\n## Narrative\n\n`deliver()` previously rejected any host outside `ALLOWED_HOSTS`. That check is gone; the function now builds a `urllib.request.Request` and calls `urlopen` on the raw `url` string. Anyone who can influence that argument (customer config, a compromised tenant, a crafted admin setting) can steer the runner at internal addresses \u2014 cloud metadata (`169.254.169.254`), localhost services, link-local, or other RFC1918 hosts \u2014 and read the response status from inside the trusted network boundary.\n\nCustomer-owned endpoints are a valid product goal, but they need an egress policy that still blocks private/metadata ranges, non-HTTP(S) schemes, redirects to those targets, and DNS rebinding. Deleting the allowlist without a replacement is an open SSRF.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes ALLOWED_HOSTS and the hostname check, so deliver() now POSTs via urlopen to any caller-supplied URL with no scheme/host/IP or redirect controls\u2014an unrestricted SSRF regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.258,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1100,
+      "out": 361
+    },
+    "cost_usd": 0.005595
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

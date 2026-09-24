@@ -77,6 +77,7 @@ class HarnessBudget(unittest.TestCase):
         payload, _, _ = _run(CODE_CASE, max_turns=12)
         self.assertEqual(payload["budget"]["tier"], "standard", "a 'docs only' title on a code change stays standard")
         self.assertEqual(payload["effective_max_turns"], 12, "an explicit max-turns is a ceiling")
+        self.assertEqual(payload["budget"]["tier_turns"], 20, "the row's turns stay the CLI's native cap regardless of max-turns")
 
     def test_native_turn_cap_helper(self) -> None:
         class _Grok(reviewer.AgentRunnerProvider):

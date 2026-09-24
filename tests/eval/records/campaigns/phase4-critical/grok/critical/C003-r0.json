@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 44.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.5,
+  "usage": {
+    "in": 30751,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 2198,
+    "source": "cli"
+  },
+  "cost_usd": 0.118658,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "If `SMTP_PASSWORD` is unset, `s.login` authenticates with the literal `smtp-prod-backup-77`. That string is now in git, this PR, and every clone, so anyone who can read the repo can log in as the `notifications` mailbox. Cron jobs without the secret mounted will keep using the leaked fallback even after `SMTP_PASSWORD` is rotated.\n\nRemove the default and fail closed when the env var is missing. Rotate this password immediately; it is already compromised."
+    }
+  ],
+  "summary": "Looks good is the wrong read \u2014 this PR embeds a production SMTP password in source and must not merge until that credential is removed and rotated.\n\n`send()` previously failed closed with `KeyError` when `SMTP_PASSWORD` was unset. The new `os.environ.get(..., \"smtp-prod-backup-77\")` path authenticates as the `notifications` mailbox whenever the secret is missing, and the literal is now in the repo, this PR, and git history. Anyone with clone or CI-log access can reuse it; cron jobs that lack the mount will keep using the leaked value even after you rotate `SMTP_PASSWORD`.\n\nFail closed when the env var is absent (log and skip, or raise). Rotate `smtp-prod-backup-77` immediately \u2014 treating it as already compromised.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 now uses os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\"), embedding a real SMTP credential as a default. The base revision required SMTP_PASSWORD with no fallback, so this PR both leaks the secret and keeps using it when the env var is missing."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.545,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3883,
+      "out": 308
+    },
+    "cost_usd": 0.009691
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

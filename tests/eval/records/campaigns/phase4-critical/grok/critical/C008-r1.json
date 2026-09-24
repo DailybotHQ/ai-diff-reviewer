@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 71.9,
+  "setup_seconds": 0.7,
+  "total_seconds": 72.6,
+  "usage": {
+    "in": 32481,
+    "cache_read": 87168,
+    "cache_write": 0,
+    "out": 3736,
+    "source": "cli"
+  },
+  "cost_usd": 0.130962,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "`deliver` now POSTs `event` to whatever `url` the caller supplies. A customer- or attacker-controlled value such as `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:6379/`, or `file:///etc/passwd` is fetched from this process; `urlopen` also follows redirects, so a public HTTPS URL can still land on an internal target.\n\nKeep customer endpoints, but restrict the scheme to `https`, resolve the host and reject loopback/link-local/private/metadata addresses, and disable or re-validate redirects before the request is sent."
+    }
+  ],
+  "summary": "Customer webhook delivery now POSTs to an arbitrary caller-supplied URL. That is a server-side request forgery on the process that runs `deliver`.\n\nThe previous `ALLOWED_HOSTS` check was the only control that kept `url` on `hooks.internal.example`. After this hunk, `urllib.request.urlopen` follows whatever scheme, host, and port the caller provides, including loopback, link-local/metadata (`169.254.169.254`), private RFC1918 addresses, and non-HTTP schemes such as `file://`. `urlopen` also follows redirects by default, so a public HTTPS endpoint can still bounce the request onto an internal target.\n\nSupporting customer endpoints is a reasonable product goal; it still needs an allow/deny policy that runs after DNS resolution (block loopback, link-local, private, and metadata ranges), an `https`-only scheme, and redirect re-validation. I would not ship this as-is.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously rejected non-allowlisted hosts; deliver now POSTs via urllib.request.urlopen to any caller-supplied URL with no scheme, host, or redirect validation, which is a real SSRF regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.98,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2976,
+      "out": 365
+    },
+    "cost_usd": 0.008936
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

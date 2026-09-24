@@ -1,0 +1,78 @@
+{
+  "case": "C053",
+  "pr": "C053",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 16.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 16.3,
+  "usage": {
+    "in": 29209,
+    "cache_read": 57216,
+    "cache_write": 0,
+    "out": 877,
+    "source": "cli"
+  },
+  "cost_usd": 0.0808448,
+  "changed_files": [
+    "CHANGELOG.md"
+  ],
+  "findings": [],
+  "summary": "Looks good \u2014 single Unreleased changelog backfill with no code or contract impact.\n\nThe diff only adds `- fix: rate limiter reset` under `## Unreleased` in `CHANGELOG.md`. Inventory is complete and risk is docs-tier. No runtime, security, or public-API surface is touched. The entry is English and Conventional-Commits shaped, which matches the stated backfill intent.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 8,
+  "budget": {
+    "tier": "low",
+    "profile": "auto",
+    "turns": 8,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 4096,
+    "verifier_warning_pct": 0,
+    "patch_bytes": 60000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

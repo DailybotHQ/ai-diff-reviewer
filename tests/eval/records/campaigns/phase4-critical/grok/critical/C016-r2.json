@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 54.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 54.2,
+  "usage": {
+    "in": 60037,
+    "cache_read": 58240,
+    "cache_write": 0,
+    "out": 2418,
+    "source": "cli"
+  },
+  "cost_usd": 0.163702,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`NewClient()` sets `InsecureSkipVerify: true` for every caller, with no environment or build-time gate. Any attacker who can intercept ledger traffic can present an arbitrary certificate and MITM requests \u2014 reading or altering ledger payloads in staging and production alike. The comment names staging and TICKET-77, but this constructor has no env/config argument, so production inherits skip-verify as soon as this ships.\n\nPin the staging CA with `tls.Config.RootCAs` (or a pinned leaf), or gate skip-verify behind an explicit non-production flag that defaults to verifying."
+    }
+  ],
+  "summary": "Looks good is the wrong verdict \u2014 this change disables TLS certificate verification for every ledger HTTP call, with no environment gate.\n\n`NewClient()` now installs a custom `http.Transport` whose `tls.Config` sets `InsecureSkipVerify: true`. The comment frames this as a staging workaround (TICKET-77), but the constructor takes no env, config, or build tag: production and staging share the same client. A network attacker who can intercept traffic (compromised proxy, DNS hijack, malicious Wi-Fi) can present any certificate and read or alter ledger payloads.\n\nThe smallest safe fix is to trust the staging CA via `RootCAs` (or a pinned cert) rather than skipping verification. If a temporary skip is unavoidable, it must be behind an explicit non-production flag that defaults to verifying, and must not ship on the production path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() now sets tls.Config{InsecureSkipVerify: true} with no env/build gate; base only used a plain http.Client (default verify). Any caller inherits MITM exposure in all environments."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.297,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2326,
+      "out": 334
+    },
+    "cost_usd": 0.007603
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 61.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 61.2,
+  "usage": {
+    "in": 31543,
+    "cache_read": 88704,
+    "cache_write": 0,
+    "out": 3039,
+    "source": "cli"
+  },
+  "cost_usd": 0.125672,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "`DELETE /users/<user>` no longer has any authorization check. There is no `before_request` hook, token check, or other gate in this app, so any caller can remove any name from `USERS` and receive 204. Cleanup jobs hitting 403 should authenticate as an allowed identity (admin or a dedicated job role) and that identity should be checked here; do not leave the destructive route open.\n\nNote that `require_role` compared `ROLES.get(user)` to the path parameter, so it was checking the *target* user rather than the caller \u2014 restoring a caller-based check is the real fix."
+    }
+  ],
+  "summary": "Removing `@require_role(\"admin\")` from `DELETE /users/<user>` leaves user deletion with no authorization at all. Anyone who can reach the route can delete any user, which is a production-blocking security and data-loss regression. The 403s on cleanup jobs should be fixed by authenticating the job as a privileged identity (or a dedicated cleanup role) and checking that identity, while keeping an authorization gate on this handler.\n\n`require_role` itself inspects `ROLES.get(user)` where `user` is the path parameter, so it was gating on the *target* account rather than the caller. That likely explains viewer-account 403s, but dropping the decorator is still the wrong fix.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "DELETE /users/<user> previously used @require_role(\"admin\") and that decorator was removed with only a comment left; the app has no before_request, token, or other auth gate, so any caller can delete any user and get 204. The defect and critical severity match the code."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.495,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4538,
+      "out": 363
+    },
+    "cost_usd": 0.011792
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

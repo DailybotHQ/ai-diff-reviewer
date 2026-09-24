@@ -1,0 +1,95 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.2,
+  "setup_seconds": 0.2,
+  "total_seconds": 39.4,
+  "usage": {
+    "in": 31130,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1833,
+    "source": "cli"
+  },
+  "cost_usd": 0.0993316,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "body": "The `middleware.RequireRole(\"admin\")` wrapper was removed when these handlers moved under `/api/v2`. `listUsers` and `editRoles` are now registered as bare `http.HandlerFunc` values on the subrouter, so the admin role gate no longer runs.\n\n**Failure mode:** any authenticated (or unauthenticated, depending on outer middleware) caller can GET `/api/v2/admin/users` and POST `/api/v2/admin/roles` without holding the admin role \u2014 privilege escalation / unauthorized admin access.\n\n**Fix:** keep the PathPrefix move, but re-apply the role check on the subrouter or each route:\n\n```suggestion\n        v2 := r.PathPrefix(\"/api/v2\").Subrouter()\n        authz := middleware.RequireRole(\"admin\")\n        v2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n        v2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nOr `v2.Use(middleware.RequireRole(\"admin\"))` if that helper returns suitable `mux` middleware."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization regression: the admin role middleware was dropped while relocating the routes under `/api/v2`.\n\n## Analysis\n\n`cmd/server/routes.go` previously wrapped both handlers with `middleware.RequireRole(\"admin\")` before registering `/admin/users` (GET) and `/admin/roles` (POST). The new code creates a `PathPrefix(\"/api/v2\")` subrouter and registers the same handlers as bare `http.HandlerFunc` values \u2014 no `Use()`, no per-route wrapper, and no other file in this repo re-applies that check.\n\nConcrete failure mode: any caller who can reach the process can invoke user listing and role editing at `/api/v2/admin/users` and `/api/v2/admin/roles` without an admin role. That is broken authorization on privileged endpoints, not a cosmetic routing cleanup.\n\nSecondary contract note (not filed separately): clients still calling `/admin/users` and `/admin/roles` will 404 after this ships; coordinate the path move with consumers or keep temporary aliases once authz is restored.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base registered listUsers/editRoles behind middleware.RequireRole(\"admin\"); head moved them under /api/v2 as bare HandlerFuncs with no role check and no other auth middleware in the tree. That is a real critical privilege-escalation regression on the admin endpoints."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.054,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2776,
+      "out": 399
+    },
+    "cost_usd": 0.009508
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

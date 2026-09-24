@@ -1,0 +1,95 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 70.2,
+  "setup_seconds": 0.2,
+  "total_seconds": 70.4,
+  "usage": {
+    "in": 17732,
+    "cache_read": 101504,
+    "cache_write": 0,
+    "out": 2920,
+    "source": "cli"
+  },
+  "cost_usd": 0.0834352,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity": "critical",
+      "body": "This bundle is not a neutral toolchain rebuild: it adds `a.run=function(s){return eval(s)}`, which executes arbitrary strings in page context. `src/app.ts` still only defines `init()` and was not changed in this PR, so the artifact diverges from source (hand-edited or otherwise unreviewed generated output).\n\nFailure mode: any caller passing user-controlled input to `app.run` gets XSS / in-page code execution. Rebuild dist from reviewed source, or land the API in `src/` without `eval` and regenerate."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR is framed as a toolchain-driven dist rebuild, but the only change injects a new `run` API that calls `eval` on its argument \u2014 behavior that is not present in `src/app.ts`.\n\n## What changed\n\n- `dist/app.min.js` (generated): one-line rewrite.\n- Base bundle exposes `init` only.\n- Head bundle adds `a.run=function(s){return eval(s)}`.\n- `src/app.ts` still only exports `init()` with `console.log(\"ok\")` and was not modified in this PR.\n\n## Why this matters\n\n1. **Security:** `eval` on a caller-supplied string is arbitrary code execution in the page context. Any future caller that passes user-controlled input into `app.run` gets XSS/RCE-in-page.\n2. **Supply-chain / integrity:** A true \"regenerated after toolchain upgrade\" rebuild should preserve program semantics (or land with matching source). Here the artifact diverges from source, which is the hand-edited-generated-file failure mode \u2014 treat the bundle as untrusted until rebuilt from reviewed source.\n3. **Reviewability:** Minified one-liners are easy to smuggle past casual review; the PR title/description do not mention the new API.\n\n## What should happen before merge\n\n- Restore `dist/app.min.js` to match `src/app.ts`, or add the intentional `run` API to source without `eval`, review that source change, then regenerate dist.\n- Do not ship a dist-only semantic change.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "dist/app.min.js",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "dist/app.min.js newly adds `a.run=function(s){return eval(s)}` while base lacked it and src/app.ts still only exports init() with no PR change, so the bundle diverges from source and exposes arbitrary in-page code execution."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.138,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2383,
+      "out": 464
+    },
+    "cost_usd": 0.00842
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C090-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

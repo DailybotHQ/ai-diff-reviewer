@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 68.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 68.2,
+  "usage": {
+    "in": 32330,
+    "cache_read": 119808,
+    "cache_write": 0,
+    "out": 3269,
+    "source": "cli"
+  },
+  "cost_usd": 0.144178,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` disables certificate validation for every caller of `NewClient()`, with no environment, host, or build-tag check. A comment naming staging and TICKET-77 does not stop this constructor from being used in production, so any network path to the ledger is open to MITM (stolen credentials, forged responses).\n\nGate the skip behind an explicit non-production flag, or load the staging CA into `tls.Config.RootCAs`. If a custom `Transport` is kept, clone `http.DefaultTransport` so proxy and HTTP/2 settings are preserved."
+    }
+  ],
+  "summary": "Unconditional TLS verification skip on the shared ledger HTTP client \u2014 do not merge until this is environment-gated or replaced with a pinned CA.\n\n`NewClient()` now installs `tls.Config{InsecureSkipVerify: true}` for every caller. The comment cites a self-signed staging cert and TICKET-77, but the constructor takes no environment, host, or build-tag argument, and this repo has no other gate around the client. Anyone who uses this client in production (or against a non-staging ledger) will accept any certificate, including a MITM.\n\nThe custom `http.Transport` is also constructed from zero values, so it drops `http.DefaultTransport` behaviour (proxy-from-env, HTTP/2, idle-conn limits). If a custom transport is kept, clone `http.DefaultTransport` and set `RootCAs` (or a tightly gated skip) on the clone.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() unconditionally sets tls.Config{InsecureSkipVerify: true} with only a staging comment and no env/host/build-tag gate; the patch newly introduces this vs the prior default-verifying client, so every ledger HTTP caller is MITM-exposed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.743,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 835,
+      "out": 317
+    },
+    "cost_usd": 0.004289
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

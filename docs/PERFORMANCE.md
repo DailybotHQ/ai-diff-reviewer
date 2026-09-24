@@ -63,7 +63,18 @@ Every run classifies the change inventory deterministically (paths, statuses, bi
 | `elevated` | prompts / policy, workflow / CI or dependency files; a mode change; incomplete inventory; > 1 500 lines | 30 | `balanced` | 8 192 | all criticals + all warnings | 200 k |
 | `critical` | policy or CI files **together with** code; an unknown file; a `high-risk-paths` match | 40 (the only raise: ≈ +$0.15–0.35 at grok-4.5 rates, on the rarest tier) | `deep` where the kind has one, else `balanced` | 8 192 | all | 200 k |
 
-`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. On a CLI runner with a native turn cap (`grok --max-turns`) the tier's turns become that cap when `agent-max-turns` is unset; `fixed` leaves the CLI uncapped, as before v3. The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. The per-tier recall guard is measured in Phase 4 (RFC-06 § Measurable targets).
+`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. On a CLI runner with a native turn cap (`grok --max-turns`) the tier **row's** turns (8 / 20 / 30 / 40) become that cap when `agent-max-turns` is unset — neither the in-process `max-turns` ceiling nor the incremental delta budget reaches a CLI, because a CLI turn is not an in-process turn (the dogfood's `max-turns: 12` stopped the grok CLI at 12 on a `critical` PR before this was separated). A CLI that stops at its cap yields an **incomplete** review (BC-04), never a crashed run. `fixed` leaves the CLI uncapped, as before v3. The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. 
+
+**Measured (Phase 4, 2026-09-24, grok CLI lane, verifier on; `tests/eval/records/campaigns/phase4-*`).** 33 corpus cells × 3 under `auto` and `fixed`, plus the `critical` row forced with `high-risk-paths: **` on the 21 critical trees:
+
+| Tier | Cells | Cost / run `auto` vs `fixed` | Recall `auto` vs `fixed` | Turns used (mean) | Cap-exhausted zero-finding runs |
+|---|---|---|---|---|---|
+| `low` | 3 | $0.092 vs $0.106 (−14 %) | no labelled defects on the docs-only cases; 0 FP in both | 4.3 | 0 |
+| `standard` | 19 | $0.100 vs $0.102 (−1 %) | 57 / 57 vs 57 / 57 | 4.1 | 0 |
+| `elevated` | 11 | $0.097 vs $0.104 (−4 %) | 7 / 18 vs 11 / 18 — one coverage-probe label (C063) is satisfied differently at the row's 200 kB patch budget; C090 within the repetition swing | 4.1 | 0 |
+| `critical` (forced; grok-4.6) | 21 | $0.155 vs $0.114 (+41 %, vs the `phase2-rc` grok-4.5 baseline) | **63 / 63** vs 60 / 63; adjudicated precision 1.0 (74 / 74) | 4.7 | 0 |
+
+Reading: on small fixtures the turn rows never bind (≈ 4 turns used), so the tiers move cost only through patch bytes and the verifier sample (−1 … −14 %); the `critical` row's extra cost is the `deep` model and it bought the three planted criticals the baseline missed at unchanged precision. Cap-exhausted zero-finding runs: 0 / 261. The recall guard held (no cell beyond the −2 blocking rule); the verdict `records/verdicts/phase4-tiers.json` is non-blocking and not promotable (deltas below the 38 % floor). What the corpus cannot show — a run that actually reaches the row's cap — the dogfood did: the grok CLI stopped at its native cap on PR #63, which is where the incomplete-on-cap behaviour above comes from.
 
 ## The agent-runner budget
 

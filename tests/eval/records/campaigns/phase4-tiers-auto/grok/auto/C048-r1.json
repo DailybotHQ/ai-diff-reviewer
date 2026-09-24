@@ -1,0 +1,78 @@
+{
+  "case": "C048",
+  "pr": "C048",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 31.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.8,
+  "usage": {
+    "in": 16396,
+    "cache_read": 101504,
+    "cache_write": 0,
+    "out": 1744,
+    "source": "cli"
+  },
+  "cost_usd": 0.0737072,
+  "changed_files": [
+    "package-lock.json"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLockfile-only PR: a single-line normalization on `package-lock.json` that adds a `resolved` URL for an existing package entry. No application, workflow, or manifest code changed.\n\n## Notes\n\n`package-lock.json` is treated as generated/omitted content under the review contract, so its internals were not line-reviewed. From the inventory and the one-line stat delta (+1/\u22121), the change matches the stated intent (npm install / URL field normalization with the same package identity). Version and integrity strings for `left-pad@1.3.0` are unchanged; only `resolved` is added.\n\nNo `package.json` (or other source) diff accompanies this commit in the workspace snapshot, so there is no manifest/lock drift introduced by *this* PR\u2019s patch set.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "case": "C047",
+  "pr": "C047",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 89.3,
+  "setup_seconds": 0.2,
+  "total_seconds": 89.5,
+  "usage": {
+    "in": 19143,
+    "cache_read": 102912,
+    "cache_write": 0,
+    "out": 3477,
+    "source": "cli"
+  },
+  "cost_usd": 0.0900216,
+  "changed_files": [
+    ".github/workflows/test.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "warning",
+      "body": "Adding `'24'` to `strategy.matrix.node` does not make the workflow test on Node 24. Nothing in the job reads `${{ matrix.node }}`: there is no `actions/setup-node` (or other runtime setup) and the only step is `npm test`.\n\nGitHub Actions will fan out two identical jobs that both use the runner\u2019s default Node, so the LTS line claimed in the PR title never takes effect.\n\nWire the matrix into setup before merge, for example:\n\n```yaml\nruns-on: ubuntu-latest\npermissions:\n  contents: read\nsteps:\n  - uses: actions/checkout@v4\n  - uses: actions/setup-node@v4\n    with:\n      node-version: ${{ matrix.node }}\n  - run: npm test\n```"
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 4,
+      "severity": "critical",
+      "body": "Job `t` has no `permissions:` block. Modified workflows should set least-privilege token scopes explicitly so the job does not inherit a repo-wide `write-all` default.\n\nFor a test-only job, prefer:\n\n```yaml\npermissions:\n  contents: read\n```\n\nat the job (or workflow) level before merge."
+    }
+  ],
+  "summary": "## Verdict\n\nThe matrix expansion to Node 24 does not change what runs in CI: `matrix.node` is never consumed, so the job still does not install or select either runtime.\n\n## Notes\n\n`.github/workflows/test.yml` only adds `'24'` beside `'20'`. There is no `actions/setup-node` (or equivalent) step, no `node-version: ${{ matrix.node }}`, and no other reference to the matrix value. GitHub Actions will schedule two jobs with identical steps; both exercise the runner image default, not Node 20 and Node 24.\n\nThe job also still has no top-level `permissions:` block. On repos whose default token permissions are still broad, that leaves the job with more scope than a test workflow needs.\n\nPre-existing gaps that block a real green run (no `runs-on`, no checkout) are unchanged by this diff; worth fixing in the same pass if the intent is working multi-version CI.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The workflow defines strategy.matrix.node as ['20','24'] but never references ${{ matrix.node }}; there is no setup-node (or any other) step, only `npm test`, so both matrix jobs use the runner default Node and the added '24' entry has no effect."
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Job `t` in the modified `.github/workflows/test.yml` has no `permissions:` block (only strategy/matrix and a test step), so the least-privilege explicit-token requirement applies. The head file and patch both support the finding."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 30.661,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2871,
+      "out": 740
+    },
+    "cost_usd": 0.01223
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

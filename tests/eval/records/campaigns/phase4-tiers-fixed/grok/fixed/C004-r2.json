@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.6,
+  "usage": {
+    "in": 30531,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2114,
+    "source": "cli"
+  },
+  "cost_usd": 0.100242,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` into `send_file` lets any client read arbitrary files the process can open.\n\n**Failure modes:**\n- `GET /reports/x?path=../../etc/passwd` resolves under `/srv/reports/../..` and serves `/etc/passwd`.\n- `GET /reports/x?path=/etc/passwd` makes `os.path.join` drop the `REPORTS` prefix because the second part is absolute.\n\nRe-introduce a containment check after join (resolve both paths and require the result stay under `REPORTS`), and only accept relative multi-segment names you intend to allow (e.g. `2024/q3/report.pdf`). Do not take the filesystem path from a free-form query parameter without validation.\n\n```suggestion\n    candidate = request.args.get(\"path\", name)\n    # Disallow absolute paths and traversal; allow intentional subfolders only.\n    if os.path.isabs(candidate) or \"..\" in candidate.split(os.sep):\n        return {\"error\": \"invalid path\"}, 400\n    full = os.path.realpath(os.path.join(REPORTS, candidate))\n    reports_root = os.path.realpath(REPORTS)\n    if full != reports_root and not full.startswith(reports_root + os.sep):\n        return {\"error\": \"invalid path\"}, 400\n    return send_file(full)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical path-traversal regression** \u2014 do not merge until the download handler re-constrains resolved paths under `REPORTS`.\n\n## Narrative\n\n`download` previously used `os.path.basename(name)` so only a single filename under `/srv/reports` could be served. This change removes that guard and builds the filesystem path from `request.args.get(\"path\", name)`, i.e. an untrusted query parameter (or the route segment with no sanitization).\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` \u2192 `os.path.join(\"/srv/reports\", \"../../etc/passwd\")` resolves outside the reports tree and `send_file` returns the target file (subject to process permissions).\n2. **Absolute path override:** `GET /reports/x?path=/etc/passwd` \u2192 `os.path.join` discards the base when the second component is absolute, so the handler serves `/etc/passwd` directly.\n\nNested quarterly folders are a reasonable product need, but they require allowlisting relative segments (or a safe join + `resolve()` + prefix check against `Path(REPORTS).resolve()`), not raw query-string concatenation. Prefer a path converter on the route (e.g. `/reports/<path:name>`) plus a containment check, and reject `..` / absolute inputs.\n\nNo other files in the diff; no repo instruction files to cross-check.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `os.path.basename(name)` with unsanitized `request.args.get(\"path\", name)` joined into `send_file`, so clients can traverse out of `/srv/reports` via `..` or absolute paths. That is a real arbitrary-file-read regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.909,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1007,
+      "out": 304
+    },
+    "cost_usd": 0.00458
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

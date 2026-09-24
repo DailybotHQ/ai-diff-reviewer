@@ -1,0 +1,95 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 46.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.8,
+  "usage": {
+    "in": 31135,
+    "cache_read": 117504,
+    "cache_write": 0,
+    "out": 2262,
+    "source": "cli"
+  },
+  "cost_usd": 0.1110932,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `body` is passed to `dangerouslySetInnerHTML` with no escaping or sanitization after `escapeHtml` was removed.\n\nAny comment string containing HTML runs in the reader's origin. Example payload: `<img src=x onerror=\"...\">` executes script when the comment renders and can exfiltrate session state or act as the user.\n\nRestore escaping, render text via React children, or \u2014 if rich formatting is required \u2014 parse an allowlisted markdown subset to elements, or sanitize HTML with a strict library (tags/attrs allowlist) before setting `__html`. Do not assign raw `body` to `__html`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical XSS regression \u2014 do not merge until comment HTML is sanitized or safely rendered.\n\n## Narrative\n\n`Comment` previously escaped `&`, `<`, and `>` before feeding `body` into `dangerouslySetInnerHTML`, so user text could not introduce tags or attributes. This change deletes `escapeHtml` and assigns `body` straight to `__html`.\n\nThere is no markdown parser, allowlist, or sanitizer (e.g. DOMPurify) in the tree. Any caller that passes comment text from users, APIs, or stored content will execute arbitrary HTML/JS in the viewer session \u2014 classic stored XSS via payloads such as `<img src=x onerror=...>` or `<script>...`.\n\nThe community request for bold/links needs a controlled path: parse a small markdown subset to React nodes, or sanitize HTML with a strict allowlist before `dangerouslySetInnerHTML`. Raw `__html: body` is not that path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes unsanitized body into dangerouslySetInnerHTML, so any HTML/script in a comment string executes in the reader origin. That is a real stored-XSS regression; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.848,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2375,
+      "out": 409
+    },
+    "cost_usd": 0.008126
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.2,
+  "usage": {
+    "in": 31071,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 2555,
+    "source": "cli"
+  },
+  "cost_usd": 0.103776,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection:** `email` is interpolated into the query with an f-string instead of a bound parameter. Any value containing a single quote breaks out of the string literal \u2014 e.g. `' OR '1'='1` returns all orders; crafted input can append additional SQL.\n\nRestore a parameterized query. For the stated partial-match goal, keep the placeholder and bind a pattern:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\n(If LIKE metacharacters in user input matter, escape `%`/`_` in `email` before wrapping.)"
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment says support needs partial-match search, but the SQL still uses `email = '...'`. Pasting an email fragment will not match full addresses stored in the table. After fixing injection, switch to a parameterized `LIKE` (or equivalent) if substring search is the real requirement."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `get_orders` by interpolating the `email` argument directly into the query string.\n\n## Analysis\n\n`store.py` previously used a parameterized query (`WHERE email = ?` with a bound parameter), which is the correct and safe pattern for sqlite3. The PR replaces that with an f-string that embeds `email` inside the SQL literal.\n\nAny caller-supplied `email` value is now concatenated into SQL. A value such as `' OR '1'='1` returns every row; a value with a closing quote plus additional statements can alter or destroy data depending on how the connection is used. Support-facing paste-an-email-fragment flows are exactly the kind of untrusted input this must not trust.\n\nThe PR title and comment say partial-match order search, but the predicate is still equality (`=`), so substring search is not implemented either. Partial match should keep parameterization, e.g. `WHERE email LIKE ?` with a bound pattern (and careful escaping of LIKE metacharacters if needed).\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "store.py line 6 interpolates `email` into the SQL via an f-string, and the patch shows this replaced a safe `?` bound parameter. That is a real SQL injection regression at critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.403,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4384,
+      "out": 260
+    },
+    "cost_usd": 0.010405
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

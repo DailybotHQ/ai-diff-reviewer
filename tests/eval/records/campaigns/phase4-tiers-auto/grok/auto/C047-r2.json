@@ -1,0 +1,93 @@
+{
+  "case": "C047",
+  "pr": "C047",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 55.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 55.5,
+  "usage": {
+    "in": 32024,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 2681,
+    "source": "cli"
+  },
+  "cost_usd": 0.1065148,
+  "changed_files": [
+    ".github/workflows/test.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity": "warning",
+      "body": "Adding `'24'` only multiplies identical jobs: nothing in this workflow reads `matrix.node`, so neither Node 20 nor Node 24 is installed or selected. Both matrix legs run `npm test` on whatever Node the runner image ships, which misses the PR goal of covering the Node 24 LTS line and wastes a duplicate CI leg.\n\nWire the version into the job before merging, for example `actions/setup-node` with `node-version: ${{ matrix.node }}` (and usually `actions/checkout` plus an explicit `runs-on`)."
+    }
+  ],
+  "summary": "## Verdict\n\nThe matrix edit does not achieve \"test on Node 24\": `matrix.node` is never referenced, so GitHub Actions will schedule two identical jobs on the runner default instead of installing Node 20 and 24.\n\n## Notes\n\n`.github/workflows/test.yml` only gained `'24'` in the strategy matrix. The job still has a single step (`run: npm test`) with no `actions/setup-node` (or equivalent) using `${{ matrix.node }}`, no `actions/checkout`, and no `runs-on`. Expanding the matrix therefore doubles wall-time and billable minutes without changing the Node binary under test.\n\nPre-existing gaps worth fixing in a follow-up (not introduced on a diff line here): missing job-level `permissions:`, missing `runs-on`, and missing checkout before `npm test`.\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": ".github/workflows/test.yml",
+      "line": 7,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The workflow matrix sets node to ['20','24'] but the job never references matrix.node and has no actions/setup-node (or checkout/runs-on); both legs only run npm test on the runner default, so adding '24' does not cover Node 24."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.538,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2047,
+      "out": 257
+    },
+    "cost_usd": 0.006046
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

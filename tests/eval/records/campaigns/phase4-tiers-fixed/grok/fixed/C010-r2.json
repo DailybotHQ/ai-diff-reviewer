@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 41.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 42.0,
+  "usage": {
+    "in": 58443,
+    "cache_read": 88576,
+    "cache_write": 0,
+    "out": 1629,
+    "source": "cli"
+  },
+  "cost_usd": 0.1532328,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can pass `accountId` in the JSON body and load that account. Previously the lookup was hard-scoped to `caller.accountId`; the new fallback only applies when `body.accountId` is absent, and there is no staff-role or ownership check when it is present.\n\nFailure mode: a normal user sends `{\"accountId\": \"<victim-id>\"}` and receives the victim account payload via `Response.json(account)`.\n\nGate the override explicitly, for example:\n\n```ts\nconst body = await req.json().catch(() => ({}));\nlet id = caller.accountId;\nif (body.accountId != null) {\n  if (!caller.isSupportStaff) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  id = String(body.accountId);\n}\n```\n\n(Use whatever staff claim your `auth()` actually exposes; the important part is denying non-staff before `findUnique`.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole: `getAccount` now trusts a client-supplied `accountId` with no staff/role check, so any authenticated caller can read another account.\n\n## Narrative\n\nBefore this change, the handler always loaded `caller.accountId` from `auth(req)`. The new path takes `body.accountId` whenever it is present and uses it as the DB lookup key. The comment mentions support staff tools, but nothing in the function (or elsewhere in this tiny tree) verifies staff role, a support scope, or even that `accountId` belongs to the caller.\n\nConcrete failure mode: an ordinary authenticated user sends `{\"accountId\": \"<victim>\"}` and receives that account\u2019s JSON. That is classic IDOR / broken authorization on a sensitive read.\n\nSecondary note (not filed separately): `req.json()` on what may be a GET-style read is brittle, and `body.accountId` is not type-checked before use \u2014 but the missing authorization gate is the merge blocker.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces a hard-scoped `caller.accountId` lookup with `body.accountId ?? caller.accountId` and returns the account with no ownership or staff-role check, so any authenticated caller can fetch arbitrary accounts."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.599,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1447,
+      "out": 379
+    },
+    "cost_usd": 0.006934
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

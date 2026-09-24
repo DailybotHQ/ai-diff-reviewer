@@ -1,0 +1,108 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 70.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 70.1,
+  "usage": {
+    "in": 32369,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 3321,
+    "source": "cli"
+  },
+  "cost_usd": 0.127992,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "`account` is spliced into the query with `fmt.Sprintf`, so the previous `$1` binding is gone. A UI-supplied value such as `' OR '1'='1` (or driver-dependent stacked statements) changes which rows this `SELECT` hits; `%` and `_` in the input also become LIKE wildcards. Bind the pattern instead:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nEscape `%` and `_` in `account` before wrapping it if the match should be literal digits."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "`QueryRow` scans the first matching row and discards the rest. After switching `number = $1` to `LIKE '%\u2026%'`, a partial such as `12` can match several accounts and this function still returns a single `balance_cents` with no uniqueness check. Callers that treat the result as *this* account's balance will show the wrong figure. Require a unique match (or query the full set) before returning a balance."
+    }
+  ],
+  "summary": "Do not merge \u2014 `Balance` now interpolates the account argument into SQL, which is a SQL injection, and a partial `LIKE` plus `QueryRow` can return another account's balance.\n\nThe previous query bound `account` as `$1`. The new `fmt.Sprintf` path puts that string inside the statement, so a value such as `' OR '1'='1` (or a stacked statement, depending on the driver) changes which rows run. The same interpolation also lets `%` / `_` in the input act as LIKE wildcards.\n\nKeep the placeholder and pass a bound pattern (`'%'+account+'%'` after escaping LIKE metacharacters). `QueryRow` still scans only the first matching row; a partial number that hits more than one account silently returns that row's `balance_cents`. If the UI is a search, return the matching set or require a unique hit before treating the result as *this* account's balance.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf embedding `account` directly and calls QueryRow with no args, replacing the base version\u2019s safe `$1` binding. That is a real SQL-injection regression at critical severity."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "Balance switched from exact `number = $1` to `LIKE '%\u2026%'` but still uses QueryRow/Scan of a single balance_cents with no uniqueness check, so a partial can match multiple accounts and return another account\u2019s balance."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 15.121,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3594,
+      "out": 612
+    },
+    "cost_usd": 0.012422
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "case": "C037",
+  "pr": "C037",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 35.1,
+  "usage": {
+    "in": 31037,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1914,
+    "source": "cli"
+  },
+  "cost_usd": 0.0995548,
+  "changed_files": [
+    "README.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a small runbook addition with no contract, security, or runtime impact.\n\n## Notes\n\nThe PR only extends `README.md` with a local cache-clear step (`rm -rf .cache/`) and a short ops caution about `/srv`. There is no application code, workflow, action input, or dependency change in the diff.\n\nThe command is scoped to a relative `.cache/` directory, which matches a typical local build-cache wipe. The `/srv` note is terse but readable as \"do not run this on the production host layout.\" Nothing in the repository contradicts that guidance (the tree is README-only).\n\nNo inline findings \u2014 nothing in the hunk fails a correctness, security, or documented-rule check.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 8,
+  "budget": {
+    "tier": "low",
+    "profile": "auto",
+    "turns": 8,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 4096,
+    "verifier_warning_pct": 0,
+    "patch_bytes": 60000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

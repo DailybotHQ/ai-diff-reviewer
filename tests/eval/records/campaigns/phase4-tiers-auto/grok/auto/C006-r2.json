@@ -1,0 +1,95 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 35.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.0,
+  "usage": {
+    "in": 16040,
+    "cache_read": 71424,
+    "cache_write": 0,
+    "out": 1460,
+    "source": "cli"
+  },
+  "cost_usd": 0.0622672,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Disabling `verify_signature`, `verify_aud`, and `verify_iss` (and dropping `SECRET` / `algorithms`) makes `identity()` trust any caller-supplied JWT payload. An attacker can forge claims such as `sub`, roles, or tenant id with an unsigned or arbitrarily signed token and become any principal.\n\nStaging token re-issuance does not justify this: there is no env/stage guard on this path, so the bypass applies everywhere this module runs.\n\nRestore signature verification with the correct key material. If issuer/audience changed in the migration, update those expected values (or accept a short explicit allow-list) while keeping `verify_signature` enabled. For a dual-key cutover, try verify with the new key then the old key \u2014 never disable verification.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT cryptographic verification and trust checks on the identity path, so any caller-supplied token is treated as authentic.\n\n## What broke\n\n`identity()` previously required a valid HS256 signature with `SECRET`, plus fixed `audience` and `issuer`. The patch removes the key and algorithms entirely and sets `verify_signature`, `verify_aud`, and `verify_iss` to `False`. PyJWT will then accept unsigned or attacker-signed tokens and return whatever claims are in the payload.\n\nConcrete failure mode: an unauthenticated client crafts `{\"sub\":\"admin\",\"aud\":\"api\",\"iss\":\"accounts.internal.example\"}` (or any other claims), base64-encodes it as a JWT with alg `none` or a junk signature, and `identity()` returns those claims as the trusted principal. That is full authentication bypass for every route that trusts this helper.\n\nThe staging / TICKET-412 rationale does not make this safe: there is no environment guard, feature flag, or host check in the diff, so the same code path would ship wherever `auth.py` is deployed.\n\n## Safer direction\n\nKeep verification on. If staging tokens were issued under a new key or issuer, configure the new secret/issuer (or a dual-key accept list) and reject tokens that fail signature checks. If old tokens must be drained, verify against both old and new keys rather than turning verification off.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.py identity() now calls jwt.decode with verify_signature/verify_aud/verify_iss all False and no key, whereas base verified HS256 with SECRET, audience, and issuer. That is an unguarded authentication bypass on every use of this module."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.822,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1191,
+      "out": 352
+    },
+    "cost_usd": 0.005697
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

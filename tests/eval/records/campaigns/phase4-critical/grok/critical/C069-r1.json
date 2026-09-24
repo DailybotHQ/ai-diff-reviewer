@@ -1,0 +1,95 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 71.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 71.9,
+  "usage": {
+    "in": 19715,
+    "cache_read": 102144,
+    "cache_write": 0,
+    "out": 4180,
+    "source": "cli"
+  },
+  "cost_usd": 0.115582,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "Both admin handlers are registered as bare `http.HandlerFunc` values. The previous `middleware.RequireRole(\"admin\")` wrapper is gone, so `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` no longer require an admin role. Any caller who can reach the server can list users and mutate roles.\n\nApply the same middleware on the subrouter (it already returns `func(http.Handler) http.Handler`, which `mux.Router.Use` accepts):\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tv2.Use(middleware.RequireRole(\"admin\"))\n\tv2.Handle(\"/admin/users\", http.HandlerFunc(a.listUsers)).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", http.HandlerFunc(a.editRoles)).Methods(\"POST\")\n```"
+    }
+  ],
+  "summary": "I'd recommend not merging until admin authorization is restored on the new `/api/v2` routes.\n\nThe PathPrefix subrouter itself is a normal gorilla/mux grouping. The rewrite also dropped `middleware.RequireRole(\"admin\")`, which previously wrapped both `listUsers` and `editRoles`. Those handlers now sit on `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` with no role check in `routes()`. The natural cleanup is `v2.Use(middleware.RequireRole(\"admin\"))` on the subrouter (same `func(http.Handler) http.Handler` shape as the old wrapper).\n\nCallers of the previous `/admin/users` and `/admin/roles` paths will 404 after this move; that matches the stated versioning intent, so it is not filed as a defect. Confirm clients and any reverse-proxy rules are updated in the same rollout.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base wrapped both admin handlers with middleware.RequireRole(\"admin\"); head registers bare HandlerFuncs on /api/v2/admin/* and RequireRole no longer appears anywhere, so admin authorization was dropped."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.105,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1066,
+      "out": 348
+    },
+    "cost_usd": 0.004937
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "case": "C059",
+  "pr": "C059",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 20.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 20.8,
+  "usage": {
+    "in": 44307,
+    "cache_read": 71680,
+    "cache_write": 0,
+    "out": 1099,
+    "source": "cli"
+  },
+  "cost_usd": 0.116712,
+  "changed_files": [
+    "prompts/review-policy.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nClean docs clarification \u2014 no issues found.\n\n## Narrative\n\nThis PR only touches `prompts/review-policy.md`, restating that merge gating is driven by finding severity (`critical` always blocks; `warning` blocks under `block-on-warning`) and that severity itself is chosen from the central reviewer rubric, which this file does not override.\n\nThe added sentence is accurate, English-only, and does not change runtime behavior, public contracts, markers, env allowlists, or security boundaries. No contradiction with the severity model in the review instructions.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

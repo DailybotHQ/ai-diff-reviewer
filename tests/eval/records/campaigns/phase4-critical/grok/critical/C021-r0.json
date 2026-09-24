@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 87.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 87.5,
+  "usage": {
+    "in": 33434,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 4403,
+    "source": "cli"
+  },
+  "cost_usd": 0.137126,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "`tar-streem` is a one-letter misspelling of the established `tar-stream` package. Merging this and running `npm install` fetches an untrusted 1.x package under `^1.0.0`, so any later 1.x publish is installed automatically. Restore the original dependency at a pinned version.\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "The new `postinstall` script runs `tar-streem-setup` automatically on every `npm install`, including CI. npm lifecycle scripts execute with the installer's privileges, so a malicious or later-compromised `tar-streem` release can read `NPM_TOKEN`/`GITHUB_TOKEN`, write SSH keys, or persist a backdoor without any import of the package. Remove this hook.\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```"
+    }
+  ],
+  "summary": "This PR swaps the well-known `tar-stream` package for the one-letter misspelling `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every `npm install`. That is a supply-chain execution path: a caret-ranged registry package runs with the installer's privileges on developer machines and CI, which is enough to steal tokens or persist a backdoor. Revert to `tar-stream` and drop the lifecycle script before merge.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced the real tar-stream ^3.1.6 dependency with the one-letter misspelling tar-streem ^1.0.0 and added a postinstall script that runs tar-streem-setup, which is a classic supply-chain typosquat."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json newly adds `\"postinstall\": \"tar-streem-setup\"` alongside replacing `tar-stream` with `tar-streem`, so npm install will auto-run that binary with installer privileges; the claimed critical supply-chain risk is supported by the anchor and diff."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 20.688,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5205,
+      "out": 760
+    },
+    "cost_usd": 0.016608
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

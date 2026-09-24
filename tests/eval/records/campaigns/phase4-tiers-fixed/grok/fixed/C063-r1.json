@@ -1,0 +1,96 @@
+{
+  "case": "C063",
+  "pr": "C063",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 68.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 68.1,
+  "usage": {
+    "in": 33317,
+    "cache_read": 120320,
+    "cache_write": 0,
+    "out": 3793,
+    "source": "cli"
+  },
+  "cost_usd": 0.125488,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity": "warning",
+      "body": "This PR removes `package-lock.json` entirely (the prior pin of `semver-utility@6.3.0` and its integrity entry go with it). The description frames the change as a routine lockfile bump / dependency refresh, but a bump updates pins in place \u2014 deletion leaves installs unpinned and drops the only recorded integrity hash. Restore the lockfile (or regenerate it from a `package.json` in the same PR) unless the intentional goal is to stop locking dependencies."
+    }
+  ],
+  "summary": "## Verdict\n\nSmall, intentional logging tweak in `src/index.ts`; the accompanying lockfile change is a full **deletion**, not a dependency refresh.\n\n## What changed\n\n- `src/index.ts`: `main()` now logs `cfg.env` alongside `cfg.appName` after `get(\"config\")`. That matches the PR title. `./fetcher` is not in this tree, so the shape of `cfg.env` could not be verified \u2014 if it is only a stage name (`production` / `staging`), this is fine; if it ever carries full environment maps or secrets, stdout logging would be the wrong sink.\n- `package-lock.json`: removed entirely (was a lockfileVersion 3 pin of `semver-utility@6.3.0`). The description calls this a \"lockfile bump,\" but the diff deletes the file. There is also no `package.json` on either side of the PR, so the lockfile was already orphaned \u2014 still, dropping the only pin removes the last recorded integrity/version anchor for that package.\n\n## Notes\n\n- No repository instruction files (`AGENTS.md` / `CLAUDE.md` / review extensions) were present to check convention rules against.\n- Omitted lockfile contents were inspected via `git diff` only enough to confirm status = deleted (not to review package graphs).\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The PR deletes package-lock.json entirely (base had lockfileVersion 3 pinning semver-utility@6.3.0 with an integrity hash); head has no package-lock.json or package.json, so installs are left unpinned as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.091,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5665,
+      "out": 395
+    },
+    "cost_usd": 0.013854
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C063-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

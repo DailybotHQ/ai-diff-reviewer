@@ -1,0 +1,108 @@
+{
+  "case": "C058",
+  "pr": "C058",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 86.7,
+  "setup_seconds": 0.1,
+  "total_seconds": 86.8,
+  "usage": {
+    "in": 35423,
+    "cache_read": 91520,
+    "cache_write": 0,
+    "out": 3169,
+    "source": "cli"
+  },
+  "cost_usd": 0.117316,
+  "changed_files": [
+    "CHANGELOG.md",
+    "package-lock.json",
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity": "warning",
+      "body": "This Unreleased entry says tar-stream 2\u21923 included an API migration in `scripts/pack.js`, but that file is not modified in the diff and does not exist on base or head (tree is only package.json, package-lock.json, CHANGELOG.md). Readers will believe call sites were updated when only the dependency pin moved.\n\nPoint the entry at the files that actually changed, or add the missing `scripts/pack.js` migration in this PR before keeping this wording."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity": "warning",
+      "body": "Dependency range moves from `^2.2.0` to `^3.1.6` (major). The PR title/description and changelog say call sites were migrated, but no application or script code changed in this commit. Any code still using the v2 pack/extract surface will break at runtime under v3 once this resolves.\n\nInclude the migrated call sites (the changelog\u2019s `scripts/pack.js` or equivalent) in the same change set as the major bump, or keep the v2 range until that migration exists."
+    }
+  ],
+  "summary": "## Verdict\n\nIncomplete major upgrade: `tar-stream` is bumped 2 \u2192 3 in the manifests, but the claimed call-site migration is not in the PR.\n\n## Narrative\n\n`package.json` and `package-lock.json` both move to `3.1.6`, which matches. The problem is the work the PR says it did beyond the version pin.\n\nThe Unreleased changelog line states an API migration landed in `scripts/pack.js`. That path is not in the diff, and it does not exist on either base (`698ba5d`) or head (`bf52029`) \u2014 the tree only contains `package.json`, `package-lock.json`, and `CHANGELOG.md`. The PR description\u2019s \u201ccall sites migrated\u201d claim has the same gap.\n\n`tar-stream` v3 is a major line (ESM / pack API changes versus v2). Shipping only the dependency bump leaves any real consumer of the v2 API on a breaking version with no matching code change in-repo. Either the migration commit is missing from this branch, or the changelog overstates what changed.\n\nLockfile presence is fine for this bump (version string updated in lock with the manifest). No repository instruction files were present to apply as extra rules.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "CHANGELOG.md",
+      "line": 2,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "CHANGELOG.md Unreleased claims an API migration in scripts/pack.js for tar-stream 2\u21923, but scripts/pack.js is absent on both base and head; the PR only bumps tar-stream in package.json/lockfile. The entry misrepresents what changed."
+    },
+    {
+      "path": "package.json",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "package.json bumps tar-stream from ^2.2.0 to ^3.1.6 and CHANGELOG.md claims an API migration in scripts/pack.js, but that file does not exist and the repo has no JS/TS call sites at all\u2014only the dependency range and lockfile changed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 30.465,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 10200,
+      "out": 937
+    },
+    "cost_usd": 0.027993
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

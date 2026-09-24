@@ -1,0 +1,95 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 44.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.0,
+  "usage": {
+    "in": 30830,
+    "cache_read": 87808,
+    "cache_write": 0,
+    "out": 2195,
+    "source": "cli"
+  },
+  "cost_usd": 0.1011724,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Hard-coded production SMTP password used as the default when `SMTP_PASSWORD` is unset. Anyone with repo (or history) access can authenticate as `notifications` on `smtp.internal.example`, and cron hosts missing the secret fail open instead of erroring.\n\nRemove the default entirely and keep fail-closed behavior; supply the secret via the cron environment or a secret store.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n\nIf the goal is a clearer cron failure, catch `KeyError` and raise an explicit configuration error naming `SMTP_PASSWORD` \u2014 never embed the credential."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a login fallback.\n\n## Why this is blocking\n\n`mailer.py` replaces the required `SMTP_PASSWORD` env lookup with:\n\n```python\nos.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")\n```\n\nThat default is a real-looking production secret checked into the repository. Consequences:\n\n- Anyone with read access to the repo (and forever after, anyone with access to git history) obtains SMTP login credentials for `notifications@internal.example`.\n- Cron/environments that fail to mount the secret no longer fail closed; they silently authenticate with the baked-in password, so misconfiguration is invisible until abuse or bounce monitoring catches it.\n- Rotating the password later does not remove it from git history; the leak is permanent without a history rewrite and credential rotation.\n\nThe original `os.environ[\"SMTP_PASSWORD\"]` KeyError on missing secret was the correct fail-closed behavior for a credential. Fixing cron should mean mounting/injecting `SMTP_PASSWORD` in the cron environment (or a secrets manager), or failing with a clear configuration error \u2014 never shipping a backup password in code.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "mailer.py line 8 hard-codes the production SMTP password as os.environ.get default (\"smtp-prod-backup-77\"), and the patch shows this replaced a fail-closed os.environ[\"SMTP_PASSWORD\"] lookup. Repo access yields the credential and missing env fails open."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.563,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2035,
+      "out": 320
+    },
+    "cost_usd": 0.006451
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

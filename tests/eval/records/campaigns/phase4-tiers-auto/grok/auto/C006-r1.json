@@ -1,0 +1,95 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.6,
+  "usage": {
+    "in": 30332,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1599,
+    "source": "cli"
+  },
+  "cost_usd": 0.0962932,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Authentication bypass:** `jwt.decode` is called with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and without `SECRET` or `algorithms`. Any crafted JWT is accepted and its claims are returned as the caller identity.\n\nFailure mode: an unauthenticated client sends `eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiJ9.` (or any payload) and `identity()` returns those claims as trusted. The comment mentions staging re-issuance (TICKET-412), but nothing in this function limits the bypass to staging.\n\nRestore signature verification (and aud/iss checks) before merge. If dual-token acceptance is required during migration, verify against multiple keys/issuers with signatures still enforced \u2014 do not disable verification globally."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, which is a full authentication bypass.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts any token bytes and trusts the claims as-is. An attacker who can hit any caller of `identity()` can forge `sub` / roles / tenant claims without the signing key.\n\nThe comment cites staging token re-issuance (TICKET-412), but the code path has no environment, flag, or host guard. If this module is deployed anywhere beyond a sealed staging stack \u2014 or if staging shares the same binary as production \u2014 production auth is effectively off.\n\n`SECRET` remains in the module but is no longer passed to `decode`, so the previous HS256 + `audience=\"api\"` + `issuer=\"accounts.internal.example\"` contract is gone for every caller.\n\n## Safer directions (for the author)\n\n- Keep verification on; fix token issuance so new tokens match the expected issuer/audience/key.\n- If old and new tokens must coexist briefly, verify with a key ring / dual-issuer allowlist, still with signature checks.\n- Any temporary relax must be compile-time or env-gated to a non-production environment and removed behind the ticket, not a blanket `verify_signature: False`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.py identity() calls jwt.decode with verify_signature, verify_aud, and verify_iss all False and without SECRET or algorithms; the patch removed the prior secure verification. Any crafted JWT is accepted as identity with no staging guard."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.074,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 861,
+      "out": 292
+    },
+    "cost_usd": 0.004191
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

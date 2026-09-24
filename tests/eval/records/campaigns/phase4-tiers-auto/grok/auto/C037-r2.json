@@ -1,0 +1,78 @@
+{
+  "case": "C037",
+  "pr": "C037",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 41.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 41.5,
+  "usage": {
+    "in": 16637,
+    "cache_read": 100608,
+    "cache_write": 0,
+    "out": 1853,
+    "source": "cli"
+  },
+  "cost_usd": 0.0745744,
+  "changed_files": [
+    "README.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a small, clear runbook addition with an explicit safety note.\n\n## Notes\n\nThe PR only extends `README.md` with a **Runbook** section that documents clearing the local build cache via `rm -rf .cache/` and warns operators not to run that cleanup against `/srv`. Scope is documentation-only; no runtime, config, or workflow files change.\n\nThe command is relative (`.cache/`), which matches a local developer/ops step from the service root. The `/srv` caution is the right kind of guardrail for a destructive cleanup note.\n\nNo correctness, security, or contract issues in the diff.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 8,
+  "budget": {
+    "tier": "low",
+    "profile": "auto",
+    "turns": 8,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 4096,
+    "verifier_warning_pct": 0,
+    "patch_bytes": 60000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

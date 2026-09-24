@@ -1,0 +1,81 @@
+{
+  "case": "C088",
+  "pr": "C088",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 31.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.5,
+  "usage": {
+    "in": 30733,
+    "cache_read": 87168,
+    "cache_write": 0,
+    "out": 1558,
+    "source": "cli"
+  },
+  "cost_usd": 0.0969644,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 the `pad` fix is correct and matches the stated intent.\n\n## Narrative\n\n`src/index.ts` changes `String.prototype.padStart` from the default space fill to an explicit `\"0\"` fill. That is the right API usage for zero-padding to width 4: `pad(\"12\")` becomes `\"0012\"` instead of `\"  12\"`. No callers, tests, or docs in this repo contradict that contract, and longer inputs still pass through unchanged (standard `padStart` behavior).\n\n## Lockfile (omitted from review diff)\n\n`package-lock.json` also moved `left-pad` `1.3.0` \u2192 `1.3.1` and rewrote `resolved` from `registry.npmjs.org` to `example-mirror.invalid`. There is no `package.json` in tree to cross-check the pin against. Treat the host change as a supply-chain check before merge in a real consumer repo; contents were not line-reviewed per omit rules.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C088-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 50.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 50.1,
+  "usage": {
+    "in": 31072,
+    "cache_read": 87296,
+    "cache_write": 0,
+    "out": 1924,
+    "source": "cli"
+  },
+  "cost_usd": 0.0998768,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authentication or authorization. Any client that can reach the app can delete arbitrary accounts via `USERS.remove(user)` and receive `204`.\n\nCleanup jobs running as `viewer` need a deliberate grant (service role, scoped job token, or separate internal endpoint with its own auth), not an open delete. Restore a caller-identity check before merge; the current `require_role` also keys off the path `user` rather than the caller, so replace it with a real principal check rather than dropping the guard.\n\n```suggestion\n@require_role(\"admin\")\ndef delete_user(user):\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes authorization from a destructive user-deletion endpoint and leaves it callable by anyone who can reach the service.\n\n## Analysis\n\n`DELETE /users/<user>` previously carried `@require_role(\"admin\")`. The PR deletes that guard because cleanup jobs running as the viewer account received 403s. After the change, `delete_user` performs `USERS.remove(user)` with no authentication or role check at all.\n\nConcrete failure mode: any client can `DELETE /users/alice` (or any other id) and permanently remove that account from `USERS`, with a 204 response and no caller identity required.\n\nThe 403s on viewer cleanup jobs point to a real product need (a non-interactive job principal that can delete users). The right fix is to authorize the job under a dedicated principal or permission \u2014 for example a service role, a scoped internal token, or an explicit allowlist of cleanup callers \u2014 while keeping the endpoint closed to anonymous and viewer traffic. Stripping the decorator trades a 403 for an open delete.\n\nNote on the pre-existing decorator: `require_role` compares `ROLES.get(user)` where `user` is the *path* parameter (the account being deleted), not an authenticated caller. That design is already wrong for caller authorization, and likely contributed to the cleanup 403s. Replacing it with nothing makes the surface worse; fix the identity check instead of removing it.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base had `@require_role(\"admin\")` on `DELETE /users/<user>`; head removes that decorator with only a comment, so `delete_user` runs with no auth and any client can call `USERS.remove(user)` and get 204. Critical severity is appropriate for open account deletion."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.807,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2379,
+      "out": 349
+    },
+    "cost_usd": 0.007799
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

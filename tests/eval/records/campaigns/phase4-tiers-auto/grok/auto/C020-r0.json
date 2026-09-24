@@ -1,0 +1,95 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 59.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 59.0,
+  "usage": {
+    "in": 31426,
+    "cache_read": 117504,
+    "cache_write": 0,
+    "out": 2623,
+    "source": "cli"
+  },
+  "cost_usd": 0.1138412,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query with `fmt.Sprintf`, so user-controlled input becomes SQL text rather than a bound value.\n\nFailure mode: an input that closes the LIKE string literal (for example a single quote plus `OR`/`--` fragments) alters the predicate and can return another account's balance or otherwise manipulate the statement. The previous `$1` placeholder avoided this.\n\nFix: keep a parameterized query and bind the value:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\"\n\terr := db.QueryRow(q, account).Scan(&cents)\n```\n\nIf `%` / `_` in the input must match literally, escape those LIKE metacharacters before binding. Do not build the statement with `fmt.Sprintf`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a SQL injection vulnerability in `Balance` by interpolating the `account` argument into the query string.\n\n## Narrative\n\nThe previous implementation used a parameterized query (`WHERE number = $1` with `account` passed as a bind argument). The new code builds the SQL with `fmt.Sprintf` and a quoted `LIKE` pattern, then passes the resulting string to `QueryRow` with no placeholders. Any value that reaches `account` from the partial-number UI (or any other caller) can close the LIKE quote and append arbitrary SQL.\n\nConcrete failure mode: `account` set to a value that closes the string literal and adds `OR 1=1` turns the predicate into a tautology; other payloads can manipulate which row is returned. This is untrusted-input flowing into string-built SQL on a balance lookup, so it is a production security blocker.\n\nPartial match via `LIKE` is a fine product goal. Keep the wildcard pattern in the SQL text and bind the account fragment as a parameter (for example `WHERE number LIKE '%' || $1 || '%'`, or pass the wrapped pattern as `$1` after escaping LIKE metacharacters `%` and `_` when literal match is required). That preserves the UI behavior without dropping the parameterization boundary.\n\n`QueryRow` with a non-unique LIKE also means multiple matching accounts yield an arbitrary row (driver-dependent). Worth handling once the injection is fixed; secondary to the security issue.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf interpolating `account` into SQL text, and QueryRow is called with no bound args; base used a safe `$1` parameter. That is a real SQL-injection regression matching the claim."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 14.776,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1202,
+      "out": 343
+    },
+    "cost_usd": 0.005665
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

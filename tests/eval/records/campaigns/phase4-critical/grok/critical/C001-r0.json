@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "42cc4c4bf80f",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 84.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 84.1,
+  "usage": {
+    "in": 32012,
+    "cache_read": 89216,
+    "cache_write": 0,
+    "out": 3348,
+    "source": "cli"
+  },
+  "cost_usd": 0.12872,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization check. Any unauthenticated caller can now delete any name in `USERS` and receive 204. Grant cleanup jobs an admin or dedicated service role (or a separate authenticated internal route) instead of dropping the decorator."
+    }
+  ],
+  "summary": "Looks good is the wrong verdict here: this PR removes the only authorization check on `DELETE /users/<user>`, so any caller can delete accounts. Cleanup jobs that 403'd as `viewer` need an admin or service identity, not an open delete endpoint.\n\n`app.py` is the entire surface. After this change `require_role` is unused, there is no `before_request` or other gate, and `delete_user` still mutates the in-memory `USERS` list and returns 204. That is a broken-authorization regression on a destructive route.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `DELETE /users/<user>`, and the head handler only calls `USERS.remove(user)` with no auth check, so any caller can delete entries and get 204. Base still had the decorator on that route."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 21.159,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5717,
+      "out": 347
+    },
+    "cost_usd": 0.013746
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

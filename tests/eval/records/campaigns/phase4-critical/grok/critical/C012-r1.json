@@ -1,0 +1,95 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 130.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 130.9,
+  "usage": {
+    "in": 35549,
+    "cache_read": 121984,
+    "cache_write": 0,
+    "out": 6106,
+    "source": "cli"
+  },
+  "cost_usd": 0.168726,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing the `__proto__` / `constructor` / `prototype` skip reopens prototype pollution. `JSON.parse` does emit those names as own enumerable keys (`Object.keys(JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` is `['__proto__']`), so `(base as any)[k] ??= {}` walks into `Object.prototype` and the recursive merge assigns onto it \u2014 `{}.polluted === true` after a single call. The `{\"constructor\":{\"prototype\":{\"polluted\":true}}}` payload pollutes the same way. Restore the blocklist (or skip inherited accessor keys) before any write through `k`.\n\n```suggestion\n    if (k === \"__proto__\" || k === \"constructor\" || k === \"prototype\") continue;\n    if (v && typeof v === \"object\" && !Array.isArray(v)) {\n      deepMerge((base as any)[k] ??= {}, v as Record<string, unknown>);\n```"
+    }
+  ],
+  "summary": "I'd recommend not merging until the prototype-pollution guard in `src/config/merge.ts` is restored.\n\nThe PR drops the `__proto__` / `constructor` / `prototype` blocklist on the claim that `JSON.parse` never yields dangerous keys. That claim is false: `JSON.parse('{\"__proto__\":{\"polluted\":true}}')` creates an *own* enumerable `__proto__` property, `Object.entries` yields it, and the remaining `(base as any)[k] ??= {}` recursive path assigns onto `Object.prototype`. I reproduced both the `__proto__` and `constructor.prototype` vectors in Node; after `deepMerge({}, JSON.parse(...))`, `{}.polluted === true`.\n\nThis is a public, untyped merge of `Record<string, unknown>` \u2014 any JSON config, API body, or user patch that reaches it becomes a process-wide pollution gadget (auth flags, `toString`, `hasOwnProperty`, etc.). Restoring the three-key skip is the smallest fix; a null-prototype destination (`Object.create(null)`) plus rejecting inherited accessors is stronger.\n\nNo other files changed; no callers or tests exist in this tree to absorb the regression.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removed the BLOCKED skip for `__proto__`/`constructor`/`prototype` while deepMerge still does `(base as any)[k] ??= {}` and recursive assignment, so JSON-parsed payloads with those keys can pollute Object.prototype. Base had the guard; head does not."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 21.377,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1427,
+      "out": 370
+    },
+    "cost_usd": 0.006277
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 79.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 79.1,
+  "usage": {
+    "in": 63041,
+    "cache_read": 124416,
+    "cache_write": 0,
+    "out": 3774,
+    "source": "cli"
+  },
+  "cost_usd": 0.210934,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Any request `Origin` is now copied into `Access-Control-Allow-Origin` while `Access-Control-Allow-Credentials` is always `true`. A page at an attacker origin can send the victim's cookies/credentials to this API and read the response; the previous allowlist (`https://app.example.com`) blocked that. Native mobile clients do not enforce CORS, and `Access-Control-Allow-Origin: *` with credentials is invalid in browsers, so this also fails the no-origin path it claims to fix. Keep an explicit allowlist (add known webview origins if needed) and omit CORS headers when `origin` is null or not listed."
+    }
+  ],
+  "summary": "This change turns a single-origin allowlist into a credentialed CORS reflector: any `Origin` is echoed back with `Access-Control-Allow-Credentials: true`. That lets any website read authenticated API responses in the victim's browser.\n\nThe stated mobile-client goal does not require this. Native HTTP stacks do not enforce CORS. Browser webviews that do send an origin belong on a finite allowlist (`https://app.example.com`, `capacitor://localhost`, and similar known schemes). When `origin` is null, `Access-Control-Allow-Origin: *` plus credentials is also invalid per the Fetch CORS spec, so browsers reject the response.\n\n`Vary: Origin` is the right cache header for origin-specific ACAO, but it does not mitigate reflecting untrusted origins.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed the `https://app.example.com` allowlist and now sets `Access-Control-Allow-Origin` to any request `origin` (or `*`) while always enabling `Access-Control-Allow-Credentials: true`, which is a classic credentialed CORS bypass. Base code only emitted those headers for allowlisted ori"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.897,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2838,
+      "out": 460
+    },
+    "cost_usd": 0.009895
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

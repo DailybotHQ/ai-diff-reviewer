@@ -1,0 +1,96 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 84.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 84.3,
+  "usage": {
+    "in": 33381,
+    "cache_read": 118784,
+    "cache_write": 0,
+    "out": 4464,
+    "source": "cli"
+  },
+  "cost_usd": 0.152938,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`0008_drop_reason` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but this PR deletes `migrations/0007_add_reason.py`. Django's migration loader will raise `NodeNotFoundError` and refuse to migrate on both fresh databases and any environment that already applied 0007.\n\nIf 0007 never shipped, drop this file too so the column is never added. If it did ship, restore `0007_add_reason.py` and keep this `RemoveField` as the next migration."
+    }
+  ],
+  "summary": "Django cannot load this migration graph: `0008_drop_reason` depends on `billing.0007_add_reason`, and this PR deletes that parent file.\n\n`manage.py migrate` will raise `NodeNotFoundError` on every environment \u2014 fresh databases (the parent node is gone) and existing ones that already recorded `0007_add_reason` in `django_migrations`. Deleting a shipped migration and adding a follow-up that still names it as a parent is not a squash and is not a drop.\n\nIf `0007_add_reason` never reached any database, delete it and omit `0008` entirely so the column is never added. If it already ran anywhere, restore `0007_add_reason.py` and keep `0008` as a `RemoveField` on top of it. Confirm the column is empty before applying the drop in production.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`0008_drop_reason.py` depends on `(\"billing\", \"0007_add_reason\")`, but this PR deletes `migrations/0007_add_reason.py` and leaves no replacement, so Django\u2019s loader cannot resolve the graph and will raise NodeNotFoundError."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.801,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3175,
+      "out": 457
+    },
+    "cost_usd": 0.009962
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 91.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 91.5,
+  "usage": {
+    "in": 32563,
+    "cache_read": 118144,
+    "cache_write": 0,
+    "out": 4046,
+    "source": "cli"
+  },
+  "cost_usd": 0.1248452,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "**Issue:** `newResetToken()` no longer produces a CSPRNG token. `Math.floor(Math.random() * 1e12).toString(36)` yields at most 10^12 distinct values (~40 bits) from a non-cryptographic PRNG, then pads to 9 chars. The previous `randomBytes(32)` path was 256 bits of secure entropy.\n\n**Failure mode:** An attacker can brute-force or predict password-reset tokens and take over accounts. `Math.random` is also unsuitable where the PRNG state can be inferred from other outputs.\n\n**Fix:** On edge runtimes use Web Crypto instead of `Math.random`:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nKeep token length at 32 bytes (64 hex chars) unless there is a documented, reviewed reason to shorten it."
+    },
+    {
+      "path": "src/auth/reset.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "**Issue:** Even ignoring PRNG quality, the encoded token is now at most nine base36 characters (`padStart(9, \"0\")`), versus 64 hex characters from 32 random bytes.\n\n**Failure mode:** A nine-character base36 string over a 10^12 space is practical to brute-force against a reset-confirmation endpoint (especially without strict rate limits), and is far more likely to leak completely in logs, referrers, and support screenshots.\n\n**Fix:** Preserve a 128\u2013256-bit token encoding (hex or base64url) from `crypto.getRandomValues`. Do not pad a small integer to a fixed short width."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this replaces a cryptographically secure 256-bit reset token with a low-entropy, non-CSPRNG value that an attacker can brute-force or predict.\n\n## Why this is critical\n\n`newResetToken()` previously returned `randomBytes(32).toString(\"hex\")` (64 hex chars, 256 bits of CSPRNG entropy). The new implementation:\n\n1. **Uses `Math.random()`**, which is not a cryptographically secure PRNG and is unsuitable for security tokens (password-reset, session, API keys).\n2. **Collapses the keyspace** to at most `1e12` distinct values (`Math.floor(Math.random() * 1e12)`), i.e. ~40 bits before base36 encoding \u2014 and often fewer in practice because of PRNG quality. That is trivial to exhaust against a reset endpoint.\n3. **Shortens the token** to ~9 base36 characters via `padStart(9, \"0\")`, which also makes offline guessing and log/URL leakage far more damaging.\n\nAnyone who can request password resets (or observe token-shaped values) can recover accounts. This is a direct authentication break.\n\n## Edge-compatible fix\n\nEdge runtimes lack Node `crypto.randomBytes`, but they expose the Web Crypto API. Prefer something equivalent to:\n\n```ts\nexport function newResetToken(): string {\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n}\n```\n\n(or `Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(\"hex\")` where `Buffer` exists). That keeps 256-bit CSPRNG tokens and works on Vercel Edge, Cloudflare Workers, Deno, and modern Node.\n\n## Scope note\n\nOnly `src/auth/reset.ts` changed; no callers or tests landed in-repo in this PR, so the failure mode is entirely in the generator itself.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `newResetToken()` uses `Math.floor(Math.random() * 1e12).toString(36)` (~40 bits, non-CSPRNG) padded to 9 chars, while base used `randomBytes(32).toString(\"hex\")` (256-bit CSPRNG). That is a real critical password-reset token entropy regression."
+    },
+    {
+      "path": "src/auth/reset.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head implementation replaces `randomBytes(32).toString(\"hex\")` (64 hex chars / 256 bits) with `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`, so tokens are at most nine base36 characters over a ~10^12 space\u2014far weaker and practical to brute-force as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 26.424,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1916,
+      "out": 836
+    },
+    "cost_usd": 0.011229
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

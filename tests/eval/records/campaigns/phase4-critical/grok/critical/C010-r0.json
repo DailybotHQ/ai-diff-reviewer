@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 58.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 59.0,
+  "usage": {
+    "in": 31587,
+    "cache_read": 117376,
+    "cache_write": 0,
+    "out": 2838,
+    "source": "cli"
+  },
+  "cost_usd": 0.13889,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can now fetch an arbitrary account: `body.accountId` replaces `caller.accountId` with no staff-role or ownership check. A user who posts `{ \"accountId\": \"<victim>\" }` receives that account's record. Gate the override on a verified staff role (or a separate staff-only route) and keep the default lookup bound to `caller.accountId`."
+    }
+  ],
+  "summary": "I'd recommend not merging until the authorization gap at `src/routes/account.ts:8` is resolved.\n\n`getAccount` used to load only `caller.accountId`. It now takes `accountId` from the JSON body whenever that field is present. The comment says this is for support staff tools, but the handler never checks that the caller is staff, and nothing in this repo constrains who may supply the override. Any authenticated user can send `{ \"accountId\": \"<other-id>\" }` and receive that account's record.\n\nKeep the default lookup bound to the authenticated caller. If staff tools need cross-account access, gate that path on a verified staff role (or a separate staff-only route) before using a client-supplied id.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces a caller-bound lookup with `body.accountId ?? caller.accountId` and never checks staff role or ownership, so any authenticated client can fetch another account by posting an arbitrary accountId. Base code only used `caller.accountId`, confirming this is a real IDOR regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.424,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1248,
+      "out": 343
+    },
+    "cost_usd": 0.005706
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

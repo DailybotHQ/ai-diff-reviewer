@@ -32,7 +32,7 @@ import schema_check  # noqa: E402  (sibling module, stdlib)
 RUN_SCHEMA: Path = HERE / "schemas" / "run-record.schema.json"
 VERDICT_SCHEMA: Path = HERE / "schemas" / "verdict.schema.json"
 MAX_RECORD_FILE_BYTES: int = 1_000_000
-MAX_RECORD_FILES: int = 1_000
+MAX_RECORD_FILES: int = 2_500   # loop guard, not a policy: Phase 4 brought the stored corpus to ≈ 1 400 files (a run = payload + record); raise deliberately, never silently
 AUXILIARY_FILES: frozenset[str] = frozenset({"ledger.json", "summary.json"})
 RESULT_TWIN_SUFFIX: str = ".run-record.json"  # `<out>.json` + `<out>.json.run-record.json` are written together
 ADJUDICATION_SCHEMA: str = "adjudication/1.0"

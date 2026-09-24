@@ -1,0 +1,108 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 153.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 153.4,
+  "usage": {
+    "in": 22086,
+    "cache_read": 167808,
+    "cache_write": 0,
+    "out": 6760,
+    "source": "cli"
+  },
+  "cost_usd": 0.168636,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "This swaps the established `tar-stream` package for `tar-streem@^1.0.0`, a one-letter misspelling at a 1.0.0 version pin. registry.npmjs.org returns 404 for `tar-streem` while `tar-stream` is still published (latest 3.2.1, 67 versions, last modified 2026-08-25). `npm install` will fail today, or pull an unrelated package the moment that name is published. Restore the original dependency:\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "`postinstall` invokes `tar-streem-setup` automatically on every `npm install` in local clones and CI. npm lifecycle scripts run with the installer's privileges, so a newly introduced package (or a later publish of this unpublished name) can execute arbitrary code before any review of `node_modules`. `tar-stream` has no installer binary and does not need a postinstall. Remove the hook:\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```"
+    }
+  ],
+  "summary": "This change replaces the long-standing `tar-stream` dependency with the lookalike `tar-streem@^1.0.0` and adds a `postinstall` hook that runs `tar-streem-setup` on every install.\n\n`tar-stream` is still published (latest 3.2.1, maintainer mafintosh, 67 versions). `tar-streem` returns 404 from registry.npmjs.org, so the new name is either unpublished or waiting to be claimed. The added lifecycle script is the execution path: `npm install` will run whatever binary that package ships, with developer and CI credentials.\n\nRestore `tar-stream` and drop the `postinstall` script. Treat the name swap and the installer hook as one supply-chain incident.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced the real dependency tar-stream@^3.1.6 with the misspelled tar-streem@^1.0.0 and added a postinstall script tar-streem-setup\u2014classic typosquat/supply-chain risk. Base confirms the prior correct package name and version."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json adds postinstall running tar-streem-setup and replaces legitimate tar-stream with tar-streem; npm will execute that hook on every install with the installer's privileges, which is a real critical supply-chain risk."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 21.168,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3529,
+      "out": 703
+    },
+    "cost_usd": 0.013273
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

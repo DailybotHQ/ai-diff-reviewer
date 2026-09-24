@@ -1,0 +1,80 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 41.9,
+  "setup_seconds": 0.1,
+  "total_seconds": 42.0,
+  "usage": {
+    "in": 31398,
+    "cache_read": 117248,
+    "cache_write": 0,
+    "out": 2339,
+    "source": "cli"
+  },
+  "cost_usd": 0.1120044,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nThis PR should not merge as-is: the only change is a regenerated minified bundle that no longer matches `src/app.ts`, despite the claim of a toolchain rebuild.\n\n## What changed\n\n- Single file: `dist/app.min.js` (omitted/generated; +1/\u22121).\n- `src/app.ts` is unchanged between base and head and still only exports `init()`.\n- The new bundle adds a `run` helper that executes `eval` on its argument. That API is absent from the TypeScript source, so this is not a faithful rebuild of the checked-in source.\n\n## Why it matters\n\nOmitted generated bundles are normally out of scope for line-by-line review, but a generated artifact that diverges from its source is itself the problem: either the bundle was hand-edited, built from uncommitted input, or otherwise drifted. Shipping `eval` of a string argument in a browser bundle is also a direct XSS/RCE foot-gun if anything user-controlled reaches `run`.\n\n## What to do\n\n1. Rebuild `dist/app.min.js` from the current `src/` (or land the corresponding source change in the same PR).\n2. Confirm the post-rebuild bundle only exposes `init` (matching `src/app.ts`), with no `eval`-based `run`.\n3. If a `run` API is intentional, add it in source with a safe implementation, tests, and an explicit security rationale \u2014 do not introduce it only in minified output.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C090-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

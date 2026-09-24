@@ -1,0 +1,78 @@
+{
+  "case": "C037",
+  "pr": "C037",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.7,
+  "setup_seconds": 0.1,
+  "total_seconds": 34.8,
+  "usage": {
+    "in": 30357,
+    "cache_read": 87552,
+    "cache_write": 0,
+    "out": 1715,
+    "source": "cli"
+  },
+  "cost_usd": 0.0972696,
+  "changed_files": [
+    "README.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 small runbook addition with no blocking issues.\n\n## Notes\n\nThe PR adds a **Runbook** section to `README.md` documenting how to clear the local build cache via `rm -rf .cache/`, plus a caution not to run that against `/srv`. Scope is docs-only (+10 lines, one file). The relative `.cache/` path matches a local-dev clear step, and the `/srv` warning is appropriate operational guardrail text for a destructive command.\n\nNo public API, security boundary, workflow, or runtime code changed. Nothing further to flag.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "low",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

@@ -22,11 +22,13 @@ Every workflow using AI Diff Reviewer sets these two.
 
 ### `api-key`
 
-- **Required** — with one exception: on the AWS Bedrock lane
-  (`provider: anthropic` + a `bedrock-runtime.{region}.amazonaws.com`
-  `api-base`) it may stay empty; the runtime signs with the AWS credentials
-  from the environment (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
-  `AWS_SESSION_TOKEN`, as exported by the OIDC credential step).
+- **Required** — except where the lane has environment credentials (v3
+  rule, RFC-07 BC-16). Today that is the AWS Bedrock lane (`provider:
+  anthropic` + a `bedrock-runtime.{region}.amazonaws.com` `api-base`): it may
+  stay empty; the runtime signs with the AWS credentials from the
+  environment (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+  `AWS_SESSION_TOKEN`, as exported by the OIDC credential step). Future
+  OIDC lanes follow the same rule.
 - **What it is:** API key (or subscription OAuth token) for the chosen
   provider.
 - **Where to get it, by provider:**
@@ -523,7 +525,7 @@ Every workflow using AI Diff Reviewer sets these two.
   constants for every tier. An explicit `max-turns` (other than the
   default) is a ceiling a tier never exceeds.
 - **When to change:** `fixed` only while you calibrate; removed in v3.1.0.
-- **Native CLI cap:** on `grok`, when `agent-max-turns` is unset, the tier's turns are passed as the CLI's `--max-turns`; `fixed` leaves the CLI uncapped (pre-v3 behaviour).
+- **Native CLI cap:** on `grok`, when `agent-max-turns` is unset, the tier row's turns (8 / 20 / 30 / 40) are passed as the CLI's `--max-turns` — `max-turns` does not reach a CLI; a CLI stopped at its cap posts an incomplete review. `fixed` leaves the CLI uncapped (pre-v3 behaviour).
 
 ### `high-risk-paths`
 

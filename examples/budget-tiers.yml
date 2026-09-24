@@ -21,8 +21,10 @@
 #             unknown class, or a `high-risk-paths` match
 #
 # An explicit `max-turns` (any value other than the default 30) stays a
-# ceiling on every tier. Follow-up rounds are budgeted by the delta instead
-# (docs/ITERATION_AWARENESS.md § 9.2). See docs/PERFORMANCE.md § "Risk-tiered
+# ceiling on every tier for the in-process runners. On the grok CLI the tier
+# row's turns are passed as the native `--max-turns` when `agent-max-turns`
+# is unset; a CLI stopped at its cap posts an incomplete review. Follow-up
+# rounds are budgeted by the delta instead (docs/ITERATION_AWARENESS.md § 9.2). See docs/PERFORMANCE.md § "Risk-tiered
 # budgets (v3)".
 
 name: PR review (risk-tiered budgets)

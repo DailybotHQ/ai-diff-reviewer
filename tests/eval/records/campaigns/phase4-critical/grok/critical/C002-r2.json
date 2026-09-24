@@ -1,0 +1,95 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 55.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 55.6,
+  "usage": {
+    "in": 31509,
+    "cache_read": 87680,
+    "cache_write": 0,
+    "out": 3094,
+    "source": "cli"
+  },
+  "cost_usd": 0.125422,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "Interpolating `email` into the SQL with an f-string lets a caller-controlled value close the quote and rewrite the query. Input like `x' OR '1'='1` returns every order; `x'; DROP TABLE orders;--` can destroy data on the same connection. The previous `?` placeholder already closed this. The new predicate is still `=`, so a fragment search also still fails. Bind a `LIKE` pattern instead:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\",\n        (f\"%{email}%\",),\n```"
+    }
+  ],
+  "summary": "Looks good is the wrong read \u2014 this is a SQL injection regression that must be reverted before merge.\n\n`get_orders` used to bind `email` with a `?` placeholder. The new f-string concatenates that value into the SQL text, so any quote in the argument closes the string literal and takes over the statement. A support paste of `x' OR '1'='1` dumps the whole `orders` table; a crafted value can also run additional statements against the same connection.\n\nThe comment claims a partial-match search, but the predicate is still `email = \u2026`, so a fragment still fails to match. The safe way to get both goals is a bound `LIKE` pattern, not interpolation.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `store.py` builds the query with `f\"SELECT ... email = '{email}'\"`, so caller-controlled `email` is interpolated into SQL. Base used a `?` placeholder with `(email,)`, so this is a real critical SQL-injection regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.445,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3512,
+      "out": 275
+    },
+    "cost_usd": 0.008828
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

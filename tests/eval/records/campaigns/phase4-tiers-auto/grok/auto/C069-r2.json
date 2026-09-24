@@ -1,0 +1,108 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 47.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 47.5,
+  "usage": {
+    "in": 32083,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2457,
+    "source": "cli"
+  },
+  "cost_usd": 0.105404,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Issue:** `middleware.RequireRole(\"admin\")` is dropped while re-registering the admin handlers. `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` are now plain `http.HandlerFunc` values with no role gate.\n\n**Failure mode:** Any unauthenticated or non-admin caller who can reach the process can list users and edit roles. Before this change both routes required the admin role at the router.\n\n**Fix:** Keep the path prefix move, but re-apply the middleware on the subrouter:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tauthz := middleware.RequireRole(\"admin\")\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n\tv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\nAlternatively `v2.Use(middleware.RequireRole(\"admin\"))` if that helper returns compatible mux middleware."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Issue:** Routes move from `/admin/users` and `/admin/roles` to `/api/v2/admin/users` and `/api/v2/admin/roles` with the old paths removed in the same commit.\n\n**Failure mode:** Existing clients, scripts, or dashboards still calling `/admin/*` get 404 after deploy. The PR frames this as versioning cleanup, but there is no alias, redirect, or deprecation layer in-tree.\n\n**Fix:** If any external caller still uses the old paths, keep dual registration (old + v2) temporarily, or document and coordinate a hard cutover before merge."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change strips admin authorization while relocating the routes under `/api/v2`.\n\n## What changed\n\n`cmd/server/routes.go` moves `GET /admin/users` and `POST /admin/roles` onto a `/api/v2` subrouter. That path move matches the PR title. In the same hunk, `middleware.RequireRole(\"admin\")` is deleted and both handlers are registered as bare `http.HandlerFunc` values.\n\n## Why this is blocking\n\nPreviously every request hit `authz(http.HandlerFunc(...))`, so only callers with the admin role could list users or edit roles. After this diff, the same handlers are reachable with no role check at the router. There is no other middleware or handler-level guard in this repository to replace it.\n\nConcrete failure mode: any client that can reach the server can call `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` and exercise privileged admin behavior.\n\n## Secondary note\n\nThe old `/admin/*` paths are removed with no compatibility shim. That is an intentional public API break if clients still call v1 paths; coordinate callers or add redirects/aliases if anything still depends on them. That is secondary to the auth regression.\n\n## Recommendation\n\nRestore `RequireRole(\"admin\")` on the v2 subrouter (per-route wrap or `v2.Use(authz)`), then re-test admin and non-admin access.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base routes wrapped listUsers/editRoles with middleware.RequireRole(\"admin\"); head re-registers them on /api/v2 as bare HandlerFuncs with no role gate and no other auth elsewhere. This is a real critical authz regression."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 5,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.192,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4289,
+      "out": 389
+    },
+    "cost_usd": 0.011578
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

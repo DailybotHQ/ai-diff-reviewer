@@ -1,0 +1,78 @@
+{
+  "case": "C053",
+  "pr": "C053",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 20.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 20.0,
+  "usage": {
+    "in": 29215,
+    "cache_read": 57472,
+    "cache_write": 0,
+    "out": 1054,
+    "source": "cli"
+  },
+  "cost_usd": 0.0819956,
+  "changed_files": [
+    "CHANGELOG.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a single Unreleased changelog backfill with nothing blocking.\n\n## Notes\n\nThe diff only adds `- fix: rate limiter reset` under `## Unreleased`. That matches the PR intent (docs backfill), stays in English, and uses a Conventional Commits\u2013style bullet consistent with a minimal changelog. No runtime, contract, security, or sync surfaces are touched.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 8,
+  "budget": {
+    "tier": "low",
+    "profile": "auto",
+    "turns": 8,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 4096,
+    "verifier_warning_pct": 0,
+    "patch_bytes": 60000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

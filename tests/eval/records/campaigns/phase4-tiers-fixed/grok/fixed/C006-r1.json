@@ -1,0 +1,95 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.2,
+  "usage": {
+    "in": 29701,
+    "cache_read": 57472,
+    "cache_write": 0,
+    "out": 1404,
+    "source": "cli"
+  },
+  "cost_usd": 0.0850676,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "`identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no longer passes `SECRET`, `algorithms`, `audience`, or `issuer`. Any client can forge a token with arbitrary claims (user id, roles, tenant) and this function will return them as a trusted identity.\n\nThere is no environment check, staging guard, or feature flag around this path \u2014 the disable applies wherever `auth.identity` is imported. A temporary re-issuance ticket does not make unsigned tokens safe.\n\nRestore signature verification (and audience/issuer checks) before merge. If staging needs a bridge during migration, use a staging-specific secret/issuer allowlist or a separate explicitly gated decode path \u2014 never `verify_signature: False` on the shared identity function."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, which means any caller-supplied token is trusted as identity.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts forged tokens with no shared secret, no `aud`, and no `iss`. There is no staging/env guard, feature flag, or alternate code path \u2014 the same function that previously enforced HS256 + audience + issuer now trusts attacker-controlled claims in every environment that runs this module.\n\nThe PR description frames this as a temporary staging unblock for token re-issuance (TICKET-412). Temporary intent does not reduce the runtime impact: anyone who can hit an endpoint that calls `identity()` can mint an arbitrary identity dict.\n\n`SECRET` remains in the module but is no longer used by `identity()`, which is consistent with verification being fully removed rather than relaxed in a controlled way.\n\n## Recommendation\n\nKeep verification on. If staging tokens are incompatible after the accounts migration, fix token issuance or accept a staging-only verification key/issuer allowlist \u2014 do not disable signature checks on the shared decode path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.identity now calls jwt.decode with verify_signature/verify_aud/verify_iss all False and no longer passes SECRET, algorithms, audience, or issuer. Base still verified HS256 signatures against SECRET with audience and issuer checks, so this is an unconditional auth bypass regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.201,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3839,
+      "out": 380
+    },
+    "cost_usd": 0.010598
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

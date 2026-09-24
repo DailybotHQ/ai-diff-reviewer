@@ -1,0 +1,95 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 50.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 50.4,
+  "usage": {
+    "in": 31437,
+    "cache_read": 117632,
+    "cache_write": 0,
+    "out": 2502,
+    "source": "cli"
+  },
+  "cost_usd": 0.1131756,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check means `deliver()` will POST to any caller-supplied URL via `urllib.request.urlopen` with no scheme, host, or network-range validation.\n\n**Failure mode:** a customer- or attacker-controlled `url` such as `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:2375/`, or an internal hostname reaches the runner/network from this process. Default redirect following can also pivot from a public endpoint to a private one.\n\n**Fix:** keep an explicit allowlist or equivalent safe-URL policy before opening the request \u2014 at minimum HTTPS-only, block loopback/link-local/private CIDRs and metadata addresses, resolve DNS and re-check the resolved IP, and disable or tightly control redirects. Restore a host allowlist (or per-tenant configured HTTPS endpoints validated at save time and again at delivery) rather than posting to an arbitrary string."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns `deliver()` into an open SSRF primitive.\n\n## What changed\n\n`webhooks.py` deleted `ALLOWED_HOSTS` and the `urlsplit` hostname check, then posts the caller-supplied `url` straight through `urllib.request.urlopen`. The PR frames this as supporting customer-configured endpoints; that product goal needs an allowlist, HTTPS-only policy, and private/link-local/metadata IP blocking \u2014 not an unrestricted fetch.\n\n## Why it matters\n\nAny value that reaches `deliver(..., url)` can hit:\n\n- Cloud metadata (`http://169.254.169.254/\u2026`)\n- Localhost and RFC1918 admin panels\n- Internal hooks the old allowlist was meant to fence\n\n`urllib.request` follows redirects by default, so a public URL can still bounce onto an internal target. Timeout alone does not bound blast radius.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously rejected non-allowlisted hosts before urllib.request.urlopen; deliver() now POSTs to any caller-supplied URL with no scheme/host/IP validation, enabling classic SSRF (metadata, loopback, internal hosts). Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.21,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2654,
+      "out": 376
+    },
+    "cost_usd": 0.00846
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

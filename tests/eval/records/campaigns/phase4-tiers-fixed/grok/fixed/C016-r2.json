@@ -1,0 +1,95 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 54.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 54.9,
+  "usage": {
+    "in": 30701,
+    "cache_read": 116736,
+    "cache_write": 0,
+    "out": 2021,
+    "source": "cli"
+  },
+  "cost_usd": 0.1085488,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hardcoded on the shared `http.Client` returned by `NewClient()`. There is no staging/prod guard, build tag, or CA pool override \u2014 every environment that uses this client will accept any certificate from any on-path attacker.\n\n**Failure mode:** DNS spoofing or a compromised proxy lets an attacker terminate TLS with a junk cert, then read or alter ledger requests/responses (including credentials and money-moving payloads) with no TLS error.\n\n**Fix:** keep verification on by default. For staging only, either (a) load the staging CA into `tls.Config.RootCAs`, or (b) gate the skip behind an explicit env/config flag that production configs never set:\n\n```go\ntlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}\nif cfg.AllowInsecureTLS { // staging-only\n    tlsConfig.InsecureSkipVerify = true\n}\n```\n\nDo not ship a blanket skip with only a \"revisit before prod\" comment."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every caller of `NewClient()`, which is a production MITM exposure if the same binary ships outside staging.\n\n## Analysis\n\n`internal/ledger/client.go` sets `tls.Config{InsecureSkipVerify: true}` on the shared HTTP transport with no environment check, build tag, or dialer customization. The comment references staging and TICKET-77, but the runtime path is global: any process that constructs this client will skip hostname and chain validation against whoever answers the TCP connection.\n\nFailure mode: an on-path attacker (compromised egress, poisoned DNS, rogue proxy) presents any certificate and reads or modifies ledger traffic \u2014 balances, transfers, auth headers \u2014 without triggering TLS errors.\n\nA ticket comment is not a control. Gate the skip on an explicit staging-only signal (or better: trust the staging CA / pin the cert), defaulting to verify-on everywhere else.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` hardcodes `tls.Config{InsecureSkipVerify: true}` on the shared HTTP transport with only a staging comment and no env, build-tag, or CA-pool guard; base had default verification. That matches the critical MITM exposure claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.768,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1273,
+      "out": 430
+    },
+    "cost_usd": 0.006355
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

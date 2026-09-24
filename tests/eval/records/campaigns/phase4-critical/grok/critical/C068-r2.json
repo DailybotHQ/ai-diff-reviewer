@@ -1,0 +1,95 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 56.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 56.6,
+  "usage": {
+    "in": 30727,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 2228,
+    "source": "cli"
+  },
+  "cost_usd": 0.118342,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`pickle.loads` on `raw` is remote code execution: session tokens are client-controlled, and pickle will run `__reduce__` (or equivalent) while reconstructing the object graph. A crafted base64 cookie therefore executes arbitrary code in the request process. Keep a safe decoder (`json.loads` as before, or a signed format) and rebuild plugin objects from plain data; if a binary blob is required, HMAC-verify it first and unpickle only through a `RestrictedUnpickler` allowlist."
+    }
+  ],
+  "summary": "Looks good is the wrong verdict here \u2014 this change replaces a safe JSON session decoder with `pickle.loads` on attacker-controlled cookie bytes and must not merge.\n\n`load_session` takes a raw string, base64-decodes it, and now unpickles it. Session cookies and similar tokens are client-supplied; pickle reconstructs arbitrary objects via `__reduce__`, so a crafted payload executes code in the web process on every request that loads a session. The previous `json.loads` path could not do that. Nothing in this file (or the rest of the tiny tree) verifies a signature, uses a restricted unpickler, or otherwise authenticates `raw` before deserialization.\n\nPlugin objects that JSON cannot round-trip should be rebuilt after a safe decode (JSON / msgpack plus an explicit constructor map), or the blob should be HMAC-signed and verified *before* any deserialize. Unpickling the cookie is not a compatibility fix; it is remote code execution.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `load_session` calls `pickle.loads` on base64-decoded `raw` session input with no HMAC or RestrictedUnpickler; base used safe `json.loads`. Untrusted pickle deserialization is a classic RCE path, so the critical finding holds."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.294,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3163,
+      "out": 409
+    },
+    "cost_usd": 0.010009
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 49.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.7,
+  "usage": {
+    "in": 30954,
+    "cache_read": 116352,
+    "cache_write": 0,
+    "out": 2199,
+    "source": "cli"
+  },
+  "cost_usd": 0.1100076,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can pass `accountId` in the JSON body and load a different account. `auth(req)` only establishes identity; there is no check that the caller is support staff (or has an equivalent privilege) before honoring `body.accountId`.\n\n**Failure mode:** a normal user sends `{\"accountId\":\"<victim>\"}` and receives that account\u2019s record \u2014 PII/account data disclosure across tenants.\n\nGate the override on an explicit staff/admin claim from `caller`, return 403 when a non-staff caller supplies `accountId`, and keep `caller.accountId` as the only path for standard users. Also validate that `accountId` is a non-empty string before the DB lookup."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization bypass: `getAccount` now trusts a client-supplied `accountId` with no staff/role check, so any authenticated caller can read any account.\n\n## Analysis\n\nPreviously the handler only loaded `caller.accountId` from `auth(req)`, which kept the lookup scoped to the authenticated principal. The new path does:\n\n```ts\nconst body = await req.json().catch(() => ({}));\nconst id: string = body.accountId ?? caller.accountId;\n```\n\nAuthentication still runs, but nothing verifies that the caller is support staff (or otherwise permitted) before substituting `body.accountId`. The comment documents intent for staff tools; the code implements unrestricted cross-account reads (IDOR).\n\nA safe design would gate the override on an explicit staff/admin claim from `auth` (e.g. `caller.isSupport` / `caller.roles`), reject non-staff overrides with 403, and keep the default self-lookup path unchanged. Consider also validating that `accountId` is a non-empty string before querying.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaced a lookup keyed only on `caller.accountId` with `body.accountId ?? caller.accountId` and never checks that the caller is support/admin before honoring the body override, so any authenticated user can fetch another account\u2019s record."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.688,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2941,
+      "out": 422
+    },
+    "cost_usd": 0.009873
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

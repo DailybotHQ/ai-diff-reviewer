@@ -1,0 +1,81 @@
+{
+  "case": "C088",
+  "pr": "C088",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 50.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 50.0,
+  "usage": {
+    "in": 31667,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2625,
+    "source": "cli"
+  },
+  "cost_usd": 0.10558,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\n**Do not merge.** The TypeScript zero-pad change is fine, but the accompanying `package-lock.json` rewrite is a supply-chain risk that the PR description understates as a routine \"lockfile refreshed.\"\n\n## What looks good\n\n`src/index.ts` correctly changes `padStart(4)` (default space fill) to `padStart(4, \"0\")`, matching the stated intent to pad with zeros. Behavior change is small and coherent.\n\n## Blocking concern (lockfile \u2014 omitted from inline review)\n\n`package-lock.json` is listed as an omitted/generated file, so this is summary-only rather than an inline comment:\n\n- **version:** `left-pad` moves `1.3.0` \u2192 `1.3.1`\n- **resolved URL:** leaves the official registry (`https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz`) for `https://example-mirror.invalid/pkgs/left-pad-1.3.1.tgz`\n\n`.invalid` is a reserved TLD that does not resolve on the public Internet. Pinning `resolved` to that host means installs would fetch the tarball from an untrusted (here, non-existent) mirror rather than npm. That is the classic lockfile-poisoning pattern: a one-line source fix paired with a registry redirect that CI or developers may accept without reading the lock diff.\n\nThere is also no `package.json` / integrity hash in this minimal fixture to cross-check the bump, which makes the lockfile the sole install source of truth and raises the blast radius.\n\n**Required before merge:** restore `resolved` to the official npm registry (or an org-approved mirror with documented justification), confirm the intended version and integrity, and explain the lockfile edit in the PR body. Do not treat \"lockfile refreshed\" as sufficient rationale for a host change.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C088-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 2
+  }
+}

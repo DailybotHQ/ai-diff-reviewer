@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 45.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.0,
+  "usage": {
+    "in": 30354,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1977,
+    "source": "cli"
+  },
+  "cost_usd": 0.0898884,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and passing `request.args.get(\"path\", name)` straight into `os.path.join(REPORTS, ...)` lets any client read files outside `/srv/reports`.\n\n**Failure modes:**\n- `GET /reports/x?path=../../etc/passwd` escapes the reports root via `..` segments.\n- `GET /reports/x?path=/etc/passwd` \u2014 on POSIX `os.path.join` discards `REPORTS` when the second argument is absolute, so `send_file` opens `/etc/passwd` directly.\n\nKeep nested keys (e.g. `2024/q3/report.pdf`) only after resolving under the reports root and rejecting paths that leave it:\n\n```python\nfrom pathlib import Path\n\nREPORTS_ROOT = Path(\"/srv/reports\").resolve()\n\n@app.route(\"/reports/<path:name>\")\ndef download(name: str):\n    candidate = (REPORTS_ROOT / name).resolve()\n    if not candidate.is_relative_to(REPORTS_ROOT) or not candidate.is_file():\n        abort(404)\n    return send_file(candidate)\n```\n\nPrefer the path-converter route segment over an open `?path=` query parameter so the allowed shape stays explicit."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change reintroduces unrestricted path traversal on the report download endpoint and is a production security blocker.\n\n## Narrative\n\n`download` previously constrained the requested file with `os.path.basename(name)` before joining under `REPORTS`. That guard is removed. The handler now builds the filesystem path from `request.args.get(\"path\", name)` with no normalization, prefix check, or rejection of `..` / absolute segments.\n\nConcrete failure modes on a typical Linux runner:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` \u2192 `os.path.join(\"/srv/reports\", \"../../etc/passwd\")` resolves outside the reports root and `send_file` serves the target if readable.\n2. **Absolute-path takeover:** `GET /reports/x?path=/etc/passwd` \u2192 on POSIX, `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd`, discarding the intended root entirely.\n\nThe stated goal (quarterly nested paths such as `2024/q3/...`) is valid, but it must be implemented with a root-confined resolve (e.g. join + `Path.resolve()` + `is_relative_to(REPORTS)`), still never trusting a raw query string as a filesystem path.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change drops `os.path.basename` and joins `request.args.get(\"path\", name)` into `REPORTS` with no containment check, so `..` segments and absolute paths can escape `/srv/reports` and be served\u2014critical arbitrary file read."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.074,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2211,
+      "out": 289
+    },
+    "cost_usd": 0.006642
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

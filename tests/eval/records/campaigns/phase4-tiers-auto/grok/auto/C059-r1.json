@@ -1,0 +1,78 @@
+{
+  "case": "C059",
+  "pr": "C059",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 16.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 16.5,
+  "usage": {
+    "in": 15632,
+    "cache_read": 71424,
+    "cache_write": 0,
+    "out": 932,
+    "source": "cli"
+  },
+  "cost_usd": 0.0582832,
+  "changed_files": [
+    "prompts/review-policy.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nLooks good \u2014 a one-line clarification that severity comes from the central rubric and that `prompts/review-policy.md` only documents gating behavior.\n\n## Notes\n\nThe added sentence correctly separates two concerns already implied by the file: (1) how severities gate the check (`critical` always blocks; `warning` blocks under `block-on-warning`), and (2) who chooses severity (the reviewer, using the shared rubric). No public contract, runtime, or security surface changed.\n\n**Recommendation:** approve",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.7,
+  "usage": {
+    "in": 31296,
+    "cache_read": 87808,
+    "cache_write": 0,
+    "out": 1657,
+    "source": "cli"
+  },
+  "cost_usd": 0.0988764,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "`process.env.PROCESSOR_KEY` is included in the debug log payload on every charge. That value is a payment-processor credential: once it hits the logging pipeline it is readable by anyone with log access and can be used to replay charges.\n\nSupport correlation only needs non-secret charge context (`orderId`, `ref`). Restore those fields and drop the key entirely.\n\n```suggestion\n  // non-secret charge context for support correlation on failures\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential into debug payloads on every successful charge.\n\n## Why this is blocking\n\n`src/payments/charge.ts` now passes `process.env.PROCESSOR_KEY` into `log.debug(...)`. Payment-processor API keys are long-lived secrets. Debug logs routinely land in centralized log stores, support tooling, and on-call exports; once there, anyone with log read access can replay charges against the processor.\n\nThe inline comment states the intent explicitly (\"include credentials in debug payloads so support can replay failures\"), so this is not an accidental field name collision \u2014 it is deliberate secret exfiltration into the logging pipeline.\n\n## Secondary note\n\nThe previous `log.info(\"charge created\", { orderId, ref })` success breadcrumb was removed. Restoring non-secret charge context at info/debug (order id + ref only) still gives support what they need for correlation without the key.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `charge.ts` logs `process.env.PROCESSOR_KEY` in the debug payload on every charge; base only logged non-secret `orderId` and `ref`. That is a payment-processor credential exposure via the logging pipeline, matching the claimed critical security defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.781,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2359,
+      "out": 403
+    },
+    "cost_usd": 0.008032
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

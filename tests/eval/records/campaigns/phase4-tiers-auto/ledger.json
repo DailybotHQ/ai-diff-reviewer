@@ -1,0 +1,11 @@
+{
+  "campaign_id": "phase4-tiers-auto",
+  "planned": 99,
+  "executed": 99,
+  "resumed": 0,
+  "spent_usd_upper_bound": 9.7544,
+  "unknown_cost_runs": 0,
+  "budget_usd": 45.0,
+  "stop_at_usd": 40.5,
+  "stopped_reason": null
+}

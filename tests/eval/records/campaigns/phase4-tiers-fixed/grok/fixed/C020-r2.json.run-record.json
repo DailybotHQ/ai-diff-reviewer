@@ -1,0 +1,86 @@
+{
+  "schema_version": "run-record/3.0",
+  "run_id": "run-grok-xai-943c7f0e785a-1790257577-78e8eeac",
+  "recorded_at": "2026-09-24T13:46:25Z",
+  "runner": "cli",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "model_alias": null,
+  "runtime_sha": "7695481624f116a990b80d38255d24ed5bb145b1",
+  "prompt_sha256": "166a8e4b0bf91ffc78d53a2df61332b71ae47e1cd12626b4181df6e71d9582c0",
+  "extension_sha256": null,
+  "sampling": {
+    "requested": {},
+    "sent": {},
+    "stripped": []
+  },
+  "context": {
+    "repo_kind": "fixture_tree",
+    "head_sha": "943c7f0e785a85f72e45a13a55a8ecb73f89be8c",
+    "base_sha": "904b49e3581a9f31fd6887e84008f5b9f949ee42",
+    "corpus_case_id": "C020",
+    "corpus_sha256": "4efa77693827d7cf7fa5253eb4e083733592b008a2ed1decec926284b6398a90",
+    "changed_files": 1,
+    "omitted_files": 0,
+    "diff_chars": 600,
+    "diff_truncated": false,
+    "iar_mode": "none",
+    "instruction_files_read": []
+  },
+  "budget": {
+    "max_turns": 30,
+    "turns_used": 4,
+    "tool_calls": 0,
+    "risk_tier": "standard",
+    "verifier_runs": 1
+  },
+  "outcome": {
+    "findings_total": 1,
+    "findings_by_severity": {
+      "critical": 1,
+      "warning": 0,
+      "info": 0
+    },
+    "findings_verified": 1,
+    "findings_downgraded": 0,
+    "findings_refuted": 0,
+    "summary_present": true,
+    "gate": {
+      "strictness": "lenient",
+      "passed": true
+    },
+    "score": {
+      "must_find_total": 1,
+      "must_find_hits": 1,
+      "false_positives": 0,
+      "unlabelled": 0,
+      "adjudicated_true": null,
+      "adjudicated_false": null
+    }
+  },
+  "usage_known": true,
+  "usage": {
+    "input_tokens": 31013,
+    "cache_read_tokens": 88192,
+    "cache_write_tokens": 0,
+    "output_tokens": 2407,
+    "source": "cli"
+  },
+  "cost_usd": 0.1029256,
+  "cost_basis": "vendor-reported",
+  "timings": {
+    "setup_seconds": 0.041,
+    "provider_seconds": 47.1,
+    "verifier_seconds": 7.261,
+    "total_seconds": 47.143
+  },
+  "status": "completed",
+  "failure_class": null,
+  "campaign": {
+    "id": "phase4-tiers-fixed",
+    "cell": "grok|fixed|C020",
+    "repetition": 2,
+    "arm": "fixed"
+  }
+}

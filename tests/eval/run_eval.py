@@ -346,8 +346,8 @@ def run_case(
                 record.model = model
                 record.model_alias = budget.alias
                 provider = (provider_factory or (lambda m: r.build_provider(provider_id, api_key=api_key, model=m, api_base=api_base)))(model)
-        native_cap_applied: bool = r.apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=effective_turns)
-        budget_payload: dict[str, Any] = {"tier": risk_tier, "profile": budget_profile, "turns": budget.turns, "alias": budget.alias, "model": model,
+        native_cap_applied: bool = r.apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=budget.tier_turns)  # the row's turns, as `main` does
+        budget_payload: dict[str, Any] = {"tier": risk_tier, "profile": budget_profile, "turns": budget.turns, "tier_turns": budget.tier_turns, "alias": budget.alias, "model": model,
                                           "output_tokens": budget.output_tokens, "verifier_warning_pct": budget.verifier_warning_pct,
                                           "patch_bytes": budget.patch_bytes, "native_cap_applied": native_cap_applied}
         setup_seconds = time.time() - t_start

@@ -1,0 +1,95 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.6",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.2,
+  "usage": {
+    "in": 31566,
+    "cache_read": 88576,
+    "cache_write": 0,
+    "out": 2618,
+    "source": "cli"
+  },
+  "cost_usd": 0.123128,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization. Any client that can hit the route can delete any user, including via a viewer-account cleanup job as the comment describes.\n\nRestore a caller-identity check (admin or a dedicated service role) on this route, and grant cleanup jobs that role instead of dropping the gate. The previous decorator inspected the path parameter `user`, not the caller, so restoring it unchanged would still not authenticate the job."
+    }
+  ],
+  "summary": "Removing `@require_role(\"admin\")` from `DELETE /users/<user>` leaves a destructive endpoint with no authorization at all.\n\nAnyone who can reach the Flask app can now delete any user (and the in-memory `USERS` list has no other gate). The comment frames this as unblocking cleanup jobs that run as the viewer account; that is a privilege-escalation path, not a fix. Give those jobs an admin/service identity, or add a separately authenticated internal cleanup path, and keep a role check on this route.\n\nThe existing `require_role` implementation also keys off the path parameter `user` rather than a caller identity, so even restoring the decorator as-is would not authenticate the job. The durable fix is to identify the caller and require admin (or a dedicated service role) before mutating `USERS`.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 40,
+  "budget": {
+    "tier": "critical",
+    "profile": "auto",
+    "turns": 40,
+    "alias": "deep",
+    "model": "grok-4.6",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "DELETE /users/<user> previously had @require_role(\"admin\") and the patch only replaces it with a comment, so delete_user now runs with no authorization check and any client can remove any user. That is a real critical authz regression on the destructive route."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.14,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4200,
+      "out": 369
+    },
+    "cost_usd": 0.011152
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

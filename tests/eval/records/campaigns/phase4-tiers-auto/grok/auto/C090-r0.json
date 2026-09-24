@@ -1,0 +1,80 @@
+{
+  "case": "C090",
+  "pr": "C090",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 37.1,
+  "usage": {
+    "in": 17223,
+    "cache_read": 101376,
+    "cache_write": 0,
+    "out": 2334,
+    "source": "cli"
+  },
+  "cost_usd": 0.0788628,
+  "changed_files": [
+    "dist/app.min.js"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nDo not merge: this is not a clean toolchain rebuild. The only changed artifact is the generated bundle, and it diverges from the checked-in source in a security-sensitive way.\n\n## What changed\n\n- **File:** `dist/app.min.js` (omitted/generated; +1/\u22121)\n- **Claim:** \"Regenerated the bundle after the toolchain upgrade.\"\n- **Source:** `src/app.ts` is **unchanged** and still only exports `init()` that logs `ok`.\n\n## Why this is a problem\n\nThe new bundle body adds:\n\n```js\na.run = function(s) { return eval(s) };\n```\n\nThat API is absent from `src/app.ts`. A true rebuild from the current source cannot introduce `run`/`eval` unless the compiler or an uncommitted source step injected it\u2014and neither appears in this PR.\n\nConcrete failure mode: any caller of `window.app.run(...)` executes arbitrary strings in the page context (XSS / supply-chain style footgun). Shipping only the minified file also hides the behavior from normal source review.\n\n## What was verified\n\n- `git diff 336487292f7b...b40d1d1fc99e` \u2014 sole file `dist/app.min.js`\n- Head `src/app.ts` \u2014 `export function init(): void { console.log(\"ok\"); }` only\n- Base vs head bundle \u2014 base has `init` only; head adds `run` + `eval`\n- No other source, build config, or lockfile changes in the PR\n\nPer review policy, omitted generated/minified files are not line-reviewed; the **presence and shape of this sole change** is the defect (hand-edited or out-of-sync artifact presented as a rebuild).\n\n## Release decision\n\n**Recommendation:** request-changes\n\nRe-generate `dist/app.min.js` from the real `src/` (or land the `run` implementation in source with a deliberate review), and drop any `eval`-based API unless there is a documented, sanitized need.\n",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "auto",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 100,
+    "patch_bytes": 200000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C090-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

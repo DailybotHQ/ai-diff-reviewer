@@ -1,0 +1,95 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "7695481624f1",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.7,
+  "usage": {
+    "in": 30350,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1714,
+    "source": "cli"
+  },
+  "cost_usd": 0.0970192,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` into `send_file` lets any client read arbitrary files the process can open.\n\n**Failure modes:**\n- `GET /reports/x?path=../../etc/passwd` \u2014 `..` segments escape `/srv/reports`.\n- `GET /reports/x?path=/etc/shadow` \u2014 absolute `path` makes `os.path.join` discard the reports root on POSIX.\n\nResolve the candidate under `REPORTS`, then reject anything whose real path is not still under that root (or strip/`basename`-style per segment and disallow `..`). Example shape:\n\n```python\nroot = os.path.realpath(REPORTS)\ncandidate = os.path.realpath(os.path.join(root, request.args.get(\"path\", name)))\nif candidate != root and not candidate.startswith(root + os.sep):\n    abort(400)\nreturn send_file(candidate)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical path-traversal regression** \u2014 this change must not merge as written.\n\n## Narrative\n\n`download` previously constrained the route parameter with `os.path.basename`, so only a single filename under `/srv/reports` could be served. The patch drops that guard and builds the path from `request.args.get(\"path\", name)`, which is fully attacker-controlled.\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves under `os.path.join` to a path outside `/srv/reports` and is returned by `send_file`.\n2. **Absolute path override:** `GET /reports/x?path=/etc/passwd` \u2014 on POSIX, `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd`, so the reports root is discarded entirely.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) is a reasonable product goal, but the path must be resolved, then verified to stay inside `REPORTS` (or use a safe join helper that rejects `..` and absolute segments). Do not pass raw query/path input straight to `send_file`.\n\nNo other files changed; scope is this one handler.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 20,
+  "budget": {
+    "tier": "standard",
+    "profile": "auto",
+    "turns": 20,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": true
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `os.path.basename(name)` with unsanitized `request.args.get(\"path\", name)` joined under REPORTS and passed to `send_file`, so `?path=../../etc/passwd` or an absolute path can escape the reports root. That is a real arbitrary-file-read regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.897,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2214,
+      "out": 325
+    },
+    "cost_usd": 0.006839
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

