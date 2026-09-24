@@ -488,6 +488,25 @@ Every workflow using AI Diff Reviewer sets these two.
 - **When to change:** always set it on the aggregate job of a matrix; set
   it on the emit legs of the same matrix to keep the PR free of notes.
 
+### `min-agreement`
+
+- **Default:** `1`
+- **What it is:** aggregate only (v3, RFC-04 § Gating policy). A `warning`
+  counts toward `block-on-warning` / `block-on-any` only when at least this
+  many legs reported it; criticals ignore the knob — a verified critical
+  from one leg still gates. Warnings below the threshold are still posted
+  and marked with their agreement.
+- **When to change:** matrices of three or more legs where lone warnings
+  are noise: `2`.
+
+### `require-all-legs`
+
+- **Default:** `false`
+- **What it is:** aggregate only. `true` fails the check when an expected
+  leg is missing, failed or timed out; `false` publishes with the delivered
+  legs and names the missing one in the review and the job summary.
+- **When to change:** every lane is mandatory in your process.
+
 ### `complexity-labels-enabled`
 
 - **Default:** `false`

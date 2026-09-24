@@ -215,7 +215,7 @@ def verdict(
     # completeness: a candidate lane must cover every baseline cell of that lane —
     # a partial campaign (a lane that failed or was cancelled half-way) must not
     # produce the non-blocking verdict that unlocks a release (RFC-01 P-1).
-    for lane in sorted({"|".join(k.split("|")[:3]) for k in c_by}):
+    for lane in sorted({"|".join(k.split("|")[:3]) for k in b_by} | {"|".join(k.split("|")[:3]) for k in c_by}):
         base_cells: set[str] = {k for k in b_by if k.startswith(lane + "|")}
         missing: list[str] = sorted(base_cells - {k for k in c_by if k.startswith(lane + "|")})
         if missing:

@@ -1,0 +1,260 @@
+{
+ "schema": "ai-diff-reviewer/ensemble-fixture/1",
+ "source": "PR #58 @ f3808cd \u2014 six-leg dogfood round (2026-09-22), triaged by hand 2026-09-24",
+ "head_sha": "f3808cd000000000000000000000000000000000",
+ "legs": {
+  "anthropic": "anthropic|anthropic|claude-sonnet-4-6",
+  "openai": "openai|openai|gpt-5.1",
+  "codex": "codex|openai|gpt-5.1-codex",
+  "cursor": "cursor|cursor|auto",
+  "grok": "grok|xai|grok-4.5",
+  "claude-code": "claude-code|zai|glm-5.3-flash"
+ },
+ "findings": [
+  {
+   "leg": "openai",
+   "path": "scripts/reviewer.py",
+   "line": 2119,
+   "severity_claimed": "warning",
+   "title": "The classifier currently accepts any four-label value such as `bedrock-runtime.not-a-region.amazonaws.com` and then uses that label as the S",
+   "body": "The classifier currently accepts any four-label value such as `bedrock-runtime.not-a-region.amazonaws.com` and then uses that label as the SigV4 region. AWS only accepts valid region/partition identifiers; this lets a typo or attacker-controlled `api-base` pass the recognized Bedrock path and fail later with an opaque signing/auth error (and the docs promise regional endpoints). Please validate the extracted label against the supported AWS region format (and reject empty/invalid labels) before treating it as Bedrock.\n\n<!-- ai-pr-reviewer-finding: fp=a7d7d534d5224d47 sev=warning -->",
+   "category": "security",
+   "group": "region-label-unchecked",
+   "anchor_text": "labels = host.split(\".\")"
+  },
+  {
+   "leg": "openai",
+   "path": "examples/provider-anthropic-bedrock.yml",
+   "line": 59,
+   "severity_claimed": "warning",
+   "title": "This example always passes `secrets.AWS_REVIEW_CREDENTIALS`, even in the documented recommended OIDC variant where `api-key` is supposed to",
+   "body": "This example always passes `secrets.AWS_REVIEW_CREDENTIALS`, even in the documented recommended OIDC variant where `api-key` is supposed to be empty. In a consumer that follows Variant A and has no packed secret, the action input expression supplies an empty value (fine), but the example never actually enables/configures OIDC because the `configure-aws-credentials` step is commented out. As copied, the workflow therefore cannot perform the advertised OIDC setup and will fail unless the user edits multiple commented sections; please provide separate complete OIDC and packed-secret examples, or ",
+   "category": "security",
+   "group": "secrets-always-passed",
+   "anchor_text": "AWS_REVIEW_CREDENTIALS: ${{ secrets.AWS_REVIEW_CREDENTIALS }}"
+  },
+  {
+   "leg": "codex",
+   "path": "examples/provider-anthropic-bedrock.yml",
+   "line": 45,
+   "severity_claimed": "warning",
+   "title": "This example is meant to be copied into consumer repos, so leaving `aws-actions/configure-aws-credentials` at a mutable tag makes the sample",
+   "body": "This example is meant to be copied into consumer repos, so leaving `aws-actions/configure-aws-credentials` at a mutable tag makes the sample inherit a supply-chain risk. Pin it to a full commit SHA here, or the copy-paste guidance undercuts the repo's normal workflow hardening.\n\n<!-- ai-pr-reviewer-finding: fp=cc4b31d243eec695 sev=warning -->",
+   "category": "security",
+   "group": "mutable-action-pin",
+   "anchor_text": "uses: aws-actions/configure-aws-credentials@v4"
+  },
+  {
+   "leg": "cursor",
+   "path": "scripts/reviewer.py",
+   "line": 2802,
+   "severity_claimed": "critical",
+   "title": "Bedrock InvokeModel puts the model id in the URL path only \u2014 AWS's Anthropic Messages request schema has no `model` field, and Bedrock rejec",
+   "body": "Bedrock InvokeModel puts the model id in the URL path only \u2014 AWS's Anthropic Messages request schema has no `model` field, and Bedrock rejects extraneous keys (`ValidationException: \u2026 extraneous key [model] is not permitted`). Every live Bedrock review will fail while this stays in the body (and `tests/test_bedrock_provider.py` currently asserts the wrong shape).\n\nAfter setting `anthropic_version` on the Bedrock branch, drop `model` before `json.dumps`:\n\n```suggestion\n        if self.profile.kind == ENDPOINT_KIND_BEDROCK:\n            # Bedrock InvokeModel takes the Anthropic Messages body with",
+   "category": "correctness",
+   "group": "body-carries-model",
+   "anchor_text": "payload = {\"model\": self.model, \"max_tokens\": max_tokens,"
+  },
+  {
+   "leg": "cursor",
+   "path": "scripts/reviewer.py",
+   "line": 2873,
+   "severity_claimed": "critical",
+   "title": "When env/OIDC credentials win, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` are used for SigV4 but never pass through `register_secret()`",
+   "body": "When env/OIDC credentials win, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` are used for SigV4 but never pass through `register_secret()`. `main()` only registers `AIPRR_API_KEY` / `AIPRR_GH_TOKEN`, so the real signing secret is absent from scrubbing. Provider HTTP errors are embedded into tracking-comment failure text via `render_tracking_body_failed` \u2192 `scrub_secrets` \u2014 any echo of the session token or secret would reach a public PR body unsanitised.\n\nAfter `_resolve_aws_credentials(...)`, register each non-empty component (`access_key`, `secret_key`, `session_token`) before signing \u2014 sam",
+   "category": "security",
+   "group": "aws-creds-not-registered",
+   "anchor_text": "secret_key = os.environ.get(\"AWS_SECRET_ACCESS_KEY\", \"\")"
+  },
+  {
+   "leg": "cursor",
+   "path": "examples/provider-anthropic-bedrock.yml",
+   "line": 14,
+   "severity_claimed": "warning",
+   "title": "This comment says OIDC can leave `api-key` empty, but `action.yml` marks `api-key` as `required: true` and `main()` aborts when `AIPRR_API_K",
+   "body": "This comment says OIDC can leave `api-key` empty, but `action.yml` marks `api-key` as `required: true` and `main()` aborts when `AIPRR_API_KEY` is empty \u2014 so the documented \"recommended\" path cannot run as written.\n\nEither relax the empty-key check for `ENDPOINT_KIND_BEDROCK` when AWS env creds are complete (and make `api-key` optional for that case), or rewrite the example/docs to require a non-empty placeholder/`api-key` even when OIDC supplies the real credentials.\n\n<!-- ai-pr-reviewer-finding: fp=e1dc4250232a4ece sev=warning -->",
+   "category": "correctness",
+   "group": "oidc-api-key-required",
+   "anchor_text": "# With OIDC the api-key input can stay empty"
+  },
+  {
+   "leg": "cursor",
+   "path": "README.md",
+   "line": 146,
+   "severity_claimed": "warning",
+   "title": "The providers table says Bedrock defaults are `anthropic.claude-sonnet-5` for both `balanced` **and** `deep`, but `_BEDROCK_TIERS` / `docs/P",
+   "body": "The providers table says Bedrock defaults are `anthropic.claude-sonnet-5` for both `balanced` **and** `deep`, but `_BEDROCK_TIERS` / `docs/PROVIDERS.md` resolve `deep` \u2192 `anthropic.claude-opus-5`. Consumers reading only the README will mis-budget cost and model choice for `model: deep`.\n\nAlign the cell with the matrix: `anthropic.claude-sonnet-5` (`balanced`); `anthropic.claude-haiku-4-5` (`economy`); `anthropic.claude-opus-5` (`deep`).\n\n<!-- ai-pr-reviewer-finding: fp=63e35d44936c5ea0 sev=warning -->",
+   "category": "correctness",
+   "group": "tier-drift",
+   "anchor_text": "| Bedrock | `anthropic.claude-sonnet-5` | `anthropic.claude-sonnet-5` | `anthropic.claude-opus-5` |"
+  },
+  {
+   "leg": "grok",
+   "path": "scripts/reviewer.py",
+   "line": 2808,
+   "severity_claimed": "critical",
+   "title": "Bedrock InvokeModel body still includes `model` \u2014 AWS commonly rejects it.",
+   "body": "**Bedrock InvokeModel body still includes `model` \u2014 AWS commonly rejects it.**\n\nOn this branch you correctly put the model id in `/model/{id}/invoke` and inject `anthropic_version`, but `anthropic_body` is still built with `\"model\": self.model` and that key is left in place. Bedrock\u2019s Anthropic Messages schema does not list `model` (it lives only in the URL path); real calls frequently fail with `ValidationException: extraneous key [model] is not permitted`. The new wire test currently locks the wrong shape in (`tests/test_bedrock_provider.py` asserts `body[\"model\"]`).\n\nBefore `json.dumps`, dr",
+   "category": "correctness",
+   "group": "body-carries-model",
+   "anchor_text": "payload = {\"model\": self.model, \"max_tokens\": max_tokens,"
+  },
+  {
+   "leg": "grok",
+   "path": "scripts/reviewer.py",
+   "line": 2873,
+   "severity_claimed": "critical",
+   "title": "Resolved AWS credentials never go through `register_secret()`.",
+   "body": "**Resolved AWS credentials never go through `register_secret()`.**\n\n`main()` only registers `AIPRR_API_KEY` and the GitHub token. On the Bedrock path the real signing material is `access_key` / `secret_key` / optional `session_token` from env (OIDC) or from unpacking the packed `api-key`. None of those component values are registered.\n\nFailure mode: OIDC env secret differs from (or replaces) the packed input; an HTTP error body, tracking-comment error, or model-echoed value can reach a public PR comment without scrubbing. Repo rule: every new credential-bearing value must hit `register_secret(",
+   "category": "security",
+   "group": "aws-creds-not-registered",
+   "anchor_text": "secret_key = os.environ.get(\"AWS_SECRET_ACCESS_KEY\", \"\")"
+  },
+  {
+   "leg": "grok",
+   "path": "examples/provider-anthropic-bedrock.yml",
+   "line": 14,
+   "severity_claimed": "warning",
+   "title": "Documented OIDC path says `api-key` can stay empty, but the runtime aborts without it.",
+   "body": "**Documented OIDC path says `api-key` can stay empty, but the runtime aborts without it.**\n\n`main()` still requires a non-empty `AIPRR_API_KEY` before any provider work (`if not (api_key and gh_token and \u2026): return 1`). Credential resolution correctly prefers `AWS_*` env vars, but that code is never reached when the input is empty. A consumer who follows this comment (OIDC only, no packed secret) gets a configuration abort, not a signed Bedrock call.\n\nEither (a) teach the example to pass a placeholder / keep a dummy `api-key` when using OIDC, or (b) relax startup so Bedrock may omit `api-key` ",
+   "category": "correctness",
+   "group": "oidc-api-key-required",
+   "anchor_text": "# With OIDC the api-key input can stay empty"
+  },
+  {
+   "leg": "grok",
+   "path": "README.md",
+   "line": 146,
+   "severity_claimed": "warning",
+   "title": "`deep` tier mapping disagrees with the code and the cost matrix.",
+   "body": "**`deep` tier mapping disagrees with the code and the cost matrix.**\n\nThis row says `anthropic.claude-sonnet-5` for both `balanced` and `deep`. `MODEL_TIER_TABLE[(\"anthropic\",\"bedrock\")]` and `docs/PROVIDERS.md` resolve `deep` \u2192 `anthropic.claude-opus-5` (and the example comment agrees). Consumers reading only the README will pick the wrong model for a deep pass.\n\nAlign the cell with the matrix, e.g. `anthropic.claude-sonnet-5` (`balanced`); `anthropic.claude-haiku-4-5` (`economy`); `anthropic.claude-opus-5` (`deep`).\n\n<!-- ai-pr-reviewer-finding: fp=66af844a0a3862b5 sev=warning -->",
+   "category": "correctness",
+   "group": "tier-drift",
+   "anchor_text": "| Bedrock | `anthropic.claude-sonnet-5` | `anthropic.claude-sonnet-5` | `anthropic.claude-opus-5` |"
+  },
+  {
+   "leg": "grok",
+   "path": "examples/provider-anthropic-bedrock.yml",
+   "line": 45,
+   "severity_claimed": "warning",
+   "title": "Example teaches a mutable tag pin for a third-party action.",
+   "body": "**Example teaches a mutable tag pin for a third-party action.**\n\n`aws-actions/configure-aws-credentials@v4` is not `actions/*` / `github/*` / `DailybotHQ/*`. Tags move; consumers who uncomment this block inherit a supply-chain foot-gun. Prefer a full commit SHA with the tag as a trailing comment (Dependabot-style), e.g. `aws-actions/configure-aws-credentials@<sha>  # v4.x.y` \u2014 even inside the commented variant A block, since this file is copy-pasted.\n\n<!-- ai-pr-reviewer-finding: fp=8d7e827887f8906e sev=warning -->",
+   "category": "security",
+   "group": "mutable-action-pin",
+   "anchor_text": "uses: aws-actions/configure-aws-credentials@v4"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2808,
+   "severity_claimed": "critical",
+   "title": "The Bedrock body still carries the top-level `\"model\"` field. `InvokeModel` takes the model id as the **path** parameter (`/model/{modelId}/",
+   "body": "The Bedrock body still carries the top-level `\"model\"` field. `InvokeModel` takes the model id as the **path** parameter (`/model/{modelId}/invoke`) \u2014 the documented body schema (`anthropic_version`, `max_tokens`, `messages`, `system`, sampling params) has **no `model` key**, and Bedrock's Claude body validation is strict: unrecognized fields come back as `ValidationException: Extra inputs are not permitted`. Anthropic's own Bedrock client strips `model` from the body for exactly this reason. Since the PR itself notes there is no live AWS verification in CI, this would surface as every Bedrock",
+   "category": "correctness",
+   "group": "body-carries-model",
+   "anchor_text": "payload = {\"model\": self.model, \"max_tokens\": max_tokens,"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 617,
+   "severity_claimed": "critical",
+   "title": "Env-first resolution is unreachable on the documented OIDC lane: `main()` aborts whenever `AIPRR_API_KEY` is empty (`scripts/reviewer.py:103",
+   "body": "Env-first resolution is unreachable on the documented OIDC lane: `main()` aborts whenever `AIPRR_API_KEY` is empty (`scripts/reviewer.py:10349`, `if not (api_key and gh_token and \u2026)`), so a consumer who follows variant A of `examples/provider-anthropic-bedrock.yml` (\"`api-key` can stay empty\") gets `Missing required env (AIPRR_API_KEY, \u2026)` and the run ends before `_resolve_aws_credentials` is ever called. Five surfaces promise this works \u2014 README (provider row + FAQ), `docs/PROVIDERS.md`, `docs/SECURITY.md`, `skills/ai-diff-reviewer/setup/reference.md`, and the example's own comment.\n\nFix: mak",
+   "category": "correctness",
+   "group": "oidc-api-key-required",
+   "anchor_text": "if not api_key:"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 617,
+   "severity_claimed": "critical",
+   "title": "These resolved AWS credentials never pass through `register_secret()`, so the outbound scrub gate (`scrub_secrets`, docs/SECURITY.md \u00a7 \"Secr",
+   "body": "These resolved AWS credentials never pass through `register_secret()`, so the outbound scrub gate (`scrub_secrets`, docs/SECURITY.md \u00a7 \"Secrets\") doesn't know them: the env/OIDC path registers nothing, and the packed path registers only the whole `KEY:SECRET` blob via `main()` (`scripts/reviewer.py:10358`) \u2014 a leak of just the `SECRET_ACCESS_KEY` component would post unredacted. The AWS secret is a long-lived cloud credential (bigger blast radius than the LLM key), and the agent-runner lanes have a documented echo-into-findings surface that this gate exists for.\n\nFix \u2014 register each component ",
+   "category": "security",
+   "group": "aws-creds-not-registered",
+   "anchor_text": "if not api_key:"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2802,
+   "severity_claimed": "warning",
+   "title": "Bedrock is the only backend whose body omits `temperature`, so Bedrock reviews sample at the provider default (1.0) while every other in-pro",
+   "body": "Bedrock is the only backend whose body omits `temperature`, so Bedrock reviews sample at the provider default (1.0) while every other in-process review runs at `REVIEW_TEMPERATURE = 0.0` \u2014 non-deterministic output for the same diff, which the round-to-round IAR dedup and reproducible CI reviews rely on. The conservative rationale in the comment above (\"their tolerance for extra sampling fields is not documented\") doesn't apply here: `temperature` is a documented InvokeModel parameter, and this is a brand-new branch with no verified wire to preserve. `tests/test_bedrock_provider.py:73` pins the",
+   "category": "correctness",
+   "group": "bedrock-no-temperature",
+   "anchor_text": "payload = {\"model\": self.model, \"max_tokens\": max_tokens,"
+  },
+  {
+   "leg": "claude-code",
+   "path": "README.md",
+   "line": 146,
+   "severity_claimed": "warning",
+   "title": "Tier drift: `_BEDROCK_TIERS` maps `deep` \u2192 `anthropic.claude-opus-5` (and `docs/PROVIDERS.md`'s matrix row agrees), but this row tells consu",
+   "body": "Tier drift: `_BEDROCK_TIERS` maps `deep` \u2192 `anthropic.claude-opus-5` (and `docs/PROVIDERS.md`'s matrix row agrees), but this row tells consumers `anthropic.claude-sonnet-5` covers `balanced` **and** `deep`. A consumer picking `deep` for a hard review gets Sonnet and pays for a tier they didn't get.\n\n```suggestion\n| **AWS Bedrock (Claude)** | `anthropic` *(in-process \u2014 SigV4-signed InvokeModel)* | `https://bedrock-runtime.{region}.amazonaws.com` | AWS credentials: env (OIDC) **or** packed `KEY:SECRET[:SESSION]` as `api-key` | `anthropic.claude-sonnet-5` (`balanced`); `anthropic.claude-haiku-4-5",
+   "category": "correctness",
+   "group": "tier-drift",
+   "anchor_text": "| Bedrock | `anthropic.claude-sonnet-5` | `anthropic.claude-sonnet-5` | `anthropic.claude-opus-5` |"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2112,
+   "severity_claimed": "warning",
+   "title": "`bedrock` is now a registered kind for **every** runner, but only `AnthropicProvider` honours it: `build_provider(\"claude-code\", \u2026)` on a `b",
+   "body": "`bedrock` is now a registered kind for **every** runner, but only `AnthropicProvider` honours it: `build_provider(\"claude-code\", \u2026)` on a `bedrock-runtime` host constructs fine (the matrix test proves constructability for all six runners) and maps the packed `KEY:SECRET` AWS credential into `ANTHROPIC_AUTH_TOKEN` for the vendor CLI env (`scripts/reviewer.py:3653`); `provider: openai` would POST chat-completions to the Bedrock host. The docs promise \"`provider: anthropic` only\", and the codebase already has the fail-fast pattern for unsupported runner\u00d7backend pairs (`_assert_codex_backend_suppo",
+   "category": "correctness",
+   "group": "bedrock-kind-only-anthropic",
+   "anchor_text": "if kind == ENDPOINT_KIND_BEDROCK:"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2833,
+   "severity_claimed": "info",
+   "title": "The canonical `host` comes from `self.profile.host` \u2014 `urlsplit().hostname`, which is lowercased and portless \u2014 while the wire `Host` header",
+   "body": "The canonical `host` comes from `self.profile.host` \u2014 `urlsplit().hostname`, which is lowercased and portless \u2014 while the wire `Host` header comes from `base_url`'s netloc as typed (`validate_api_base` returns `scheme://{netloc}{path}` verbatim). `api-base: https://Bedrock-Runtime.us-east-1.amazonaws.com` or an explicit `\u2026:443` therefore signs a host that differs byte-for-byte from the transmitted one \u2192 `InvalidSignatureException` that looks like a bad credential. Derive the signed host from `urllib.parse.urlsplit(url).netloc` (or normalise the host for this kind) so the two are structurally e",
+   "category": "style",
+   "group": "host-lowercased",
+   "anchor_text": "host = self.profile.host"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2894,
+   "severity_claimed": "info",
+   "title": "One signature is computed here and then reused by `_post_json_with_retries` across up to 4 attempts; with `API_REQUEST_TIMEOUT = 600` and de",
+   "body": "One signature is computed here and then reused by `_post_json_with_retries` across up to 4 attempts; with `API_REQUEST_TIMEOUT = 600` and delays `(2, 5, 15)`, the last attempt can start ~25\u201340 minutes after `x-amz-date` \u2014 past SigV4's ~15-minute request validity \u2014 so a throttled/5xx run would end on `InvalidSignatureException` instead of the real error. Cheap hardening: pass a header-builder callable and re-sign inside the retry loop.\n\n<!-- ai-pr-reviewer-finding: fp=593d740a3aab91bf sev=info -->",
+   "category": "performance",
+   "group": "signature-reuse",
+   "anchor_text": "signature = _sigv4_sign(request)"
+  },
+  {
+   "leg": "claude-code",
+   "path": "scripts/reviewer.py",
+   "line": 2147,
+   "severity_claimed": "info",
+   "title": "AWS's China partition spells the runtime host `bedrock-runtime.cn-north-1.amazonaws.com.cn` \u2014 five labels, so `_is_bedrock_runtime_host` ret",
+   "body": "AWS's China partition spells the runtime host `bedrock-runtime.cn-north-1.amazonaws.com.cn` \u2014 five labels, so `_is_bedrock_runtime_host` returns False and the host lands in `custom`: the run takes the non-Bedrock branch, sending the packed AWS secret as `x-api-key` (+ `anthropic-version`) to the Bedrock host, and fails with a confusing 4xx instead of SigV4. Either extend the pattern to the `.cn` suffix or fail fast with a \"partition not supported\" message.\n\n<!-- ai-pr-reviewer-finding: fp=72f9cb646c50b2c7 sev=info -->",
+   "category": "correctness",
+   "group": "china-partition-host",
+   "anchor_text": "return host.endswith(\".amazonaws.com\")"
+  }
+ ],
+ "groups": {
+  "region-label-unchecked": 1,
+  "secrets-always-passed": 1,
+  "mutable-action-pin": 2,
+  "body-carries-model": 3,
+  "aws-creds-not-registered": 3,
+  "oidc-api-key-required": 3,
+  "tier-drift": 3,
+  "bedrock-no-temperature": 1,
+  "bedrock-kind-only-anthropic": 1,
+  "host-lowercased": 1,
+  "signature-reuse": 1,
+  "china-partition-host": 1
+ }
+}

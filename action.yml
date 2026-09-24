@@ -159,6 +159,14 @@ inputs:
     description: 'v3 (RFC-04): comma- or newline-separated leg ids the aggregate job waits for (`<provider>|<endpoint_kind>|<model>`, as recorded in each leg''s run record). On an `emit` leg, setting it suppresses the D-19 note. Empty by default.'
     required: false
     default: ''
+  min-agreement:
+    description: 'v3 aggregate only (RFC-04 § Gating policy): a `warning` counts toward `block-on-warning` / `block-on-any` only when at least this many legs reported it; criticals ignore it (a verified critical from one leg still gates). `1` keeps single-leg semantics; `2` is the noise-reduction setting for matrices of three or more legs.'
+    required: false
+    default: '1'
+  require-all-legs:
+    description: 'v3 aggregate only (RFC-04): when `true`, a missing, failed or timed-out leg fails the check. Default `false` publishes with the delivered legs and names the missing one in the review and the job summary.'
+    required: false
+    default: 'false'
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -427,6 +435,8 @@ runs:
         AIPRR_STRICT_UNVERIFIED_CRITICALS: ${{ inputs.strict-unverified-criticals }}
         AIPRR_MODE: ${{ inputs.mode }}
         AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
+        AIPRR_MIN_AGREEMENT: ${{ inputs.min-agreement }}
+        AIPRR_REQUIRE_ALL_LEGS: ${{ inputs.require-all-legs }}
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
         # `claude-code`, `cursor`, `codex`, and `grok` provider branches.

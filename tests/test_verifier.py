@@ -168,9 +168,9 @@ class AliasResolution(unittest.TestCase):
             prov, _, _, _, reason = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="", requested_model="", review_model="m")
         self.assertIsNone(prov); self.assertIn("ANTHROPIC_BASE_URL", reason)
         with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": reviewer.ZAI_ANTHROPIC_COMPAT_API_BASE}):
-            # an explicit api-base input still wins over the hook
-            _, _, _, kind, _ = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="", requested_model="", review_model="m")
-            self.assertEqual(kind, "zai")
+            # an explicit api-base input wins over the hook: the input names the vendor default host, the env points at Z.ai
+            _, _, _, kind, _ = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="https://api.anthropic.com", requested_model="", review_model="m")
+            self.assertEqual(kind, "anthropic")
         prov, model, alias, kind, reason = reviewer.build_verifier_provider(provider_id="openai", api_key="k", api_base="https://example.invalid/v1", requested_model="", review_model="my-deployment")
         self.assertIsInstance(prov, reviewer.OpenAIProvider); self.assertEqual((model, alias), ("my-deployment", ""))
 

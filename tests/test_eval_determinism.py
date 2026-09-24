@@ -86,6 +86,10 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(any(b.startswith("incomplete candidate lane") and "2 of 6" in b for b in v["blocking"]), v["blocking"])
         full = det.verdict(base, _campaign("cand", 1.0, 4, cases=6), candidate_runtime_sha="x", prompt_sha256="0" * 64, baseline_ref="b")
         self.assertFalse(any(b.startswith("incomplete candidate lane") for b in full["blocking"]))
+        # a baseline lane the candidate never ran at all (PR #61 self-review, round 3): still incomplete
+        other_lane = [dict(r, provider="claude-code", endpoint_kind="zai", model="glm-5.3-flash", run_id=r["run_id"] + "-glm") for r in base]
+        v2 = det.verdict(base + other_lane, _campaign("cand", 1.0, 4, cases=6), candidate_runtime_sha="x", prompt_sha256="0" * 64, baseline_ref="b")
+        self.assertTrue(any(b.startswith("incomplete candidate lane claude-code|zai|glm-5.3-flash") and "6 of 6" in b for b in v2["blocking"]), v2["blocking"])
 
     def test_first_party_unknown_usage_blocks(self) -> None:
         cand = _campaign("cand", 1.0, 3)

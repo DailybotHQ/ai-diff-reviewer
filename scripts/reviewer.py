@@ -79,6 +79,8 @@ import hashlib
 import functools
 import hmac
 import json
+import copy
+import difflib
 import os
 import re
 import shlex
@@ -877,6 +879,7 @@ MAX_EVIDENCE_TOOL_TRACE_IDS: int = 50
 FINDING_CATEGORY_DEFAULT: str = "other"
 VERIFICATION_STATUSES: tuple[str, ...] = ("unverified", "verified", "refuted", "downgraded", "skipped")
 VERIFICATION_UNVERIFIED: str = "unverified"
+VERIFICATION_VERIFIED: str = "verified"
 LIFECYCLE_STATES: tuple[str, ...] = ("new", "open", "retired", "regressed")
 RETIRED_REASONS: tuple[str, ...] = ("verified_fixed", "maintainer_resolved", "file_removed")
 ORIGIN_UNKNOWN_RUN_ID: str = "unknown"
@@ -896,6 +899,16 @@ MODE_EMIT: str = "emit"
 MODE_AGGREGATE: str = "aggregate"
 VALID_MODES: tuple[str, ...] = (MODE_REVIEW, MODE_EMIT, MODE_AGGREGATE)
 EMIT_NOTE_MARKER: str = "<!-- ai-pr-reviewer-emit-note -->"   # the one note an emit leg may post (D-19)
+# RFC-04 § Deduplication / § Gating policy (D-17): the aggregator's key and knobs.
+DEDUP_LINE_WINDOW: int = 3                 # |line_a − line_b| ≤ 3, or overlapping start_line..line ranges
+DEDUP_TITLE_RATIO: float = 0.6             # difflib ratio on titles — tie-break when the anchors differ
+DEDUP_JACCARD: float = 0.4                 # token Jaccard on title + first 200 body chars — tie-break
+DEDUP_BODY_PREFIX_CHARS: int = 200
+DEDUP_DISTINCT_JACCARD: float = 0.15       # same anchor but token overlap below this → two findings (calibrated: 0.07 distinct vs ≥ 0.24 same)
+MIN_AGREEMENT_ENV: str = "AIPRR_MIN_AGREEMENT"          # aggregate only; default 1 = single-leg semantics
+REQUIRE_ALL_LEGS_ENV: str = "AIPRR_REQUIRE_ALL_LEGS"    # aggregate only; default false
+MAX_AGGREGATE_LEGS: int = 16
+MAX_AGGREGATE_FINDINGS: int = 2_000
 VERIFIER_MODE_ON: str = "on"
 VERIFIER_MODE_OFF: str = "off"
 VERIFIER_MAX_TURNS_PER_FINDING: int = 4
@@ -6291,6 +6304,8 @@ class ReviewResult:
     # Findings the verifier refuted (RFC-03): never posted inline, listed in
     # the structured output so nothing is dropped silently.
     refuted: list[Finding] = field(default_factory=list)
+    # RFC-04: the merged prior ledger of an aggregated review (raw finding-v3 dicts).
+    aggregate_prior_findings: list[dict[str, Any]] = field(default_factory=list)
     # Constructor-only compatibility flag (`ReviewResult(incomplete=True)`):
     # folded into `status` by `__post_init__`; reads go through the derived
     # property below, so `status` stays the single source of truth.
@@ -13101,6 +13116,381 @@ def post_emit_note(*, token: str, repo: str, pr_number: int, record: RunRecord) 
     except Exception as exc:  # noqa: BLE001 — best-effort GH API call; the artifact is the deliverable
         log(f"mode=emit: could not post the note (non-fatal): {exc}")
         return 0
+
+
+# ---------------------------------------------------------------------------
+# RFC-04 aggregator (Task 22): consolidate the emitted leg documents.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LegDocument:
+    """One leg's `review-output/3.0` document, parsed for aggregation."""
+
+    leg_id: str
+    provider: str
+    endpoint_kind: str
+    model: str
+    head_sha: str
+    recorded_at: str
+    status: str
+    run_id: str
+    findings: list[Finding] = field(default_factory=list)
+    refuted: list[dict[str, Any]] = field(default_factory=list)
+    prior_findings: list[dict[str, Any]] = field(default_factory=list)
+    narrative: str = ""
+    cost_usd: float | None = None
+    turns: int = 0
+    usage_known: bool = False
+    source: str = ""
+
+    @property
+    def delivered(self) -> bool:
+        """Complete artifact: counts in `legs_total` (RFC-04 § Agreement)."""
+        return self.status == RUN_STATUS_COMPLETED
+
+    @property
+    def contributes(self) -> bool:
+        """Findings are merged from complete and partial legs alike; failed / skipped legs carry none."""
+        return self.status in (RUN_STATUS_COMPLETED, RUN_STATUS_INCOMPLETE, RUN_STATUS_TIMEOUT)
+
+
+@dataclass
+class AggregateReport:
+    """What the aggregator did — the job summary and the `legs` block of the document."""
+
+    head_sha: str = ""
+    legs_expected: list[str] = field(default_factory=list)
+    legs_delivered: list[str] = field(default_factory=list)
+    legs_partial: list[str] = field(default_factory=list)
+    legs_missing: list[str] = field(default_factory=list)
+    legs_invalid: list[str] = field(default_factory=list)
+    superseded: list[str] = field(default_factory=list)
+    ignored_other_head: int = 0
+    findings_in: int = 0
+    duplicates_removed: int = 0
+    agreement_histogram: dict[str, int] = field(default_factory=dict)
+    per_leg: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def legs_total(self) -> int:
+        return len(self.legs_delivered)
+
+    def legs_block(self) -> list[dict[str, Any]]:
+        """The document's `legs` array: one entry per expected leg."""
+        out: list[dict[str, Any]] = []
+        for leg in self.legs_expected:
+            row: dict[str, Any] = next((r for r in self.per_leg if r["leg_id"] == leg), {})
+            delivered: bool = leg in self.legs_delivered
+            out.append({"leg_id": leg, "delivered": delivered,
+                        "status": str(row.get("status") or ("missing" if not row else "failed")),
+                        "run_id": row.get("run_id"), "findings": int(row.get("findings") or 0),
+                        "cost_usd": row.get("cost_usd"), "turns": int(row.get("turns") or 0)})
+        return out
+
+
+def finding_from_v3_dict(d: dict[str, Any]) -> Finding:
+    """Inverse of `Finding.to_v3_dict` for documents read back by the aggregator."""
+    ev: dict[str, Any] = d.get("evidence") if isinstance(d.get("evidence"), dict) else {}
+    ver: dict[str, Any] = d.get("verification") if isinstance(d.get("verification"), dict) else {}
+    severity: str = str(d.get("severity") or SEVERITY_INFO)
+    claimed: str = str(d.get("severity_claimed") or severity)
+    fid: str = str(d.get("id") or "")
+    finding: Finding = Finding(
+        path=str(d.get("path") or ""),
+        line=max(1, int(d.get("line") or 1)),
+        body=str(d.get("body") or ""),
+        severity=severity if severity in ALLOWED_SEVERITIES else SEVERITY_INFO,
+        start_line=int(d["start_line"]) if isinstance(d.get("start_line"), int) else None,
+        side=str(d.get("side") or "RIGHT"),
+        fingerprint=fid[len(FINDING_ID_PREFIX):] if fid.startswith(FINDING_ID_PREFIX) and len(fid) > len(FINDING_ID_PREFIX) else None,
+        severity_claimed=claimed if claimed in ALLOWED_SEVERITIES else SEVERITY_INFO,
+        category=str(d.get("category") or FINDING_CATEGORY_DEFAULT),
+        title=str(d.get("title") or ""),
+        suggestion=str(d["suggestion"]) if d.get("suggestion") else None,
+        evidence=FindingEvidence(
+            anchor_sha256=str(ev.get("anchor_sha256") or ""), excerpt=str(ev.get("excerpt") or ""),
+            files_read=[str(x) for x in (ev.get("files_read") or [])], tool_trace_ids=[str(x) for x in (ev.get("tool_trace_ids") or [])],
+            checks=[dict(c) for c in (ev.get("checks") or []) if isinstance(c, dict)],
+            documented_rule=dict(ev["documented_rule"]) if isinstance(ev.get("documented_rule"), dict) else None,
+        ),
+        verification=FindingVerification(
+            status=str(ver.get("status") or VERIFICATION_UNVERIFIED), reason=str(ver.get("reason") or ""),
+            verifier_model_alias=ver.get("verifier_model_alias"), verifier_endpoint_kind=ver.get("verifier_endpoint_kind"),
+            verified_at=ver.get("verified_at"), checks=[dict(c) for c in (ver.get("checks") or []) if isinstance(c, dict)],
+        ),
+        agreement=dict(d["agreement"]) if isinstance(d.get("agreement"), dict) else None,
+        origin=dict(d["origin"]) if isinstance(d.get("origin"), dict) else None,
+    )
+    if isinstance(d.get("lifecycle"), dict):
+        finding.lifecycle.update({k: v for k, v in d["lifecycle"].items() if k in finding.lifecycle})
+    return finding
+
+
+def leg_id_of(provider: str, endpoint_kind: str, model: str) -> str:
+    return f"{provider}|{endpoint_kind}|{model}"
+
+
+def parse_leg_document(doc: dict[str, Any], *, source: str = "") -> LegDocument:
+    """Validate the keys the aggregator relies on and parse one leg document.
+    Raises `ValueError` on a document that is not a `review-output/3.0`."""
+    if not isinstance(doc, dict) or doc.get("schema_version") != REVIEW_OUTPUT_SCHEMA_VERSION:
+        raise ValueError(f"{source or 'document'}: not a {REVIEW_OUTPUT_SCHEMA_VERSION} document")
+    run: Any = doc.get("run")
+    if not isinstance(run, dict) or not isinstance(doc.get("findings"), list):
+        raise ValueError(f"{source or 'document'}: missing `run` or `findings`")
+    context: dict[str, Any] = run.get("context") if isinstance(run.get("context"), dict) else {}
+    budget: dict[str, Any] = run.get("budget") if isinstance(run.get("budget"), dict) else {}
+    findings: list[Finding] = [finding_from_v3_dict(f) for f in doc["findings"] if isinstance(f, dict)][:MAX_AGGREGATE_FINDINGS]
+    summary: dict[str, Any] = doc.get("summary") if isinstance(doc.get("summary"), dict) else {}
+    cost: Any = doc.get("cost_usd", run.get("cost_usd"))
+    return LegDocument(
+        leg_id=leg_id_of(str(run.get("provider") or ""), str(run.get("endpoint_kind") or ""), str(run.get("model") or "")),
+        provider=str(run.get("provider") or ""), endpoint_kind=str(run.get("endpoint_kind") or ""), model=str(run.get("model") or ""),
+        head_sha=str(context.get("head_sha") or run.get("head_sha") or ""), recorded_at=str(run.get("recorded_at") or ""),
+        status=str(run.get("status") or RUN_STATUS_FAILED), run_id=str(run.get("run_id") or ""),
+        findings=findings, refuted=[dict(r) for r in (doc.get("refuted") or []) if isinstance(r, dict)],
+        prior_findings=[dict(pf) for pf in (doc.get("prior_findings") or []) if isinstance(pf, dict)],
+        narrative=str(summary.get("narrative") or ""), cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
+        turns=int(budget.get("turns_used") or 0), usage_known=bool(doc.get("usage_known", run.get("usage_known", False))), source=source,
+    )
+
+
+def _dedup_tokens(finding: Finding) -> set[str]:
+    text: str = f"{finding.effective_title()} {(finding.body or '')[:DEDUP_BODY_PREFIX_CHARS]}".lower()
+    return {t for t in re.findall(r"[a-z0-9_]+", text) if len(t) > 2}
+
+
+def _text_similarity(a: Finding, b: Finding) -> tuple[float, float]:
+    """(title ratio, token Jaccard) — the RFC-04 step-4 measures."""
+    ratio: float = difflib.SequenceMatcher(None, a.effective_title().lower(), b.effective_title().lower()).ratio()
+    ta, tb = _dedup_tokens(a), _dedup_tokens(b)
+    jaccard: float = len(ta & tb) / len(ta | tb) if (ta or tb) else 0.0
+    return ratio, jaccard
+
+
+def _anchor_line(finding: Finding) -> str:
+    lines: list[str] = [l for l in (finding.evidence.excerpt or "").splitlines()]
+    if not lines:
+        return ""
+    return lines[len(lines) // 2].strip()
+
+
+def _anchor_contained(a: Finding, b: Finding) -> bool:
+    """RFC-04 step 3, containment clause: b's anchor line appears in a's excerpt."""
+    needle: str = _anchor_line(b)
+    return len(needle) >= 8 and needle in (a.evidence.excerpt or "")
+
+
+def same_finding(a: Finding, b: Finding) -> bool:
+    """RFC-04 § Deduplication steps 1–4: anchors decide, text tie-breaks."""
+    if a.path != b.path:
+        return False
+    ratio, jaccard = _text_similarity(a, b)
+    text_similar: bool = ratio >= DEDUP_TITLE_RATIO or jaccard >= DEDUP_JACCARD
+    a_lo, b_lo = (a.start_line or a.line), (b.start_line or b.line)
+    in_window: bool = abs(a.line - b.line) <= DEDUP_LINE_WINDOW or (a_lo <= b.line and b_lo <= a.line)
+    if not in_window:
+        return False
+    anchors_match: bool = bool(a.evidence.anchor_sha256) and a.evidence.anchor_sha256 == b.evidence.anchor_sha256
+    anchors_match = anchors_match or _anchor_contained(a, b) or _anchor_contained(b, a)
+    if anchors_match:
+        # Two clearly different claims on one line stay two findings. Calibrated
+        # on the PR #58 six-leg round (`tests/fixtures/ensemble/`): "body carries
+        # `model`" vs "body omits `temperature`" at one anchor have token Jaccard
+        # 0.07, while every same-defect pair at one anchor sits at 0.24–0.38; the
+        # title ratio is noise on short titles (0.11 for a true pair) and the
+        # model-chosen category is not reliable enough to key on, so neither is used.
+        if jaccard < DEDUP_DISTINCT_JACCARD:
+            return False
+        return True
+    return text_similar
+
+
+def _richness(finding: Finding) -> tuple[int, int]:
+    supports: int = sum(1 for c in finding.evidence.checks if str(c.get("result") or "") == "supports")
+    return supports, len(finding.body or "")
+
+
+def merge_findings(group: list[tuple[str, Finding]], *, legs_total: int) -> Finding:
+    """One consolidated finding: the richest report's body, the maximum
+    severity claim, the strongest verification, and the agreement record."""
+    ranked: list[tuple[str, Finding]] = sorted(group, key=lambda item: _richness(item[1]), reverse=True)
+    base_leg, base = ranked[0]
+    merged: Finding = copy.deepcopy(base)
+    claims: list[str] = [f.severity_claimed or f.severity for _, f in group]
+    merged.severity_claimed = overall_severity(claims)
+    merged.severity = merged.severity_claimed
+    verified: list[tuple[str, Finding]] = [(leg, f) for leg, f in group if f.verification.status == VERIFICATION_VERIFIED]
+    if verified and merged.verification.status != VERIFICATION_VERIFIED:
+        merged.verification = copy.deepcopy(verified[0][1].verification)
+    reporters: list[str] = []
+    for leg, _ in group:
+        if leg not in reporters:
+            reporters.append(leg)
+    # finding-v3 `agreement` (schema: legs_total ≥ 1, reported_by = leg ids); the
+    # per-report detail (claim, verification, run id) travels in `extra` for the
+    # structured output's legs block and the tests, never in the posted comment.
+    merged.agreement = {"legs_total": max(1, legs_total), "legs_reporting": len(reporters), "reported_by": list(reporters)}
+    merged.extra = dict(merged.extra or {})
+    merged.extra["reports"] = [{"leg_id": leg, "severity_claimed": f.severity_claimed or f.severity, "verification": f.verification.status,
+                                "run_id": (f.origin or {}).get("run_id")} for leg, f in group]
+    others: list[str] = [leg for leg in reporters if leg != base_leg]
+    if others:
+        merged.body = (merged.body or "").rstrip() + "\n\n_Also reported by " + ", ".join(f"`{leg}`" for leg in others) + "._"
+    merged.fingerprint = None  # recomputed on the consolidated finding (IAR: one set per PR)
+    return merged
+
+
+def _cluster(items: list[tuple[str, Finding]]) -> list[list[tuple[str, Finding]]]:
+    """Union-find over `same_finding` (symmetric, O(n²) on a bounded n)."""
+    parent: list[int] = list(range(len(items)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i][0] == items[j][0]:
+                continue  # a leg never duplicates itself: two reports from one leg at one anchor are two findings
+            if items[i][1].path == items[j][1].path and same_finding(items[i][1], items[j][1]):
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[rj] = ri
+    groups: dict[int, list[tuple[str, Finding]]] = {}
+    for i, item in enumerate(items):
+        groups.setdefault(find(i), []).append(item)
+    return list(groups.values())
+
+
+def aggregate_documents(
+    docs: list[LegDocument],
+    *,
+    head_sha: str,
+    expected_legs: tuple[str, ...] = (),
+) -> tuple["ReviewResult", AggregateReport]:
+    """RFC-04: keep this head's documents, the newest per leg, merge the
+    findings of every contributing leg into one consolidated set with
+    agreement, merge the refuted lists and the prior ledger, and report
+    what was expected, delivered, partial and missing."""
+    report: AggregateReport = AggregateReport(head_sha=head_sha)
+    latest: dict[str, LegDocument] = {}
+    for doc in docs:
+        if head_sha and doc.head_sha and doc.head_sha != head_sha:
+            report.ignored_other_head += 1
+            continue
+        current: LegDocument | None = latest.get(doc.leg_id)
+        if current is None or doc.recorded_at > current.recorded_at:
+            if current is not None:
+                report.superseded.append(current.source or current.run_id)
+            latest[doc.leg_id] = doc
+        else:
+            report.superseded.append(doc.source or doc.run_id)
+    if len(latest) > MAX_AGGREGATE_LEGS:
+        raise ValueError(f"{len(latest)} legs exceed MAX_AGGREGATE_LEGS={MAX_AGGREGATE_LEGS}")
+    legs: list[str] = list(expected_legs) or sorted(latest)
+    for leg in sorted(latest):
+        if leg not in legs:
+            legs.append(leg)  # an unexpected leg still counts; it is reported as such
+    report.legs_expected = legs
+    for leg in legs:
+        doc = latest.get(leg)
+        if doc is None:
+            report.legs_missing.append(leg)
+            continue
+        report.per_leg.append({"leg_id": leg, "status": doc.status, "run_id": doc.run_id, "findings": len(doc.findings),
+                               "cost_usd": doc.cost_usd, "turns": doc.turns, "source": doc.source, "expected": leg in expected_legs or not expected_legs})
+        if doc.delivered:
+            report.legs_delivered.append(leg)
+        elif doc.contributes:
+            report.legs_partial.append(leg)
+        else:
+            report.legs_missing.append(leg)
+    items: list[tuple[str, Finding]] = [(leg, f) for leg, doc in latest.items() if doc.contributes for f in doc.findings]
+    report.findings_in = len(items)
+    legs_total: int = report.legs_total or len({leg for leg, _ in items})
+    consolidated: list[Finding] = [merge_findings(group, legs_total=legs_total) for group in _cluster(items)]
+    consolidated.sort(key=lambda f: (-SEVERITY_RANK.get(f.severity, 0), f.path, f.line))
+    report.duplicates_removed = len(items) - len(consolidated)
+    for f in consolidated:
+        n: str = str((f.agreement or {}).get("legs_reporting", 1))
+        report.agreement_histogram[n] = report.agreement_histogram.get(n, 0) + 1
+    refuted: list[Finding] = []
+    seen_refuted: set[tuple[str, int, str]] = set()
+    for leg, doc in latest.items():
+        for r in doc.refuted:
+            key: tuple[str, int, str] = (str(r.get("path") or ""), int(r.get("line") or 0), str(r.get("title") or "")[:80])
+            if key in seen_refuted:
+                continue
+            seen_refuted.add(key)
+            rf: Finding = Finding(path=key[0], line=max(1, key[1]), body=str(r.get("title") or "(refuted)"), severity=SEVERITY_WARNING,
+                                  severity_claimed=str(r.get("severity_claimed") or SEVERITY_WARNING), title=str(r.get("title") or ""),
+                                  verification=FindingVerification(status="refuted", reason=str(r.get("reason") or "")), origin=r.get("origin") if isinstance(r.get("origin"), dict) else None)
+            rf.agreement = {"legs_total": max(1, legs_total), "legs_reporting": 1, "reported_by": [leg]}
+            refuted.append(rf)
+    prior: dict[str, dict[str, Any]] = {}
+    for doc in latest.values():
+        for pf in doc.prior_findings:
+            fp: str = str(pf.get("fingerprint") or pf.get("id") or "")
+            if fp and fp not in prior:
+                prior[fp] = pf
+    narrative: str = max((doc.narrative for doc in latest.values() if doc.contributes), key=len, default="")
+    result: ReviewResult = ReviewResult(summary=narrative, findings=consolidated, overall_severity=overall_severity([f.severity for f in consolidated]))
+    result.refuted = refuted
+    result.status = RUN_STATUS_COMPLETED if report.legs_delivered else RUN_STATUS_INCOMPLETE
+    if not report.legs_delivered:
+        result.status_note = "no review leg delivered a complete document"
+    result.aggregate_prior_findings = list(prior.values())
+    return result, report
+
+
+@dataclass
+class AggregateGateDecision:
+    severity: str
+    forced_block_reason: str = ""
+    warnings_below_agreement: int = 0
+
+
+def apply_aggregate_gate_knobs(result: "ReviewResult", report: AggregateReport, *, min_agreement: int = 1, require_all_legs: bool = False) -> AggregateGateDecision:
+    """RFC-04 § Gating policy: the severity the gate sees. A warning counts
+    only when `legs_reporting ≥ min_agreement`; criticals ignore the knob.
+    `require_all_legs` turns a missing or partial leg into a forced block."""
+    counted: list[str] = []
+    below: int = 0
+    for f in result.findings:
+        reporting: int = int((f.agreement or {}).get("legs_reporting", 1))
+        if f.severity == SEVERITY_CRITICAL or reporting >= max(1, min_agreement):
+            counted.append(f.severity)
+        else:
+            below += 1
+    severity: str = overall_severity(counted)
+    reason: str = ""
+    if require_all_legs and (report.legs_missing or report.legs_partial):
+        names: list[str] = report.legs_missing + report.legs_partial
+        reason = f"require-all-legs: {len(names)} leg(s) not delivered ({', '.join(names[:4])})"
+    return AggregateGateDecision(severity=severity, forced_block_reason=reason, warnings_below_agreement=below)
+
+
+def render_aggregate_legs_table(report: AggregateReport) -> str:
+    """Markdown for the review body / job summary: legs expected vs delivered."""
+    lines: list[str] = [f"Legs: {len(report.legs_delivered)} delivered / {len(report.legs_expected)} expected"
+                        + (f" · partial: {', '.join(report.legs_partial)}" if report.legs_partial else "")
+                        + (f" · **missing: {', '.join(report.legs_missing)}**" if report.legs_missing else "")
+                        + f" · findings in {report.findings_in} → {report.findings_in - report.duplicates_removed} ({report.duplicates_removed} duplicate(s) removed)", ""]
+    lines += ["| Leg | Status | Findings | Turns | Cost |", "|---|---|---|---|---|"]
+    for row in report.per_leg:
+        cost: str = f"${row['cost_usd']:.3f}" if isinstance(row.get("cost_usd"), (int, float)) else "n/a"
+        lines.append(f"| `{row['leg_id']}` | {row['status']} | {row['findings']} | {row['turns']} | {cost} |")
+    for leg in report.legs_missing:
+        if not any(r["leg_id"] == leg for r in report.per_leg):
+            lines.append(f"| `{leg}` | missing | — | — | — |")
+    if report.agreement_histogram:
+        hist: str = ", ".join(f"{k} leg(s): {v}" for k, v in sorted(report.agreement_histogram.items(), key=lambda kv: int(kv[0])))
+        lines += ["", f"Agreement: {hist}"]
+    return "\n".join(lines)
 
 
 def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = None) -> int:

@@ -246,8 +246,8 @@ release-gate: eval-verdict-blocking — <file>: <blocking findings>
 A fourth line, `release-gate: eval-gate-error — <exception>`, means the gate
 **itself** could not run (missing `scripts/reviewer.py` or `prompts/default.md`
 at the candidate, an unreadable verdict file, a bug in the gate). The step
-then fails with `::error::` and `blocked=error` — an infrastructure fault is
-never reported as "no verdict". Fix the cause and re-run the workflow.
+then fails with `::error::`, `blocked=true` and `reason=eval-gate-error` — an
+infrastructure fault is never reported as "no verdict". Fix the cause and re-run the workflow.
 
 and every later step is skipped (`steps.version.outputs.skip` is empty, so
 Step 2.5 onward never run). Nothing was tagged or pushed — this is a clean

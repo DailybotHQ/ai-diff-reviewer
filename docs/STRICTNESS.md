@@ -86,6 +86,17 @@ The strictness gate reads the **published** severity, so `block-on-critical` blo
 
 Verifier lanes: in-process runners verify on their own backend with the `economy` tier alias (`balanced` where no cheaper tier reviews); CLI lanes verify runtime-side on the in-process runner of the same backend with the same credential — `grok` → xAI's OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible base (Z.ai or default), `codex` → the configured OpenAI base. Inputs: `verifier` (`on` / `off`), `verifier-model` (alias or id), `strict-unverified-criticals` (transition knob: gate on the claim as in v2; removed in v3.1.0).
 
+
+## Aggregated reviews (v3, `mode: aggregate`)
+
+When several legs emit and one job aggregates ([RFC-04](rfc/v3/04-ensemble-consolidation.md)), the strictness modes keep their meaning over the **consolidated, verified** set:
+
+- Duplicates across legs are merged by anchor (same path, lines within ±3 or overlapping ranges, same anchor content) with text as a tie-break; each consolidated finding carries `agreement = {legs_total, legs_reporting, reported_by}`. Calibrated on the six-leg PR #58 round: two different claims at one anchor (token overlap 0.07) stay apart, same-defect pairs (overlap ≥ 0.24) merge, and a leg never duplicates itself.
+- **Severity** is the maximum claim across reporters, then the verifier and the severity policy apply as on a single leg: a `critical` publishes only when verified, however many legs claimed it — agreement is not evidence.
+- `min-agreement` (default `1`): a `warning` counts toward `block-on-warning` / `block-on-any` only when `legs_reporting ≥ min-agreement`; criticals ignore it.
+- `require-all-legs` (default `false`): `true` fails the check when a leg is missing or did not complete; `false` publishes with the delivered legs (`legs_total` counts complete legs; partial legs still contribute their findings and are named).
+- The check line names the knob when it decided the outcome, and the job summary lists legs expected / delivered / partial / missing, findings in → out, and the agreement histogram.
+
 ## Choosing your mode
 
 A short decision tree:
