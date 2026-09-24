@@ -101,6 +101,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v7
@@ -126,8 +127,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "::group::npm install -g @anthropic-ai/claude-code"
-          npm install -g @anthropic-ai/claude-code
+          # Pinned: the campaign spends real credentials, so the CLI it runs must not move under a
+          # workflow that did not change (same version the action resolves when `claude-code-version` is set).
+          echo "::group::npm install -g @anthropic-ai/claude-code@2.1.281"
+          npm install -g @anthropic-ai/claude-code@2.1.281
           echo "::endgroup::"
           claude --version
 

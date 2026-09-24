@@ -252,7 +252,13 @@ skip, not a partial release.
 `candidate_content_sha256` equals SHA-256 of `scripts/reviewer.py` on the
 candidate commit and whose `prompt_sha256` equals SHA-256 of
 `prompts/default.md`. Docs-only commits after the measured commit still
-match; any runtime or prompt change needs a new verdict.
+match; any runtime or prompt change needs a new verdict. **Newest matching
+verdict only:** when several verdicts share the candidate's hashes (for
+example a trees-only campaign and a PR campaign measured on the same
+commit), the one with the latest `computed_at` decides — a later blocking
+verdict freezes the cut and a later non-blocking one unlocks it, regardless
+of which campaign was larger. Name the campaign in `--baseline-ref` and keep
+one verdict per release candidate to avoid surprises.
 
 **Recovery:**
 

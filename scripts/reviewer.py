@@ -8170,6 +8170,44 @@ def apply_severity_policy(result: "ReviewResult", *, strict_unverified_criticals
     return counts
 
 
+def restore_prior_severity_escalation(result: "ReviewResult", pre_context: Any) -> str:
+    """Re-fold still-open prior findings into `overall_severity` after the
+    severity policy recomputed it from the published findings only.
+
+    `run_iar_post_llm` (and the incomplete / crash fallbacks) escalate
+    `overall_severity` with every prior finding that is not verified
+    resolved — the v2.3.1 gate invariant: an open prior critical keeps the
+    check red on an empty or info-only follow-up. `apply_severity_policy`
+    runs later and rebuilds the severity from this round's published
+    findings, so the escalation must be applied again here. Verified
+    resolved priors (`result.prior_reconciliation.resolved`) stay excluded."""
+    prior_findings: list[Any] = list(getattr(pre_context, "prior_findings", None) or []) if pre_context is not None else []
+    if not prior_findings:
+        return result.overall_severity
+    resolved: set[str] = set()
+    if result.prior_reconciliation is not None:
+        resolved = {pf.fingerprint for pf in result.prior_reconciliation.resolved}
+    result.overall_severity = overall_severity(
+        [result.overall_severity] + [pf.severity for pf in prior_findings if pf.fingerprint not in resolved]
+    )
+    return result.overall_severity
+
+
+def drop_refuted_from_open_set(state: "IterationState | None", result: "ReviewResult") -> int:
+    """A refuted finding is never posted, so it must not stay in the
+    persisted open set either — otherwise incremental rounds would carry
+    the false positive's fingerprint and could silence a later, honest
+    re-report at the same anchor. Returns how many fingerprints were dropped."""
+    if state is None or not result.refuted:
+        return 0
+    refuted_fps: set[str] = {f.fingerprint for f in result.refuted if f.fingerprint}
+    if not refuted_fps:
+        return 0
+    before: int = len(state.open_fingerprints_this_gen)
+    state.open_fingerprints_this_gen = [fp for fp in state.open_fingerprints_this_gen if fp not in refuted_fps]
+    return before - len(state.open_fingerprints_this_gen)
+
+
 def _estimate_cost_vs_baseline(
     *,
     effective_cap: int,
@@ -14000,6 +14038,13 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         f"{policy_counts['refuted']} refuted, {policy_counts['annotated']} claimed-critical annotated"
         + (" (strict-unverified-criticals: gating on the claim)" if verifier_policy.strict_unverified_criticals else "")
     )
+    # The policy rebuilt `overall_severity` from this round's published
+    # findings; still-open prior findings must keep the gate red (v2.3.1
+    # invariant), and refuted findings must leave the persisted open set.
+    restore_prior_severity_escalation(result, iar_pre_context)
+    dropped_refuted: int = drop_refuted_from_open_set(iar_state_final, result)
+    if dropped_refuted:
+        log(f"IAR: dropped {dropped_refuted} refuted fingerprint(s) from the open set")
     severity: str = result.overall_severity
     blocked, block_reason = compute_check_gate(
         severity=severity,

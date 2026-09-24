@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 from pathlib import Path
 from typing import Any
@@ -371,3 +372,60 @@ class InlineComment422Salvage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SeverityPolicyKeepsPriorEscalation(unittest.TestCase):
+    """v3 (PR #61 self-review, verified critical): `apply_severity_policy`
+    rebuilds `overall_severity` from this round's published findings, which
+    used to wipe the prior-finding escalation IAR had folded in. The
+    escalation is re-applied after the policy; the gate stays red."""
+
+    def _pre(self, *priors: Any) -> Any:
+        return reviewer.IARPreLLMContext(
+            prior_state=None, transition=reviewer.GenerationTransition.NEW_COMMITS,
+            base_sha="b" * 40, head_sha="6" * 40, range_hash="h", new_lines_pct=0.0, pr_labels=[],
+            pre_policy_result=reviewer.PolicyResult(findings_to_surface=[], findings_silenced=[],
+                effective_max_inline_comments=30, prompt_addendum="", policy_applied=reviewer.IAR_POLICY_ITERATIVE),
+            prior_findings=tuple(priors), mode=reviewer.IAR_MODE_INCREMENTAL, delta=_delta(),
+        )
+
+    def test_empty_follow_up_with_open_prior_critical_still_blocks(self) -> None:
+        fp = "c" * 16
+        result = reviewer.ReviewResult(summary="s", findings=[], overall_severity=reviewer.SEVERITY_NONE)
+        # what run_iar_post_llm does for a still-open prior critical
+        result.overall_severity = reviewer.overall_severity([result.overall_severity, reviewer.SEVERITY_CRITICAL])
+        self.assertEqual(result.overall_severity, reviewer.SEVERITY_CRITICAL)
+        reviewer.apply_severity_policy(result)
+        self.assertEqual(result.overall_severity, reviewer.SEVERITY_NONE)  # the wipe the review reported
+        self.assertEqual(reviewer.restore_prior_severity_escalation(result, self._pre(_prior(fp))), reviewer.SEVERITY_CRITICAL)
+        blocked, _ = reviewer.compute_check_gate(
+            severity=result.overall_severity, strictness=reviewer.STRICTNESS_BLOCK_CRITICAL, incomplete=False, cli_name="grok",
+            pr_desc_mode=reviewer.PR_DESC_MODE_OFF, description_adequate=True, description_reason="",
+        )
+        self.assertTrue(blocked)
+
+    def test_verified_resolved_prior_does_not_escalate(self) -> None:
+        fp = "d" * 16
+        prior = _prior(fp)
+        result = reviewer.ReviewResult(summary="s", findings=[], overall_severity=reviewer.SEVERITY_NONE)
+        result.prior_reconciliation = SimpleNamespace(resolved=[prior], still_open=[], regressed=[])
+        reviewer.apply_severity_policy(result)
+        self.assertEqual(reviewer.restore_prior_severity_escalation(result, self._pre(prior)), reviewer.SEVERITY_NONE)
+
+    def test_no_prior_context_is_a_no_op(self) -> None:
+        result = reviewer.ReviewResult(summary="s", findings=[], overall_severity=reviewer.SEVERITY_WARNING)
+        self.assertEqual(reviewer.restore_prior_severity_escalation(result, None), reviewer.SEVERITY_WARNING)
+
+    def test_refuted_fingerprints_leave_the_open_set(self) -> None:
+        state = reviewer.IterationState(
+            version=reviewer.IAR_STATE_SCHEMA_VERSION, generation=1, generation_range_hash="h", round_in_generation=1,
+            policy_applied=reviewer.IAR_POLICY_ITERATIVE, resolved_fingerprints=[], open_fingerprints_this_gen=["a" * 16, "b" * 16],
+            history=[], base_sha="b" * 40, head_sha="6" * 40,
+        )
+        refuted = reviewer.Finding(path="src/auth.py", line=10, severity=reviewer.SEVERITY_WARNING, body="false claim")
+        refuted.fingerprint = "a" * 16
+        result = reviewer.ReviewResult(summary="s", findings=[], overall_severity=reviewer.SEVERITY_NONE)
+        result.refuted.append(refuted)
+        self.assertEqual(reviewer.drop_refuted_from_open_set(state, result), 1)
+        self.assertEqual(state.open_fingerprints_this_gen, ["b" * 16])
+        self.assertEqual(reviewer.drop_refuted_from_open_set(None, result), 0)
