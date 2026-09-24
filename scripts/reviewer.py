@@ -10161,6 +10161,19 @@ def render_change_inventory_block(ctx: "PRContext") -> str:
     return header + table + "\n\n" + verdict + "\n\n"
 
 
+def apply_native_turn_cap(provider: Any, *, provider_id: str, budget_profile: str, turns: int) -> bool:
+    """RFC-06: on a CLI runner with a native turn cap (`grok --max-turns`) the
+    tier budget IS the cap when `agent-max-turns` is unset (`provider.max_turns`
+    is 0). `budget-profile: fixed` leaves the CLI uncapped, as before v3. Returns
+    whether the cap was applied."""
+    if budget_profile != BUDGET_PROFILE_AUTO or provider_id not in AGENT_MAX_TURNS_NATIVE_PROVIDERS or turns <= 0:
+        return False
+    if not isinstance(provider, AgentRunnerProvider) or getattr(provider, "max_turns", None) != 0:
+        return False
+    provider.max_turns = int(turns)
+    return True
+
+
 def set_output_token_cap(cap: int) -> None:
     """Budget-matrix output-token cap for this run (0 restores the constant)."""
     global OUTPUT_TOKEN_CAP  # noqa: PLW0603 — one process, one budget
@@ -14694,6 +14707,8 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             provider = build_provider(
                 provider_id, api_key=api_key, model=model, api_base=api_base
             )
+            if apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=max_turns):
+                log(f"budget: tier {record.risk_tier} turn cap {max_turns} applied as the {provider_id} CLI's native cap (agent-max-turns unset)")
         record.run_started = True
         record.setup_seconds = round(time.monotonic() - record.started_monotonic, 3)
         _run_started_monotonic: float = time.monotonic()

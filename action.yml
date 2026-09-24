@@ -189,7 +189,7 @@ inputs:
   # These inputs only affect the CLI providers (`claude-code`, `cursor`, `codex`).
   # Ignored by `anthropic`. Empty = provider default.
   agent-max-turns:
-    description: 'Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns N`). Claude Code, Cursor and Codex expose no turn-count flag — the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound). Whole number; ignored by chat-completions providers (use `max-turns`).'
+    description: 'Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns N`; when unset, `budget-profile: auto` passes the risk tier''s turns). Claude Code, Cursor and Codex expose no turn-count flag — the run logs a per-provider warning naming the alternative (Claude Code: `--max-budget-usd` via `agent-extra-args`; otherwise the 900 s invocation timeout is the bound). Whole number; ignored by chat-completions providers (use `max-turns`).'
     required: false
     default: ''
   agent-extra-args:

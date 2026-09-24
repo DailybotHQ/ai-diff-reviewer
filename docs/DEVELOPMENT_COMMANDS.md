@@ -180,7 +180,7 @@ Targets `python3.10+`. Most contributors will have `python3` from the system; th
 
 ## Run the test suite
 
-The runtime has a standard-library `unittest` suite (1120 tests across 58 files as of the v3 Phase 4 work, no install needed):
+The runtime has a standard-library `unittest` suite (1126 tests across 59 files as of the v3 Phase 4 work, no install needed):
 
 ```bash
 python3 -m unittest discover -s tests
@@ -229,6 +229,9 @@ XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balan
 # … multi-round fixtures (C091–C094): round 2 in incremental mode, or the verifier-only no-change round
 XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
   --tree tests/eval/cases/C091.json --verifier on --round 2 --out /tmp/C091-r2.json
+# … the RFC-06 tier budget (default `auto`: the tier's row; `fixed` = the pre-v3 constants) and a forced `critical` tier
+XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
+  --tree tests/eval/cases/C001.json --verifier on --budget-profile auto --high-risk-paths '**' --out /tmp/C001-critical.json
 GH_TOKEN=$(gh auth token) XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
   --repo DailybotHQ/ai-diff-reviewer --pr 46 --worktree /path/to/worktree-at-pr-head --out /tmp/pr46.json
 

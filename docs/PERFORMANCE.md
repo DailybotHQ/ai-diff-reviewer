@@ -63,7 +63,7 @@ Every run classifies the change inventory deterministically (paths, statuses, bi
 | `elevated` | prompts / policy, workflow / CI or dependency files; a mode change; incomplete inventory; > 1 500 lines | 30 | `balanced` | 8 192 | all criticals + all warnings | 200 k |
 | `critical` | policy or CI files **together with** code; an unknown file; a `high-risk-paths` match | 40 (the only raise: ≈ +$0.15–0.35 at grok-4.5 rates, on the rarest tier) | `deep` where the kind has one, else `balanced` | 8 192 | all | 200 k |
 
-`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. The per-tier recall guard is measured in Phase 4 (RFC-06 § Measurable targets).
+`budget-profile: fixed` restores today's constants (30 turns, `balanced`, 8 192, 30 %, 120 k) for every tier; an explicit `max-turns` (other than the default) is a ceiling a tier never exceeds; `high-risk-paths` raises, nothing lowers; `economy` is never a review alias. On a CLI runner with a native turn cap (`grok --max-turns`) the tier's turns become that cap when `agent-max-turns` is unset; `fixed` leaves the CLI uncapped, as before v3. The tier is written to the change inventory, the run record (`budget.risk_tier`) and the structured output. The per-tier recall guard is measured in Phase 4 (RFC-06 § Measurable targets).
 
 ## The agent-runner budget
 

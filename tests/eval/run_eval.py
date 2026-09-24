@@ -260,8 +260,21 @@ def run_case(
     verifier_provider: Any = None,
     api_key: str = "",
     round_mode: str = "",
+    budget_profile: str = "auto",
+    high_risk_paths: str = "",
+    model_alias: str = "",
+    provider_factory: Any = None,
 ) -> dict[str, Any]:
     """Review one fixture-tree case with an already-built provider.
+
+    `budget_profile` / `high_risk_paths` (Task 29) apply the RFC-06 tier budget
+    exactly as `main` does: the tier from `classify_inventory`, the row from
+    `resolve_budget` (turns, output cap, patch bytes, the verifier's warning
+    sample), the review alias (`deep` on `critical` where the lane has one —
+    the provider is rebuilt through `provider_factory(model)`, default
+    `build_provider`) and, on a CLI with a native cap, the tier's turns as
+    that cap. `model_alias` is the caller's raw `--model` (an alias or empty
+    lets the tier choose; a pinned id is kept).
 
     `round_mode` (Task 27): `""` reviews base → head in one full round; `"2"`
     replays a multi-round fixture's round 2 in incremental mode (delta
@@ -313,6 +326,30 @@ def run_case(
             ctx.incremental = pre_context
         record.head_sha = head_sha
         record.populate_context(ctx, base_sha=base_sha, iar_mode=("none" if not round_mode else ("verifier-only" if pre_context.verifier_only else "incremental")))
+        # RFC-06 (Task 29): the tier budget, as `main` applies it.
+        _classes, risk_tier = r.classify_inventory(ctx.inventory, r.parse_glob_list(high_risk_paths))
+        record.risk_tier = risk_tier
+        has_deep: bool = bool((r.MODEL_TIER_TABLE.get((provider_id, record.endpoint_kind)) or {}).get(r.MODEL_TIER_DEEP))
+        budget = r.resolve_budget(risk_tier, profile=budget_profile, max_turns_input=(max_turns if max_turns != r.DEFAULT_MAX_TURNS else 0), has_deep=has_deep)
+        effective_turns = min(effective_turns, budget.turns) if pre_context is not None else budget.turns
+        r.set_output_token_cap(budget.output_tokens)
+        ctx.patch_budget_bytes = budget.patch_bytes
+        if verifier_policy is not None:
+            verifier_policy.warning_sample_pct = budget.verifier_warning_pct
+        if budget_profile == r.BUDGET_PROFILE_AUTO and model_alias in ("", r.MODEL_TIER_BALANCED) and budget.alias != r.MODEL_TIER_BALANCED:
+            try:
+                tier_model: str = r.resolve_model(provider_id, profile if profile is not None else r.resolve_endpoint_profile(api_base, provider_id), budget.alias)
+            except Exception:  # noqa: BLE001 — a kind without a row keeps the lane's model, as `main` does
+                tier_model = model
+            if tier_model != model:
+                model = tier_model
+                record.model = model
+                record.model_alias = budget.alias
+                provider = (provider_factory or (lambda m: r.build_provider(provider_id, api_key=api_key, model=m, api_base=api_base)))(model)
+        native_cap_applied: bool = r.apply_native_turn_cap(provider, provider_id=provider_id, budget_profile=budget_profile, turns=effective_turns)
+        budget_payload: dict[str, Any] = {"tier": risk_tier, "profile": budget_profile, "turns": budget.turns, "alias": budget.alias, "model": model,
+                                          "output_tokens": budget.output_tokens, "verifier_warning_pct": budget.verifier_warning_pct,
+                                          "patch_bytes": budget.patch_bytes, "native_cap_applied": native_cap_applied}
         setup_seconds = time.time() - t_start
         record.setup_seconds = round(setup_seconds, 3)
         record.run_started = True
@@ -371,7 +408,7 @@ def run_case(
             usage.cost_usd = r.estimate_cost_usd(model, usage)
         if isinstance(provider, r.AgentRunnerProvider):
             record.instruction_files_read = list(getattr(provider, "last_instruction_files_read", ()))
-        record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=max_turns)
+        record.populate_from_run(provider=provider, state=state, result=result, usage=usage, max_turns=effective_turns)  # the run's real cap (tier / delta budget)
         record.status = r.RUN_STATUS_INCOMPLETE if result.incomplete else r.RUN_STATUS_COMPLETED
         stamp_verifier_record(record, report, {"verified": report.verified, "downgraded": report.downgraded, "refuted": report.refuted})
     payload = {
@@ -389,6 +426,7 @@ def run_case(
         "summary": (result.summary or "")[:2000],
         "round": round_mode or "full",
         "effective_max_turns": effective_turns,
+        "budget": budget_payload,
         "prior_finding_updates": {fp: list(v) for fp, v in (result.prior_finding_updates or {}).items()},
         # multi-round scoring (fixture note: "labels describe what must still be flagged (open / regressed) after
         # round 2"): a prior the model reported open / regressed is a flag at the prior's anchor — the incremental
@@ -463,7 +501,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             case_path=Path(args.tree), provider=provider, runtime=r, system_prompt=system_prompt,
             max_turns=args.max_turns, out=Path(args.out), provider_id=args.provider, model=model,
             api_base=api_base, verifier_policy=r.VerifierPolicy(enabled=(args.verifier or "off").lower() == "on"), api_key=key,
-            round_mode=(args.round or ""),
+            round_mode=(args.round or ""), budget_profile=(args.budget_profile or "auto"), high_risk_paths=(args.high_risk_paths or ""),
+            model_alias=(args.model or ""),
         )
         print(fmt_row(payload))
         return payload
@@ -643,6 +682,8 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--extension", default=""); rp.add_argument("--max-turns", type=int, default=30); rp.add_argument("--out", required=True)
     rp.add_argument("--verifier", default="off", choices=["on", "off"], help="run the v3 verifier + severity policy after the review (Task 14)")
     rp.add_argument("--round", default="", choices=["", "2", "nochange"], help="multi-round fixtures (Task 27): `2` = incremental round 2, `nochange` = verifier-only round")
+    rp.add_argument("--budget-profile", default="auto", choices=["auto", "fixed"], help="RFC-06 budget profile (Task 29): `auto` = the tier's row, `fixed` = the pre-v3 constants (tree runs)")
+    rp.add_argument("--high-risk-paths", default="", help="comma / newline globs that raise the tier to `critical` (tree runs)")
     sp = sub.add_parser("score"); sp.add_argument("paths", nargs="+")
     return ap
 

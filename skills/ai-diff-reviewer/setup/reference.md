@@ -523,6 +523,7 @@ Every workflow using AI Diff Reviewer sets these two.
   constants for every tier. An explicit `max-turns` (other than the
   default) is a ceiling a tier never exceeds.
 - **When to change:** `fixed` only while you calibrate; removed in v3.1.0.
+- **Native CLI cap:** on `grok`, when `agent-max-turns` is unset, the tier's turns are passed as the CLI's `--max-turns`; `fixed` leaves the CLI uncapped (pre-v3 behaviour).
 
 ### `high-risk-paths`
 
