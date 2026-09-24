@@ -886,6 +886,16 @@ ORIGIN_UNKNOWN_RUN_ID: str = "unknown"
 VERIFIER_ENV: str = "AIPRR_VERIFIER"                       # `on` (default) | `off`
 VERIFIER_MODEL_ENV: str = "AIPRR_VERIFIER_MODEL"           # alias or model id; empty = economy
 STRICT_UNVERIFIED_CRITICALS_ENV: str = "AIPRR_STRICT_UNVERIFIED_CRITICALS"
+# RFC-04 (BC-09): the action's role. `review` publishes as always; `emit` runs the
+# review, writes the document + artifact and performs NO GitHub mutation; `aggregate`
+# consolidates the emitted legs and publishes once.
+MODE_ENV: str = "AIPRR_MODE"
+EXPECTED_LEGS_ENV: str = "AIPRR_EXPECTED_LEGS"             # comma / newline separated leg ids (aggregate + emit)
+MODE_REVIEW: str = "review"
+MODE_EMIT: str = "emit"
+MODE_AGGREGATE: str = "aggregate"
+VALID_MODES: tuple[str, ...] = (MODE_REVIEW, MODE_EMIT, MODE_AGGREGATE)
+EMIT_NOTE_MARKER: str = "<!-- ai-pr-reviewer-emit-note -->"   # the one note an emit leg may post (D-19)
 VERIFIER_MODE_ON: str = "on"
 VERIFIER_MODE_OFF: str = "off"
 VERIFIER_MAX_TURNS_PER_FINDING: int = 4
@@ -1857,6 +1867,60 @@ def write_all_outputs(
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class PublishPolicy:
+    """What this run may write to GitHub (RFC-04 § Design).
+
+    `review` (default) and `aggregate` publish. `emit` performs **no**
+    mutation: every non-GET REST call and every GraphQL mutation is
+    recorded in `suppressed` and answered with an empty payload, so the
+    review runs, the document and artifact are produced, and a
+    prompt-injected leg can post nothing. The single D-19 note is the only
+    exemption and goes through `allow_writes()`."""
+
+    mode: str = MODE_REVIEW
+    expected_legs: tuple[str, ...] = ()
+    suppressed: list[dict[str, str]] = field(default_factory=list)
+    _exempt: bool = False
+
+    @property
+    def writes_allowed(self) -> bool:
+        return self.mode != MODE_EMIT or self._exempt
+
+    def suppress(self, kind: str, target: str) -> None:
+        self.suppressed.append({"kind": kind, "target": target})
+        if len(self.suppressed) <= 20:
+            log(f"mode=emit: suppressed GitHub write {kind} {target}")
+
+
+PUBLISH_POLICY: PublishPolicy = PublishPolicy()
+
+
+def set_publish_policy(policy: PublishPolicy) -> None:
+    global PUBLISH_POLICY  # noqa: PLW0603 — one process, one role
+    PUBLISH_POLICY = policy
+
+
+def parse_expected_legs(raw: str) -> tuple[str, ...]:
+    """`expected-legs`: comma- or newline-separated leg ids, trimmed, de-duplicated, order kept."""
+    seen: list[str] = []
+    for part in re.split(r"[,\n]", raw or ""):
+        item: str = part.strip()
+        if item and item not in seen:
+            seen.append(item)
+    return tuple(seen)
+
+
+class allow_writes:
+    """Context manager: lift the emit suppression for one deliberate write (the D-19 note)."""
+
+    def __enter__(self) -> None:
+        PUBLISH_POLICY._exempt = True
+
+    def __exit__(self, *exc: Any) -> None:
+        PUBLISH_POLICY._exempt = False
+
+
 def gh_request(
     method: str,
     path: str,
@@ -1871,6 +1935,9 @@ def gh_request(
     (e.g. `/pulls/{n}/files`) depending on the endpoint. Callers narrow the
     type at the call site.
     """
+    if method.upper() != "GET" and not PUBLISH_POLICY.writes_allowed:
+        PUBLISH_POLICY.suppress(method.upper(), path)
+        return {}
     url: str = f"{GITHUB_REST_BASE}{path}"
     data: bytes | None = (
         json.dumps(body).encode("utf-8") if body is not None else None
@@ -1945,6 +2012,9 @@ def gh_get_collaborator_permission(
 
 def gh_graphql(query: str, variables: dict[str, Any], *, token: str) -> Any:
     """POST a GraphQL query to GitHub and return the parsed `data` payload."""
+    if not PUBLISH_POLICY.writes_allowed and re.match(r"\s*mutation\b", query):
+        PUBLISH_POLICY.suppress("GRAPHQL", query.strip().split("(", 1)[0][:60])
+        return {}
     body: bytes = json.dumps({"query": query, "variables": variables}).encode(
         "utf-8"
     )
@@ -13001,6 +13071,38 @@ def main() -> int:
         write_review_output_for_run(record, output_ctx, status=status, failure_class=failure_class)
 
 
+def render_emit_note(*, artifact_name: str, head_sha: str) -> str:
+    """The one comment an emit leg may post (D-19): only when `expected-legs`
+    is unset, so a forgotten aggregate job cannot silently review nothing."""
+    return (
+        f"{EMIT_NOTE_MARKER}\n"
+        f"**AI Diff Reviewer ran in `mode: emit`** for `{head_sha[:12]}` and uploaded the artifact "
+        f"`{artifact_name}` — no review was posted. Add a `mode: aggregate` job after the review legs "
+        f"(with `expected-legs` naming them) to publish the consolidated review, or drop `mode: emit` "
+        f"for a single-leg setup. See docs/MIGRATION_v3.md."
+    )
+
+
+def post_emit_note(*, token: str, repo: str, pr_number: int, record: RunRecord) -> int:
+    """Create or refresh the D-19 note (one per PR, found by its marker). Best-effort."""
+    body: str = render_emit_note(artifact_name=review_output_artifact_name(record), head_sha=record.head_sha or "")
+    try:
+        existing: Any = gh_request("GET", f"/repos/{repo}/issues/{pr_number}/comments?per_page=100", token=token)
+        found: int = 0
+        for c in existing if isinstance(existing, list) else []:
+            if isinstance(c, dict) and EMIT_NOTE_MARKER in str(c.get("body") or ""):
+                found = int(c.get("id") or 0)
+                break
+        with allow_writes():
+            if found:
+                gh_update_issue_comment(token=token, repo=repo, comment_id=found, body=body)
+                return found
+            return gh_post_issue_comment(token=token, repo=repo, pr_number=pr_number, body=body)
+    except Exception as exc:  # noqa: BLE001 — best-effort GH API call; the artifact is the deliverable
+        log(f"mode=emit: could not post the note (non-fatal): {exc}")
+        return 0
+
+
 def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = None) -> int:
     ctx_out: ReviewOutputContext = output_ctx if output_ctx is not None else ReviewOutputContext()
     # ------------------------------------------------------------------
@@ -13244,6 +13346,19 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             os.environ.get(STRICT_UNVERIFIED_CRITICALS_ENV, "false"), default=False
         ),
     )
+    mode: str = os.environ.get(MODE_ENV, MODE_REVIEW).strip().lower() or MODE_REVIEW
+    if mode not in VALID_MODES:
+        log(f"Invalid mode {mode!r} — expected one of {', '.join(VALID_MODES)}")
+        write_all_outputs(skipped=False)
+        return 1
+    expected_legs: tuple[str, ...] = parse_expected_legs(os.environ.get(EXPECTED_LEGS_ENV, ""))
+    set_publish_policy(PublishPolicy(mode=mode, expected_legs=expected_legs))
+    ctx_out.role = mode
+    if mode == MODE_EMIT:
+        log(
+            "mode=emit: the review runs and the document/artifact are produced; every GitHub write is suppressed"
+            + (f"; expected legs: {', '.join(expected_legs)}" if expected_legs else "; no expected-legs — one note will be posted (D-19)")
+        )
     complexity_label_prefix: str = (
         os.environ.get(
             "AIPRR_COMPLEXITY_LABEL_PREFIX",
@@ -14370,6 +14485,13 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
 
     # Exit code 2 = blocked, so the GitHub check turns red but we keep
     # exit code 1 reserved for hard failures.
+    if mode == MODE_EMIT:
+        # The gate is computed and recorded (outputs + document) but enforced
+        # by the aggregate job; an emit leg never fails a matrix on its own.
+        if not expected_legs:
+            post_emit_note(token=gh_token, repo=repo, pr_number=pr_number, record=record)
+        log(f"mode=emit: {len(PUBLISH_POLICY.suppressed)} GitHub write(s) suppressed; gate ({'blocked' if blocked else 'pass'}) left to the aggregate job")
+        return 0
     return 2 if blocked else 0
 
 

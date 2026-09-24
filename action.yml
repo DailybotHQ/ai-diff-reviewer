@@ -151,6 +151,14 @@ inputs:
     description: 'When `true`, a claimed `critical` gates the check even when the verifier did not verify it (v2 behaviour; the annotation is still added). Transition knob — removed in v3.1.0 (RFC-07 BC-18).'
     required: false
     default: 'false'
+  mode:
+    description: 'v3 role of this step (RFC-04, BC-09). `review` (default): run and publish, exactly the single-leg flow. `emit`: run the review, write the `review-output/3.0` document and upload it as an artifact, and perform NO GitHub write (no review, no comment, no label — a matrix leg needs only `contents: read` + `pull-requests: read`); the gate is recorded, not enforced, so the step exits 0 unless the run itself fails. `aggregate`: download the emitted legs for this head, consolidate, verify once and publish one review (Phase 2). With `mode: emit` and no `expected-legs`, one note is posted on the PR so a forgotten aggregate job cannot silently review nothing.'
+    required: false
+    default: 'review'
+  expected-legs:
+    description: 'v3 (RFC-04): comma- or newline-separated leg ids the aggregate job waits for (`<provider>|<endpoint_kind>|<model>`, as recorded in each leg''s run record). On an `emit` leg, setting it suppresses the D-19 note. Empty by default.'
+    required: false
+    default: ''
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -417,6 +425,8 @@ runs:
         AIPRR_VERIFIER: ${{ inputs.verifier }}
         AIPRR_VERIFIER_MODEL: ${{ inputs.verifier-model }}
         AIPRR_STRICT_UNVERIFIED_CRITICALS: ${{ inputs.strict-unverified-criticals }}
+        AIPRR_MODE: ${{ inputs.mode }}
+        AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
         # `claude-code`, `cursor`, `codex`, and `grok` provider branches.

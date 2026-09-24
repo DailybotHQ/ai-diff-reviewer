@@ -32,6 +32,10 @@ Outbound network calls depend on the configured provider:
 
 Auditable in `scripts/reviewer.py` via the `ANTHROPIC_API_URL`, `GITHUB_REST_BASE`, and `GITHUB_GRAPHQL_URL` constants, and in `action.yml` via the install steps.
 
+### Roles and the write surface (v3 `mode`)
+
+`mode: emit` turns a review leg into a producer with **no** write surface: the guard sits in the GitHub transport (`gh_request` refuses every non-GET call, `gh_graphql` every mutation) so no helper can post a review, a comment or a label, whatever a prompt-injected model asks for. The leg needs only `contents: read` and `pull-requests: read` plus its provider secret; the single exemption is the D-19 note (one comment, only when `expected-legs` is unset) posted through `allow_writes()`. Only the `aggregate` job holds `pull-requests: write`, and it publishes from documents it validates against the RFC-05 schema — the smaller per-leg blast radius is the security argument for the split (RFC-04 § Topology).
+
 ### Vendor-CLI subprocess environment (v1.1.0+)
 
 Agent-runner providers invoke the vendor CLI through `_run_cli_process` — `subprocess.Popen(argv, env=...)` in argv-list form, never `shell=True`, with bounded output capture (last 4 MB per stream) and one deadline over write, wait and drain (v2.2.0+; `subprocess.run` semantics otherwise). The `env` passed to the subprocess is **explicitly scrubbed** via `_build_cli_env()`: it forwards only an allowlist of variables the CLI needs (`PATH`, `HOME`, `NODE_PATH`, locale, runner metadata) plus the vendor-specific API key. `AIPRR_GH_TOKEN` and every other `AIPRR_*` env var are **not** forwarded to the CLI — the reviewer's Python runtime keeps the GitHub token in-process and calls the GitHub API directly.

@@ -461,6 +461,33 @@ Every workflow using AI Diff Reviewer sets these two.
 - **When to enable:** you migrate from v2 and want the gate unchanged while
   you evaluate the verifier.
 
+### `mode`
+
+- **Default:** `review`
+- **What it is:** the step's role (v3, RFC-04). `review` — run and
+  publish, the single-leg flow. `emit` — run the review, write the
+  `review-output/3.0` document and upload it as an artifact, and perform
+  **no** GitHub write: no review, no comment, no label. An emit leg needs
+  only `contents: read` + `pull-requests: read`; it exits 0 (the gate is
+  recorded in the outputs and the document, and enforced by the aggregate
+  job). `aggregate` — download the emitted legs for this head, consolidate,
+  verify once and publish one review (Phase 2 of v3).
+- **When to change:** you run a provider matrix and want one consolidated
+  review instead of one per leg: `mode: emit` on every leg, one
+  `mode: aggregate` job after them. With `emit` and no `expected-legs`
+  one note is posted on the PR so a forgotten aggregate job cannot
+  silently review nothing.
+
+### `expected-legs`
+
+- **Default:** `''`
+- **What it is:** comma- or newline-separated leg ids
+  (`<provider>|<endpoint_kind>|<model>`, as in each leg's run record) the
+  aggregate job waits for. On an `emit` leg, setting it suppresses the
+  note above.
+- **When to change:** always set it on the aggregate job of a matrix; set
+  it on the emit legs of the same matrix to keep the PR free of notes.
+
 ### `complexity-labels-enabled`
 
 - **Default:** `false`
