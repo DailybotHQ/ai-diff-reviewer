@@ -300,6 +300,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     token = gh_token()
     worktree = str(Path(args.worktree).resolve())  # absolute: everything after chdir uses it
     args.worktree = worktree
+    args.prompt = str(Path(args.prompt).resolve())  # relative prompt/extension paths break after chdir
+    if args.extension:
+        args.extension = str(Path(args.extension).resolve())
     out_path = Path(args.out).resolve()
     args.out = str(out_path)
     os.chdir(worktree)

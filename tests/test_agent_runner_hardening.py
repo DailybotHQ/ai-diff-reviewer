@@ -337,7 +337,9 @@ class ContractFixesTests(unittest.TestCase):
 
     def test_prompt_substitution_note_covers_output_tools(self) -> None:
         prompt = (_ROOT / "prompts" / "default.md").read_text(encoding="utf-8")
-        self.assertIn("where this prompt says `post_inline_comment` or `submit_review` and your environment gives you an output contract instead", prompt)
+        # v3 (Task 16): `emit_finding` is the tool name; `post_inline_comment` stays an alias.
+        self.assertIn("where this prompt says `emit_finding` or `submit_review` and your environment gives you an output contract instead", prompt)
+        self.assertIn("`post_inline_comment` is the older name of the same tool", prompt)
         self.assertEqual(prompt, (_ROOT / "skills" / "ai-diff-reviewer" / "prompt.md").read_text(encoding="utf-8"))
 
 
