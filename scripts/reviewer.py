@@ -13309,6 +13309,9 @@ def parse_leg_document(doc: dict[str, Any], *, source: str = "") -> LegDocument:
     budget: dict[str, Any] = run.get("budget") if isinstance(run.get("budget"), dict) else {}
     findings: list[Finding] = [finding_from_v3_dict(f) for f in doc["findings"] if isinstance(f, dict)][:MAX_AGGREGATE_FINDINGS]
     summary: dict[str, Any] = doc.get("summary") if isinstance(doc.get("summary"), dict) else {}
+    # The leg's narrative may end with its own incremental footer ("_Since last
+    # review …_"); the aggregate renders one footer for the consolidated set.
+    narrative: str = "\n".join(l for l in str(summary.get("narrative") or "").splitlines() if not l.strip().startswith("_Since last review")).strip()
     cost: Any = doc.get("cost_usd", run.get("cost_usd"))
     leg_id: str = leg_id_of(str(run.get("provider") or ""), str(run.get("endpoint_kind") or ""), str(run.get("model") or ""))
     prior_block: dict[str, Any] = doc.get("prior_findings") if isinstance(doc.get("prior_findings"), dict) else {}
@@ -13319,7 +13322,7 @@ def parse_leg_document(doc: dict[str, Any], *, source: str = "") -> LegDocument:
         status=str(run.get("status") or RUN_STATUS_FAILED), run_id=str(run.get("run_id") or ""),
         findings=findings, refuted=[dict(r) for r in (doc.get("refuted") or []) if isinstance(r, dict)],
         prior_findings=prior_block, prior_updates=_prior_updates_from_block(prior_block, leg_id),
-        narrative=str(summary.get("narrative") or ""), cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
+        narrative=narrative, cost_usd=float(cost) if isinstance(cost, (int, float)) else None,
         turns=int(budget.get("turns_used") or 0), usage_known=bool(doc.get("usage_known", run.get("usage_known", False))), source=source,
     )
 
@@ -13501,6 +13504,8 @@ def aggregate_documents(
             refuted.append(rf)
     prior_updates: dict[str, tuple[str, str]] = {}
     for doc in latest.values():
+        if not doc.contributes:
+            continue  # a failed or skipped leg reviewed nothing: its ledger carries no claim
         for fp, (status, reason) in doc.prior_updates.items():
             current: tuple[str, str] | None = prior_updates.get(fp)
             if current is None or (status == PRIOR_FINDING_STATUS_REGRESSED and current[0] != PRIOR_FINDING_STATUS_REGRESSED):

@@ -142,6 +142,32 @@ class LegsAndKnobs(unittest.TestCase):
         self.assertEqual(result.summary, "the longer narrative wins")
         self.assertEqual(result.findings, [])
 
+    def test_failed_and_skipped_legs_carry_no_prior_claims(self) -> None:
+        # round-3 self-review (verified warning): a leg that reviewed nothing must not retire priors
+        claim = reviewer._prior_updates_from_block({"retired": [{"id": "f-" + "z" * 16, "reason": "verified_fixed"}], "still_open": [], "regressed": [], "unverified_claims": []}, A)
+        failed = _leg(A, [], status="failed"); failed.prior_updates = claim
+        good = _leg(B, [_finding("a.py", 1, "info", title="x")])
+        result, _ = reviewer.aggregate_documents([failed, good], head_sha=HEAD, expected_legs=(A, B))
+        self.assertEqual(result.prior_finding_updates, {})
+        partial = _leg(A, [], status="timeout"); partial.prior_updates = claim
+        result2, _ = reviewer.aggregate_documents([partial, good], head_sha=HEAD, expected_legs=(A, B))
+        self.assertIn("z" * 16, result2.prior_finding_updates, "a partial leg did review and may claim")
+
+    def test_prior_block_round_trips_from_writer_to_reader(self) -> None:
+        # round-3 self-review (info): the document the runtime writes parses back into the same claims
+        rec = reviewer.PriorFindingReconciliation()
+        pf = lambda fp: reviewer.PriorFinding(thread_id="T", comment_id="C", comment_database_id=1, path="p.py", line=1, severity="warning", fingerprint=fp, body_excerpt="b", is_outdated=False)  # noqa: E731
+        rec.resolved = [pf("1" * 16)]; rec.retired_reasons["1" * 16] = "verified_fixed"
+        rec.still_open = [pf("2" * 16)]; rec.regressed = [pf("3" * 16)]; rec.unverified = [pf("4" * 16)]
+        result = reviewer.ReviewResult(findings=[], summary="narrative\n\n_Since last review (a → b): resolved 1 · still open 1_")
+        result.prior_reconciliation = rec
+        run = reviewer.RunRecord(); run.provider, run.endpoint_kind, run.model, run.head_sha = "grok", "xai", "grok-4.5", HEAD
+        ctx = reviewer.ReviewOutputContext(result=result, role="emit", narrative=result.summary)
+        doc = reviewer.build_review_output(run_doc=run.to_dict(status="completed", failure_class=None), ctx=ctx)
+        leg = reviewer.parse_leg_document(doc, source="rt")
+        self.assertEqual({fp: st for fp, (st, _) in leg.prior_updates.items()}, {"1" * 16: "resolved", "4" * 16: "resolved", "3" * 16: "regressed"})
+        self.assertEqual(leg.narrative, "narrative", "the leg's own incremental footer is stripped")
+
     def test_leg_document_prior_block_parses_into_claims(self) -> None:
         doc = {"schema_version": reviewer.REVIEW_OUTPUT_SCHEMA_VERSION, "run": {"provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5", "status": "completed",
                "context": {"head_sha": HEAD}}, "findings": [],
