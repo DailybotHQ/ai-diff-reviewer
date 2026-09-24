@@ -924,6 +924,24 @@ RETIRED_REASON_FILE_REMOVED: str = "file_removed"
 RETIRED_REASON_MAINTAINER: str = "maintainer_resolved"
 ANCHOR_UNCHANGED_REASON: str = "anchor unchanged at head — claimed resolved but the code at the finding is identical"
 ANCHOR_REREAD_UNAVAILABLE_REASON: str = "anchor re-read unavailable (the raising head is not in the checkout)"
+# Structured output document (RFC-05, BC-11): one `review-output/3.0` per run
+# in every role, next to the findings file, uploaded as an artifact and
+# referenced by two scalar outputs (path + digest).
+REVIEW_OUTPUT_REL: str = ".aiprr/review-output.json"
+REVIEW_OUTPUT_SCHEMA_VERSION: str = "review-output/3.0"
+REVIEW_OUTPUT_ROLE_REVIEW: str = "review"
+# Cap (D-15 / Q-23): half of MAX_HTTP_BODY_BYTES, above MAX_FINDINGS_FILE_BYTES;
+# excerpts are trimmed first, then the narrative, then findings beyond the
+# inline cap (criticals last) — never silently.
+MAX_REVIEW_OUTPUT_BYTES: int = 4_000_000
+REVIEW_OUTPUT_EXCERPT_TRIM_CHARS: int = 200
+RISK_CLASS_UNKNOWN: str = "unknown"
+RISK_TIER_UNCLASSIFIED: str = "unclassified"
+STRUCTURED_OUTPUT_PATH_OUTPUT: str = "structured-output-path"
+STRUCTURED_OUTPUT_SHA256_OUTPUT: str = "structured-output-sha256"
+STRUCTURED_OUTPUT_ARTIFACT_OUTPUT: str = "structured-output-artifact"
+REVIEW_OUTPUT_ARTIFACT_PREFIX: str = "ai-diff-reviewer"
+REVIEW_OUTPUT_FILE_STATUSES: tuple[str, ...] = ("added", "modified", "removed", "renamed", "copied", "changed", "unchanged")
 VERIFIER_VERDICT_SCHEMA: dict[str, Any] = {
     "name": VERIFIER_VERDICT_TOOL,
     "description": "Record the verification verdict for the finding under review (call exactly once, last).",
@@ -1825,6 +1843,12 @@ def write_all_outputs(
     write_action_output("inline-dropped", str(inline_dropped))
     write_action_output("blocked", "true" if blocked else "false")
     write_action_output("review-url", review_url)
+    # v3 structured output (RFC-05): defined on every path; `main()`'s
+    # wrapper overwrites them with the real path / digest / artifact name
+    # once the document is written ($GITHUB_OUTPUT is append-only).
+    write_action_output(STRUCTURED_OUTPUT_PATH_OUTPUT, "")
+    write_action_output(STRUCTURED_OUTPUT_SHA256_OUTPUT, "")
+    write_action_output(STRUCTURED_OUTPUT_ARTIFACT_OUTPUT, "")
     write_iar_outputs_empty()
 
 
@@ -12660,13 +12684,246 @@ def render_tracking_body_skipped_by_label(
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class ReviewOutputContext:
+    """What `_main_impl` learns along the way and the RFC-05 document needs
+    beyond the run record: the final result, the inventory, the gate, the
+    verifier report, the model's narrative, the exact posted body and the
+    review URL. Every field has a default so a run that ended early still
+    yields a valid document."""
+
+    role: str = REVIEW_OUTPUT_ROLE_REVIEW
+    result: "ReviewResult | None" = None
+    inventory: "ChangeInventory | None" = None
+    strictness: str = STRICTNESS_LENIENT
+    blocked: bool = False
+    block_reason: str = ""
+    verifier_report: "VerifierReport | None" = None
+    narrative: str = ""
+    posted_markdown: str = ""
+    review_url: str | None = None
+    endpoint_host: str = ""
+
+
+def _normalise_retired_reason(reason: str) -> str:
+    for known in (RETIRED_REASON_VERIFIED_FIXED, RETIRED_REASON_MAINTAINER, RETIRED_REASON_FILE_REMOVED):
+        if reason.startswith(known):
+            return known
+    return RETIRED_REASON_VERIFIED_FIXED
+
+
+def review_output_artifact_name(record: "RunRecord") -> str:
+    """`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>` (artifact names may not contain `/`)."""
+    leg: str = re.sub(r"[^a-z0-9]+", "-", f"{record.provider}-{record.endpoint_kind}-{record.model}".lower()).strip("-")
+    return f"{REVIEW_OUTPUT_ARTIFACT_PREFIX}-{(record.head_sha or 'nohead')[:12]}-{leg or 'leg'}"[:120]
+
+
+def build_review_output(
+    *,
+    run_doc: dict[str, Any],
+    ctx: "ReviewOutputContext",
+    head_sha: str = "",
+    base_sha: str = "",
+) -> dict[str, Any]:
+    """The `review-output/3.0` document for one run (RFC-05 § Design).
+
+    Untruncated and unscrubbed — `finalize_review_output` applies the cap
+    and the scrubs. PR title / body never enter the document; only SHAs,
+    paths and counts describe the change.
+    """
+    result: ReviewResult = ctx.result if ctx.result is not None else ReviewResult()
+    inv: ChangeInventory | None = ctx.inventory
+    files: list[dict[str, Any]] = []
+    for f in (inv.files if inv is not None else []):
+        status: str = str(f.get("status") or "changed")
+        files.append(
+            {
+                "path": str(f.get("path", "")),
+                "previous_path": f.get("previous_path"),
+                "status": status if status in REVIEW_OUTPUT_FILE_STATUSES else "changed",
+                "additions": max(0, int(f.get("additions") or 0)),
+                "deletions": max(0, int(f.get("deletions") or 0)),
+                "binary": bool(f.get("binary")),
+                "mode_change": bool(f.get("mode_change")),
+                "omitted": bool(f.get("omitted")),
+                "patch_chars": int(f["patch_chars"]) if f.get("patch_chars") is not None else None,
+                "risk_class": RISK_CLASS_UNKNOWN,
+            }
+        )
+    counts: dict[str, int] = {SEVERITY_CRITICAL: 0, SEVERITY_WARNING: 0, SEVERITY_INFO: 0}
+    ver: dict[str, int] = {"verified": 0, "unverified": 0, "downgraded": 0, "refuted": len(result.refuted), "skipped": 0}
+    histogram: dict[str, int] = {}
+    for f in result.findings:
+        if f.severity in counts:
+            counts[f.severity] += 1
+        if f.verification.status in ver:
+            ver[f.verification.status] += 1
+        legs: str = str((f.agreement or {}).get("legs_reporting") or 1)
+        histogram[legs] = histogram.get(legs, 0) + 1
+    rec: PriorFindingReconciliation | None = result.prior_reconciliation
+    prior: dict[str, Any] = {"retired": [], "still_open": [], "regressed": [], "unverified_claims": []}
+    if rec is not None:
+        prior["retired"] = [{"id": f"{FINDING_ID_PREFIX}{pf.fingerprint}", "reason": _normalise_retired_reason(rec.retired_reasons.get(pf.fingerprint, RETIRED_REASON_VERIFIED_FIXED))} for pf in rec.resolved]
+        regressed_fps: set[str] = {pf.fingerprint for pf in rec.regressed}
+        prior["still_open"] = [f"{FINDING_ID_PREFIX}{pf.fingerprint}" for pf in rec.still_open if pf.fingerprint not in regressed_fps]
+        prior["regressed"] = [f"{FINDING_ID_PREFIX}{pf.fingerprint}" for pf in rec.regressed]
+        prior["unverified_claims"] = [f"{FINDING_ID_PREFIX}{pf.fingerprint}" for pf in rec.unverified]
+    usage_block: dict[str, Any] | None = run_doc.get("usage") if isinstance(run_doc.get("usage"), dict) else None
+    usage: dict[str, Any] | None = None
+    if usage_block is not None:
+        source: str = str(usage_block.get("source") or "estimated")
+        usage = {
+            "input_tokens": int(usage_block.get("input_tokens") or 0),
+            "cache_read_tokens": int(usage_block.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(usage_block.get("cache_write_tokens") or 0),
+            "output_tokens": int(usage_block.get("output_tokens") or 0),
+            "source": source if source in ("vendor", "cli", "estimated", "aggregated") else "estimated",
+        }
+    # The run record allows null prompt/runtime hashes on early exits; the
+    # document restates the identity keys as strings (RFC-05 § Schema).
+    run_embedded: dict[str, Any] = dict(run_doc)
+    for key in ("prompt_sha256", "runtime_sha", "model", "endpoint_kind"):
+        if run_embedded.get(key) is None:
+            run_embedded[key] = ""
+    return {
+        "schema_version": REVIEW_OUTPUT_SCHEMA_VERSION,
+        "document_id": f"{ctx.role}-{run_doc.get('run_id') or ORIGIN_UNKNOWN_RUN_ID}",
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "role": ctx.role,
+        "run": run_embedded,
+        "change_inventory": {
+            "head_sha": (inv.head_sha if inv is not None and inv.head_sha else head_sha) or "",
+            "base_sha": (inv.base_sha if inv is not None and inv.base_sha else base_sha) or "",
+            "files": files,
+            "omitted": sum(1 for f in files if f["omitted"]),
+            "complete": bool(inv.complete) if inv is not None else False,
+            "risk_tier": RISK_TIER_UNCLASSIFIED,
+        },
+        "findings": [f.to_v3_dict() for f in result.findings],
+        "refuted": [
+            {
+                "id": f"{FINDING_ID_PREFIX}{f.fingerprint or finding_fingerprint(finding=f, code_context=None)}",
+                "path": f.path, "line": max(1, int(f.line)),
+                "severity_claimed": f.severity_claimed if f.severity_claimed in ALLOWED_SEVERITIES else f.severity,
+                "title": f.effective_title(), "reason": f.verification.reason or "refuted",
+                "origin": f.to_v3_dict()["origin"],
+            }
+            for f in result.refuted
+        ],
+        "prior_findings": prior,
+        "summary": {
+            "counts": counts,
+            "verification_counts": ver,
+            "agreement_histogram": histogram or {"1": 0},
+            "narrative": (ctx.narrative or "")[:SUMMARY_NARRATIVE_MAX_CHARS],
+            "rendered_markdown": ctx.posted_markdown or "",
+        },
+        "gate": {
+            "strictness": ctx.strictness if ctx.strictness in VALID_STRICTNESS else STRICTNESS_LENIENT,
+            "passed": not ctx.blocked,
+            "reason": ctx.block_reason or "",
+            "min_agreement": 1,
+            "require_all_legs": False,
+        },
+        "legs": None,
+        "duplicates_removed": None,
+        "usage_known": bool(run_doc.get("usage_known")),
+        "usage": usage if run_doc.get("usage_known") else None,
+        "cost_usd": run_doc.get("cost_usd") if run_doc.get("usage_known") else None,
+        "truncated": {"any": False, "findings_dropped": 0, "excerpts_trimmed": 0, "narrative_trimmed": False},
+        "review_url": ctx.review_url or None,
+    }
+
+
+def scrub_hosts(text: str, hosts: tuple[str, ...]) -> str:
+    """Replace configured backend hostnames (never a field of the document by
+    contract, but a model may echo them in a body) with `<endpoint>`."""
+    for host in hosts:
+        if host and host in text:
+            text = text.replace(host, "<endpoint>")
+    return text
+
+
+def finalize_review_output(doc: dict[str, Any], *, hosts: tuple[str, ...] = ()) -> str:
+    """Scrub and cap the document (RFC-05 § Bounds and safety). Returns the
+    JSON text to write. Truncation order: excerpts → narrative → findings
+    beyond the cap, criticals last; `truncated.*` records every step."""
+    def encode(d: dict[str, Any]) -> str:
+        return scrub_hosts(scrub_secrets(json.dumps(d, indent=1, ensure_ascii=False)), hosts)
+
+    text: str = encode(doc)
+    if len(text.encode("utf-8")) <= MAX_REVIEW_OUTPUT_BYTES:
+        return text
+    trunc: dict[str, Any] = doc["truncated"]
+    trunc["any"] = True
+    for f in doc["findings"]:
+        excerpt: str = str((f.get("evidence") or {}).get("excerpt") or "")
+        if len(excerpt) > REVIEW_OUTPUT_EXCERPT_TRIM_CHARS:
+            f["evidence"]["excerpt"] = excerpt[:REVIEW_OUTPUT_EXCERPT_TRIM_CHARS]
+            trunc["excerpts_trimmed"] += 1
+    text = encode(doc)
+    if len(text.encode("utf-8")) <= MAX_REVIEW_OUTPUT_BYTES:
+        return text
+    if doc["summary"]["narrative"]:
+        doc["summary"]["narrative"] = ""
+        trunc["narrative_trimmed"] = True
+        text = encode(doc)
+        if len(text.encode("utf-8")) <= MAX_REVIEW_OUTPUT_BYTES:
+            return text
+    # Drop from the least severe end: order by rank so criticals go last.
+    ordered: list[dict[str, Any]] = sorted(
+        doc["findings"], key=lambda f: SEVERITY_RANK.get(str(f.get("severity")), 0), reverse=True
+    )
+    while ordered and len(text.encode("utf-8")) > MAX_REVIEW_OUTPUT_BYTES:
+        ordered.pop()
+        trunc["findings_dropped"] += 1
+        doc["findings"] = ordered
+        text = encode(doc)
+    return text
+
+
+def write_review_output(text: str, *, workspace: Path | None = None) -> tuple[Path, str] | None:
+    """Write `.aiprr/review-output.json`; returns `(path, sha256)`. Best-effort."""
+    try:
+        root: Path = workspace if workspace is not None else Path.cwd()
+        target: Path = root / REVIEW_OUTPUT_REL
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data: bytes = (text.rstrip("\n") + "\n").encode("utf-8")
+        target.write_bytes(data)
+        return target.resolve(), hashlib.sha256(data).hexdigest()
+    except Exception as exc:  # noqa: BLE001 — the document is best-effort telemetry
+        log(f"review output not written: {type(exc).__name__}: {exc}")
+        return None
+
+
+def write_review_output_for_run(
+    record: "RunRecord", ctx: "ReviewOutputContext", *, status: str, failure_class: str | None
+) -> None:
+    """Build, finalize, write and reference the document (every exit path)."""
+    try:
+        run_doc: dict[str, Any] = record.to_dict(status=status, failure_class=failure_class)
+        doc: dict[str, Any] = build_review_output(run_doc=run_doc, ctx=ctx, head_sha=record.head_sha, base_sha=record.base_sha)
+        text: str = finalize_review_output(doc, hosts=(ctx.endpoint_host,) if ctx.endpoint_host else ())
+        written: tuple[Path, str] | None = write_review_output(text)
+        if written is None:
+            return
+        path, digest = written
+        write_action_output(STRUCTURED_OUTPUT_PATH_OUTPUT, str(path))
+        write_action_output(STRUCTURED_OUTPUT_SHA256_OUTPUT, digest)
+        write_action_output(STRUCTURED_OUTPUT_ARTIFACT_OUTPUT, review_output_artifact_name(record))
+        log(f"Structured output written: {REVIEW_OUTPUT_REL} ({len(text.encode('utf-8'))} bytes, sha256 {digest[:12]}…)")
+    except Exception as exc:  # noqa: BLE001 — never turns a finished review into a failure
+        log(f"review output skipped: {type(exc).__name__}: {exc}")
+
+
 def main() -> int:
     """Entry point: run the review and ALWAYS leave a run record behind."""
     record: RunRecord = RunRecord()
+    output_ctx: ReviewOutputContext = ReviewOutputContext()
     exit_code: int = 1
     crashed: bool = False
     try:
-        exit_code = _main_impl(record)
+        exit_code = _main_impl(record, output_ctx)
         return exit_code
     except BaseException:
         crashed = True
@@ -12674,9 +12931,13 @@ def main() -> int:
     finally:
         status, failure_class = resolve_run_status(record, exit_code, crashed=crashed)
         write_run_record(record, status=status, failure_class=failure_class)
+        # RFC-05: the structured document follows the run record on every
+        # exit path (success, skip, failure) and points the outputs at itself.
+        write_review_output_for_run(record, output_ctx, status=status, failure_class=failure_class)
 
 
-def _main_impl(record: RunRecord) -> int:
+def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = None) -> int:
+    ctx_out: ReviewOutputContext = output_ctx if output_ctx is not None else ReviewOutputContext()
     # ------------------------------------------------------------------
     # Load + validate environment
     # ------------------------------------------------------------------
@@ -12705,6 +12966,7 @@ def _main_impl(record: RunRecord) -> int:
     )
     record.provider = provider_id if provider_id in PROVIDER_IDS_FOR_RECORD else record.provider
     record.endpoint_kind = backend_profile.kind
+    ctx_out.endpoint_host = "" if backend_profile.is_default else str(getattr(backend_profile, "host", "") or "")
     record.head_sha = head_sha
     record.runtime_sha = _runtime_sha(action_path)
     bedrock_env_credentials: bool = False
@@ -13353,6 +13615,7 @@ def _main_impl(record: RunRecord) -> int:
         )
         # v3 parity tools read the SHA-bound inventory from the state.
         state.inventory = pr_ctx.inventory
+        ctx_out.inventory = pr_ctx.inventory
         if prompt_extension_file:
             state.extra_instruction_files = (prompt_extension_file,)
         if pr_ctx.inventory is not None and not pr_ctx.inventory.complete:
@@ -13722,6 +13985,8 @@ def _main_impl(record: RunRecord) -> int:
     except Exception as exc:  # noqa: BLE001 — the verifier fails open into visibility
         log(f"verifier crashed: {type(exc).__name__}: {exc} — publishing claimed criticals as annotated warnings")
         verifier_report = VerifierReport(reason=f"verifier crashed: {type(exc).__name__}")
+    ctx_out.result = result
+    ctx_out.verifier_report = verifier_report
     policy_counts: dict[str, int] = apply_severity_policy(
         result, strict_unverified_criticals=verifier_policy.strict_unverified_criticals
     )
@@ -13753,6 +14018,7 @@ def _main_impl(record: RunRecord) -> int:
     )
     record.strictness = strictness
     record.gate_passed = not blocked
+    ctx_out.strictness, ctx_out.blocked, ctx_out.block_reason = strictness, blocked, block_reason
     record.status = result.status  # same vocabulary as run-record/3.0 (completed / incomplete / timeout)
     if pr_desc_mode == PR_DESC_MODE_BLOCK and not description_verdict.is_adequate:
         log(f"PR description gate: blocking — {description_verdict.reason}")
@@ -13764,6 +14030,7 @@ def _main_impl(record: RunRecord) -> int:
 
     # v3 (RFC-03 § Structured summary): the posted body is generated from
     # the final findings; the model's text becomes the bounded narrative.
+    ctx_out.narrative = result.summary or ""
     result.summary = render_review_summary(
         result,
         narrative=result.summary,
@@ -14002,6 +14269,8 @@ def _main_impl(record: RunRecord) -> int:
     # ------------------------------------------------------------------
     # Action outputs
     # ------------------------------------------------------------------
+    ctx_out.posted_markdown = result.summary
+    ctx_out.review_url = review_url or None
     write_all_outputs(
         skipped=False,
         severity=severity,

@@ -399,6 +399,7 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 - Side is `LEFT`/`RIGHT` (case-insensitive on input, uppercased on output).
 - Unknown top-level or per-finding keys are silently ignored (forward-compatibility with vendor extensions).
 - The optional v3 keys (`title`, `category`, `evidence`) are validated strictly for type and enum, bounded in length, and lifted into `Finding.extra`; a legacy file without them parses exactly as before.
+- The findings file is the **CLI → runtime** input; the runtime's own output is the `review-output/3.0` document (`.aiprr/review-output.json`, see `docs/ARCHITECTURE.md`), which lifts these findings into finding v3 with provenance, verification and the generated summary — CLIs are never asked to produce those.
 
 Missing files raise `FileNotFoundError` with an actionable message. Malformed JSON raises `ValueError` with the offending snippet quoted.
 

@@ -308,6 +308,9 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `inline-dropped` | int | Inline comments dropped because GitHub returned 422. |
 | `blocked` | bool | Whether strictness blocked the check. When `true`, the action exits with code 2. |
 | `skipped` | bool | Whether the run was skipped without invoking the LLM (label/author gate OR `skip-review-label` emergency bypass). |
+| `structured-output-path` | string | v3: absolute path of the `review-output/3.0` document (`.aiprr/review-output.json`): run record, change inventory, findings with evidence and verification, refuted findings, prior-findings ledger, generated summary (`rendered_markdown` = the posted body), gate, usage, cost. Written on every exit path. |
+| `structured-output-sha256` | string | v3: SHA-256 of that document, so a downstream step can verify it reads what this run wrote. |
+| `structured-output-artifact` | string | v3: name of the uploaded artifact carrying the document (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90-day retention). |
 | `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every successful IAR pipeline run; empty if the pipeline crashed mid-flight (caught by the try/except safety net). |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |

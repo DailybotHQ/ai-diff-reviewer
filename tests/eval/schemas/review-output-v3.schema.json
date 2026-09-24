@@ -96,7 +96,8 @@
             "completed",
             "incomplete",
             "failed",
-            "timeout"
+            "timeout",
+            "skipped"
           ]
         }
       }

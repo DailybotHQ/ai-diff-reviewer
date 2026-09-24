@@ -241,6 +241,16 @@ outputs:
     description: 'Whether the run was skipped without invoking the LLM (`true`/`false`). Set to `true` when EITHER (a) the label gate suppressed the run (missing `label-gate` label, `author-association` filter, `trigger-mode: label-once` already reviewed this label toggle, etc.) OR (b) the configured `skip-review-label` was present on the PR at trigger time (the emergency-bypass short-circuit).'
     value: ${{ steps.review.outputs.skipped }}
 
+  structured-output-path:
+    description: 'v3: absolute path of the `review-output/3.0` document this run wrote (`.aiprr/review-output.json` in the workspace) — the run record, the change inventory, the findings with evidence and verification, the refuted findings, the prior-findings ledger, the generated summary (`rendered_markdown` is the posted body), the gate, usage and cost. Written on every exit path; empty only when the document could not be written.'
+    value: ${{ steps.review.outputs.structured-output-path }}
+  structured-output-sha256:
+    description: 'v3: SHA-256 of the document at `structured-output-path`, so a downstream step can verify it reads what this run wrote.'
+    value: ${{ steps.review.outputs.structured-output-sha256 }}
+  structured-output-artifact:
+    description: 'v3: name of the workflow artifact that carries the document (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90-day retention).'
+    value: ${{ steps.review.outputs.structured-output-artifact }}
+
   # ---------------- Iteration-Aware Review (IAR) outputs ----------------
   # Populated on every run. If the IAR pipeline crashes mid-flight
   # (caught by main()'s try/except), all five outputs stay as empty
@@ -439,3 +449,16 @@ runs:
       run: |
         set -euo pipefail
         python3 "${AIPRR_ACTION_PATH}/scripts/reviewer.py"
+
+    - name: Upload the structured review output (review-output/3.0)
+      # RFC-05: the document is the input of the aggregator, the eval gate and
+      # the apply-review skill. `always()` so a failed or skipped run still
+      # ships its (minimal) document; the step is a no-op when nothing was
+      # written. Pinned by SHA (v4.6.2).
+      if: always() && steps.review.outputs.structured-output-path != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ steps.review.outputs.structured-output-artifact }}
+        path: ${{ steps.review.outputs.structured-output-path }}
+        retention-days: 90
+        if-no-files-found: ignore
