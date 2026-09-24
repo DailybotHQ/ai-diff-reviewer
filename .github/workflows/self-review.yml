@@ -99,6 +99,12 @@ jobs:
       # RFC-04: the leg ids the aggregate job waits for (see the decide step).
       expected_legs: ${{ steps.decide.outputs.expected_legs }}
     steps:
+      # The decide step resolves the expected leg ids with the runtime's own
+      # functions, so it needs the checkout (read-only, no credentials kept).
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       # No checkout: the decision only reads event context and secret presence,
       # never the diff (full coverage = every provider on every ready PR).
       - name: Decide which provider legs run
