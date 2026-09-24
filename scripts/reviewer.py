@@ -908,6 +908,15 @@ DEDUP_DISTINCT_JACCARD: float = 0.15       # same anchor but token overlap below
 MIN_AGREEMENT_ENV: str = "AIPRR_MIN_AGREEMENT"          # aggregate only; default 1 = single-leg semantics
 REQUIRE_ALL_LEGS_ENV: str = "AIPRR_REQUIRE_ALL_LEGS"    # aggregate only; default false
 MAX_AGGREGATE_LEGS: int = 16
+AGGREGATE_SCOPE: str = "aggregate"                        # review scope of the aggregate job (marker, IAR state, collapse)
+AGGREGATE_MARKER: str = "<!-- ai-pr-reviewer-aggregate -->"
+ARTIFACT_DIR_ENV: str = "AIPRR_ARTIFACT_DIR"              # where the download-artifact step put the leg documents
+JOB_SUMMARY_ENV: str = "GITHUB_STEP_SUMMARY"
+LEGS_EXPECTED_OUTPUT: str = "legs-expected"
+LEGS_DELIVERED_OUTPUT: str = "legs-delivered"
+DUPLICATES_REMOVED_OUTPUT: str = "duplicates-removed"
+AGREEMENT_HISTOGRAM_OUTPUT: str = "agreement-histogram"
+MAX_ARTIFACT_FILES: int = 500
 MAX_AGGREGATE_FINDINGS: int = 2_000
 VERIFIER_MODE_ON: str = "on"
 VERIFIER_MODE_OFF: str = "off"
@@ -1279,7 +1288,10 @@ PROVIDER_MARKER_PREFIX: str = "<!-- ai-pr-reviewer-provider:"
 
 
 def provider_marker(provider_id: str) -> str:
-    """The HTML-comment marker identifying which provider produced a comment."""
+    """The HTML-comment marker identifying which provider produced a comment.
+    The aggregate job carries `AGGREGATE_MARKER` instead (RFC-04 § Publishing)."""
+    if provider_id == AGGREGATE_SCOPE:
+        return AGGREGATE_MARKER
     return f"{PROVIDER_MARKER_PREFIX} {provider_id} -->"
 
 # Agent-runner findings contract (see AgentRunnerProvider docstring).
@@ -1872,6 +1884,8 @@ def write_all_outputs(
     write_action_output(STRUCTURED_OUTPUT_PATH_OUTPUT, "")
     write_action_output(STRUCTURED_OUTPUT_SHA256_OUTPUT, "")
     write_action_output(STRUCTURED_OUTPUT_ARTIFACT_OUTPUT, "")
+    for name in (LEGS_EXPECTED_OUTPUT, LEGS_DELIVERED_OUTPUT, DUPLICATES_REMOVED_OUTPUT, AGREEMENT_HISTOGRAM_OUTPUT):
+        write_action_output(name, "")
     write_iar_outputs_empty()
 
 
@@ -8032,6 +8046,12 @@ def run_verifier(
     selected_ids: set[int] = {id(f) for f in selected}
     stamp: str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for f in result.findings:
+        if f.verification.status == VERIFICATION_VERIFIED and f.verification.checks:
+            # Already verified by a code-grounded pass (an aggregated leg that
+            # ran in `review` mode, or a re-run): verified once is verified —
+            # never re-stamped as skipped / unverified, never paid for twice.
+            report.verified += 1
+            continue
         if id(f) not in selected_ids:
             claimed: str = f.severity_claimed or f.severity
             if claimed == SEVERITY_INFO:
@@ -12853,6 +12873,9 @@ class ReviewOutputContext:
     posted_markdown: str = ""
     review_url: str | None = None
     endpoint_host: str = ""
+    # RFC-04 (aggregate role): the legs block and the duplicates removed.
+    legs: list[dict[str, Any]] | None = None
+    duplicates_removed: int | None = None
 
 
 def _normalise_retired_reason(reason: str) -> str:
@@ -12975,8 +12998,8 @@ def build_review_output(
             "min_agreement": 1,
             "require_all_legs": False,
         },
-        "legs": None,
-        "duplicates_removed": None,
+        "legs": [dict(leg) for leg in ctx.legs] if ctx.legs is not None else None,
+        "duplicates_removed": ctx.duplicates_removed,
         "usage_known": bool(run_doc.get("usage_known")),
         "usage": usage if run_doc.get("usage_known") else None,
         "cost_usd": run_doc.get("cost_usd") if run_doc.get("usage_known") else None,
@@ -13493,12 +13516,82 @@ def render_aggregate_legs_table(report: AggregateReport) -> str:
     return "\n".join(lines)
 
 
+def load_leg_documents(artifact_dir: Path) -> tuple[list[LegDocument], list[str]]:
+    """Every `*.json` under the download directory that parses as a
+    `review-output/3.0` document; the rest are reported as invalid legs.
+    `download-artifact` writes one sub-directory per artifact."""
+    docs: list[LegDocument] = []
+    invalid: list[str] = []
+    files: list[Path] = sorted(p for p in artifact_dir.rglob("*.json") if p.is_file())[:MAX_ARTIFACT_FILES]
+    for path in files:
+        rel: str = str(path.relative_to(artifact_dir))
+        try:
+            raw: bytes = path.read_bytes()
+            if len(raw) > MAX_REVIEW_OUTPUT_BYTES:
+                raise ValueError(f"{rel}: {len(raw)} bytes exceed MAX_REVIEW_OUTPUT_BYTES")
+            docs.append(parse_leg_document(json.loads(raw.decode("utf-8")), source=rel))
+        except (ValueError, OSError, UnicodeDecodeError) as exc:
+            invalid.append(f"{rel}: {exc}")
+    return docs, invalid
+
+
+def write_job_summary(text: str) -> None:
+    """Append Markdown to the workflow job summary (`$GITHUB_STEP_SUMMARY`); no-op outside Actions."""
+    target: str = os.environ.get(JOB_SUMMARY_ENV, "").strip()
+    if not target:
+        return
+    try:
+        with open(target, "a", encoding="utf-8") as fh:
+            fh.write(text.rstrip() + "\n\n")
+    except OSError as exc:
+        log(f"could not write the job summary (non-fatal): {exc}")
+
+
+def write_aggregate_outputs(report: AggregateReport) -> None:
+    write_action_output(LEGS_EXPECTED_OUTPUT, ",".join(report.legs_expected))
+    write_action_output(LEGS_DELIVERED_OUTPUT, ",".join(report.legs_delivered))
+    write_action_output(DUPLICATES_REMOVED_OUTPUT, str(report.duplicates_removed))
+    write_action_output(AGREEMENT_HISTOGRAM_OUTPUT, json.dumps(dict(sorted(report.agreement_histogram.items(), key=lambda kv: int(kv[0]))), separators=(",", ":")))
+
+
+def insert_legs_table(summary: str, table: str) -> str:
+    """Put the legs table right after the check line of the generated body."""
+    marker: str = "\nCheck: "
+    i: int = summary.find(marker)
+    if i < 0:
+        return summary.rstrip() + "\n\n" + table
+    j: int = summary.find("\n", i + 1)
+    j = len(summary) if j < 0 else j
+    return summary[: j + 1] + "\n" + table + "\n" + summary[j + 1 :]
+
+
+def run_aggregate_stage(*, artifact_dir: Path, head_sha: str, expected_legs: tuple[str, ...]) -> tuple["ReviewResult", AggregateReport]:
+    """The aggregate role's "review": documents → consolidated result + report."""
+    docs, invalid = load_leg_documents(artifact_dir)
+    log(f"aggregate: {len(docs)} leg document(s) under {artifact_dir}" + (f"; {len(invalid)} invalid: {'; '.join(invalid[:3])}" if invalid else ""))
+    result, report = aggregate_documents(docs, head_sha=head_sha, expected_legs=expected_legs)
+    report.legs_invalid = invalid
+    if not result.summary:
+        result.summary = result.status_note or "No leg carried a narrative."
+    log(
+        f"aggregate: legs delivered {len(report.legs_delivered)}/{len(report.legs_expected)}"
+        + (f", partial {', '.join(report.legs_partial)}" if report.legs_partial else "")
+        + (f", missing {', '.join(report.legs_missing)}" if report.legs_missing else "")
+        + f"; findings {report.findings_in} → {len(result.findings)} ({report.duplicates_removed} duplicate(s) removed)"
+        + (f"; {report.ignored_other_head} document(s) for another head ignored" if report.ignored_other_head else "")
+    )
+    return result, report
+
+
 def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = None) -> int:
     ctx_out: ReviewOutputContext = output_ctx if output_ctx is not None else ReviewOutputContext()
     # ------------------------------------------------------------------
     # Load + validate environment
     # ------------------------------------------------------------------
     provider_id: str = os.environ.get("AIPRR_PROVIDER", "anthropic").strip()
+    # RFC-04 role — parsed first because the review scope (marker, IAR state,
+    # collapse) depends on it; validated with the other inputs below.
+    mode: str = os.environ.get(MODE_ENV, MODE_REVIEW).strip().lower() or MODE_REVIEW
     api_key: str = os.environ.get("AIPRR_API_KEY", "").strip()
     gh_token: str = os.environ.get("AIPRR_GH_TOKEN", "").strip()
     repo: str = os.environ.get("AIPRR_REPO", "").strip()
@@ -13576,7 +13669,7 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     register_secret(api_key)
     register_secret(gh_token)
     pr_number: int = int(pr_number_raw)
-    review_scope: str = review_scope_id(provider_id, api_base)
+    review_scope: str = AGGREGATE_SCOPE if mode == MODE_AGGREGATE else review_scope_id(provider_id, api_base)
     log_backend_selection(backend_profile)
 
     # Model: empty → provider default; tier word → cost-controls table;
@@ -13736,7 +13829,6 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             os.environ.get(STRICT_UNVERIFIED_CRITICALS_ENV, "false"), default=False
         ),
     )
-    mode: str = os.environ.get(MODE_ENV, MODE_REVIEW).strip().lower() or MODE_REVIEW
     if mode not in VALID_MODES:
         log(f"Invalid mode {mode!r} — expected one of {', '.join(VALID_MODES)}")
         write_all_outputs(skipped=False)
@@ -13744,10 +13836,23 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     expected_legs: tuple[str, ...] = parse_expected_legs(os.environ.get(EXPECTED_LEGS_ENV, ""))
     set_publish_policy(PublishPolicy(mode=mode, expected_legs=expected_legs))
     ctx_out.role = mode
+    min_agreement: int = max(1, int(os.environ.get(MIN_AGREEMENT_ENV, "1").strip() or "1"))
+    require_all_legs: bool = parse_bool(os.environ.get(REQUIRE_ALL_LEGS_ENV, "false"), default=False)
+    artifact_dir: Path = Path(os.environ.get(ARTIFACT_DIR_ENV, "").strip() or ".aiprr/legs")
     if mode == MODE_EMIT:
         log(
             "mode=emit: the review runs and the document/artifact are produced; every GitHub write is suppressed"
             + (f"; expected legs: {', '.join(expected_legs)}" if expected_legs else "; no expected-legs — one note will be posted (D-19)")
+        )
+        if verifier_policy.enabled:
+            # D-06: the verifier runs once, in the aggregate job, over the consolidated set.
+            verifier_policy.enabled = False
+            log("mode=emit: verifier deferred to the aggregate job (D-06)")
+    elif mode == MODE_AGGREGATE:
+        log(
+            f"mode=aggregate: consolidating the leg documents under {artifact_dir}"
+            + (f"; expected legs: {', '.join(expected_legs)}" if expected_legs else "; expected-legs unset — every delivered leg counts")
+            + f"; min-agreement={min_agreement}, require-all-legs={require_all_legs}"
         )
     complexity_label_prefix: str = (
         os.environ.get(
@@ -14016,6 +14121,16 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     # ------------------------------------------------------------------
     # Collapse previous bot reviews/comments as outdated
     # ------------------------------------------------------------------
+    if collapse_previous and mode == MODE_AGGREGATE:
+        # RFC-04 § Publishing: the first aggregated round also minimizes the
+        # surviving per-leg artefacts of the v2 shape (migration) — detected by
+        # the absence of any aggregate-scoped IAR state on the PR.
+        try:
+            if read_prior_iteration_state(repo=repo, pr_number=pr_number, token=gh_token, provider_id=AGGREGATE_SCOPE, bot_login=bot_login) is None:
+                migrated: int = gh_collapse_previous_reviews(token=gh_token, repo=repo, pr_number=pr_number, bot_login=bot_login, provider_marker_text="")
+                log(f"aggregate: first aggregated round — collapsed {migrated} per-leg artefact(s) (migration)")
+        except Exception as exc:  # noqa: BLE001 — best-effort GH API call
+            log(f"aggregate: migration collapse failed (non-fatal): {exc}")
     if collapse_previous:
         try:
             gh_collapse_previous_reviews(
@@ -14226,9 +14341,11 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
                 f"adequate={description_verdict.is_adequate}"
             )
 
-        provider: Provider | AgentRunnerProvider = build_provider(
-            provider_id, api_key=api_key, model=model, api_base=api_base
-        )
+        provider: Provider | AgentRunnerProvider | None = None
+        if mode != MODE_AGGREGATE:
+            provider = build_provider(
+                provider_id, api_key=api_key, model=model, api_base=api_base
+            )
         record.run_started = True
         record.setup_seconds = round(time.monotonic() - record.started_monotonic, 3)
         _run_started_monotonic: float = time.monotonic()
@@ -14245,7 +14362,14 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         if agent_runner_warning:
             log(agent_runner_warning)
 
-        if isinstance(provider, AgentRunnerProvider):
+        aggregate_report: AggregateReport | None = None
+        if mode == MODE_AGGREGATE:
+            # Aggregate role (RFC-04): no model call — the "review" is the
+            # consolidation of the emitted leg documents for this head.
+            result, aggregate_report = run_aggregate_stage(artifact_dir=artifact_dir, head_sha=head_sha, expected_legs=expected_legs)
+            ctx_out.legs = aggregate_report.legs_block()
+            ctx_out.duplicates_removed = aggregate_report.duplicates_removed
+        elif isinstance(provider, AgentRunnerProvider):
             # Agent-runner path: vendor CLI owns the tool-use loop. Verify the
             # CLI is on PATH (defensive — the composite step should have
             # installed it), then invoke and parse findings.json.
@@ -14578,8 +14702,15 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
     if dropped_refuted:
         log(f"IAR: dropped {dropped_refuted} refuted fingerprint(s) from the open set")
     severity: str = result.overall_severity
+    gate_severity: str = severity
+    aggregate_decision: AggregateGateDecision | None = None
+    if mode == MODE_AGGREGATE and aggregate_report is not None:
+        aggregate_decision = apply_aggregate_gate_knobs(result, aggregate_report, min_agreement=min_agreement, require_all_legs=require_all_legs)
+        gate_severity = aggregate_decision.severity
+        if aggregate_decision.warnings_below_agreement:
+            log(f"aggregate: {aggregate_decision.warnings_below_agreement} warning(s) below min-agreement={min_agreement} do not gate")
     blocked, block_reason = compute_check_gate(
-        severity=severity,
+        severity=gate_severity,
         strictness=strictness,
         incomplete=result.incomplete,
         cli_name=str(getattr(provider, "CLI_NAME", provider_id)),
@@ -14589,6 +14720,11 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         review_status=result.status,
         status_note=result.status_note,
     )
+    if aggregate_report is not None and not blocked:
+        if aggregate_decision is not None and aggregate_decision.forced_block_reason:
+            blocked, block_reason = True, aggregate_decision.forced_block_reason
+        elif not aggregate_report.legs_delivered and not aggregate_report.legs_partial and aggregate_report.legs_expected:
+            blocked, block_reason = True, "no review leg delivered a document for this head"
     log(
         f"Severity: {severity}; strictness: {strictness}; blocked: {blocked} "
         f"({block_reason})"
@@ -14626,6 +14762,8 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
             "Review body recommended `approve` while the gate is failing — "
             "rewrote it to `request-changes`."
         )
+    if aggregate_report is not None:
+        result.summary = insert_legs_table(result.summary, render_aggregate_legs_table(aggregate_report))
     result.summary = (result.summary or "").rstrip() + render_gate_status_block(
         blocked=blocked,
         block_reason=block_reason,
@@ -14856,6 +14994,15 @@ def _main_impl(record: RunRecord, output_ctx: "ReviewOutputContext | None" = Non
         blocked=blocked,
         review_url=review_url,
     )
+    if aggregate_report is not None:
+        write_aggregate_outputs(aggregate_report)
+        write_job_summary(
+            "## AI Diff Reviewer — aggregated review\n\n"
+            + render_aggregate_legs_table(aggregate_report)
+            + f"\n\nCheck: {'🚫 failing' if blocked else '✅ passing'} — strictness `{strictness}`: {block_reason}"
+            + (f"\n\nReview: {review_url}" if review_url else "")
+            + (f"\n\nInvalid documents: {'; '.join(aggregate_report.legs_invalid[:5])}" if aggregate_report.legs_invalid else "")
+        )
     # IAR outputs: overwrite the five empty defaults from write_all_outputs
     # with real values ($GITHUB_OUTPUT is append-only; last write wins).
     # Only fires when the full IAR pipeline succeeded — a mid-flight

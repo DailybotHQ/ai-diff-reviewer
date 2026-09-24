@@ -214,6 +214,32 @@ shows what it costs in recall.
 - **Security posture:** emit legs need no `pull-requests: write` — recorded
   in `docs/SECURITY.md`.
 
+## Implementation notes (PLAN_v3_implementation Tasks 21–23, 2026-09-24)
+
+- **Artifact naming.** GitHub artifact names cannot contain `/`; the
+  `ai-diff-reviewer/<head_sha>/<leg_id>.json` scheme above maps to the
+  artifact name `ai-diff-reviewer-<head12>-<provider>-<kind>-<model>` (one
+  file, `review-output.json`, inside). The aggregate job downloads
+  `ai-diff-reviewer-*` and keys on the `head_sha` inside each document.
+- **Dedup calibration on the labelled six-leg round of PR #58**
+  (`tests/fixtures/ensemble/pr58-f3808cd.json`, 21 findings / 12 defects):
+  two refinements to steps 1–4 were needed for precision 1.0 — a leg never
+  duplicates itself (two reports from one leg at one anchor are two
+  findings), and two claims at one anchor with token Jaccard < 0.15 stay
+  apart (the distinct pair measured 0.07, every same-defect pair ≥ 0.24;
+  the title ratio is noise on short titles, 0.11 for a true pair, and the
+  model's category is not reliable enough to key on). Within the key's
+  reach every duplicate merged (residual 0 %); cross-anchor duplicates (the
+  same defect 6 lines or a file apart, 3 of 15) remain by design.
+- **Verifier placement (D-06).** `mode: emit` disables the leg's verifier;
+  the aggregate job verifies the consolidated set once. A finding a leg
+  already verified (checks present) stays verified — never re-stamped or
+  paid for twice.
+- **`min-agreement`** removes lone warnings from the *gate* only; they are
+  still posted with their agreement.
+- **Emit legs exit 0**; the gate is recorded in their outputs and document
+  and enforced by the aggregate job.
+
 ## Open questions
 
 | Id | Question | Recommendation |

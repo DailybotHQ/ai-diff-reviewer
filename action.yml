@@ -266,6 +266,18 @@ outputs:
   structured-output-artifact:
     description: 'v3: name of the workflow artifact that carries the document (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90-day retention).'
     value: ${{ steps.review.outputs.structured-output-artifact }}
+  legs-expected:
+    description: 'v3 aggregate: comma-separated leg ids the aggregate job expected (`expected-legs`, or every delivered leg when unset). Empty on review/emit runs.'
+    value: ${{ steps.review.outputs.legs-expected }}
+  legs-delivered:
+    description: 'v3 aggregate: comma-separated leg ids that delivered a complete document for this head.'
+    value: ${{ steps.review.outputs.legs-delivered }}
+  duplicates-removed:
+    description: 'v3 aggregate: findings merged away by the dedup key (findings in minus findings published).'
+    value: ${{ steps.review.outputs.duplicates-removed }}
+  agreement-histogram:
+    description: 'v3 aggregate: JSON object `{"<legs reporting>": <findings>}` over the consolidated findings.'
+    value: ${{ steps.review.outputs.agreement-histogram }}
 
   # ---------------- Iteration-Aware Review (IAR) outputs ----------------
   # Populated on every run. If the IAR pipeline crashes mid-flight
@@ -398,6 +410,19 @@ runs:
     # Main review runtime — invoked for every provider (chat-completions
     # OR agent-runner). scripts/reviewer.py dispatches on AIPRR_PROVIDER.
     # ---------------------------------------------------------------
+    - name: Download the emitted leg documents (mode=aggregate)
+      # RFC-04: the aggregate job consolidates the `review-output/3.0`
+      # artifacts the emit legs uploaded for this head. Every artifact of the
+      # run is downloaded into one sub-directory each; the runtime keys on the
+      # head SHA inside the documents and ignores other heads. Pinned by SHA
+      # (v4.3.0).
+      if: inputs.mode == 'aggregate'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        pattern: ai-diff-reviewer-*
+        path: ${{ runner.temp }}/ai-diff-reviewer-legs
+        merge-multiple: false
+
     - name: Run AI Diff Reviewer
       id: review
       shell: bash
@@ -437,6 +462,7 @@ runs:
         AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
         AIPRR_MIN_AGREEMENT: ${{ inputs.min-agreement }}
         AIPRR_REQUIRE_ALL_LEGS: ${{ inputs.require-all-legs }}
+        AIPRR_ARTIFACT_DIR: ${{ runner.temp }}/ai-diff-reviewer-legs
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
         # `claude-code`, `cursor`, `codex`, and `grok` provider branches.

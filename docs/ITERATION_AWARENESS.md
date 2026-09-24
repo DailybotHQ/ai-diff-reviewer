@@ -369,6 +369,8 @@ IAR: safety net triggered (45.2% new lines exceeds threshold 30%) — forcing fi
 
 **The rescue.** `_fetch_latest_marker_body` uses a three-tier ordering to find the latest marker that carries state, in priority order:
 
+**v3 aggregate role (RFC-04).** When the review is published by a `mode: aggregate` job, the IAR state is embedded on the tracking comment that carries `<!-- ai-pr-reviewer-aggregate -->` and read back with that scope on the next round — one history per PR. Emit legs never write a marker; on the first aggregated round the runtime collapses surviving per-leg markers (migration) and starts the aggregate history fresh. Refuted fingerprints are dropped from the open set before the state is embedded.
+
 1. **Newest non-minimized marker WITH an `IAR_STATE_TAG_OPEN` block** — the common path when `collapse-previous: false` or the current run is the first review since collapse.
 2. **Newest minimized marker WITH state block** — the collapse-boundary rescue. Under `collapse-previous: true` the last real tracking comment has been minimized, but the state block is still in its body. Reading it here is what makes IAR persistence work on defaults.
 3. **Newest marker of any shape** — back-compat fallback for callers who just want "the last marker we posted"; `_parse_state_from_marker_body` returns `None` if the body carries no state block, which downstream treats as a first review.
