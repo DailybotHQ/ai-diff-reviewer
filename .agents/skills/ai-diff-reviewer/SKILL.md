@@ -1,7 +1,7 @@
 ---
 name: ai-diff-reviewer
 description: Local & CI companion to the AI Diff Reviewer GitHub Action (DailybotHQ/ai-diff-reviewer). Router for five capabilities — (1) review the current branch's diff locally with the same methodology as the CI action; (2) generate a repo-tailored .review/extension.md (generate-extension); (3) install and configure the Action, and answer reference questions about any action.yml input (setup); (4) author a well-documented pull request from the branch's diff, syncing the branch with the remote base first (open-pr); (5) read the review CI posted on the open PR and walk through each finding to apply, defer or skip (apply-review). Auto-detects .review/extension.md and layers it on the shipped default prompt for local-CI parity. Use when the developer asks to review current changes or pre-flight before pushing, to customize the reviewer for this repo, how to set up AI Diff Reviewer or what an input does, to open, create or rewrite a PR, or what the CI review said and how to address its findings.
-version: "2.5.1"
+version: "3.0.0"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🔍","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git"]}}}
@@ -40,7 +40,7 @@ doesn't have it yet.
 | 2 | Author repo-specific overrides (`.review/extension.md`) | [`generate-extension`](generate-extension/SKILL.md) | 🖥️ Local **+** ☁️ CI (shared file) |
 | 3 | Install the GitHub Action + write `pr-review.yml` | [`setup`](setup/SKILL.md) | ☁️ CI |
 | 4 | Draft the PR title + body from the diff | [`open-pr`](open-pr/SKILL.md) | 🖥️ Local → GitHub |
-| 5 | Read the CI review on the PR + walk through findings to apply/defer/skip | [`apply-review`](apply-review/SKILL.md) | ☁️ CI → 🖥️ Local |
+| 5 | Read the CI review on the PR (the v3 structured-output artifact first, review threads as the fallback) + walk through findings to apply/defer/skip | [`apply-review`](apply-review/SKILL.md) | ☁️ CI → 🖥️ Local |
 
 Sub-skill 3 (`setup`) also doubles as the **reference manual** for
 every `action.yml` input via [`setup/reference.md`](setup/reference.md)
@@ -257,7 +257,7 @@ four sibling sub-skills have their own procedures in their respective
 - [`generate-extension/SKILL.md`](generate-extension/SKILL.md) — author `.review/extension.md`
 - [`setup/SKILL.md`](setup/SKILL.md) — install the GitHub Action
 - [`open-pr/SKILL.md`](open-pr/SKILL.md) — author the PR title + body
-- [`apply-review/SKILL.md`](apply-review/SKILL.md) — read + apply the CI review posted on the PR
+- [`apply-review/SKILL.md`](apply-review/SKILL.md) — read + apply the CI review posted on the PR (artifact-first since v3: the `review-output/3.0` document carries findings, verification, refuted findings and the prior ledger; threads are the fallback)
 
 ---
 
