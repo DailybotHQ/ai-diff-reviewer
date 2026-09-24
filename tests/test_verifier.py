@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from typing import Any
 
@@ -156,6 +157,20 @@ class AliasResolution(unittest.TestCase):
         self.assertIsInstance(prov, reviewer.AnthropicProvider); self.assertEqual(model, "claude-haiku-4-5")
         prov, model, alias, kind, reason = reviewer.build_verifier_provider(provider_id="cursor", api_key="k", api_base="", requested_model="", review_model="auto")
         self.assertIsNone(prov); self.assertIn("no in-process backend", reason)
+
+    def test_cli_lane_verifier_follows_the_inherited_base_url_hook(self) -> None:
+        # PR #61 self-review (glm, warning): a claude-code lane pointed at Z.ai only through
+        # ANTHROPIC_BASE_URL used to send the verifier (with the Z.ai key) to the vendor default host.
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": reviewer.ZAI_ANTHROPIC_COMPAT_API_BASE}):
+            prov, model, alias, kind, reason = reviewer.build_verifier_provider(provider_id="claude-code", api_key="zai-k", api_base="", requested_model="", review_model="glm-5.3")
+        self.assertIsInstance(prov, reviewer.AnthropicProvider); self.assertEqual((kind, reason), ("zai", ""))
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": "not a url"}):
+            prov, _, _, _, reason = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="", requested_model="", review_model="m")
+        self.assertIsNone(prov); self.assertIn("ANTHROPIC_BASE_URL", reason)
+        with mock.patch.dict(os.environ, {"ANTHROPIC_BASE_URL": reviewer.ZAI_ANTHROPIC_COMPAT_API_BASE}):
+            # an explicit api-base input still wins over the hook
+            _, _, _, kind, _ = reviewer.build_verifier_provider(provider_id="claude-code", api_key="k", api_base="", requested_model="", review_model="m")
+            self.assertEqual(kind, "zai")
         prov, model, alias, kind, reason = reviewer.build_verifier_provider(provider_id="openai", api_key="k", api_base="https://example.invalid/v1", requested_model="", review_model="my-deployment")
         self.assertIsInstance(prov, reviewer.OpenAIProvider); self.assertEqual((model, alias), ("my-deployment", ""))
 
@@ -165,12 +180,12 @@ class RunVerifierAndRecord(_Repo):
         result = reviewer.ReviewResult(findings=[_finding("critical", fp="a" * 16), _finding("warning", line=3, fp="b" * 16), _finding("info", line=4)])
         prov = ScriptedVerifier({"status": "verified", "reason": "r", "checks": SUPPORTS})
         report = reviewer.run_verifier(result, policy=reviewer.VerifierPolicy(warning_sample_pct=0), provider=prov, model="m", alias="economy", endpoint_kind="xai", unavailable_reason="", inventory=None)
-        self.assertEqual((report.runs, report.verified, report.skipped), (1, 1, 1))
+        self.assertEqual((report.runs, report.verified, report.skipped), (1, 1, 2))
         self.assertEqual(result.findings[0].verification.status, "verified")
         self.assertEqual((result.findings[0].verification.verifier_model_alias, result.findings[0].verification.verifier_endpoint_kind), ("economy", "xai"))
         self.assertIsNotNone(result.findings[0].verification.verified_at)
         self.assertEqual((result.findings[1].verification.status, result.findings[1].verification.reason), ("skipped", "not sampled"))
-        self.assertEqual(result.findings[2].verification.status, "unverified", "info is never verified")
+        self.assertEqual((result.findings[2].verification.status, result.findings[2].verification.reason), ("skipped", "info is never verified"))
         self.assertGreater(report.usage.input_tokens, 0)
 
     def test_off_and_unavailable_paths(self) -> None:

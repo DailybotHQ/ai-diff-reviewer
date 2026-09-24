@@ -75,6 +75,16 @@ class NarrativeInvariant(unittest.TestCase):
         self.assertEqual(body.count("[^1]"), 2, "footnote marker once on first mention + the footnote definition")
         self.assertIn("[^1]: `src/gone.py:44` is mentioned above but is not a row of the findings table", body)
 
+    def test_findings_past_the_table_cap_are_still_table_anchors(self) -> None:
+        # PR #61 self-review (glm, info): rows are capped for display, but every published
+        # finding is posted inline — naming one past the cap must not be footnoted as "not posted".
+        n = reviewer.SUMMARY_MAX_TABLE_ROWS + 2
+        result = reviewer.ReviewResult(findings=[_f("src/a.py", 10 + i, "warning") for i in range(n)])
+        last = f"src/a.py:{10 + n - 1}"
+        body = _render(result, narrative=f"See `{last}`.")
+        self.assertNotIn("[^1]", body)
+        self.assertIn("more inline", body)
+
     def test_narrative_is_bounded(self) -> None:
         big = "word " * 2000
         body = _render(reviewer.ReviewResult(findings=[]), narrative=big)

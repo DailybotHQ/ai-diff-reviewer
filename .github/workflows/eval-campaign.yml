@@ -189,7 +189,9 @@ jobs:
   verdict:
     name: 'Validate records and compute the verdict'
     needs: [scope, campaign]
-    if: always() && needs.scope.result == 'success'
+    # Only a campaign that finished can mint a verdict — a failed, timed-out or
+    # cancelled lane must never produce the non-blocking verdict that unlocks a release.
+    if: always() && needs.scope.result == 'success' && needs.campaign.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -53,7 +53,9 @@ As a runtime backstop, the reviewer registers the provider API key and the GitHu
 
 The default `provider: anthropic` path is not subject to (1) or (2): its only tools are `read_file`/`grep`/`glob` (all `safe_repo_path`-scoped to the checkout), `post_inline_comment`, and `submit_review` — none can read process env or files outside the repo, so the worst case of a successful injection there is "the reviewer wrote silly comments on this one PR."
 
-### Custom endpoints (`api-base`, v2.1.0+) — where your key goes
+### Custom endpoints
+
+> **Verifier (v3).** The verifier runs on the in-process runner of the lane's kind with the lane's own credential and the lane's own base: the `api-base` input when set, otherwise — on CLI lanes only — the inherited `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` hook that `_build_cli_env` forwards to the CLI. It never sends a lane's key to the vendor default host when the lane was pointed elsewhere; an unusable inherited URL makes the verifier unavailable (fail-open into visibility, reason recorded) rather than mis-routed. (`api-base`, v2.1.0+) — where your key goes
 
 `api-base` points a runner at a different backend (Z.ai, xAI, Azure Foundry, DeepSeek, Moonshot/Kimi, MiniMax, Qwen/DashScope, Google Gemini, OpenRouter, or a self-hosted gateway). Recognised vendor hosts get a named endpoint profile (auth style, caching flags, known quirks such as Gemini rejecting `seed`); every other host is treated as a plain protocol-compatible gateway and warned about by name. The value is validated **before anything outward-facing happens** (`validate_api_base`): absolute `https://` URL (plain `http://` only for `localhost` / `127.0.0.1` / `[::1]`), a host, **ASCII hostnames only** (internationalised domains must be given in their explicit punycode `xn--` form so a homoglyph can never look like a vendor domain in your logs), no userinfo, no query string, no fragment. A malformed value aborts the run with a `CONFIGURATION ERROR` — the credential is never sent to a guessed host.
 

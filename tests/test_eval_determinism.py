@@ -77,6 +77,16 @@ class VerdictTests(unittest.TestCase):
         v = det.verdict(_campaign("baseline", 1.0, 4), _campaign("cand", 1.0, 1), candidate_runtime_sha="x", prompt_sha256="0" * 64, baseline_ref="b")
         self.assertTrue(any("recall regression" in b for b in v["blocking"]))
 
+    def test_incomplete_candidate_lane_blocks(self) -> None:
+        # PR #61 self-review (glm, warning): a lane that finished half its cells must not mint a
+        # non-blocking verdict (the verdict job used to run even after a failed campaign).
+        base = _campaign("baseline", 1.0, 4, cases=6)
+        cand = [r for r in _campaign("cand", 1.0, 4, cases=6) if r["context"]["corpus_case_id"] in ("C000", "C001", "C002", "C003")]
+        v = det.verdict(base, cand, candidate_runtime_sha="x", prompt_sha256="0" * 64, baseline_ref="b")
+        self.assertTrue(any(b.startswith("incomplete candidate lane") and "2 of 6" in b for b in v["blocking"]), v["blocking"])
+        full = det.verdict(base, _campaign("cand", 1.0, 4, cases=6), candidate_runtime_sha="x", prompt_sha256="0" * 64, baseline_ref="b")
+        self.assertFalse(any(b.startswith("incomplete candidate lane") for b in full["blocking"]))
+
     def test_first_party_unknown_usage_blocks(self) -> None:
         cand = _campaign("cand", 1.0, 3)
         for r in cand:

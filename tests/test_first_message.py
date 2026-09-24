@@ -82,6 +82,20 @@ class FirstMessageBudget(unittest.TestCase):
         self.assertIn("get_patch", text)
         self.assertLessEqual(len(text.encode()), reviewer.FIRST_MESSAGE_PATCH_BYTES + 20_000, "message = budgeted patches + small envelope")
 
+    def test_file_absent_from_the_capped_diff_is_listed_for_on_demand_retrieval(self) -> None:
+        # PR #61 self-review (claimed critical): the tail file of a > MAX_DIFF_CHARS PR fell off
+        # `ctx.diff` entirely and was neither embedded nor listed while the inventory said "complete".
+        ctx = _ctx([("a.py", 200), ("b.py", 200)])
+        ctx.inventory.files.append({"path": "tail.py", "status": "modified", "additions": 30, "deletions": 0, "omitted": False,
+                                    "previous_path": None, "binary": False, "mode_change": False, "patch_chars": 2_000})
+        ctx.inventory.files.append({"path": "ignored.lock", "status": "modified", "additions": 1, "deletions": 0, "omitted": True,
+                                    "previous_path": None, "binary": False, "mode_change": False, "patch_chars": 0})
+        embedded, skipped = reviewer.select_first_message_patches(ctx)
+        self.assertEqual([p for p, _ in embedded], ["a.py", "b.py"])
+        self.assertEqual(skipped, [("tail.py", 2_000)])  # listed with its size; the omitted file stays in the omitted block
+        prompt = reviewer.render_user_prompt(ctx)
+        self.assertIn("tail.py", prompt.split(reviewer.NOT_EMBEDDED_HEADING)[1])
+
     def test_greedy_fill_lets_a_small_late_file_in(self) -> None:
         big = reviewer.FIRST_MESSAGE_PATCH_BYTES // 30 + 10  # ≈ each big file > 1/30 of the budget
         files = [(f"big{i}.py", big) for i in range(40)] + [("tiny.py", 1)]

@@ -50,6 +50,16 @@ class EvaluateTests(unittest.TestCase):
         ok, reason, _ = rg.evaluate([_verdict(age_days=45)], runtime_sha="abc1234", content_sha256=CONTENT, prompt_sha256=PROMPT, now=NOW)
         self.assertEqual((ok, reason), (False, rg.REASON_STALE))
 
+    def test_gate_that_cannot_run_exits_2_not_missing(self) -> None:
+        # PR #61 self-review (glm, warning): a crashed gate must not read as "eval-verdict-missing".
+        import io, contextlib
+        with tempfile.TemporaryDirectory() as td:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = rg.main(["--verdicts", td, "--runtime", str(Path(td) / "does-not-exist.py"), "--prompt", str(Path(td) / "nope.md")])
+        self.assertEqual(rc, rg.EXIT_GATE_ERROR)
+        self.assertIn(rg.REASON_ERROR, buf.getvalue())
+
     def test_blocking(self) -> None:
         ok, reason, detail = rg.evaluate([_verdict(blocking=["recall regression on grok|…"])], runtime_sha="abc1234", content_sha256=CONTENT, prompt_sha256=PROMPT, now=NOW)
         self.assertEqual((ok, reason), (False, rg.REASON_BLOCKING))

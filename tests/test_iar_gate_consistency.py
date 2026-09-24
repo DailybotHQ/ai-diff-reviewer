@@ -370,10 +370,6 @@ class InlineComment422Salvage(unittest.TestCase):
             _, dropped = reviewer.gh_submit_review_with_fallback(token="t", repo="o/r", pr_number=1, head_sha="h", result=result, diff_text=self.DIFF)
         self.assertEqual(calls, [2, 1, 0]); self.assertEqual(dropped, 2)
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SeverityPolicyKeepsPriorEscalation(unittest.TestCase):
     """v3 (PR #61 self-review, verified critical): `apply_severity_policy`
     rebuilds `overall_severity` from this round's published findings, which
@@ -429,3 +425,7 @@ class SeverityPolicyKeepsPriorEscalation(unittest.TestCase):
         self.assertEqual(reviewer.drop_refuted_from_open_set(state, result), 1)
         self.assertEqual(state.open_fingerprints_this_gen, ["b" * 16])
         self.assertEqual(reviewer.drop_refuted_from_open_set(None, result), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

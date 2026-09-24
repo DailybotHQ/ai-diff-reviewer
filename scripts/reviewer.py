@@ -7794,6 +7794,18 @@ def build_verifier_provider(
             return None, "", "", "", f"no in-process backend to verify on for provider {provider_id!r}"
         if provider_id == "grok":
             base = XAI_OPENAI_COMPAT_API_BASE
+        elif not base:
+            # The CLI lane may be pointed at a gateway through the inherited
+            # `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` hook (`_build_cli_env`)
+            # instead of the `api-base` input; the verifier must offer the
+            # lane's key to the same host, never to the vendor default.
+            env_name: str = CLAUDE_CODE_BASE_URL_ENV if runner == "anthropic" else "OPENAI_BASE_URL"
+            inherited: str = os.environ.get(env_name, "").strip()
+            if inherited:
+                try:
+                    base = validate_api_base(inherited)
+                except Exception as exc:  # noqa: BLE001 — fail open into visibility
+                    return None, "", "", "", f"inherited {env_name} is not a usable verifier base: {exc}"
     try:
         vprofile: EndpointProfile = resolve_endpoint_profile(base, runner)
         model, alias = resolve_verifier_model(runner, vprofile, requested_model)
@@ -7938,7 +7950,9 @@ def run_verifier(
         if id(f) not in selected_ids:
             claimed: str = f.severity_claimed or f.severity
             if claimed == SEVERITY_INFO:
-                continue  # never verified; stays `unverified` by design
+                f.verification = FindingVerification(status="skipped", reason="info is never verified")
+                report.skipped += 1
+                continue
             f.verification = FindingVerification(
                 status="skipped",
                 reason="verifier off" if not policy.enabled else "not sampled",
@@ -8068,8 +8082,9 @@ def render_review_summary(
             key=lambda f: (SEVERITY_RANK.get(f.severity, 0), SEVERITY_RANK.get(f.severity_claimed or "", 0)),
             reverse=True,
         )
+        for f in ordered:
+            table_anchors.add((f.path, int(f.line)))  # every published finding is posted inline, capped rows or not
         for f in ordered[:SUMMARY_MAX_TABLE_ROWS]:
-            table_anchors.add((f.path, int(f.line)))
             title: str = f.effective_title().replace("|", "\\|")[:SUMMARY_TABLE_TITLE_CHARS]
             claimed: str = f.severity_claimed or f.severity
             sev: str = f"{_SEVERITY_EMOJI.get(f.severity, '')} {f.severity}" + (f" (claimed {claimed})" if claimed != f.severity else "")
@@ -9923,13 +9938,25 @@ def select_first_message_patches(
         {str(f["path"]): int(f.get("patch_chars") or 0) for f in ctx.inventory.files}
         if ctx.inventory is not None else {}
     )
+    inventory_by_path: dict[str, dict[str, Any]] = (
+        {str(f["path"]): f for f in ctx.inventory.files} if ctx.inventory is not None else {}
+    )
     embedded: list[tuple[str, str]] = []
     skipped: list[tuple[str, int]] = []
     used: int = 0
     for path in order:
         section: str | None = sections.get(path)
         if section is None:
-            continue  # omitted by shape_diff or absent from the ceiling-capped diff
+            entry: dict[str, Any] | None = inventory_by_path.get(path)
+            if entry is None or entry.get("omitted") or entry.get("binary") is True:
+                continue  # ignore-glob hit (already in the omitted block) or nothing to embed
+            # In the inventory but absent from the ceiling-capped diff (a PR
+            # past `MAX_DIFF_CHARS`): still changed, still reviewable — list it
+            # so the completeness sentence stays true and `get_patch` /
+            # `git diff` can fetch it. Dropping it silently was the BC-03 gap
+            # the v3 self-review found.
+            skipped.append((path, chars_by_path.get(path) or 0))
+            continue
         size: int = len(section.encode("utf-8"))
         if "[diff truncated at" in section or used + size > budget_bytes:
             skipped.append((path, chars_by_path.get(path) or len(section)))
@@ -12910,7 +12937,7 @@ def finalize_review_output(doc: dict[str, Any], *, hosts: tuple[str, ...] = ()) 
             return text
     # Drop from the least severe end: order by rank so criticals go last.
     ordered: list[dict[str, Any]] = sorted(
-        doc["findings"], key=lambda f: SEVERITY_RANK.get(str(f.get("severity")), 0), reverse=True
+        doc["findings"], key=lambda f: SEVERITY_RANK.get(str(f.get("severity")), SEVERITY_RANK.get(SEVERITY_INFO, 0)), reverse=True
     )
     while ordered and len(text.encode("utf-8")) > MAX_REVIEW_OUTPUT_BYTES:
         ordered.pop()

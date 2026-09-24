@@ -212,6 +212,15 @@ def verdict(
     descriptive_only: bool = any(c_by[k]["descriptive_only"] for k in paired) or len(paired) < 4
     if len(paired) < 4:
         notes.append(f"only {len(paired)} paired cell(s); a lane needs at least 4 cases")
+    # completeness: a candidate lane must cover every baseline cell of that lane —
+    # a partial campaign (a lane that failed or was cancelled half-way) must not
+    # produce the non-blocking verdict that unlocks a release (RFC-01 P-1).
+    for lane in sorted({"|".join(k.split("|")[:3]) for k in c_by}):
+        base_cells: set[str] = {k for k in b_by if k.startswith(lane + "|")}
+        missing: list[str] = sorted(base_cells - {k for k in c_by if k.startswith(lane + "|")})
+        if missing:
+            shown: str = ", ".join(m.split("|")[-1] for m in missing[:3]) + ("…" if len(missing) > 3 else "")
+            blocking.append(f"incomplete candidate lane {lane}: {len(missing)} of {len(base_cells)} baseline cell(s) missing ({shown})")
 
     # cost: paired relative difference (negative = cheaper)
     cost_diffs: list[float] = []

@@ -35,6 +35,8 @@ DEFAULT_MAX_AGE_DAYS: int = 30
 REASON_MISSING: str = "eval-verdict-missing"
 REASON_STALE: str = "eval-verdict-stale"
 REASON_BLOCKING: str = "eval-verdict-blocking"
+REASON_ERROR: str = "eval-gate-error"          # the gate itself could not run (exit 2, never a silent skip)
+EXIT_GATE_ERROR: int = 2
 
 
 def sha256_file(path: Path) -> str:
@@ -102,11 +104,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prompt", default="prompts/default.md")
     parser.add_argument("--max-age-days", type=int, default=DEFAULT_MAX_AGE_DAYS)
     args = parser.parse_args(argv)
-    ok, reason, detail = evaluate(
-        load_verdicts(Path(args.verdicts)), runtime_sha=args.runtime_sha,
-        content_sha256=sha256_file(Path(args.runtime)), prompt_sha256=sha256_file(Path(args.prompt)),
-        max_age_days=args.max_age_days,
-    )
+    try:
+        ok, reason, detail = evaluate(
+            load_verdicts(Path(args.verdicts)), runtime_sha=args.runtime_sha,
+            content_sha256=sha256_file(Path(args.runtime)), prompt_sha256=sha256_file(Path(args.prompt)),
+            max_age_days=args.max_age_days,
+        )
+    except Exception as exc:  # noqa: BLE001 — "the gate could not run" must not read as "the gate said no"
+        print(f"release-gate: {REASON_ERROR} — {type(exc).__name__}: {exc}")
+        return EXIT_GATE_ERROR
     print(("release-gate: OK — " if ok else f"release-gate: {reason} — ") + detail)
     return 0 if ok else 1
 
