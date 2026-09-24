@@ -1,6 +1,6 @@
 # AI Diff Reviewer v3
 
-> **Draft** — written during the v3 implementation plan (Phase 1, 2026-09-24). Sections marked *planned* describe rows of the [breaking-change ledger](rfc/v3/07-breaking-change-ledger.md) that ship later in this major; the shipped state is what `CHANGELOG.md § [Unreleased]` says.
+> **Final for `v3.0.0`** (2026-09-24). Every row of the [breaking-change ledger](rfc/v3/07-breaking-change-ledger.md) (BC-01 … BC-20) has shipped or was closed as unchanged; the shipped state, row by row, is `CHANGELOG.md § [3.0.0]` (`[Unreleased]` until the cut).
 
 **`@v2` keeps working unchanged; `v2` stops moving at its last `v2.x.y` and receives security and catalog fixes for six months from `release/v2` (RFC-08 D-09).**
 
@@ -33,7 +33,8 @@ Work through this list once; most consumers change nothing.
 - **Documented-rules findings (BC-05):** the bundled prompt now reads `AGENTS.md`, `CONTRIBUTING.md` and friends and reports `contradicts-documented-rule` with the quoted rule; tune with `.review/extension.md`.
 - **Finding v3 fields in agent-runner findings files (BC-12):** optional `title`, `category`, `evidence.*` — legacy files still parse.
 - **Ensemble mode (BC-09):** run each provider as a matrix leg with `mode: emit` and one `mode: aggregate` job — one consolidated review per head, duplicates merged by anchor, agreement per finding, the verifier run once; knobs `expected-legs`, `min-agreement`, `require-all-legs`; outputs `legs-expected`, `legs-delivered`, `duplicates-removed`, `agreement-histogram` ([examples/ensemble-matrix.yml](../examples/ensemble-matrix.yml)). Consumers with per-leg IAR history: the first aggregated round collapses the per-leg reviews and starts one history on the aggregate marker.
-- Budget knobs `budget-profile` / `high-risk-paths` (BC-19); `complexity-source: inventory` derives the `complexity:*` label from the risk tier (BC-14); with an empty `model` the review runs on the lane's `balanced` alias — today's benchmarked defaults — and `economy` is never selected for review (BC-15). *Planned:* `api-key` optional wherever environment credentials exist (BC-16).
+- Budget knobs `budget-profile` / `high-risk-paths` (BC-19); `complexity-source: inventory` derives the `complexity:*` label from the risk tier (BC-14); with an empty `model` the review runs on the lane's `balanced` alias — today's benchmarked defaults — and `economy` is never selected for review (BC-15). On `grok` the tier's turns are the CLI's native `--max-turns` when `agent-max-turns` is unset ([examples/budget-tiers.yml](../examples/budget-tiers.yml)).
+- **`api-key` is optional wherever the lane has environment credentials (BC-16)** — the v2.5.0 Bedrock exception is the rule now (AWS today; future OIDC lanes follow it). Nothing changes for lanes without environment credentials.
 
 ## Transition knobs (one minor cycle)
 
@@ -58,5 +59,5 @@ Releases are gated on a current, non-blocking eval verdict for the candidate's r
 - [CHANGELOG.md](../CHANGELOG.md) — the shipped state, row by row
 - [rfc/v3/README.md](rfc/v3/README.md) — the design records (RFC-00…08)
 - [STRICTNESS.md](STRICTNESS.md) · [PERFORMANCE.md](PERFORMANCE.md) · [PR_REVIEW_WORKFLOW.md](PR_REVIEW_WORKFLOW.md) · [ITERATION_AWARENESS.md](ITERATION_AWARENESS.md)
-- [examples/verifier.yml](../examples/verifier.yml)
+- [examples/verifier.yml](../examples/verifier.yml) · [examples/ensemble-matrix.yml](../examples/ensemble-matrix.yml) · [examples/budget-tiers.yml](../examples/budget-tiers.yml)
 - [MIGRATION_v2.md](MIGRATION_v2.md) — the v2 record

@@ -284,6 +284,39 @@ one verdict per release candidate to avoid surprises.
 The gate never fails the workflow red; it skips the release so the log
 explains itself. `[skip release]` commits bypass the whole job as before.
 
+## The v2 maintenance line (`release/v2`, six months from `v3.0.0`)
+
+When `v3.0.0` is published `release.yml` starts moving `v3` and **`v2` stops
+moving** at the last `v2.x.y` (`v2.5.1`). Consumers pinned to `@v2` see
+nothing change; the tags `v2.0.0` … `v2.5.1` stay resolvable forever (Rule #8:
+never delete a tag).
+
+**What `release/v2` receives** (RFC-07 § Tag and maintenance policy, RFC-08
+D-09): security fixes and provider-catalog breakages (a vendor renames or
+retires a model id) for **six months** after the `v3.0.0` release date — no
+features, no contract changes. The branch is created once, from the last v2
+release tag:
+
+```bash
+git fetch origin --tags
+git checkout -b release/v2 v2.5.1
+git push origin release/v2
+```
+
+**Cutting a `v2.x.y` from the branch.** `auto-release.yml` only runs on
+`main`, so a maintenance release is cut by hand from `release/v2` with the
+`/release` procedure (`.agents/commands/release.md`): bump `version:` in
+`skills/ai-diff-reviewer/SKILL.md`, stamp `CHANGELOG.md`, tag `v2.x.y`, push
+the tag, publish the GitHub Release. `release.yml` then moves `v2` onto it
+(its pre-release guard only skips tags containing `-`). Do **not** move `v2`
+onto anything cut from `main` — a v3 runtime under the `v2` alias is the
+failure the two lines exist to prevent. The v2 dogfood workflow on the
+branch stays as it was at `v2.5.1`.
+
+**End of life.** Six months after `v3.0.0`, stop cutting from the branch;
+leave it in place (it documents the line), leave the tags, and add a line
+under `## [Unreleased]` of the branch's CHANGELOG saying the line is closed.
+
 ## Preventing the recurrence
 
 Two paths — pick one before the next release that includes a
