@@ -174,6 +174,10 @@ Either:
 
 In neither case should you trust the older marker as authoritative for the current HEAD.
 
+## Closing the loop — the `address-review` sub-skill
+
+Everything above is the manual procedure; the local skill's [`address-review` sub-skill](../skills/ai-diff-reviewer/address-review/SKILL.md) executes it end to end: find the branch's open PR(s), check the review is fresh for HEAD (marker SHA, or the [structured artifact](#the-structured-output-artifact-v3--the-machine-path)), present the findings with an apply/defer/skip plan, then — on one yes — apply, commit (small Conventional Commits batches), push, and re-arm the reviewer the way the repo triggers it (label-gated: toggle the label off/on or add it; push-triggered: confirm the new run started). It obeys the same rules as this doc: never a stale review, minimized comments skipped, per-leg attribution, structured artifact preferred over scraped bodies.
+
 ## For agents reviewing other agents' PRs
 
 If you are an AI agent applying feedback from this bot to a PR:

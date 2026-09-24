@@ -50,12 +50,13 @@ The same [`prompts/default.md`](prompts/default.md) drives both surfaces. Pinnin
 ### As a coding-agent skill (local)
 
 - [Quick start (skill)](#quick-start-skill)
-- [The five sub-skills](#the-five-sub-skills)
+- [The six sub-skills](#the-six-sub-skills)
 - [First-run bootstrap prompt](#first-run-bootstrap-prompt)
 - [Sub-skill: run a local review](#sub-skill-run-a-local-review-default-flow)
 - [Sub-skill: `setup` — install the Action via wizard](#sub-skill-setup--install-the-action-via-wizard)
 - [Sub-skill: `generate-extension` — tailor the reviewer](#sub-skill-generate-extension--tailor-the-reviewer-to-your-repo)
 - [Sub-skill: `open-pr` — author the PR from the diff](#sub-skill-open-pr--author-the-pr-from-the-same-diff)
+- [Sub-skill: `address-review` — close the loop](#sub-skill-address-review--close-the-loop)
 
 ### Shared foundations
 
@@ -560,7 +561,7 @@ npx skills add DailybotHQ/ai-diff-reviewer@v3 --skill ai-diff-reviewer
 
 `npx skills` vendors the skill into `.agents/skills/ai-diff-reviewer/` in your repo and records source + content hash in `skills-lock.json` so teammates restore identical bytes with `npx skills experimental_install`. Bump with `npx skills update ai-diff-reviewer`.
 
-Once installed, natural-language triggers activate each of the five capabilities — no memorized commands to look up:
+Once installed, natural-language triggers activate each of the six capabilities — no memorized commands to look up:
 
 ```text
 "Review my current branch"                         → local review
@@ -568,13 +569,14 @@ Once installed, natural-language triggers activate each of the five capabilities
 "Generate a .review/extension.md for this repo"    → tailor the reviewer to your stack
 "Open the PR for this branch"                      → sync with main, then author the PR from the diff
 "What did the CI review say?"                      → read the CI review on the PR and walk through the findings
+"Address the review and re-run"                    → resolve the CI findings, commit, push, re-trigger the reviewer
 ```
 
-Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`, `/ai-diff-reviewer-apply-review`.
+Some harnesses (Claude Code, Cursor) also expose these as slash commands: `/ai-diff-reviewer`, `/ai-diff-reviewer-setup`, `/ai-diff-reviewer-generate-extension`, `/ai-diff-reviewer-open-pr`, `/ai-diff-reviewer-apply-review`, `/ai-diff-reviewer-address-review`.
 
-## The five sub-skills
+## The six sub-skills
 
-The skill is a **router** — it inspects your intent from natural language and routes to one of five capabilities, all sharing the same shipped prompt as the review base:
+The skill is a **router** — it inspects your intent from natural language and routes to one of six capabilities, all sharing the same shipped prompt as the review base:
 
 | Sub-skill | Purpose | Fires when you say… |
 |---|---|---|
@@ -583,8 +585,9 @@ The skill is a **router** — it inspects your intent from natural language and 
 | **[`generate-extension`](skills/ai-diff-reviewer/generate-extension/SKILL.md)** | Bootstrap a repo-tailored `.review/extension.md` after inspecting your stack (≥ 12 Discovery tool calls) | *"Generate a `.review/extension.md` for this repo"* · *"Customize the review for our project"* |
 | **[`open-pr`](skills/ai-diff-reviewer/open-pr/SKILL.md)** | Sync the branch with the remote base (merge, resolve conflicts, push), then author a well-documented pull request (title + body) from the diff — Conventional Commits inference, PR-template merge, `gh pr create` / `edit` | *"Open the PR"* · *"Draft the PR title and description"* · *"Rewrite the PR body properly"* |
 | **[`apply-review`](skills/ai-diff-reviewer/apply-review/SKILL.md)** | Read the CI review posted on the branch's PR (latest marker, collapsed history filtered, per-leg attribution) and walk through each finding to apply / defer / skip with per-finding consent — never commits, never pushes | *"What did the CI review say?"* · *"Apply the AI review's fixes"* · *"Walk me through the findings"* |
+| **[`address-review`](skills/ai-diff-reviewer/address-review/SKILL.md)** | The one-invocation loop: find the branch's PR(s), check the review is fresh for the current head, resolve the findings (apply → commit → push), and re-arm the reviewer the way the repo triggers it (label toggle, or confirm the push-triggered run) | *"Address the review and re-run"* · *"Resolve the reviewer comments and toggle ready"* · *"Loop the review"* |
 
-Together they form a **lifecycle**: `setup` installs the Action once per repo → `generate-extension` tailors the review once per repo → the default review flow catches issues before pushing on every branch → `open-pr` authors the PR that ships the change.
+Together they form a **lifecycle**: `setup` installs the Action once per repo → `generate-extension` tailors the review once per repo → the default review flow catches issues before pushing on every branch → `open-pr` authors the PR that ships the change → CI reviews it → `apply-review` reads the findings, and `address-review` resolves them and re-arms the reviewer for the next round — as many rounds as the change needs.
 
 ## First-run bootstrap prompt
 
@@ -680,6 +683,14 @@ Your existing `.github/pull_request_template.md` is **merged, never overwritten*
 Full skill: [`skills/ai-diff-reviewer/open-pr/SKILL.md`](skills/ai-diff-reviewer/open-pr/SKILL.md).
 
 ---
+
+## Sub-skill: `address-review` — close the loop
+
+The step after every review round, as one consented invocation. It finds the open PR(s) for the current branch, checks the review is fresh for the current head (marker SHA, or the v3 structured-output artifact when the workflow uploads it), presents the findings with an **apply / defer / skip** plan, and — on one yes — applies the fixes, commits them in small Conventional Commits batches, pushes, and **re-arms the reviewer the way this repo triggers it**: a label-gated workflow gets its label toggled off/on (or added when missing), a push-triggered workflow is confirmed to have restarted on the new head, and a repo with no reviewer workflow is told so and offered the local review instead.
+
+Unlike [`apply-review`](#sub-skill-apply-review--read-the-ci-review-and-walk-the-findings) it commits and pushes — that is the loop's point. Like `apply-review`, it never addresses a stale review, skips minimized comments, attributes findings to their leg, and never touches workflow files or check runs.
+
+*"Address the review and re-run"* · *"Resolve the reviewer comments and toggle ready"* · *"Loop the review"*
 
 ## Bringing them together — `.review/extension.md`
 
