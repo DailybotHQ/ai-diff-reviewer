@@ -83,7 +83,7 @@ It is **not** a replacement for human code review. It's an additional reviewer t
 - **License:** MIT.
 - **Channel:** GitHub Marketplace (publicly searchable at [`marketplace/actions/ai-diff-reviewer`](https://github.com/marketplace/actions/ai-diff-reviewer)) + direct repo URL for `uses: DailybotHQ/ai-diff-reviewer@v3`.
 - **Repo path:** `DailybotHQ/ai-diff-reviewer`.
-- **Versioning:** SemVer. Default pin is the moving major `@v2` (tracks latest `v2.x.y`).
+- **Versioning:** SemVer. Default pin is the moving major `@v3` (tracks latest `v3.x.y`).
 - **Runners × backends:** as of `v2.1.0` the action ships **six runners** across two families, and an optional `api-base` input that points a runner at another backend:
   - Chat-completions family (this action drives the tool-use loop): `anthropic`, `openai`.
   - Agent-runner family (vendor CLI drives the loop; findings return via `.aiprr/findings.json`): `claude-code`, `cursor`, `codex`, `grok`.
