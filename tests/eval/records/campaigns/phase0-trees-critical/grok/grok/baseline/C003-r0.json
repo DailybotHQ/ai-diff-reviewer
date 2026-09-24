@@ -1,0 +1,51 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 21.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 21.2,
+  "usage": {
+    "in": 27938,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 991,
+    "source": "cli"
+  },
+  "cost_usd": 0.0782572,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded production SMTP password in source.**\n\n`os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` commits a real-looking credential as the default when the env var is unset. Anyone with repo (or CI log) access can authenticate as `notifications` on `smtp.internal.example`, and the secret is permanently in git history once merged.\n\nFailure mode: cron without the secret mounted no longer fails closed \u2014 it logs in with the baked-in password. That also masks misconfiguration instead of surfacing it.\n\n**Fix:** require the env var and fail clearly if missing; never put credentials in source. Rotate this password if it was ever used in prod.\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is not set\")\n        s.login(\"notifications\", password)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a login fallback.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `mailer.py:8` | Hard-coded production SMTP password in source |\n\n## Discussion\n\n`os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` turns a missing secret into a silent login with a committed credential. That password is now in git history for anyone with repo access, will appear in PR diffs and CI logs, and bypasses whatever secret-mounting the cron env was supposed to rely on.\n\nThe right fix for \"cron envs without SMTP_PASSWORD crashed\" is fail-fast with a clear error (or skip send and alert), and ensure the job mounts `SMTP_PASSWORD` from the secret store. Rotate `smtp-prod-backup-77` immediately if it was ever a real credential.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

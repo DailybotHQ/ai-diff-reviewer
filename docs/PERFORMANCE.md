@@ -45,7 +45,7 @@ Agent-runner providers don't hit this section — they own their own loop intern
 **Worst-case cost per review** (in Anthropic API terms, using the defaults):
 
 - Up to **30 turns** × up to **8192 output tokens** = ~245 K output tokens.
-- Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed diff (capped at `MAX_DIFF_CHARS = 200 000` chars — see below).
+- Input token growth is bounded by `MAX_CONVERSATION_TURNS_RETAINED = 12` on retained turn-pairs plus the seed message (patches budgeted at `FIRST_MESSAGE_PATCH_BYTES = 120 000` bytes — see below; anything beyond is fetched on demand with `get_patch`).
 - Since v2.1.0 follow-up rounds run in **incremental mode**: the seed message carries only the hunks changed since the last reviewed head plus the prior-findings table, and both the inline cap and `max-turns` scale with the delta (floors: 3 comments, 6 turns). On a typical "push a fix" round this is the largest saving of all — most of the PR diff is not sent at all. See `docs/ITERATION_AWARENESS.md § 14`.
 - Since v2.1.0 the seed diff is **cached** on Anthropic (a second `cache_control` breakpoint on the first user message), so on turns 2..N it is billed at the cache-read rate (~10 % of input) instead of full price; combined with diff shaping (`ignore-paths`) this is where most of the per-review input cost went. Watch the per-call `usage:` log line for `cache_read`.
 - Realistic reviews come in **well under** the ceiling: typical runs terminate on `submit_review` after 5–15 turns.
@@ -89,8 +89,11 @@ Every tool the model can call has a hard cap so a bad `read_file(path, limit=999
 | [`MAX_TOOL_OUTPUT_BYTES`](../scripts/reviewer.py) | `32_000` | Any tool result larger than this is truncated with a pointer telling the model to narrow the call. |
 | [`MAX_FILE_READ_LINES`](../scripts/reviewer.py) | `2_000` | Hard ceiling on `read_file` line count per call. |
 | [`MAX_SEARCH_RESULTS`](../scripts/reviewer.py) | `200` | Hard ceiling on `grep` / `glob` result counts. |
-| [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `200_000` | Cap on the seed diff embedded in the first user message. Larger diffs are truncated with a pointer to `read_file`. |
-| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the `MAX_DIFF_CHARS` cap and reported to the model as omitted. Extended by `ignore-paths`. |
+| [`FIRST_MESSAGE_PATCH_BYTES`](../scripts/reviewer.py) | `120_000` | v3: byte budget for the patches embedded in the first user message. Files are embedded **whole, in inventory order, while they fit** (greedy); the rest are listed under `## Not embedded — fetch on demand` and fetched with `get_patch` (in-process) or `git diff <base>...<head> -- <path>` (CLI lanes). Lowered from the old 200 000-char single blob. RFC-06 tiers override it (60 k / 120 k / 200 k). |
+| [`MAX_DIFF_CHARS`](../scripts/reviewer.py) | `= FIRST_MESSAGE_PATCH_BYTES` | Ceiling on the diff kept on `PRContext`; a section cut by the ceiling is never embedded half-way. The embedding rule is per file (above), not this constant. |
+| [`MAX_PATCH_CHARS`](../scripts/reviewer.py) | `40_000` | Per-call cap of `get_patch`; a truncated answer lists the remaining hunk indices. |
+| [`MAX_TOOL_TRACE_ENTRIES`](../scripts/reviewer.py) | `500` | Bound on `ReviewState.tool_trace` (name, redacted args, result hash per tool call). |
+| [`DEFAULT_IGNORE_PATH_GLOBS`](../scripts/reviewer.py) | lockfiles, `*.min.*`, `*.map`, `node_modules/`, `vendor/`, `dist/`, snapshots | Diff sections removed **before** the byte budget applies and reported to the model as omitted (inventory flag + `## Omitted` block). Extended by `ignore-paths`. |
 
 These caps mean the model **cannot** flood its own context. A huge file or an over-broad grep degrades gracefully into a truncation message — the review continues, the offending call retries with a narrower scope.
 
@@ -276,6 +279,35 @@ Example CI dashboard snippet — surface cost telemetry as a workflow annotation
     cost=${{ steps.review.outputs.iteration-cost-vs-baseline-estimate }} \
     tokens=${{ steps.review.outputs.iteration-tokens-used }}"
 ```
+
+## Measured noise floor and the eval-gate verdict (v3)
+
+Since v3 every run writes a `run-record/3.0` file (`.aiprr/run-record.json`) with cost, usage, turns and separated timings, and the eval gate ([RFC-01](rfc/v3/01-eval-gate-contract.md)) reasons over replicated runs of the pinned corpus instead of single dogfood logs. The first measured floor (Phase 0, 2026-09-23, 3 repetitions per cell; default lane grok-4.5 CLI `balanced` unless noted):
+
+| Set | Cells | Cost spread median `(max−min)/mean` | Worst | Recall swing | Mean cost / run |
+|---|---|---|---|---|---|
+| 7 historical PRs (`phase0-floor`) | 7 | 0.252 | 0.403 | 1 defect (1 of 7 cells) | $0.60 (range $0.34–$1.46) |
+| 21 critical fixture trees (`phase0-trees-critical`) | 21 | 0.294 | 0.680 | 0 | $0.093 |
+| 7 historical PRs, Claude Code on Z.ai `glm-5.3-flash` (`phase0-floor` glm) | 7 | 0.206 | 0.305 | 2 defects (2 of 7 cells) | $1.50 (range $0.89–$3.47, list price) |
+| **All baseline lanes** | **35** | **0.268** | **0.680** | **2** | — |
+| *v3 re-stamp (2026-09-24)* — 7 historical PRs, in-process `openai` runner on xAI (`phase1-parity`) | 7 | 0.410 | 1.221 | 2 | $0.354 |
+| 21 critical trees, v3.0 prompt, verifier off / on (`phase1-precision-off` / `-on`) | 21 / 21 | 0.405 / 0.312 | 0.801 / 0.954 | 1 / 1 | $0.109 / $0.104 |
+| 21 critical trees, release-candidate runtime, verifier on (`phase2-rc`) | 21 | 0.387 | 0.927 | 1 | $0.114 |
+| **All v3-prompt lanes (the floor in force)** | **70** | **0.370** | **1.22** | **2** | — |
+
+What this means when reading cost numbers: two identical runs of the same PR routinely differ by a quarter of their cost, and a single PR moved from 6 to 9 turns between repetitions. A cost claim below ≈ 38 % on a paired comparison is inside the noise and is not promotable (v3 re-stamp; v2 said 27 %); a recall claim needs a net gain of 3 defects; a change is blocking when the lane's median spread widens past 1.5 × this baseline (0.56) or any cell exceeds 1.3. The verdict file that encodes the decision is `verdict/1.0` (`tests/eval/schemas/verdict.schema.json`, example in `schemas/examples/`), produced by `python3 tests/eval/determinism.py verdict --baseline DIR --candidate DIR`, and the release workflow refuses to cut a release without a fresh non-blocking one ([`RELEASE_RECOVERY.md`](RELEASE_RECOVERY.md) → "Release skipped by the eval gate"). Raw records and summaries: `tests/eval/records/campaigns/`.
+
+### Verifier cost (v3, measured)
+
+The verifier ([RFC-03](rfc/v3/03-verification-and-evidence.md), input `verifier`, default on) re-reads the anchor of every claimed critical and a 30 % sample of warnings with the `economy` alias and at most four tool calls. Measured on the Phase 1 precision campaign (Task 19, 2026-09-24; 70 verifications over 62 grok-4.5 reviews of the 21 critical fixture trees, verifier = grok-4.5 on xAI):
+
+| Per verified finding | Per tree review ($0.104 mean) | Per PR-class review (projected from the Phase 0 grok floor: 0.10 criticals + 1.86 warnings → ≈ 0.65 verifications) |
+|---|---|---|
+| ≈ 3.0 k input + 0.36 k output tokens, 10.1 s, $0.0088 (max 6.5 k / 20 s / $0.016) | +$0.010 ≈ +9.6 % | ≈ +$0.006 ≈ +1 % of $0.60 |
+
+Verifier wall-clock is serial after the review loop (`timings.verifier_seconds` in the run record), so a PR with three claimed criticals adds ≈ 30 s. The knobs are `verifier: off` (claimed criticals then publish as annotated warnings — see [STRICTNESS](STRICTNESS.md)), `verifier-model` (an explicit id or alias) and `strict-unverified-criticals`.
+
+**Prompt-cache lottery in the cost floor.** On xAI-backed lanes the same review repeated three times routinely differs by a third in cost while its token *totals* are near-identical: the cached share of input swings between ≈ 35 % and ≈ 90 % from one repetition to the next (Phase 0 trees: cache-normalised token spread median 0.02 versus real-cost spread 0.29). Cost spreads in this document therefore mix provider-side cache warmth with genuine behaviour; the v3.0 prompt and first message also widened the *behavioural* part on the tree corpus (cache-normalised spread 0.24–0.28, turns 3–9 where v2 used 3–4) at unchanged recall — recorded as a Stage Gate B item in the plan, not folded into the thresholds.
 
 ## Complete token accounting and focused context
 

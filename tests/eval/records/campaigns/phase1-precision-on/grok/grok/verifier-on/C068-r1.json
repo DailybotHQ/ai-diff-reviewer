@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 42.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 42.2,
+  "usage": {
+    "in": 16464,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 1524,
+    "source": "cli"
+  },
+  "cost_usd": 0.0722928,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** `load_session` now calls `pickle.loads` on base64-decoded `raw`. Session blobs are almost always attacker-controlled (cookie / header / form field). Pickle executes attacker-defined reduction callables during load, so a crafted payload yields arbitrary code execution in the app process.\n\n**Failure mode:** Attacker sets a session cookie to `base64(pickle.dumps(malicious_object))` \u2192 worker RCE on the next request that calls `load_session`.\n\n**Fix:** Keep a data-only decoder on this boundary. If the cart plugin needs richer types, encode them explicitly (JSON + allowlisted type tag, or a signed serializer such as `itsdangerous.URLSafeSerializer`) and reconstruct objects in application code after validation. Do not unpickle client-supplied bytes.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\n(restore `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a remote code execution path by deserializing session payloads with `pickle.loads`.\n\n## Analysis\n\n`load_session` takes a raw string (typically a cookie or other client-supplied session blob), base64-decodes it, and previously parsed it with `json.loads`. JSON only rebuilds plain data. `pickle.loads` can invoke arbitrary `__reduce__` / opcode payloads during unpickle, so a crafted session value becomes full process RCE on the web worker.\n\nThe comment about cart-plugin \u201cricher session objects\u201d does not make pickle safe for inbound session bytes. Compatible object graphs should use an allowlisted serializer (e.g. signed JSON/JWT, `itsdangerous`, or a constrained schema) rather than pickle on the trust boundary.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`load_session` was changed from `json.loads` to `pickle.loads` on base64-decoded `raw`, so untrusted session blobs can execute arbitrary reduction callables. That is a real critical RCE boundary defect on this API."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.477,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6539,
+      "out": 405
+    },
+    "cost_usd": 0.015585
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

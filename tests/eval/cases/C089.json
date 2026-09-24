@@ -1,0 +1,69 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C089",
+  "title": "Lockfile downgrades PyYAML to a version with a known unsafe-load CVE; docs-only code change",
+  "stack": "python",
+  "change_class": "dependency",
+  "risk_class": "warning_positive",
+  "family_group": "G89",
+  "gap_tags": [
+    "omitted_patch"
+  ],
+  "fixture": {
+    "base": {
+      "poetry.lock": "[[package]]\nname = \"pyyaml\"\nversion = \"6.0.2\"\n\n[metadata]\nlock-version = \"2.0\"\n",
+      "README.md": "# tool\n"
+    },
+    "head": {
+      "poetry.lock": "[[package]]\nname = \"pyyaml\"\nversion = \"5.3.1\"\n\n[metadata]\nlock-version = \"2.0\"\n",
+      "README.md": "# tool\n\nSee CONTRIBUTING.\n"
+    },
+    "pr_metadata": {
+      "title": "docs: link CONTRIBUTING",
+      "body": "README touch-up; lock re-resolved.",
+      "deceptive": false
+    },
+    "inventory": {
+      "changed_paths": [
+        "poetry.lock",
+        "README.md"
+      ],
+      "missing_from_fixture": [],
+      "note": "poetry.lock is omitted from the embedded diff by the default ignore globs"
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:b5e3542b59630b21e8ebf1a385ce1b7c27421d3693f645139637eec4176dec5d"
+  },
+  "labels": [
+    {
+      "id": "C089-d1",
+      "severity": "warning",
+      "path": "poetry.lock",
+      "defect": "Dependency downgraded (6.0.2 → 5.3.1) to a release with a published full_load code-execution advisory, hidden in a docs PR",
+      "evidence": "The only substantive change is in the lockfile the reviewer does not embed; the downgrade re-exposes the yaml.full_load vulnerability class.",
+      "keywords": [
+        "pyyaml",
+        "5.3.1",
+        "downgrade",
+        "lock"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C089-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

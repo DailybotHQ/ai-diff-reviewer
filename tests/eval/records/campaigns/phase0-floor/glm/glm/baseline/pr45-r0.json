@@ -1,0 +1,66 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 17,
+  "tool_calls": null,
+  "seconds": 519.9,
+  "setup_seconds": 2.1,
+  "total_seconds": 522.0,
+  "usage": {
+    "in": 88673,
+    "cache_read": 549824,
+    "cache_write": 0,
+    "out": 21275,
+    "source": "cli"
+  },
+  "cost_usd": 1.250152,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5443,
+      "severity": "warning",
+      "body": "`infer_pr_complexity_fallback` matches raw substrings anywhere in the path, so benign changes mislabel as `complexity:high`: a single-file docs typo in `docs/SECURITY.md` returns `high` because the marker check at `scripts/reviewer.py:5471` runs *before* the docs-only `low` branch at `:5478` (contradicting the \"docs-only \u2192 typically low\" intent), `auth` matches `AuthorCard.astro` / `author-guide.md`, and `token` matches `tokenizer.py`. Worse, `scripts/reviewer.py` and `action.yml` are *this repo's* filenames baked into the shared runtime \u2014 every consumer repo that ships its own GitHub Action gets `high` on each `action.yml` change. Fix: match path segments against the security words (`segments = {p for path in lowered for p in re.split(r\"[/_.\\-]\", path) if p}` \u2014 `re` is already imported) and drop or repo-configure the two product-specific entries."
+    },
+    {
+      "path": "tests/test_findings_parser.py",
+      "line": 71,
+      "severity": "info",
+      "body": "The two added cases (`README.md` \u2192 low, `scripts/reviewer.py` \u2192 high) dodge the interesting branches: the size thresholds (`len(paths) >= 8`, `line_delta > 500/100`, `>= 3` files at `scripts/reviewer.py:5482-5485`) and the marker-shadows-docs interaction are never exercised. A `docs/security.md` single-file case plus a medium-boundary case would pin the intended semantics \u2014 whichever way the substring-matching question in `_COMPLEXITY_HIGH_PATH_MARKERS` resolves."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-plumbed feature \u2014 complexity metadata now flows from both provider families into one label-application block, with a heuristic safety net. No blocking findings; one warning about the fallback heuristic's false positives.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5443` | Heuristic fallback matches raw substrings (`auth` matches `author`, `token` matches `tokenizer`) and bakes in this repo's filenames (`scripts/reviewer.py`, `action.yml`), so consumer PRs get systematic false `complexity:high` |\n| 2 | \u2139\ufe0f info | `tests/test_findings_parser.py:71` | Threshold branches (`>= 8` files, `> 500`/`> 100` lines) and the marker-shadows-docs interaction are untested |\n\n## Verified\n\n- `python3 -m py_compile scripts/reviewer.py` clean; `python3 -m unittest discover -s tests` \u2192 490 tests OK.\n- `pr_ctx` at the fallback call site (`scripts/reviewer.py:6778`) is guaranteed non-None \u2014 the outer `try/except` at `scripts/reviewer.py:6514` returns 1 on fetch failure before the label block is reached.\n- `raw` is dict-validated (`scripts/reviewer.py:5549`) before `raw.get(\"complexity\")`; an invalid level logs a warning and is ignored, never fatal, and the malformed-JSON fallback path simply omits complexity (the heuristic covers it).\n- All four `run_review` signatures carry `require_complexity_in_findings`; the single call site (`scripts/reviewer.py:6564`) passes it, so no subclass is missed.\n- Chat-completions gating intact: `set_pr_complexity` is only exposed when `complexity-labels-enabled` (`scripts/reviewer.py:6617`), and labels are only applied under the same flag, so the always-present optional schema in the prompt directive is inert when the feature is off.\n- The criticals-first truncation on the agent-runner path is untouched; `complexity` rides on `ReviewResult`, not `findings`, so IAR dedup/caps can't shed it.\n- Stdlib-only, no subprocess/path/env surface touched, no `action.ym",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 10
+  }
+}

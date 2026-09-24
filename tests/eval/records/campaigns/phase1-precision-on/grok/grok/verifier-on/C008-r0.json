@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 48.7,
+  "setup_seconds": 0.2,
+  "total_seconds": 48.9,
+  "usage": {
+    "in": 30989,
+    "cache_read": 117120,
+    "cache_write": 0,
+    "out": 2103,
+    "source": "cli"
+  },
+  "cost_usd": 0.109732,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "**Issue:** Removing the `ALLOWED_HOSTS` check means `deliver()` will `urlopen` any caller-supplied URL. That is classic SSRF: a customer- or attacker-controlled endpoint can target cloud metadata (`169.254.169.254`), localhost, or internal hosts from the runner/app network.\n\n**Failure mode:** `deliver(event, \"http://169.254.169.254/latest/meta-data/\")` (or `http://127.0.0.1:...`) no longer raises and the server issues the POST.\n\n**Fix:** Keep an allowlist or replace it with a real egress policy before `Request`/`urlopen`: HTTPS-only, resolve host and reject private/link-local/metadata ranges, block redirects to those ranges, and reject non-http(s) schemes. If customers need custom hosts, allowlist per-tenant registered HTTPS endpoints \u2014 do not open arbitrary URLs."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns `deliver()` into an open SSRF primitive.\n\n## Analysis\n\n`webhooks.py` previously restricted destinations to `ALLOWED_HOSTS` (`hooks.internal.example`) before `urllib.request.urlopen`. The PR deletes that check and posts to whatever `url` the caller passes.\n\nAny attacker-influenced or customer-supplied URL can now reach:\n\n- Cloud metadata (`http://169.254.169.254/...`)\n- Loopback and link-local services\n- Internal RFC1918 hosts\n- Non-HTTPS schemes `urllib` will follow\n\nSupporting customer endpoints is a valid product goal, but it requires an explicit egress policy (HTTPS-only, public-IP / block-private ranges, DNS rebinding protections, redirect limits), not deleting the guard with a comment.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch deletes the only ALLOWED_HOSTS hostname gate before urllib.request.urlopen, so deliver() now POSTs to any caller-supplied URL (including metadata/localhost/internal hosts). That is a real open-SSRF regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.305,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3485,
+      "out": 342
+    },
+    "cost_usd": 0.010072
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

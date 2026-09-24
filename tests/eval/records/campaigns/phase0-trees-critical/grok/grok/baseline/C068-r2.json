@@ -1,0 +1,51 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 18.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 18.3,
+  "usage": {
+    "in": 28157,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 1056,
+    "source": "cli"
+  },
+  "cost_usd": 0.0790852,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Unsafe deserialization: `pickle.loads` on session input is remote code execution.**\n\n`raw` is base64-decoded and passed straight to `pickle.loads`. Pickle executes attacker-controlled object graphs during load (e.g. via `__reduce__`), so any client that can supply a session blob can run arbitrary code on the server.\n\n`json.loads` only reconstructed data; this change removes that safety. If the cart plugin needs richer structures, decode a safe format (JSON/msgpack) and map fields into trusted server-side types \u2014 never unpickle client bytes.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\nRestore `import json` and keep pickle off this path entirely."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces safe JSON session decoding with `pickle.loads` on client-supplied bytes, which is remote code execution.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `web/session.py:6` | `pickle.loads` on session input enables arbitrary code execution |\n\n## Discussion\n\nSession blobs are almost always attacker-influenced (cookies, headers, or request bodies). `json.loads` only builds plain data; `pickle.loads` can invoke `__reduce__` / opcode sequences and run arbitrary Python during deserialization.\n\nThe cart-plugin motivation does not justify this. Prefer a safe structured format (JSON with an explicit schema, or a signed token that carries only data) and keep any richer object reconstruction on the server after parsing trusted fields.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

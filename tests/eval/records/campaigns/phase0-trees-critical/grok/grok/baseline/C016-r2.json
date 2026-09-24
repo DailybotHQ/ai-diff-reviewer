@@ -1,0 +1,57 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.5,
+  "usage": {
+    "in": 28781,
+    "cache_read": 82560,
+    "cache_write": 0,
+    "out": 1654,
+    "source": "cli"
+  },
+  "cost_usd": 0.092254,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "**MITM risk: TLS verification is disabled for all environments.** `InsecureSkipVerify: true` is hardcoded in `NewClient()` with no staging-only gate, build tag, or config flag. Every consumer of this client \u2014 including production \u2014 will accept any certificate, so an on-path attacker can intercept or modify ledger traffic.\n\nThe comment says \"revisit before prod (TICKET-77)\", but nothing in code enforces that.\n\n**Fix:** keep verification on by default; only skip verify behind an explicit non-prod switch, or better, trust the staging CA via `RootCAs` / `Certificates`:\n\n```suggestion\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},\n```\n\nOr gate the insecure path:\n\n```go\ntlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}\nif os.Getenv(\"LEDGER_TLS_INSECURE\") == \"1\" {\n    tlsCfg.InsecureSkipVerify = true // staging self-signed only\n}\n```"
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "**Custom `Transport` drops `http.DefaultTransport` defaults.** Replacing `Transport` with a bare `&http.Transport{TLSClientConfig: ...}` loses proxy-from-env, HTTP/2, reasonable dial/idle timeouts, and connection pool settings from the default transport.\n\nClone and override only TLS:\n\n```go\ntr := http.DefaultTransport.(*http.Transport).Clone()\ntr.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}\nreturn &http.Client{Timeout: 10 * time.Second, Transport: tr}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every ledger call in every environment.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `internal/ledger/client.go:14` | `InsecureSkipVerify: true` is hardcoded with no staging/prod gate |\n| 2 | \u26a0\ufe0f warning  | `internal/ledger/client.go:12` | Custom `http.Transport` replaces defaults (proxy, HTTP/2, pools) |\n\n## Details\n\n`NewClient()` is the shared constructor and has no environment, build tag, or config switch. The comment references staging and TICKET-77, but the runtime behavior applies the same insecure TLS settings in production. Any network path that can intercept ledger traffic can present an arbitrary certificate and read or modify requests and responses (MITM).\n\nIf staging truly needs a temporary bypass, gate it explicitly (e.g. only when an env like `LEDGER_TLS_INSECURE=1` is set, default false), prefer pinning/adding the staging CA to the trust store, and keep production verification on.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

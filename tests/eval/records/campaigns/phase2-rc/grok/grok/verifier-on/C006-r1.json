@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 31.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.5,
+  "usage": {
+    "in": 29775,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1326,
+    "source": "cli"
+  },
+  "cost_usd": 0.084786,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Disabling `verify_signature` (and aud/iss checks) makes `identity()` accept any attacker-controlled JWT payload as authentic. Anyone who can hit a caller of this function can forge claims and impersonate any user \u2014 there is no env/stage guard on this path, so the bypass applies wherever this code runs.\n\nRestore verification with the correct secret/algorithms/audience/issuer. If old and new tokens must coexist during re-issuance, verify with a key set (or try old-then-new keys) instead of turning verification off.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, so any forged token is accepted as a valid identity.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` trusts the token payload with no cryptographic check. An attacker who can reach any endpoint that calls `identity()` can mint a token with arbitrary claims (user id, roles, tenant) and authenticate as that principal.\n\nThe PR frames this as a staging workaround for token re-issuance (TICKET-412), but the code path has:\n\n- no environment / stage gate\n- no feature flag\n- no alternate verification path\n- no expiry still being enforced in an obvious way once signature verify is off (PyJWT also skips `exp` unless configured; with verify_signature False, default exp verification may still run depending on version \u2014 either way signature trust is gone)\n\nEven if the deploy target is \u201cstaging only\u201d today, shipping this on the shared branch means any environment that pulls the commit inherits open authentication.\n\n## Recommendation\n\nRestore signature verification with the correct post-migration key/issuer/audience, or gate a temporary bypass behind an explicit non-production guard that cannot be satisfied in prod. Prefer re-issuing tokens or accepting both old and new signing keys over disabling verify.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "identity() now calls jwt.decode with verify_signature/aud/iss all False and no SECRET, so any forged JWT payload is accepted with no env/stage guard. Base still verified HS256 with SECRET, audience, and issuer."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.443,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2370,
+      "out": 349
+    },
+    "cost_usd": 0.007756
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

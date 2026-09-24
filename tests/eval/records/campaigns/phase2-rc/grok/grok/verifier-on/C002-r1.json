@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 46.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.2,
+  "usage": {
+    "in": 58667,
+    "cache_read": 28928,
+    "cache_write": 0,
+    "out": 1564,
+    "source": "cli"
+  },
+  "cost_usd": 0.1353964,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "The query builds SQL with an f-string so `email` is concatenated into the statement instead of bound as a parameter. Any support-pasted or caller-controlled value can alter the SQL (e.g. `x' OR '1'='1` returns all rows; crafted input can attach extra clauses).\n\nRestore a parameterized query. For the stated partial-match need, keep the value bound:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nIf `%`/`_` in the fragment should be literal, escape them before wrapping with `%`."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The PR title/description and the new comment say support needs fragment/partial email search, but the SQL still uses `email = '...'`. Pasting a substring will return no rows unless it equals the full stored email.\n\nSwitch to `LIKE ?` (or `instr(email, ?) > 0`) **with a bound parameter** so partial match works without reintroducing injection."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a SQL injection vulnerability in `get_orders` by interpolating `email` directly into the query string.\n\n## What went wrong\n\nThe previous code correctly used a bound parameter (`?` + `(email,)`). The new f-string form:\n\n```python\nf\"SELECT id, total FROM orders WHERE email = '{email}'\"\n```\n\nlets any caller-controlled `email` value break out of the string literal and alter the SQL. A value like `x' OR '1'='1` returns every order; values with `;` / subqueries can read or modify other tables depending on SQLite settings and how the connection is used.\n\nSupport's partial-match need does **not** require dropping parameterization. Use `LIKE` with a bound parameter (and escape `%`/`_` in the user fragment if literal match is intended):\n\n```python\ncur = conn.execute(\n    \"SELECT id, total FROM orders WHERE email LIKE ?\",\n    (f\"%{email}%\",),\n)\n```\n\n## Secondary issue\n\nThe comment and PR title say partial-match search, but the predicate is still `=`, so fragments will not match unless the full email is supplied. Fix the injection and the operator together.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `store.py` builds the query with an f-string that interpolates `email` directly; base used a bound `?` parameter. That is a clear SQL-injection regression, so critical severity is appropriate."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The new comment claims partial-match support, but `store.py` still filters with `email = '...'` (equality only), so substring search cannot work as described."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 14.893,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4693,
+      "out": 568
+    },
+    "cost_usd": 0.014125
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

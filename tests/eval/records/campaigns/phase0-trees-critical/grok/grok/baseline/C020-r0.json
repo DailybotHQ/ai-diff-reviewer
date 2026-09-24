@@ -1,0 +1,57 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 146.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 146.5,
+  "usage": {
+    "in": 29111,
+    "cache_read": 83328,
+    "cache_write": 0,
+    "out": 2139,
+    "source": "cli"
+  },
+  "cost_usd": 0.0960544,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query with `fmt.Sprintf`, so attacker-controlled input can alter the SQL (e.g. `account = \"' OR '1'='1\"`).\n\nThe previous `$1` placeholder was safe. Keep parameterization and pass the LIKE pattern as a bound argument:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso consider escaping `%` and `_` inside `account` if those should be treated as literals rather than LIKE wildcards."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "body": "**Wrong-row risk:** `QueryRow` expects at most one row. A partial `LIKE '%\u2026%'` match can hit multiple accounts; `Scan` then returns the first row's balance and discards the rest, so the UI can show another account's `balance_cents`.\n\nPrefer an exact match for `Balance`, or if partial search is required, enforce uniqueness (e.g. `LIKE` plus a `LIMIT 2` check / explicit error when more than one row matches) before treating the result as that account's balance."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a parameterized equality lookup with string-interpolated SQL and introduces a critical SQL injection.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `ledger/query.go:11` | SQL injection via `fmt.Sprintf` into LIKE clause |\n| 2 | \u26a0\ufe0f warning  | `ledger/query.go:11` | Partial match can return the wrong account balance |\n\n## Details\n\n`Balance` previously bound `account` as `$1`. The new query builds SQL with `fmt.Sprintf` and embeds the raw `account` string inside a LIKE pattern. Any caller-supplied value (UI partial search, API input, etc.) can break out of the string literal and alter the query.\n\nEven after fixing injection, `QueryRow` on a non-unique LIKE match silently scans the first row and discards the rest, so a partial number can return another account's balance.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

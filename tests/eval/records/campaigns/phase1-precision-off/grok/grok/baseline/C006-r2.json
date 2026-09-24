@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 29.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.2,
+  "usage": {
+    "in": 30126,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1595,
+    "source": "cli"
+  },
+  "cost_usd": 0.0871404,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nDisabling `verify_signature`, `verify_aud`, and `verify_iss` makes `identity()` trust any well-formed JWT payload. An attacker can mint an unsigned/forged token (e.g. `{\"sub\": \"admin\", \"aud\": \"api\"}`) and pass authentication wherever this function gates access.\n\nThe comment cites staging re-issuance (TICKET-412), but nothing in this function scopes the bypass to staging or a feature flag \u2014 it applies to every call site.\n\nRestore signature verification with the real key material, and keep `audience` / `issuer` (or the post-migration equivalents) enforced. For a migration window, prefer accepting multiple valid keys/issuers under full verification rather than turning verification off."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables all JWT cryptographic and claim verification in `identity()`, so any caller-supplied token is trusted as-is.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts forged tokens with arbitrary `sub`/roles/claims. The PR framing (\u201cstaging tokens / TICKET-412\u201d) does not appear in code as an environment or deployment guard \u2014 the bypass is unconditional on every path that calls `identity()`.\n\nRemoved checks that previously bound tokens to this service:\n- HMAC signature with `SECRET`\n- `algorithms=[\"HS256\"]` (algorithm lock-down)\n- `audience=\"api\"`\n- `issuer=\"accounts.internal.example\"`\n\n## Safer approaches (for the ticket, outside this diff)\n\n- Keep verification on; rotate/re-issue tokens so they verify under the post-migration issuer/keys.\n- If dual-key acceptance is needed during rollout, pass multiple verification keys / accept both issuers explicitly while still verifying signatures.\n- If a temporary bypass is truly unavoidable, gate it behind an explicit non-production runtime check and fail closed everywhere else \u2014 still a last resort.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

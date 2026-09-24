@@ -1,0 +1,97 @@
+# Ensemble review (v3, RFC-04): several providers review the same PR, ONE
+# consolidated review is posted.
+#
+# Each matrix leg runs in `mode: emit` — it reviews, writes its
+# `review-output/3.0` document, uploads it as an artifact and performs NO
+# GitHub write (the leg needs only read permissions). The `aggregate` job
+# downloads the legs' artifacts, merges duplicates by anchor, records how many
+# legs agree on each finding, verifies the consolidated set once, and
+# publishes one review with one marker and one label.
+#
+# `expected-legs` names the legs the aggregate waits for as
+# `<provider>|<endpoint_kind>|<model>` — exactly what each leg's run record
+# carries (kind from the api-base, model as resolved by the runtime; aliases
+# such as `balanced` resolve to a concrete id, so name the id here).
+name: AI Diff Reviewer (ensemble)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review:
+    name: 'Review — ${{ matrix.provider }}'
+    # Fork PRs cannot read repo secrets; skip them instead of failing (same
+    # gate as the other shipped examples).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: grok
+            secret: XAI_API_KEY
+            model: grok-4.5
+            api_base: ''
+          - provider: claude-code
+            secret: ZAI_CODING_API_KEY
+            model: glm-5.3-flash
+            api_base: https://api.z.ai/api/anthropic
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: DailybotHQ/ai-diff-reviewer@v3
+        with:
+          mode: emit
+          expected-legs: 'grok|xai|grok-4.5,claude-code|zai|glm-5.3-flash'
+          provider: ${{ matrix.provider }}
+          api-key: ${{ secrets[matrix.secret] }}
+          model: ${{ matrix.model }}
+          api-base: ${{ matrix.api_base }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          label-gate: ready
+
+  aggregate:
+    name: 'Review — aggregate'
+    needs: review
+    # `always()`: a leg that timed out must not erase the others' work — the
+    # aggregate publishes with the delivered legs and names the missing one.
+    if: always() && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: DailybotHQ/ai-diff-reviewer@v3
+        with:
+          mode: aggregate
+          expected-legs: 'grok|xai|grok-4.5,claude-code|zai|glm-5.3-flash'
+          # The verifier lane: the aggregate verifies every claimed critical
+          # once, on the in-process twin of this provider with this key.
+          provider: grok
+          api-key: ${{ secrets.XAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          label-gate: ready
+          strictness: block-on-critical
+          applied-label: ai-reviewed
+          # A warning gates only when this many legs reported it (criticals
+          # ignore it). `2` is the noise-reduction setting for ≥ 3 legs.
+          min-agreement: 1
+          # `true` fails the check when a leg is missing or timed out.
+          require-all-legs: false

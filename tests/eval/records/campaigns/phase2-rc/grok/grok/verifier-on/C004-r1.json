@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 37.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.0,
+  "usage": {
+    "in": 30284,
+    "cache_read": 57088,
+    "cache_write": 0,
+    "out": 1456,
+    "source": "cli"
+  },
+  "cost_usd": 0.0864304,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Issue:** Removing `os.path.basename()` and joining `request.args.get(\"path\", name)` directly onto `REPORTS` lets callers escape `/srv/reports` with `../` segments (e.g. `/reports/x?path=../../etc/passwd`). `send_file` will then read any filesystem path the process can open \u2014 arbitrary file disclosure.\n\n**Fix:** Resolve the candidate under `REPORTS` and reject paths that leave that directory before calling `send_file`. Example:\n\n```python\n@app.route(\"/reports/<name>\")\ndef download(name: str):\n    # allow nested subpaths; still confine to REPORTS\n    candidate = request.args.get(\"path\", name)\n    reports_root = os.path.realpath(REPORTS)\n    full = os.path.realpath(os.path.join(reports_root, candidate))\n    if not full.startswith(reports_root + os.sep) and full != reports_root:\n        abort(400)\n    return send_file(full)\n```\n\nAlso prefer taking the relative path only from a single validated source (route or query), and keep rejecting absolute paths."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a path-traversal arbitrary file read on the report download endpoint.\n\n## Narrative\n\nThe previous implementation used `os.path.basename(name)` so the route parameter could only select a single filename under `/srv/reports`. The new code drops that guard and passes `request.args.get(\"path\", name)` straight into `os.path.join(REPORTS, ...)`.\n\nAny client can request something like `/reports/x?path=../../etc/passwd` (or equivalent `../` chains) and `send_file` will serve files outside the reports directory, limited only by the process user and OS permissions. Using the query parameter also bypasses the route segment entirely, so nested folders are not the only new surface \u2014 absolute-looking relative escapes work the same way.\n\nSupporting nested paths (e.g. `2024/q3/report.pdf`) is a reasonable product need, but it requires resolving the path under `REPORTS` and rejecting anything that escapes that root (resolve + commonpath/prefix check, or an equivalent safe-join helper). Until that guard exists, this endpoint is unsafe on any reachable deployment.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change dropped `os.path.basename(name)` and now does `send_file(os.path.join(REPORTS, request.args.get(\"path\", name)))` with no confinement check, so `?path=../../etc/passwd` (and similar) escapes `/srv/reports` and discloses arbitrary readable files. That matches a critical path-traversal regre"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.262,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2664,
+      "out": 318
+    },
+    "cost_usd": 0.00762
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

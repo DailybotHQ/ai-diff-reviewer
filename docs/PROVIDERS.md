@@ -176,6 +176,8 @@ The return value must look like an Anthropic `Messages.create` response — mini
 
 Then register the implementation in `build_provider()` and add a default model in `DEFAULT_MODELS`. That's it.
 
+**Findings on the chat-completions path (v3).** The model reports findings through the `emit_finding` tool — anchor, `severity`, `title`, `category` (the finding v3 enum), optional `suggestion` and `evidence` (`files_read`, typed `checks`, `documented_rule`); invalid enums come back as tool errors, never as reinterpreted findings. `post_inline_comment` remains as an alias for one minor cycle (title from the body's first line, category `other`). After the loop the runtime completes the runtime-owned fields (`complete_finding_evidence`) so both families converge on the same finding v3 document (`docs/rfc/v3/schemas/finding-v3.schema.json`).
+
 ## Per-provider translation notes and roadmap
 
 ### OpenAI / Azure / OpenAI-compatible — shipped as `provider: openai`
@@ -264,7 +266,7 @@ The Anthropic provider caches both the system prompt and the diff-bearing first 
 
 | Backend | `api-base` | `api-key` | Models | Notes |
 |---|---|---|---|---|
-| Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | Byte-identical to previous releases: `x-api-key` auth, `cache_control` on the system prompt. |
+| Anthropic (default) | *(empty)* | Anthropic API key | `claude-sonnet-4-6` (default) | `x-api-key` auth, `cache_control` on the system prompt. v3 changes the request shape of every in-process runner (inventory + budgeted patches + parity tools, BC-03); the v2 "byte-identical" promise is withdrawn (BC-17, [MIGRATION_v3](MIGRATION_v3.md)). |
 | Z.ai GLM (Coding Plan) | `https://api.z.ai/api/anthropic` | Z.ai Coding Plan key | `glm-5.3`, `glm-5.3-flash` | Flat-rate plan ⇒ ≈ 0 marginal cost per review. Zero-install GLM path; the deepest GLM reviews use `provider: claude-code` with the same base (see below). |
 | xAI Grok | `https://api.x.ai` | xAI API key | `grok-4.5`, `grok-4.6` | Anthropic-compatible surface of the xAI API. |
 | Moonshot/Kimi | `https://api.moonshot.ai/anthropic` | Moonshot API key | `kimi-k2-0905-preview`, `kimi-k2-turbo-preview` | Kimi for Claude Code: the `claude-code` runner runs K2 through this base. |
@@ -357,7 +359,14 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
       "body": "markdown body of this inline comment",
       "severity": "critical",
       "start_line": 40,
-      "side": "RIGHT"
+      "side": "RIGHT",
+      "title": "Deleting the decorator removes the only authorization check",
+      "category": "security",
+      "evidence": {
+        "files_read": ["src/foo.py", "src/auth.py"],
+        "checks": [{"kind": "grep_callers", "target": "require_role", "result": "supports", "note": "no other guard on the route"}],
+        "documented_rule": null
+      }
     }
   ]
 }
@@ -375,6 +384,9 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 | `findings[].severity` | string | optional (default `info`) | Exactly one of `critical`, `warning`, `info` (lowercase). Drives the strictness gate. |
 | `findings[].start_line` | integer | optional | Start line for multi-line comments. |
 | `findings[].side` | string | optional (default `RIGHT`) | `LEFT` or `RIGHT` (case-normalised). `RIGHT` = new code, `LEFT` = removed. |
+| `findings[].title` | string | optional (v3) | One line naming the defect; cut at 120 characters. |
+| `findings[].category` | string | optional (v3) | Exactly one of `correctness`, `security`, `data-loss`, `broken-contract`, `concurrency`, `performance`, `maintainability`, `contradicts-documented-rule`, `test-gap`, `style`, `other` (case-normalised; anything else is rejected like an unknown severity). |
+| `findings[].evidence` | object | optional (v3) | What the agent verified: `files_read` (≤ 20 strings), `checks` (≤ 20 of `{kind: read_anchor \| grep_callers \| read_base_version \| read_instruction_file \| run_test \| type_check \| other, target, result: supports \| contradicts \| inconclusive, note ≤ 300}`), `documented_rule` (`{file, quote ≤ 500}` for `contradicts-documented-rule`, else `null`). Wrong types and unknown enum values are rejected; unknown keys inside `evidence` are ignored. They are promoted to the typed finding v3 fields (`Finding.title` / `category` / `evidence`) and the raw validated dict stays on `Finding.extra`. |
 
 ### Validation guarantees
 
@@ -386,6 +398,8 @@ exactly once, at the end of its run. `parse_findings_file()` in `scripts/reviewe
 - Severity is exactly one of the allowed values (case-insensitive on input, lowercased on output).
 - Side is `LEFT`/`RIGHT` (case-insensitive on input, uppercased on output).
 - Unknown top-level or per-finding keys are silently ignored (forward-compatibility with vendor extensions).
+- The optional v3 keys (`title`, `category`, `evidence`) are validated strictly for type and enum, bounded in length, and lifted into `Finding.extra`; a legacy file without them parses exactly as before.
+- The findings file is the **CLI → runtime** input; the runtime's own output is the `review-output/3.0` document (`.aiprr/review-output.json`, see `docs/ARCHITECTURE.md`), which lifts these findings into finding v3 with provenance, verification and the generated summary — CLIs are never asked to produce those.
 
 Missing files raise `FileNotFoundError` with an actionable message. Malformed JSON raises `ValueError` with the offending snippet quoted.
 
@@ -397,12 +411,16 @@ Missing files raise `FileNotFoundError` with an actionable message. Malformed JS
 | non-zero exit, findings file written | posts the review with a `Partial review: <cli> exited with code N` footer and a WARNING in the log | strictness gate as usual |
 | exit 0, no findings file | **retried once** with a fresh session when the first attempt used less than half of the CLI timeout (both attempts' usage is reported, the summary carries a `Retried once` note); if the retry also produces no file, posts an explicit summary-only **incomplete review** naming the cause | **fails** under every blocking strictness (`lenient` stays green); the reviewed label is not stamped; `label-once` keeps the toggle armed; prior IAR state is re-embedded unchanged |
 | non-zero exit, no findings file | the run fails with the CLI's stderr/stdout tail | red |
+| killed at `CLI_INVOCATION_TIMEOUT`, findings file written (v3) | posts the findings written so far as a **timed-out review** (`status: timeout`, `Review timed out: …` footer) | **fails** under every blocking strictness (`lenient` stays green); label not stamped |
+| killed at `CLI_INVOCATION_TIMEOUT`, no findings file | the run fails with the timeout message | red |
 
 Any findings file that exists before the CLI starts is removed first, so a file that exists afterwards was written by this run. CLI stdout/stderr are captured **bounded** (last 4 MB of each stream): a chatty agent cannot grow the reviewer's memory, and a multi-megabyte prompt on stdin cannot deadlock against a full pipe.
 
 ### The prompt directive
 
 CLI providers wrap the review instructions with `write_findings_prompt_directive()`, which appends the schema + "write your findings to this file before ending your turn" instruction to whatever comes from `prompts/default.md`. The directive is standardised so every CLI writes the same schema — one parser, three producers.
+
+**The user prompt (v3).** Every CLI lane sends the same first message the in-process runners get — `## Change inventory` (SHA-bound table with the `complete` verdict), `## Patches` (whole files in inventory order up to `FIRST_MESSAGE_PATCH_BYTES`) and `## Not embedded — fetch on demand` (diff them natively with the SHAs the inventory names) — followed by `## Required reading (repository instructions)`: `AGENTS.md` / `CLAUDE.md` (once, even when symlinked), `.review/extension.md`, the docs index and the configured `prompt-extension-file`, each SHA-256 stamped and bounded to 64 KB in total, introduced as data that never overrides the review rules. The inventory is also written to `<workspace>/.aiprr/inventory.json` (deleted first, like the findings file) so the CLI can re-read it exactly. The run record's `context.instruction_files_read` for CLI lanes lists what the prompt carried — the CLI's own tool use is not observable, so the record never invents a tool trace.
 
 ### Adding a new agent-runner provider
 
@@ -586,7 +604,9 @@ Most consumers run **one provider per PR** — that's the common case and needs 
 
 **`collapse-previous` is scoped per-provider.** Every review body and tracking comment carries an invisible per-provider marker (`<!-- ai-pr-reviewer-provider: <id> -->`). When `collapse-previous` runs (default `true`), it only minimizes *this provider's own* prior artefacts — it will **not** collapse a different provider's review, even though all jobs share one `github-token` (author `github-actions[bot]`). So each provider keeps a single live review, and re-running a provider outdates only its own previous run.
 
-To run multiple providers cleanly:
+**v3 — one consolidated review instead of one per provider.** Run each provider as a matrix leg with `mode: emit` and add one `mode: aggregate` job: the legs post nothing (read permissions only), the aggregate merges duplicates by anchor, records agreement per finding, verifies once and publishes one review with one marker and one label ([`examples/ensemble-matrix.yml`](../examples/ensemble-matrix.yml), [PR_REVIEW_WORKFLOW § Aggregated reviews](PR_REVIEW_WORKFLOW.md#aggregated-reviews-v3-mode-aggregate)). This repo's [`self-review.yml`](../.github/workflows/self-review.yml) is the reference topology. The per-provider pattern below still works for consumers who want separate reviews.
+
+To run multiple providers cleanly (separate reviews):
 
 1. Keep `collapse-previous` at its default (`true`) — the per-provider scoping does the right thing.
 2. **Give each provider a distinct `applied-label`** (e.g. `reviewed:anthropic`, `reviewed:codex`) so you can tell the reviews apart in the conversation tab.

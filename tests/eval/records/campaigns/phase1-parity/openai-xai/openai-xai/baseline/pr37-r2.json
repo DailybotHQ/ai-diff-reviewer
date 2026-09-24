@@ -1,0 +1,143 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 41,
+  "seconds": 168.2,
+  "setup_seconds": 1.5,
+  "total_seconds": 169.7,
+  "usage": {
+    "in": 31230,
+    "cache_read": 444288,
+    "cache_write": 0,
+    "out": 5139,
+    "source": "api"
+  },
+  "cost_usd": 0.182152,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 4,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThis PR rewrites `SKILL.md` from an older four-capability snapshot and lands `version: \"1.6.2\"` plus a four-capability frontmatter `description`, while `main` (base) already ships `version: \"2.5.1\"` and a five-capability router that includes `apply-review`. Merging as-is would publish a major documentation/contract regression to the skills.sh source-of-truth path.\n\n**Fix:** rebase onto current `main` and re-apply only the narrative reframe (title, two-audiences framing, Surface column, section order, Default-flow header) on top of the live five-capability / v2 content. Do not carry forward `1.6.2` or the four-capability description."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 41,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nThe capabilities table stops at four rows and labels the skill \u201cFour coordinated capabilities\u201d. On `main`, row 5 is `apply-review` (CI \u2192 local walkthrough of posted findings), and Flow A/B + Activation already route to it. Dropping that row orphans the sub-skill and breaks agent routing for \u201cwhat did the CI review say?\u201d / \u201capply the AI review\u2019s fixes\u201d.\n\nRestore capability #5 and keep Flow/Activation/`Default flow` sibling links consistent with base after rebase."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nVersion-parity guidance pins `@v1.4.2` and claims identical reviews. Base documents `@v2.1.0` / current major `@v2` and correctly notes that CI may still differ on round 2+ via IAR. Teaching `@v1.4.2` steers new installs onto an obsolete line and overstates local\u2194CI identity.\n\nAfter rebase, keep the base pin (`@v2.1.0` or current moving `@v2`) and the IAR caveat."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 98,
+      "severity": "warning",
+      "body": "The Install block still says \u201cLatest v1.x\u201d and pins `npx skills add \u2026@v1.4.2`, and the slug note freezes published tags at `v1.0.0\u2013v1.4.2`. Base already moved this to \u201cLatest v2.x\u201d / `@v2.1.0` and \u201ccurrent major `@v2`\u201d. Copy-paste from this skill would install the wrong major.\n\nRebase and preserve the v2 Install examples from `main`."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 76,
+      "severity": "warning",
+      "body": "Compressed parity text says \u201csame review, locally and in CI\u201d and removes the entire **CI-only surfaces** block (IAR, `skip-review-label`, incremental follow-up + usage telemetry) that `main` uses to set correct expectations. That is not a lossless compression: agents and humans will treat local full passes as bit-identical to CI round 2+ output.\n\nKeep the Surface-column / audience framing, but retain base\u2019s IAR-aware parity wording and the CI-only surfaces section."
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 190,
+      "severity": "warning",
+      "body": "The new \u201cDefault flow\u201d header is a good structural idea, but the sibling list says \u201cthree sibling sub-skills\u201d and omits `apply-review/SKILL.md`, which base already lists as the fourth sibling. After rebase, keep the header and restore all four siblings (five capabilities total)."
+    }
+  ],
+  "summary": "I'd recommend not merging until this branch is rebased onto current `main` \u2014 the PR is a stale-branch rewrite that would regress the shipped skill docs, not a pure narrative reframe on top of live content.\n\n## What went wrong\n\nThe PR description frames this as a content-only restructure of `skills/ai-diff-reviewer/SKILL.md` (522\u2192511 lines, Steps 0\u20135 \u201cbyte-identical\u201d). Against the **actual merge base** (`38c6144`), that is not what the diff does:\n\n| Surface | `main` (base) | This PR (head) |\n|---|---|---|\n| Frontmatter `version` | `2.5.1` | `1.6.2` |\n| Capabilities | **Five** (includes `apply-review`) | **Four** |\n| Pin examples | `@v2.1.0` / \u201cLatest v2.x\u201d | `@v1.4.2` / \u201cLatest v1.x\u201d |\n| Parity story | methodology + severity; IAR may shorten CI round 2+ | \u201csame review, locally and in CI\u201d |\n| CI-only surfaces | IAR, `skip-review-label`, incremental follow-up + usage | **removed** |\n| `apply-review/` | present on base (~1.4k LOC sub-skill) | absent from head worktree / router |\n\nThe unified diff looks like \u201cLocal Companion \u2192 Local & CI Companion\u201d only because the branch\u2019s *parent* of the edit was an older four-capability file. Git still merges against today\u2019s `main`, so landing this would overwrite the current router.\n\n## Narrative intent (still good)\n\nThe structural goals are sound and already partially present on `main` (two audiences, Surface column, flows-before-install, Default-flow header). After rebase, re-apply **only** any remaining wording polish on top of the five-capability / v2 text \u2014 do not resurrect v1.6.2 content.\n\n## Security / skill-audit notes\n\nNo new `curl|sh`, token-looking placeholders, or `allowed-tools` expansion in the changed hunks. Trust-boundary Step 0 text is unchanged in intent. Risk is documentation/contract correctness, not a new runtime attack surface.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 41,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 98,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 76,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 190,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 6,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 5,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,655 @@
+{
+  "records_total": 105,
+  "records_complete": 105,
+  "records_failed": 0,
+  "cells": {
+    "claude-code|zai|glm-5.3-flash|baseline|chore/bootstrap-review-extension": {
+      "n": 3,
+      "cost_mean": 1.5597203333333336,
+      "cost_min": 1.253342,
+      "cost_max": 1.72857,
+      "cost_relative_spread": 0.30468795581088143,
+      "seconds_mean": 650.2116666666667,
+      "turns_mean": 13.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|ci/self-review-complexity-labels": {
+      "n": 3,
+      "cost_mean": 1.0505526666666667,
+      "cost_min": 1.030504,
+      "cost_max": 1.0733620000000001,
+      "cost_relative_spread": 0.04079567008856931,
+      "seconds_mean": 407.21166666666664,
+      "turns_mean": 14.666666666666666,
+      "recall_values": [
+        1,
+        1,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 1,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|docs/skill-local-ci-companion": {
+      "n": 3,
+      "cost_mean": 0.9134306666666667,
+      "cost_min": 0.8382090000000001,
+      "cost_max": 1.0569870000000001,
+      "cost_relative_spread": 0.23951243152189622,
+      "seconds_mean": 381.0213333333333,
+      "turns_mean": 12.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/author-association-permission-gate": {
+      "n": 3,
+      "cost_mean": 1.3976116666666665,
+      "cost_min": 1.2501939999999998,
+      "cost_max": 1.5383229999999999,
+      "cost_relative_spread": 0.20615812451479734,
+      "seconds_mean": 624.1033333333334,
+      "turns_mean": 15.333333333333334,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/complexity-labels-all-providers": {
+      "n": 3,
+      "cost_mean": 1.1954163333333332,
+      "cost_min": 1.08103,
+      "cost_max": 1.255067,
+      "cost_relative_spread": 0.14558693498415756,
+      "seconds_mean": 454.00533333333334,
+      "turns_mean": 16.333333333333332,
+      "recall_values": [
+        0,
+        2,
+        2
+      ],
+      "recall_total": 2,
+      "recall_delta": 2,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|feat/iteration-aware-review": {
+      "n": 3,
+      "cost_mean": 3.471505666666667,
+      "cost_min": 3.1143169999999993,
+      "cost_max": 4.1269860000000005,
+      "cost_relative_spread": 0.29170887137636853,
+      "seconds_mean": 666.601,
+      "turns_mean": 41.333333333333336,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "claude-code|zai|glm-5.3-flash|baseline|test/self-review-skip-status": {
+      "n": 3,
+      "cost_mean": 0.8850079999999999,
+      "cost_min": 0.828085,
+      "cost_max": 0.9626519999999998,
+      "cost_relative_spread": 0.15205173286569149,
+      "seconds_mean": 385.6863333333333,
+      "turns_mean": 7.333333333333333,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C001": {
+      "n": 3,
+      "cost_mean": 0.08017013333333332,
+      "cost_min": 0.0793004,
+      "cost_max": 0.0806852,
+      "cost_relative_spread": 0.01727326552198997,
+      "seconds_mean": 31.112,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C002": {
+      "n": 3,
+      "cost_mean": 0.0932672,
+      "cost_min": 0.0914652,
+      "cost_max": 0.0944144,
+      "cost_relative_spread": 0.03162097714952308,
+      "seconds_mean": 46.59733333333333,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C003": {
+      "n": 3,
+      "cost_mean": 0.07854933333333333,
+      "cost_min": 0.0782572,
+      "cost_max": 0.0787196,
+      "cost_relative_spread": 0.005886746333514416,
+      "seconds_mean": 32.465,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C004": {
+      "n": 3,
+      "cost_mean": 0.08053093333333333,
+      "cost_min": 0.0799876,
+      "cost_max": 0.0811156,
+      "cost_relative_spread": 0.014007039944898898,
+      "seconds_mean": 24.639666666666667,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C005": {
+      "n": 3,
+      "cost_mean": 0.08145533333333334,
+      "cost_min": 0.0788672,
+      "cost_max": 0.0835716,
+      "cost_relative_spread": 0.05775435207843968,
+      "seconds_mean": 52.546,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C006": {
+      "n": 3,
+      "cost_mean": 0.09325906666666667,
+      "cost_min": 0.0768912,
+      "cost_max": 0.1250048,
+      "cost_relative_spread": 0.5159133767869576,
+      "seconds_mean": 25.78833333333333,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C008": {
+      "n": 3,
+      "cost_mean": 0.08151106666666667,
+      "cost_min": 0.0808156,
+      "cost_max": 0.0825264,
+      "cost_relative_spread": 0.020988561062465116,
+      "seconds_mean": 104.53633333333333,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C009": {
+      "n": 3,
+      "cost_mean": 0.09685666666666666,
+      "cost_min": 0.0880836,
+      "cost_max": 0.101642,
+      "cost_relative_spread": 0.13998416904704544,
+      "seconds_mean": 70.19266666666667,
+      "turns_mean": 4.666666666666667,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C010": {
+      "n": 3,
+      "cost_mean": 0.0865896,
+      "cost_min": 0.0712204,
+      "cost_max": 0.1008596,
+      "cost_relative_spread": 0.34229514860907073,
+      "seconds_mean": 124.835,
+      "turns_mean": 4.333333333333333,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C011": {
+      "n": 3,
+      "cost_mean": 0.07416053333333333,
+      "cost_min": 0.055742,
+      "cost_max": 0.0896064,
+      "cost_relative_spread": 0.45663641397760535,
+      "seconds_mean": 55.61966666666666,
+      "turns_mean": 3.3333333333333335,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C012": {
+      "n": 3,
+      "cost_mean": 0.1131684,
+      "cost_min": 0.094264,
+      "cost_max": 0.1301884,
+      "cost_relative_spread": 0.3174419714337219,
+      "seconds_mean": 84.641,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C013": {
+      "n": 3,
+      "cost_mean": 0.10435946666666666,
+      "cost_min": 0.083396,
+      "cost_max": 0.1384184,
+      "cost_relative_spread": 0.5272391835399696,
+      "seconds_mean": 90.94033333333333,
+      "turns_mean": 3.6666666666666665,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C014": {
+      "n": 3,
+      "cost_mean": 0.10288986666666666,
+      "cost_min": 0.081948,
+      "cost_max": 0.1434032,
+      "cost_relative_spread": 0.5972910840588126,
+      "seconds_mean": 40.254333333333335,
+      "turns_mean": 3.3333333333333335,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C016": {
+      "n": 3,
+      "cost_mean": 0.13829186666666668,
+      "cost_min": 0.092254,
+      "cost_max": 0.18632520000000002,
+      "cost_relative_spread": 0.6802366781753375,
+      "seconds_mean": 80.96133333333333,
+      "turns_mean": 5.333333333333333,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C019": {
+      "n": 3,
+      "cost_mean": 0.11386813333333333,
+      "cost_min": 0.0971332,
+      "cost_max": 0.1471128,
+      "cost_relative_spread": 0.43892525974489777,
+      "seconds_mean": 45.016333333333336,
+      "turns_mean": 4.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C020": {
+      "n": 3,
+      "cost_mean": 0.09764080000000001,
+      "cost_min": 0.0841016,
+      "cost_max": 0.1127664,
+      "cost_relative_spread": 0.29357399775503684,
+      "seconds_mean": 73.258,
+      "turns_mean": 5.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C021": {
+      "n": 3,
+      "cost_mean": 0.06484493333333334,
+      "cost_min": 0.0538208,
+      "cost_max": 0.0809236,
+      "cost_relative_spread": 0.41796326415633595,
+      "seconds_mean": 92.06099999999999,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C022": {
+      "n": 3,
+      "cost_mean": 0.11943986666666667,
+      "cost_min": 0.1065952,
+      "cost_max": 0.1385972,
+      "cost_relative_spread": 0.2679339896561617,
+      "seconds_mean": 57.74633333333333,
+      "turns_mean": 5.333333333333333,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C068": {
+      "n": 3,
+      "cost_mean": 0.08262693333333333,
+      "cost_min": 0.0790852,
+      "cost_max": 0.0891796,
+      "cost_relative_spread": 0.12216839706826833,
+      "seconds_mean": 40.87133333333333,
+      "turns_mean": 3.3333333333333335,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C069": {
+      "n": 3,
+      "cost_mean": 0.09798146666666667,
+      "cost_min": 0.085044,
+      "cost_max": 0.1138656,
+      "cost_relative_spread": 0.2941535882296108,
+      "seconds_mean": 31.842000000000002,
+      "turns_mean": 3.6666666666666665,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|C070": {
+      "n": 3,
+      "cost_mean": 0.07549253333333333,
+      "cost_min": 0.0602872,
+      "cost_max": 0.0837208,
+      "cost_relative_spread": 0.31040950628229896,
+      "seconds_mean": 35.18566666666667,
+      "turns_mean": 3.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|chore/bootstrap-review-extension": {
+      "n": 3,
+      "cost_mean": 0.480608,
+      "cost_min": 0.4656584,
+      "cost_max": 0.4936056,
+      "cost_relative_spread": 0.05814967707570412,
+      "seconds_mean": 172.87199999999999,
+      "turns_mean": 8.0,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|ci/self-review-complexity-labels": {
+      "n": 3,
+      "cost_mean": 0.4161724,
+      "cost_min": 0.3963548,
+      "cost_max": 0.4516908,
+      "cost_relative_spread": 0.13296412736644717,
+      "seconds_mean": 127.74533333333333,
+      "turns_mean": 9.0,
+      "recall_values": [
+        1,
+        1,
+        1
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|docs/skill-local-ci-companion": {
+      "n": 3,
+      "cost_mean": 0.37589786666666664,
+      "cost_min": 0.3155316,
+      "cost_max": 0.4102268,
+      "cost_relative_spread": 0.2519173647877402,
+      "seconds_mean": 171.17233333333334,
+      "turns_mean": 8.666666666666666,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/author-association-permission-gate": {
+      "n": 3,
+      "cost_mean": 0.5224456,
+      "cost_min": 0.4053984,
+      "cost_max": 0.5846492,
+      "cost_relative_spread": 0.3430994537995918,
+      "seconds_mean": 276.93833333333333,
+      "turns_mean": 11.0,
+      "recall_values": [
+        0,
+        1,
+        0
+      ],
+      "recall_total": 1,
+      "recall_delta": 1,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/complexity-labels-all-providers": {
+      "n": 3,
+      "cost_mean": 0.6245006666666666,
+      "cost_min": 0.5464484,
+      "cost_max": 0.686604,
+      "cost_relative_spread": 0.224428263220429,
+      "seconds_mean": 232.4416666666667,
+      "turns_mean": 12.666666666666666,
+      "recall_values": [
+        2,
+        2,
+        2
+      ],
+      "recall_total": 2,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|feat/iteration-aware-review": {
+      "n": 3,
+      "cost_mean": 1.4617677333333334,
+      "cost_min": 1.2070836,
+      "cost_max": 1.6148988,
+      "cost_relative_spread": 0.278987687784051,
+      "seconds_mean": 442.9666666666667,
+      "turns_mean": 21.0,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    },
+    "grok|xai|grok-4.5|baseline|test/self-review-skip-status": {
+      "n": 3,
+      "cost_mean": 0.3412477333333333,
+      "cost_min": 0.249938,
+      "cost_max": 0.3873844,
+      "cost_relative_spread": 0.4027760086709246,
+      "seconds_mean": 251.70633333333333,
+      "turns_mean": 6.666666666666667,
+      "recall_values": [
+        0,
+        0,
+        0
+      ],
+      "recall_total": 0,
+      "recall_delta": 0,
+      "usage_unknown_runs": 0,
+      "descriptive_only": false
+    }
+  },
+  "noise_floor": {
+    "replicated_cells": 35,
+    "cost_relative_spread_median": 0.2679339896561617,
+    "cost_relative_spread_mean": 0.2555006078422632,
+    "cost_relative_spread_worst": 0.6802366781753375,
+    "recall_delta_max": 2,
+    "recall_delta_cells_nonzero": 3
+  },
+  "first_party_unknown_usage_run_ids": [],
+  "duplication": {
+    "available": false,
+    "reason": "run records carry finding counts, not anchors; duplication is measured over structured review outputs (RFC-05)"
+  },
+  "campaign_cost": {
+    "sum_usd": 49.9585184,
+    "records_with_cost": 105,
+    "records_without_cost": 0
+  }
+}

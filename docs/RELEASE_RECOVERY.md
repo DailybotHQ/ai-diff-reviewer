@@ -233,6 +233,57 @@ marker on the pre-squash commit is belt-and-suspenders only.
 
 ---
 
+## Release skipped by the eval gate (v3, BC-02)
+
+**Symptom:** `auto-release.yml` Step 1.5 prints one of
+
+```text
+release-gate: eval-verdict-missing — no verdict matches runtime content … + prompt …
+release-gate: eval-verdict-stale — <file>: computed_at … is older than 30 days
+release-gate: eval-verdict-blocking — <file>: <blocking findings>
+```
+
+A fourth line, `release-gate: eval-gate-error — <exception>`, means the gate
+**itself** could not run (missing `scripts/reviewer.py` or `prompts/default.md`
+at the candidate, an unreadable verdict file, a bug in the gate). The step
+then fails with `::error::`, `blocked=true` and `reason=eval-gate-error` — an
+infrastructure fault is never reported as "no verdict". Fix the cause and re-run the workflow.
+
+and every later step is skipped (`steps.version.outputs.skip` is empty, so
+Step 2.5 onward never run). Nothing was tagged or pushed — this is a clean
+skip, not a partial release.
+
+**What the gate checks** (`tests/eval/release_gate.py`): the newest
+`verdict/1.0` under `tests/eval/records/verdicts/` whose
+`candidate_content_sha256` equals SHA-256 of `scripts/reviewer.py` on the
+candidate commit and whose `prompt_sha256` equals SHA-256 of
+`prompts/default.md`. Docs-only commits after the measured commit still
+match; any runtime or prompt change needs a new verdict. **Newest matching
+verdict only:** when several verdicts share the candidate's hashes (for
+example a trees-only campaign and a PR campaign measured on the same
+commit), the one with the latest `computed_at` decides — a later blocking
+verdict freezes the cut and a later non-blocking one unlocks it, regardless
+of which campaign was larger. Name the campaign in `--baseline-ref` and keep
+one verdict per release candidate to avoid surprises.
+
+**Recovery:**
+
+1. `missing` — dispatch `eval-campaign.yml` on the candidate branch with a
+   `budget_usd` and `baseline` (the stored baseline campaign's records dir);
+   the workflow opens a PR with the verdict file; merge it (`[skip release]`
+   is in its commit message); push a no-op or the next change to `main` to
+   re-trigger the release.
+2. `stale` — same as missing: re-run the campaign; a verdict is trusted for
+   30 days (`--max-age-days`).
+3. `blocking` — read the verdict's `blocking` list (recall regression,
+   widened determinism, unknown usage on a first-party lane). Fix the
+   regression, re-measure, and only then release. Do **not** delete or edit
+   the blocking verdict; a newer non-blocking verdict for the fixed content
+   supersedes it.
+
+The gate never fails the workflow red; it skips the release so the log
+explains itself. `[skip release]` commits bypass the whole job as before.
+
 ## Preventing the recurrence
 
 Two paths — pick one before the next release that includes a

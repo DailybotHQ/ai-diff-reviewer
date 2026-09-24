@@ -1,0 +1,39 @@
+{
+  "id": "f-9c1e7a3b5d2f8e40",
+  "path": "scripts/reviewer.py",
+  "line": 8236,
+  "start_line": null,
+  "side": "RIGHT",
+  "severity": "critical",
+  "severity_claimed": "critical",
+  "category": "security",
+  "title": "Base ref taken from the PR payload reaches git argv unvalidated",
+  "body": "`base_ref` is read from the webhook payload and interpolated into `git diff origin/<base>...HEAD`. A crafted branch name starting with `-` is parsed as a git option. Validate the ref against the repository's branch list or reject names that do not match the ref-name grammar before building argv.",
+  "suggestion": null,
+  "evidence": {
+    "anchor_sha256": "3b9f2c7d1e8a4b60",
+    "excerpt": "diff_proc = run_cmd([\"git\", \"diff\", f\"origin/{base_ref}...HEAD\", \"--no-color\", \"--unified=3\"])",
+    "files_read": ["scripts/reviewer.py", "docs/SECURITY.md"],
+    "tool_trace_ids": ["t-0007", "t-0009", "t-0012"],
+    "checks": [
+      { "kind": "read_anchor", "target": "scripts/reviewer.py:8226-8244", "result": "supports", "note": "argv built from base_ref without a ref-name check" },
+      { "kind": "grep_callers", "target": "base_ref", "result": "supports", "note": "value originates from the PR payload in main()" },
+      { "kind": "read_instruction_file", "target": "docs/SECURITY.md", "result": "supports", "note": "SECURITY.md states SHA arguments come from trusted sources; branch names are not covered" }
+    ],
+    "documented_rule": null
+  },
+  "verification": {
+    "status": "verified",
+    "verifier_model_alias": "economy",
+    "verifier_endpoint_kind": "xai",
+    "reason": "Anchor read at head confirms unvalidated interpolation; a leading-dash ref name reproduces the option-injection shape; no guard found in callers.",
+    "verified_at": "2026-10-02T14:05:40Z",
+    "checks": [
+      { "kind": "read_anchor", "target": "scripts/reviewer.py:8226-8244", "result": "supports", "note": null },
+      { "kind": "grep_callers", "target": "base_ref", "result": "supports", "note": "single producer, no validation" }
+    ]
+  },
+  "agreement": { "legs_total": 2, "legs_reporting": 2, "reported_by": ["grok|xai", "claude-code|zai"] },
+  "lifecycle": { "state": "new", "first_seen_run_id": "p1-ensemble-pr61-r0", "retired_reason": null },
+  "origin": { "run_id": "p1-ensemble-pr61-r0", "provider": "grok", "endpoint_kind": "xai", "model": "grok-4.5" }
+}

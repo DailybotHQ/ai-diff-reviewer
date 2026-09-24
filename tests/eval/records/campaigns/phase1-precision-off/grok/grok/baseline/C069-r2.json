@@ -1,0 +1,92 @@
+{
+  "case": "C069",
+  "pr": "C069",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 52.1,
+  "usage": {
+    "in": 62717,
+    "cache_read": 58368,
+    "cache_write": 0,
+    "out": 2787,
+    "source": "cli"
+  },
+  "cost_usd": 0.1596664,
+  "changed_files": [
+    "cmd/server/routes.go"
+  ],
+  "findings": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`middleware.RequireRole(\"admin\")` wrapped both admin handlers on the base branch and is gone here. `GET /api/v2/admin/users` and `POST /api/v2/admin/roles` are registered as bare `http.HandlerFunc` values, so any client that can reach the server can list users and edit roles without an admin role check \u2014 direct privilege escalation on `editRoles`.\n\nRe-apply the admin gate on the v2 subrouter, for example:\n\n```suggestion\n\tv2 := r.PathPrefix(\"/api/v2\").Subrouter()\n\tauthz := middleware.RequireRole(\"admin\")\n\tv2.Handle(\"/admin/users\", authz(http.HandlerFunc(a.listUsers))).Methods(\"GET\")\n```\n\n(and the same `authz(...)` wrap on the `/admin/roles` route), or `v2.Use(middleware.RequireRole(\"admin\"))` if that helper matches your middleware signature."
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`POST /api/v2/admin/roles` previously required `RequireRole(\"admin\")` and now calls `a.editRoles` directly. Unauthenticated or non-admin callers can attempt role mutations \u2014 the highest-impact endpoint in this diff.\n\nWrap it with the same admin middleware as before:\n\n```suggestion\n\tv2.Handle(\"/admin/roles\", authz(http.HandlerFunc(a.editRoles))).Methods(\"POST\")\n```\n\n(with `authz := middleware.RequireRole(\"admin\")` restored above)."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change drops admin authorization while relocating the routes under `/api/v2`.\n\n## Narrative\n\nThe PathPrefix move to `/api/v2` is straightforward gorilla/mux usage and matches the stated versioning cleanup. The load-bearing defect is that `middleware.RequireRole(\"admin\")` was removed entirely: both `listUsers` (GET) and `editRoles` (POST) are now registered as bare `http.HandlerFunc` values with no role gate.\n\nIn the base revision every admin handler was wrapped with `authz`. After this diff, any caller who can reach the process can hit `/api/v2/admin/users` and `/api/v2/admin/roles` without an admin role check. `editRoles` in particular is a privilege-escalation surface.\n\nRestoring the same `RequireRole(\"admin\")` wrapper on the v2 subrouter (per-route or via `v2.Use`) is required before this is safe to ship. Optionally keep legacy `/admin/*` routes temporarily if external clients still call the old paths; that is secondary to the auth regression.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C069-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

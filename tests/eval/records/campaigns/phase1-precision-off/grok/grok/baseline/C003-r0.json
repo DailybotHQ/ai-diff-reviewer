@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 23.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 23.9,
+  "usage": {
+    "in": 59104,
+    "cache_read": 28928,
+    "cache_write": 0,
+    "out": 1284,
+    "source": "cli"
+  },
+  "cost_usd": 0.1345904,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Hard-coded production SMTP password in source.** When `SMTP_PASSWORD` is unset, `s.login` authenticates with the literal default `smtp-prod-backup-77`. That credential is now committed to git and usable by anyone who can read the repo to send mail as `notifications` on `smtp.internal.example`.\n\nFail closed if the secret is missing, and inject the password only via the environment/secret mount. If this string was ever a real password, rotate it on the SMTP side immediately.\n\n```suggestion\n        password = os.environ.get(\"SMTP_PASSWORD\")\n        if not password:\n            raise RuntimeError(\"SMTP_PASSWORD is not set\")\n        s.login(\"notifications\", password)\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default login password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), which fails closed when the secret is missing. The patch switches to `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")`, so any cron/host without the env var authenticates with a hard-coded password that is now in git history.\n\nThat is a credential leak and an auth bypass for the notifications mailbox: anyone with repo read access (or CI logs that echo the source) can log into `smtp.internal.example` as `notifications`. The comment framing this as a cron convenience does not change the failure mode.\n\nA safe fix is fail-closed with a clear error (or skip-send path) when the secret is absent, and mount `SMTP_PASSWORD` in the cron environment via the secret store. Rotate `smtp-prod-backup-77` immediately if it was ever a real credential.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

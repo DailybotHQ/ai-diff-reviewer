@@ -196,7 +196,7 @@ class RequestShapeTests(unittest.TestCase):
         self.assertNotIn("max_tokens", body)
         self.assertEqual(body["tool_choice"], "auto")
         self.assertEqual(body["messages"][0], {"role": "system", "content": "S"})
-        self.assertEqual(len(body["tools"]), 5)
+        self.assertEqual(len(body["tools"]), len(reviewer.tools_schema(10)))  # base set incl. v3 parity tools
 
     def test_azure_profile_adds_api_key_header_and_v1_path(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://myres.services.ai.azure.com/openai/v1", "openai")

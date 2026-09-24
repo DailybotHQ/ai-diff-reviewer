@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 39.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.6,
+  "usage": {
+    "in": 16596,
+    "cache_read": 71552,
+    "cache_write": 0,
+    "out": 2054,
+    "source": "cli"
+  },
+  "cost_usd": 0.0669816,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `tar-stream` (legitimate, widely used) is replaced with `tar-streem` \u2014 a near-identical misspelling at `^1.0.0`. Combined with the new `postinstall` script, this is the standard shape of an npm typosquatting / supply-chain attack: install a lookalike package that runs code at install time.\n\n**Failure mode:** Anyone who runs `npm install` on this branch (local dev or CI) resolves and executes whatever `tar-streem@^1.0.0` publishes, including credential theft, reverse shells, or further dependency poisoning. The PR description (\"bundles its installer\") is social cover for that hook, not evidence of a maintained fork.\n\n**Fix:** Revert the dependency to `tar-stream` (or pin a verified maintained alternative after reviewing its source, publish provenance, and API). Do not adopt `tar-streem` without independent proof it is the same project under a new name (registry ownership, GitHub repo, identical API, signed releases)."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `\"postinstall\": \"tar-streem-setup\"` executes a binary from the newly added dependency on every install, with no pin to a full content hash and no reviewable script in-repo.\n\n**Failure mode:** `npm install` / `npm ci` will invoke `tar-streem-setup` automatically in CI and on developer machines. Install hooks are a primary vector for npm malware because they run before any application code is reviewed or tested.\n\n**Fix:** Remove the `postinstall` script entirely. If setup is truly required for a legitimate tool, make it an explicit opt-in script (e.g. `npm run setup`) that developers run after inspecting what it does \u2014 never an implicit lifecycle hook for a just-added third-party package."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` package with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every `npm install`. That is a classic typosquatting / supply-chain install-time execution pattern.\n\n## Why this is dangerous\n\n- **Name swap:** `tar-stream` \u2192 `tar-streem` is a one-letter misspelling of a widely used packaging library. Nothing in the repo shows an API migration, import update, or maintainer rationale beyond \"bundles its installer.\"\n- **Install-time code execution:** `\"postinstall\": \"tar-streem-setup\"` runs whatever binary that package ships as soon as dependencies are installed \u2014 CI runners, developer laptops, and anyone who clones and installs. No review of package contents is possible from this diff alone.\n- **Version regression:** `^3.1.6` \u2192 `^1.0.0` is inconsistent with a drop-in maintained successor; it is consistent with a newly published malicious stub.\n- **No consumer updates:** `scripts/pack.js` is referenced but absent from the tree; nothing demonstrates the new package is required for packaging behavior.\n\n## Release decision\n\nBlock until the dependency change is reverted to `tar-stream` (or another verified, maintained successor with a real migration) and the `postinstall` hook is removed.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

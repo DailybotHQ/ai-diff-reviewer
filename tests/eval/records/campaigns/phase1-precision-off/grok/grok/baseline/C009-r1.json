@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 28.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 28.2,
+  "usage": {
+    "in": 16134,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 1442,
+    "source": "cli"
+  },
+  "cost_usd": 0.0711408,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**XSS:** `body` is assigned to `dangerouslySetInnerHTML` with no escaping or sanitization. Any user-controlled comment can inject script (`<img onerror=\u2026>`, `<svg onload=\u2026>`, javascript URLs in links, etc.) and run in other users\u2019 browsers.\n\nRestore escaping, or parse a limited markup dialect and sanitize the output (allowlist tags/attrs) before setting `__html`. Do not pass raw `body` through as HTML.\n\n```suggestion\n  return <div className=\"comment\">{body}</div>;\n```\n\n(If you need bold/links, use a Markdown library + sanitizer instead of the plain-text suggestion above.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a stored/reflected XSS by piping the raw `body` string into `dangerouslySetInnerHTML` with no sanitization.\n\n## What went wrong\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning HTML. That made `dangerouslySetInnerHTML` safe (if pointless for \"rich\" formatting). Removing `escapeHtml` and passing `body` straight through means any comment payload like `<img src=x onerror=alert(document.cookie)>` or `<script>\u2026</script>` executes in every viewer\u2019s session.\n\nThe comment says rich formatting (bold/links) was requested. That goal needs a **safe** path: a vetted Markdown renderer that emits escaped HTML, or an allowlist sanitizer (e.g. DOMPurify) after a limited markup transform. Raw HTML is not that path.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

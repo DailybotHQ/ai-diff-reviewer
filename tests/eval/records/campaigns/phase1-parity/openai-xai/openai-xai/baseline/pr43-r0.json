@@ -1,0 +1,104 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 6,
+  "tool_calls": 21,
+  "seconds": 85.8,
+  "setup_seconds": 12.4,
+  "total_seconds": 98.2,
+  "usage": {
+    "in": 60464,
+    "cache_read": 235904,
+    "cache_write": 0,
+    "out": 3093,
+    "source": "api"
+  },
+  "cost_usd": 0.186667,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 333,
+      "severity": "warning",
+      "body": "The new comment says chat-completions legs are `anthropic` and `codex`, with no-ops only on `claude-code`/`cursor`. That is wrong: `CodexProvider` subclasses `AgentRunnerProvider`, so complexity labeling is chat-completions-only (`anthropic`). With this config, the codex leg will log the agent-runner no-op warning and never apply `complexity:*`. Align the comment with `docs/PR_METADATA_CHECKS.md` \u00a7 provider support matrix (and the PR description, which currently repeats the same mistake).\n\n```suggestion\n          # PR complexity labeling \u2014 dogfood docs/PR_METADATA_CHECKS.md\n          # \u00a7 `complexity-labels-enabled`. The model calls `set_pr_complexity`\n          # and applies `complexity:low|medium|high`. Only the chat-completions\n          # leg (`anthropic`) performs the assessment; agent-runner legs\n          # (`claude-code`, `cursor`, `codex`) log a no-op warning by design.\n          complexity-labels-enabled: true\n          complexity-label-prefix: 'complexity:'\n```"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 56,
+      "severity": "warning",
+      "body": "This header now points readers at `docs/TRIGGER_MODES.md` \u00a7 \"Recipe: run once when labelled `AIReview`\u2026\", but that section is still titled and written for `ready` / `no-ready-label`. Same drift in `AGENTS.md` (\"label-gated on `ready`\") and README links that treat this workflow as the reference implementation. Either keep the recipe title as `ready` here (consumer-facing example name) while only changing the repo's concrete label, or update the docs/AGENTS references in the same PR so maintainers are not sent to a non-existent section."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity": "warning",
+      "body": "`label-gate` (and the matching scope bash / `empty_reason`) flip from `ready` to `AIReview`, but the PR title/summary only advertise complexity-label dogfooding, and the test plan still says \u201capply the `ready` label\u201d. After merge, applying `ready` will no longer start self-review or arm the merge gate \u2014 a silent maintainer workflow break unless `AGENTS.md`, contributor docs, and any branch-protection/label habits are updated in lockstep. If the rename is intentional, call it out in the PR body and sync the docs; if not, drop the rename from this change."
+    }
+  ],
+  "summary": "Looks good on the intended complexity-label dogfood, but the PR also renames the self-review gate label and ships an incorrect provider note \u2014 address those before merge.\n\n## Narrative\n\nThe `complexity-labels-enabled: true` + default `complexity-label-prefix: 'complexity:'` block is a reasonable Rule #10 dogfood of `docs/PR_METADATA_CHECKS.md`. Inputs match `action.yml`, permissions already include `pull-requests: write`, and the feature is best-effort / opt-in. No new secrets, subprocesses, or unpinned third-party actions.\n\nTwo problems sit next to that change:\n\n1. **Wrong provider split in the new comment (and the PR description).** Only `anthropic` is chat-completions here. `codex` is an `AgentRunnerProvider` and will no-op complexity labeling with a WARNING, same as `claude-code` / `cursor`. The test plan\u2019s \u201canthropic leg applies the label\u201d expectation is fine; claiming codex does too is not.\n\n2. **`ready` \u2192 `AIReview` is a large, mostly undocumented behavior change.** Scope matching, `label-gate`, `empty_reason` (`no-ready-label` \u2192 `no-gate-label`), gate `if:`, and operator-facing messages all move. Contributor docs still say this workflow is label-gated on `ready` (`AGENTS.md`, `docs/TRIGGER_MODES.md` recipe title, README links). The PR title/test plan still talk about `ready`. After merge, maintainers who keep using `ready` will get skipped reviews and a skipped merge gate with no obvious signal in this PR\u2019s summary.\n\nSecurity/workflow posture of the YAML itself looks fine: no `${{ github.event.pull_request.* }}` shell interpolation, explicit `permissions`, `persist-credentials: false` unchanged.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 333,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 56,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

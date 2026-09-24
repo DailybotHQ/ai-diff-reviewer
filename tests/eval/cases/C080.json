@@ -1,0 +1,77 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C080",
+  "title": "Retry default set to 0 attempts; client loop never sends the request",
+  "stack": "go",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G80",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "retry.go": "package client\n\n// MaxAttempts is the total number of attempts, including the first.\nvar MaxAttempts = 3\n",
+      "client.go": "package client\n\nfunc Do(send func() error) error {\n\tvar err error\n\tfor i := 0; i < MaxAttempts; i++ {\n\t\tif err = send(); err == nil {\n\t\t\treturn nil\n\t\t}\n\t}\n\treturn err\n}\n"
+    },
+    "head": {
+      "retry.go": "package client\n\n// MaxAttempts is the number of RETRIES after the first attempt; 0 disables retrying.\nvar MaxAttempts = 0\n",
+      "client.go": "package client\n\nfunc Do(send func() error) error {\n\tvar err error\n\tfor i := 0; i < MaxAttempts; i++ {\n\t\tif err = send(); err == nil {\n\t\t\treturn nil\n\t\t}\n\t}\n\treturn err\n}\n"
+    },
+    "pr_metadata": {
+      "title": "Disable retries by default",
+      "body": "Retries hid real outages; opt in explicitly.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:59d983404fc61409d1aaf01e68185ce5eab1ee5db1f763bf650d84141742756e"
+  },
+  "labels": [
+    {
+      "id": "C080-d1",
+      "severity": "warning",
+      "path": "retry.go",
+      "defect": "Semantics of MaxAttempts changed (attempts → retries) with the default 0, while the loop still treats it as total attempts",
+      "evidence": "Do() now iterates zero times: the request is never sent and Do returns nil (no error) — every caller believes the call succeeded.",
+      "keywords": [
+        "MaxAttempts",
+        "0",
+        "retries",
+        "never"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C080-d2",
+      "severity": "warning",
+      "path": "client.go",
+      "defect": "Loop bound assumes MaxAttempts counts the first attempt",
+      "evidence": "for i := 0; i < MaxAttempts; i++ with MaxAttempts = 0 executes zero sends and returns a nil error.",
+      "keywords": [
+        "MaxAttempts",
+        "i < MaxAttempts",
+        "nil"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C080-d1",
+      "C080-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

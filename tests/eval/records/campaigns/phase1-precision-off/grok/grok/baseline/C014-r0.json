@@ -1,0 +1,92 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 44.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.3,
+  "usage": {
+    "in": 16624,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 2055,
+    "source": "cli"
+  },
+  "cost_usd": 0.0757988,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nAny attacker-controlled page can send a cross-origin request with its own `Origin`; this helper now echoes that value as `Access-Control-Allow-Origin` while always setting `Access-Control-Allow-Credentials: true`. Browsers will expose the response to that origin and attach cookies on the request, so a malicious site can invoke cookie-authenticated API endpoints and read the result.\n\nNative apps do not use CORS; if webviews need more hosts, extend the allowlist (or a strict suffix/pattern check) instead of reflecting arbitrary origins.\n\n```suggestion\nconst ALLOWED = new Set([\"https://app.example.com\"]);\n\nexport function corsHeaders(origin: string | null): Record<string, string> {\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n}\n```"
+    },
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "When `origin` is null, the headers become `Access-Control-Allow-Origin: *` plus `Access-Control-Allow-Credentials: true`. The Fetch CORS algorithm treats that combination as a failure, so credentialed browser clients get a CORS error rather than a usable response. Even for the non-credentialed case, prefer omitting ACAO (or using a real allowlisted origin) over `*` bundled with credentials."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical CORS regression: the middleware now reflects any request `Origin` (or `*`) while always sending `Access-Control-Allow-Credentials: true`. That lets any website make credentialed cross-origin calls and read the responses if the API uses cookies or other credentialed auth.\n\n## Analysis\n\nPreviously only `https://app.example.com` received ACAO + credentials. The new path:\n\n1. Echoes whatever `Origin` the client sends when present.\n2. Falls back to `Access-Control-Allow-Origin: *` when `origin` is null, still with credentials (browsers reject `*` + credentials per the Fetch spec; the dangerous case is the reflection path).\n3. Drops the allowlist entirely.\n\nNative mobile HTTP clients do not enforce CORS, so loosening browser CORS does not unlock them. Mobile webviews that need extra origins belong on an explicit allowlist (or a vetted pattern list), not a mirror of the request.\n\n`Vary: Origin` is correct for any origin-varying response but does not mitigate the open reflection.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

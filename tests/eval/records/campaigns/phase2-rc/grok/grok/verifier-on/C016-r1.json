@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 37.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.1,
+  "usage": {
+    "in": 16224,
+    "cache_read": 71808,
+    "cache_write": 0,
+    "out": 1385,
+    "source": "cli"
+  },
+  "cost_usd": 0.0623004,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is set on the shared `http.Client` returned by `NewClient()` with no environment, config, or build-tag guard. Every consumer \u2014 including production if this binary is deployed there \u2014 will accept any TLS certificate on the ledger connection, enabling MITM against ledger traffic (credentials, balances, postings).\n\nThe comment claims this is staging-only (TICKET-77), but nothing in the code enforces that. Either gate the skip behind an explicit non-default staging flag, or trust the staging CA via `RootCAs` / cert pinning so verification stays on.\n\n```suggestion\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, // load staging CA into RootCAs if needed\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every caller of `NewClient()`, in every environment.\n\n## Why this is blocking\n\n`tls.Config{InsecureSkipVerify: true}` is wired into the shared HTTP client with no environment, build-tag, or config gate. The comment says \"staging\" and cites TICKET-77, but the code path is global: any production (or otherwise non-staging) use of `ledger.NewClient()` will accept any certificate, including a MITM on the ledger connection.\n\nThat is a concrete confidentiality/integrity failure for whatever the ledger client sends or receives (auth material, balances, postings), not a style nit.\n\n## What would make this acceptable\n\nGate the skip on an explicit staging-only signal (env var / config flag that defaults to verify-on), or pin the staging CA / use a custom `RootCAs` pool instead of skipping verification entirely. Keep production on verified TLS.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` sets `tls.Config{InsecureSkipVerify: true}` with no environment, config, or build-tag gate; base only used a plain `http.Client` (default verification). The staging-only intent is comment-only, so any consumer accepts any cert and is exposed to MITM."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.067,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2455,
+      "out": 410
+    },
+    "cost_usd": 0.008317
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

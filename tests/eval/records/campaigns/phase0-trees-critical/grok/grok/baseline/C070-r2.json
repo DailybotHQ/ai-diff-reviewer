@@ -1,0 +1,57 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 30.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.7,
+  "usage": {
+    "in": 28402,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1532,
+    "source": "cli"
+  },
+  "cost_usd": 0.0824696,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Critical command-injection / RCE: `exec` runs a shell, and both `src` and `filter` are interpolated unsanitized into the command string. A value such as `filter = \"; id; #\"` or `src = 'x\"; curl evil; echo \"'` executes arbitrary commands on the runner with the process privileges.\n\nThe claim that `-filter` needs a shell is incorrect \u2014 pass arguments as an argv list with `execFile` (and allowlist filter names if expressions must stay constrained):\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nAlso restore `import { execFile } from \"child_process\";`. If filter expressions are truly free-form, validate/allowlist them before argv pass-through \u2014 never via shell string concatenation."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "Public signature change: `filter` is inserted as a new required second parameter, so existing `resize(src, w)` callers will pass a number as `filter` and shift `w`, breaking at runtime. If this API is exported for consumers, make `filter` optional (e.g. last-arg default like `\"Lanczos\"`), or treat this as a breaking major-version bump and update all call sites in the same PR."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change replaces safe `execFile` argv execution with `exec` and interpolates caller-controlled `src` and `filter` into a shell command, enabling command injection / RCE on the host that runs `resize()`.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/images/resize.ts:6` | Shell injection via `exec` + unescaped `src`/`filter` |\n| 2 | \u26a0\ufe0f warning | `src/images/resize.ts:3` | Required `filter` param inserted mid-signature breaks existing callers |\n\n### Notes\n\n- ImageMagick `-filter` does **not** require a shell. Pass filter tokens as discrete `execFile` argv elements (and validate against an allowlist of known filter names if power-user expressions are in scope).\n- Double-quoting `src` does not make it safe under `exec` (`\"`, `` ` ``, `$()`, newlines all still break out).\n- Fixed `/tmp/out.png` output path is pre-existing shared-temp risk; left out of inline findings as unchanged behavior.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 48.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 48.8,
+  "usage": {
+    "in": 17767,
+    "cache_read": 131328,
+    "cache_write": 0,
+    "out": 2943,
+    "source": "cli"
+  },
+  "cost_usd": 0.0925904,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query string with `fmt.Sprintf`, so input containing a single quote changes the SQL instead of being treated as data. Example payload: `' OR '1'='1` expands the LIKE clause into a tautology; more hostile input can manipulate the statement further.\n\nThe previous `$1` placeholder was safe. Partial match only needs wildcards on the bound value:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nRemove the unused `fmt` import after this fix. Also escape `%` and `_` in `account` if substring search must be literal."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "body": "After binding the pattern safely, user-supplied `%` and `_` are still LIKE metacharacters. A search of `%` matches every account number; `_` matches any single character.\n\nIf the UI means literal substring match, escape `%`, `_`, and the escape character in `account` before wrapping with leading/trailing `%`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by building the query with `fmt.Sprintf` instead of a bound parameter.\n\n## Narrative\n\n`Balance` previously used a parameterized equality check (`WHERE number = $1`). The partial-match UI goal is reasonable, but the implementation concatenates the untrusted `account` string directly into SQL via `fmt.Sprintf` and `LIKE '%%%s%%'`.\n\nAny value containing a single quote can break out of the LIKE literal and alter the statement \u2014 reading another account's balance, matching all rows, or executing additional SQL depending on the driver and privileges.\n\nKeep the placeholder and only wrap the **bound value** with wildcards. Prefer also escaping `%` and `_` in user input so they are literal characters in LIKE.\n\n`QueryRow` still returns one row; a partial match that hits multiple accounts silently uses one result. Confirm whether the product wants a single ambiguous hit, an error on multiples, or a list API.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head interpolates `account` into the LIKE clause via fmt.Sprintf with no parameterization, so quote-bearing input alters the SQL; base correctly bound the value with $1. That is a real SQL-injection regression at critical severity."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.668,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2652,
+      "out": 333
+    },
+    "cost_usd": 0.008198
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 157.2,
+  "setup_seconds": 1.9,
+  "total_seconds": 159.1,
+  "usage": {
+    "in": 118951,
+    "cache_read": 584448,
+    "cache_write": 0,
+    "out": 8737,
+    "source": "cli"
+  },
+  "cost_usd": 0.4656584,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 175,
+      "severity": "warning",
+      "body": "Step 3.5 sits between tag push (Step 3) and GitHub Release creation (Steps 4\u20135). With `set -euo pipefail`, any failure in `npx skills update`, the dogfood commit, or `git push` fails the job and **skips** release-notes generation and `softprops/action-gh-release`. Failure mode: `vX.Y.Z` + moving major tag are already public, but no GitHub Release is published (and `release.yml` never fires on `release: published`), leaving a half-published release that needs manual cleanup.\n\nMove this step to **after** Step 5, or keep it here with `continue-on-error: true` plus an explicit failing follow-up check so install-flow smoke still alerts without blocking Release creation. The PR risk note covers \u201ctag already published\u201d; it understates that Steps 4\u20135 are also dropped."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "warning",
+      "body": "`npx --yes skills update ai-diff-reviewer` does not pin `@${NEW_VERSION}`, and the only success check is `git diff --quiet` on the vendored tree. If the skills registry/API still serves the previous tag during the 5s window (or longer), the update is a no-op, the empty diff path prints \u201calready at ${NEW_VERSION}\u201d, and the job exits 0 \u2014 a **false green** that never smoke-tested the tag just pushed.\n\nPrefer an explicit pin and a version assertion, e.g. `npx --yes skills add \"DailybotHQ/ai-diff-reviewer@${NEW_VERSION}\" --skill ai-diff-reviewer -y` then `grep -q \"version: \\\"${NEW_VERSION#v}\\\"\" .agents/skills/ai-diff-reviewer/SKILL.md` (with a short retry loop). That makes pillar (B) actually verify the just-published tag."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfooding PR \u2014 wiring `.review/extension.md` into `self-review.yml` and bootstrapping the vendored skill are the right shape. Two release-pipeline issues in new Step 3.5 should be fixed before merge so a flaky `npx skills` run cannot leave a half-published release.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/auto-release.yml:175` | Step 3.5 failure skips GitHub Release (Steps 4\u20135) after tags are already public |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/auto-release.yml:206` | `npx skills update` is unpinned and success is inferred from an empty diff \u2014 lag can false-green |\n\n## Notes\n\n- **Extension quality:** `.review/extension.md` is concrete and code-anchored (stdlib-only, `shell=True`, `safe_repo_path`, marker contracts, CLI env allowlist). Wiring it via `prompt-extension-file` keeps local skill auto-detect and CI on the same file \u2014 good pillar-(A) design.\n- **Vendored baseline:** `.agents/skills/ai-diff-reviewer/` matches `skills/ai-diff-reviewer/` byte-for-byte at `v1.4.2`; `skills-lock.json` entry looks correct. First-time vendor on a feature branch is the intended bootstrap exception to DON'T #14.\n- **Shipped skill nits (fix in `skills/`, not by hand-editing `.agents/`):** `generate-extension/SKILL.md` lists `Bash` under `allowed-tools` but Step 0 is \u201cConfirm mode\u201d, not a Trust boundary section (parent + setup both have one). Parent `SKILL.md` also duplicates the \u201cOption A\u201d heading. Neither blocks this PR; track for the next skill content release.\n- **`[skip release]` guard** on the dogfood commit message is correct and matches the job-level `if:`.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 12
+  }
+}

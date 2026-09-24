@@ -1,0 +1,92 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 54.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 54.4,
+  "usage": {
+    "in": 17879,
+    "cache_read": 102528,
+    "cache_write": 0,
+    "out": 2939,
+    "source": "cli"
+  },
+  "cost_usd": 0.0841504,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "The account argument is interpolated into the SQL string with `fmt.Sprintf`, so a value containing a single quote can break out of the `LIKE` literal and change the statement (classic SQL injection). The previous `$1` placeholder avoided this.\n\nKeep the pattern as a bound parameter and build only the pattern value in Go:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso escape `%` and `_` in `account` if users should match those characters literally rather than as LIKE wildcards."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "`QueryRow` scans the first row when several accounts match the substring and discards the rest without error. A partial number like `12` can therefore return some other account's balance instead of failing closed or asking the user to disambiguate.\n\nIf the UI needs a single account, require a unique match (for example check row count, or `LIMIT 2` and error when two rows appear) or keep equality once the user picks a concrete account."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by interpolating the account argument into the query string.\n\n## Narrative\n\n`Balance` previously used a parameterized equality check (`WHERE number = $1`). The partial-match UI goal is reasonable, but the implementation builds SQL with `fmt.Sprintf` and embeds `account` directly inside a quoted `LIKE` pattern. Any caller-supplied value that contains a single quote can break out of the string literal and alter the statement (for example reading other rows, depending on the driver and database).\n\nPartial match should keep the value as a bound parameter, e.g. `WHERE number LIKE $1` with the pattern assembled in Go as `\"%\" + account + \"%\"` (and ideally escape `%` / `_` in the user input so they are not treated as wildcards). `QueryRow` will also silently use the first match when multiple accounts share a substring; if the UI expects a unique account, the caller needs an explicit uniqueness check or a different query shape.\n\nNo repository instruction files were present; severity follows the standard security rubric for injection in data-access code.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code builds the LIKE query with fmt.Sprintf interpolating `account` into the SQL string, and QueryRow is called with no bound args. Base used a safe `$1` placeholder, so this is a real SQL-injection regression at critical severity."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 5.239,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 805,
+      "out": 289
+    },
+    "cost_usd": 0.004061
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

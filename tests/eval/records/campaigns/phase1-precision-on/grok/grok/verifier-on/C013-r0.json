@@ -1,0 +1,79 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 91.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 91.9,
+  "usage": {
+    "in": 48678,
+    "cache_read": 219392,
+    "cache_write": 0,
+    "out": 4089,
+    "source": "cli"
+  },
+  "cost_usd": 0.1877076,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "Password-reset tokens must be unguessable. This replaces `randomBytes(32)` (256 bits of CSPRNG entropy) with `Math.floor(Math.random() * 1e12).toString(36)`, which is both non-cryptographic and limited to at most 10^12 distinct values (~40 bits), then padded to a ~9-character string.\n\nAn attacker who can request resets and try tokens can brute-force or predict values and take over accounts. Edge runtimes cannot use Node's `crypto.randomBytes`, but they do provide Web Crypto `crypto.getRandomValues`, which is the correct portable replacement.\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a cryptographically secure password-reset token with a weak, guessable `Math.random()` value and collapses entropy from 256 bits to roughly 40 bits.\n\n## Narrative\n\n`newResetToken()` previously returned `randomBytes(32).toString(\"hex\")` (32 bytes of CSPRNG output, 64 hex chars). The new implementation does `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`.\n\nThat is unsafe for a reset token on two independent axes:\n\n1. **Generator:** `Math.random()` is not a CSPRNG. Its output is predictable under common JS engine models and is explicitly unsuitable for secrets, session identifiers, or password-reset material.\n2. **Space:** Even treating the draw as uniform, the domain is at most `10^12` values (~40 bits), then base-36 encoded into a ~9-character string. Online attackers (or anyone who observes a few tokens) can brute-force or collide far more easily than with a 256-bit token.\n\nEdge runtimes do lack Node's `crypto.randomBytes`, but they expose the Web Crypto API. The portable fix is `crypto.getRandomValues()` (global `crypto` in modern Edge / Workers / browsers), still producing 32 random bytes and hex-encoding them so callers keep a high-entropy opaque string.\n\n## Release decision\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head implementation of `newResetToken` replaced `randomBytes(32)` (256-bit CSPRNG) with `Math.floor(Math.random() * 1e12).toString(36).padStart(9, \"0\")`, which is non-cryptographic and at most ~40 bits of entropy\u2014unsafe for password-reset tokens. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 12.833,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2792,
+      "out": 421
+    },
+    "cost_usd": 0.009032
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

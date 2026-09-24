@@ -180,7 +180,7 @@ Targets `python3.10+`. Most contributors will have `python3` from the system; th
 
 ## Run the test suite
 
-The runtime has a standard-library `unittest` suite (720 tests across 24 files as of v2.1.0, no install needed):
+The runtime has a standard-library `unittest` suite (1094 tests across 54 files as of the v3 Phase 1 work, no install needed):
 
 ```bash
 python3 -m unittest discover -s tests
@@ -195,6 +195,48 @@ To scope to a specific file or class:
 python3 -m unittest tests.test_agent_runner_providers
 python3 -m unittest tests.test_findings_parser.ParseFindingsFileHappyPath
 ```
+
+## Eval gate (v3) — offline checks, campaigns, verdicts
+
+The eval gate ([RFC-01](rfc/v3/01-eval-gate-contract.md)) has an offline half that runs on every PR (`eval-gate-offline` in `code_check.yml`) and an online half that spends provider tokens only on demand. All tools are stdlib and live under `tests/eval/`.
+
+```bash
+# Offline (what CI runs — no secrets, no spend)
+python3 tests/eval/schema_check.py --all                                    # every shipped schema validates its example
+python3 tests/eval/records_validate.py --records tests/eval/records         # stored run records, verdicts, manifests, adjudications
+python3 tests/eval/corpus_validate.py --json                                # the labelled corpus (pins, floors, blinded critical adjudication)
+python3 tests/eval/determinism.py --selftest                                # verdict computation self-test
+
+# Noise floor and verdicts over stored records
+python3 tests/eval/determinism.py summarize --records tests/eval/records/campaigns --out /tmp/summary.json
+python3 tests/eval/determinism.py verdict --baseline tests/eval/records/campaigns --candidate <records-dir> \
+  --out tests/eval/records/verdicts/<campaign_id>.json --runtime-sha "$(git rev-parse HEAD)" \
+  --prompt-sha256 "$(sha256sum prompts/default.md | cut -d' ' -f1)" --content-sha256 "$(sha256sum scripts/reviewer.py | cut -d' ' -f1)"
+python3 tests/eval/release_gate.py --verdicts tests/eval/records/verdicts --runtime-sha "$(git rev-parse HEAD)"   # what auto-release.yml Step 1.5 asks
+
+# Online campaigns (spend real tokens — projection first, hard stop at 90 % of the budget)
+python3 tests/eval/campaign.py dry-run --manifest tests/eval/campaigns/phase0-floor.json --budget-usd 60
+python3 tests/eval/campaign.py run --manifest tests/eval/campaigns/phase0-floor.json --lane grok --budget-usd 60 \
+  --records-out tests/eval/records/campaigns/<campaign_id>/grok --runtime-sha "$(git rev-parse HEAD)"   # resumes over completed records
+# In CI: Actions → "Eval Campaign" → Run workflow (budget_usd is required).
+
+# One review against a labelled fixture tree (no GitHub access) or a real PR
+XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
+  --tree tests/eval/cases/C001.json --out /tmp/C001.json
+# … with the v3 verifier + severity policy after the review (the campaign arm sets `"verifier": "on"`):
+XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
+  --tree tests/eval/cases/C001.json --verifier on --out /tmp/C001.json
+GH_TOKEN=$(gh auth token) XAI_API_KEY=… python3 tests/eval/run_eval.py run --provider grok --model balanced --api-key-env XAI_API_KEY \
+  --repo DailybotHQ/ai-diff-reviewer --pr 46 --worktree /path/to/worktree-at-pr-head --out /tmp/pr46.json
+
+# Blinded, source-grounded adjudication of a campaign's findings → precision
+python3 tests/eval/adjudicate.py worksheet --results tests/eval/records/campaigns/<campaign_id> --out /tmp/worksheet.json
+#   fill `verdict` (true | false | overstated) and `note` per item, then:
+python3 tests/eval/adjudicate.py seal --worksheet /tmp/worksheet.json --out tests/eval/records/adjudications/<campaign_id>.json \
+  --adjudicator "<name>" --campaign-id <campaign_id>
+```
+
+Records are append-only; a `<campaign_id>.failed.md` note marks a bad campaign. Layout and rules: [`tests/eval/records/README.md`](../tests/eval/records/README.md); the measured floor and what it means for cost claims: [`PERFORMANCE.md`](PERFORMANCE.md#measured-noise-floor-and-the-eval-gate-verdict-v3).
 
 ## Validate the action.yml contract locally
 

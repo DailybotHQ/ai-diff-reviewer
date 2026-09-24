@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 30.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 30.3,
+  "usage": {
+    "in": 17306,
+    "cache_read": 131712,
+    "cache_write": 0,
+    "out": 1504,
+    "source": "cli"
+  },
+  "cost_usd": 0.0831496,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `log.debug` includes `process.env.PROCESSOR_KEY` in the structured payload. The comment on the previous line explicitly calls this out as intentionally shipping credentials for support replay.\n\n**Failure mode:** When debug logging is enabled (or when the logging stack always captures `debug` in staging/production), the processor API key is written to log sinks. Anyone who can read those logs can reuse the key to create charges, refund, or otherwise act as the merchant against the payment processor.\n\n**Fix:** Log only non-secret charge context (`orderId`, `ref`, processor error codes). Remove `key` from the payload entirely. If support needs replay, use a separate authenticated path that never persists the raw secret into logs.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential into debug output.\n\n## Findings\n\n`src/payments/charge.ts` replaces the previous safe success log (`orderId`, `ref`) with a debug payload that includes `process.env.PROCESSOR_KEY`. The inline comment states the intent is to put credentials in debug payloads so support can replay failures. That is a secret-exfiltration path: debug logs commonly ship to centralized logging, support tooling, and longer retention tiers. Anyone with log read access can recover the processor key and create charges.\n\nSafe charge-failure debuggability is order id, charge ref, processor error code/message, and request idempotency keys \u2014 never the API key itself. Support replay should use a secured internal tool or break-glass secret store, not log backfill.\n\nThe previous `log.info(\"charge created\", \u2026)` success breadcrumb was also removed, so operational visibility of successful charges drops even if the secret line is fixed.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

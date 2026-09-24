@@ -1,0 +1,45 @@
+{
+  "schema_version": "verdict/1.0",
+  "candidate_runtime_sha": "426aa0eb574dafd17b99ae087d400b367a05b0ea",
+  "candidate_content_sha256": "cd8c4ec1a7051f088a1605086bc4ae3eba4f2d5002b14f5cb01494a26619f6ed",
+  "prompt_sha256": "4c8047986cba86d63761ef7b7c4c6a7613c1ba0f7565abc6e7535838c0564c26",
+  "baseline_ref": "phase0-baseline",
+  "computed_at": "2026-09-23T22:21:54Z",
+  "paired_cells": 35,
+  "descriptive_only": false,
+  "measurements": {
+    "cost_relative_delta_point": 0.0,
+    "cost_relative_delta_ci95": [
+      0.0,
+      0.0
+    ],
+    "recall_net_defects": 0,
+    "recall_ci95": [
+      0.0,
+      0.0
+    ],
+    "candidate_noise_floor": {
+      "replicated_cells": 35,
+      "cost_relative_spread_median": 0.2679339896561617,
+      "cost_relative_spread_mean": 0.2555006078422632,
+      "cost_relative_spread_worst": 0.6802366781753375,
+      "recall_delta_max": 2,
+      "recall_delta_cells_nonzero": 3
+    }
+  },
+  "promotable": {
+    "cost": false,
+    "recall": false,
+    "precision": false
+  },
+  "blocking": [],
+  "notes": [],
+  "thresholds": {
+    "promotable_cost_rel_delta": 0.27,
+    "promotable_recall_net_defects": 3,
+    "blocking_recall_drop_defects": 2,
+    "baseline_spread_median": 0.268,
+    "blocking_spread_median_factor": 1.5,
+    "blocking_spread_worst": 1.0
+  }
+}

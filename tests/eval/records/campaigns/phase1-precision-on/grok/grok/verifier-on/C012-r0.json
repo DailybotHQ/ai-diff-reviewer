@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 13,
+  "tool_calls": null,
+  "seconds": 202.4,
+  "setup_seconds": 0.1,
+  "total_seconds": 202.4,
+  "usage": {
+    "in": 54685,
+    "cache_read": 353792,
+    "cache_write": 0,
+    "out": 9312,
+    "source": "cli"
+  },
+  "cost_usd": 0.2713796,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "body": "The removed `BLOCKED` guard (`__proto__`, `constructor`, `prototype`) was the only protection against prototype pollution in this recursive merge.\n\n**Failure mode:** A patch such as `{\"__proto__\": {\"polluted\": true}}` or `{\"constructor\": {\"prototype\": {\"polluted\": true}}}` \u2014 both valid `JSON.parse` output \u2014 reaches `Object.entries`, then `(base as any)[k] ??= {}` / assignment. For `__proto__`, the read returns `Object.prototype` (truthy), so the recursive call merges attacker keys straight onto `Object.prototype`. The `constructor.prototype` path does the same. Verified: after merge, `{}.polluted === true`.\n\n**Fix:** Restore the blocklist (or equivalent `Object.hasOwn` + skip, or merge into `Object.create(null)` targets only). Do not rely on \u201cJSON.parse is safe\u201d \u2014 it preserves these keys as own properties.\n\n```suggestion\nconst BLOCKED = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n\nexport function deepMerge<T>(base: T, patch: Record<string, unknown>): T {\n  for (const [k, v] of Object.entries(patch)) {\n    if (BLOCKED.has(k)) continue;\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** Removing the key blocklist reintroduces classic prototype pollution in `deepMerge`.\n\n## Why the PR rationale is wrong\n\nThe claim that `JSON.parse` never yields dangerous keys is false. Verified on current Node:\n\n- `Object.keys(JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` \u2192 `['__proto__']` (own property)\n- `Object.entries(...)` therefore feeds `__proto__` into the merge loop\n- `constructor` / `prototype` are ordinary JSON keys and parse normally\n\n## Failure mode\n\nWith the blocklist gone, recursive merge does:\n\n1. **`__proto__`:** `(base)[\"__proto__\"] ??= {}` resolves to `Object.prototype` (truthy), then `deepMerge(Object.prototype, v)` writes attacker-controlled keys onto `Object.prototype`.\n2. **`constructor` / `prototype`:** `deepMerge(base.constructor, { prototype: {...} })` reaches `Object.prototype` the same way.\n\nReproduced both paths; after merge `{}.polluted === true`.\n\n## Context\n\n`deepMerge` is a generic exported helper taking `Record<string, unknown>`. Even if one caller only ever passes trusted literals today, the safeguard belongs in the merge implementation \u2014 any future config/API/CLI path that passes parsed JSON becomes an RCE/auth-bypass gadget once shared prototypes are polluted.\n\n## Release decision\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The base version guarded `__proto__`/`constructor`/`prototype`; head removed that blocklist while still doing recursive `(base as any)[k] ??= {}` assignment, so attacker-controlled keys can merge onto `Object.prototype`. That is a real prototype-pollution regression in the exported helper."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.952,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4768,
+      "out": 459
+    },
+    "cost_usd": 0.013954
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

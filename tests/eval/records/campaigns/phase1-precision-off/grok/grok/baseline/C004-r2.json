@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.2,
+  "usage": {
+    "in": 57993,
+    "cache_read": 29952,
+    "cache_write": 0,
+    "out": 1756,
+    "source": "cli"
+  },
+  "cost_usd": 0.1355076,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `os.path.basename()` and joining `request.args.get(\"path\", name)` directly into `send_file` allows arbitrary file read.\n\n**Failure mode:** `GET /reports/anything?path=../../../etc/passwd` (or `?path=/etc/passwd`) escapes `/srv/reports`. `os.path.join(\"/srv/reports\", \"/etc/passwd\")` returns `/etc/passwd` because an absolute segment discards the base. Any readable file under the service account can be exfiltrated.\n\n**Fix:** resolve the joined path and require it stay under `REPORTS` before calling `send_file`:\n\n```python\nfrom pathlib import Path\n\nREPORTS_ROOT = Path(\"/srv/reports\").resolve()\n\n@app.route(\"/reports/<path:name>\")\ndef download(name: str):\n    candidate = (REPORTS_ROOT / name).resolve()\n    if not candidate.is_relative_to(REPORTS_ROOT) or not candidate.is_file():\n        abort(404)\n    return send_file(candidate)\n```\n\nDo not take a raw `path` query parameter without the same jail check."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a classic path-traversal / arbitrary file read on the report download endpoint.\n\n## What went wrong\n\nThe previous code intentionally constrained `name` with `os.path.basename()` before joining under `REPORTS`. That guard is removed, and the handler now passes `request.args.get(\"path\", name)` straight into `os.path.join` and `send_file`.\n\nConcrete failure modes on a typical Linux runner:\n\n1. **Relative escape:** `GET /reports/x?path=../../../etc/passwd` resolves outside `/srv/reports` and serves host files the process can read.\n2. **Absolute-path join discard:** `GET /reports/x?path=/etc/passwd` \u2014 `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd` because an absolute second segment resets the join.\n\nUnauthenticated (or any caller who can hit this route) can read arbitrary files the service account can open: configs, keys, `/etc/shadow` if permitted, application source, etc.\n\n## Fix direction\n\nKeep nested folders, but enforce a root jail after resolve, e.g. resolve the candidate under `REPORTS`, then require `Path(full).resolve().is_relative_to(Path(REPORTS).resolve())` (or equivalent `commonpath` check). Prefer path segments in the URL (`/reports/<path:subpath>`) over an unbound `?path=` query string, and reject `..` / absolute inputs early.\n\nSupporting nested reports is fine; dropping the basename guard without a replacement jail is what makes this critical.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

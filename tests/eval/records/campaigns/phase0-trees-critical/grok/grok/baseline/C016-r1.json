@@ -1,0 +1,51 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 95.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 96.0,
+  "usage": {
+    "in": 58146,
+    "cache_read": 166144,
+    "cache_write": 0,
+    "out": 3365,
+    "source": "cli"
+  },
+  "cost_usd": 0.18632520000000002,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "**TLS verification is disabled for all environments, not only staging.**\n\n`NewClient()` always builds a transport with `InsecureSkipVerify: true`. Any caller \u2014 staging or production \u2014 will accept any certificate (or no valid chain), so an on-path attacker can MITM ledger traffic and read or alter responses.\n\nA comment and `TICKET-77` do not gate runtime behavior. Gate the insecure path on an explicit staging-only config that defaults to verify-on, or better: load the staging CA into `tls.Config.RootCAs` and leave verification enabled.\n\n```go\n// example: only skip verify when explicitly configured for staging\ntlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}\nif cfg.AllowInsecureTLS { // must default false; prod must not set this\n    tlsCfg.InsecureSkipVerify = true\n}\nreturn &http.Client{\n    Timeout: 10 * time.Second,\n    Transport: &http.Transport{TLSClientConfig: tlsCfg},\n}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: TLS certificate verification is disabled unconditionally for every ledger HTTP client.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `internal/ledger/client.go:14` | `InsecureSkipVerify: true` applies in all environments, enabling MITM on ledger traffic |\n\n## Notes\n\n`NewClient()` is shared construction with no staging/prod split, env flag, or custom CA pool. A comment and TICKET-77 do not constrain runtime behavior. Production (or any non-staging) callers inherit the same insecure transport.\n\nPreferred fix: pin the staging CA (or use a staging-only build tag / config flag that installs `RootCAs`), and keep verification enabled everywhere else. If a temporary skip is unavoidable, gate it explicitly on an explicit staging environment check that defaults to secure.\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

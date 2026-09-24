@@ -1,0 +1,106 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 63.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 63.9,
+  "usage": {
+    "in": 76534,
+    "cache_read": 73728,
+    "cache_write": 0,
+    "out": 2972,
+    "source": "cli"
+  },
+  "cost_usd": 0.1930184,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`dependencies` points at `billing.0007_add_reason`, but this PR deletes `migrations/0007_add_reason.py`. Django cannot load that parent node, so the migration graph is invalid and `migrate` fails on every fresh checkout.\n\n**Fix (choose one):**\n- If `0007` may already be applied anywhere: **restore** `0007_add_reason.py` and keep this `0008` `RemoveField` migration.\n- If `0007` was never deployed: **delete this file** and leave `0007` removed \u2014 no drop migration is needed when the add never landed.\n\n```suggestion\n    dependencies = [(\"billing\", \"0006_initial\")]\n```\n\n(Only valid if you squash add+drop into a no-op and also remove the `RemoveField` \u2014 restoring `0007` + keeping `RemoveField` is the safer default when history may exist.)"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `0007_add_reason` from the repo rewrites migration history. Any database that already recorded `billing.0007_add_reason` in `django_migrations` will disagree with the code tree (missing module on `migrate`, fake-apply confusion, or inability to run forward to `0008`).\n\nDjango\u2019s rule: once a migration may have run outside your laptop, leave it immutable and add a new operations migration. Deleting the `AddField` while adding `RemoveField` in `0008` is the failure mode that corrupts deployability.\n\nRestore this file if the migration could exist in any environment; only delete it (and skip `0008`) when you are certain it never shipped."
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "`RemoveField` drops `invoice.void_reason` and discards any stored values on apply. The comment says it was never shown in the UI; that does not prove no writer filled it (admin, shell, API, fixtures).\n\nBefore merging a valid drop migration, confirm staging/prod have no non-empty values (or accept intentional data loss explicitly in the PR body). Prefer keeping `0007` + this `0008` only after that check \u2014 not deleting `0007`."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken migration graph \u2014 do not merge until the dependency chain is restored.\n\n## What went wrong\n\n`migrations/0008_drop_reason.py` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but this PR **deletes** `migrations/0007_add_reason.py`. Django resolves the graph by loading migration modules from disk; with `0007` gone, `migrate` / `showmigrations` fail with `NodeNotFoundError` (or equivalent) looking for `billing.0007_add_reason`. Fresh clones and CI cannot apply the chain at all.\n\n## Correct approaches (pick one)\n\n1. **`0007` already applied in any environment** (staging, prod, a teammate\u2019s DB): keep `0007_add_reason.py` in the tree and ship only a new `0008` that `RemoveField`s `void_reason`. Never delete a migration that may be in `django_migrations`.\n2. **`0007` never shipped anywhere**: delete `0007` and **do not add** `0008`. The column was never created; a drop migration is unnecessary and still needs the add migration as its parent.\n\nThe PR currently combines both strategies and gets neither: the add is gone, the drop remains, and the drop\u2019s parent is missing.\n\n## Secondary risk\n\n`RemoveField` is destructive. Even if the column was never shown in the UI, any rows that stored a reason lose that data on apply. That is acceptable only after confirming no environment has useful values \u2014 and only once the graph itself is valid.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

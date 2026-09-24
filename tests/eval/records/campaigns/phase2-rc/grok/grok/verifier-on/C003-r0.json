@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 33.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.3,
+  "usage": {
+    "in": 29905,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1315,
+    "source": "cli"
+  },
+  "cost_usd": 0.0937736,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "The fallback default `\"smtp-prod-backup-77\"` is a live-looking credential committed to the repository. When `SMTP_PASSWORD` is unset (exactly the cron path this PR targets), every process logs into SMTP with that password. Repo readers can exfiltrate it from git history and impersonate `notifications@internal.example`.\n\nRemove the default entirely. Keep fail-closed (`os.environ[\"SMTP_PASSWORD\"]`) or load the secret from the job\u2019s secret store / mounted env, and fix the cron mount so `SMTP_PASSWORD` is present. Rotate this password immediately if it was ever real."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a login fallback.\n\n## What went wrong\n\n`mailer.py` replaces the required `SMTP_PASSWORD` env lookup with `os.environ.get(..., \"smtp-prod-backup-77\")`. When the secret is missing (the cron case the PR aims to fix), every runner authenticates with a password that is now committed to git history. Anyone with repo read access can send mail as `notifications@internal.example`.\n\nThe crash-on-missing-secret was the correct fail-closed behavior. A missing mount should fail the job loudly or use a secrets manager / CI secret injection \u2014 not a baked-in backup password.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The PR changes fail-closed `os.environ[\"SMTP_PASSWORD\"]` to `os.environ.get(..., \"smtp-prod-backup-77\")`, committing a hard-coded SMTP login secret used whenever the env var is unset. That matches a critical credential-in-source defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.296,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1993,
+      "out": 339
+    },
+    "cost_usd": 0.006481
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

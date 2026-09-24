@@ -26,6 +26,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Pre-releases (`v3.0.0-rc.1`, anything with a `-`) never move the
+          # major alias: consumers opt into an rc explicitly (RFC-07 § Tag and
+          # maintenance policy). The SemVer check below would skip them too;
+          # this guard names the reason in the log.
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            echo "Release tag '$RELEASE_TAG' is a pre-release — the moving major tag is not updated."
+            exit 0
+          fi
           if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Release tag '$RELEASE_TAG' is not a SemVer (vX.Y.Z) tag — skipping."
             exit 0

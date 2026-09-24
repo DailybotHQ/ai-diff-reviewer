@@ -1,0 +1,69 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "426aa0e",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 213.6,
+  "setup_seconds": 1.8,
+  "total_seconds": 215.4,
+  "usage": {
+    "in": 88974,
+    "cache_read": 506368,
+    "cache_write": 0,
+    "out": 12590,
+    "source": "cli"
+  },
+  "cost_usd": 0.4053984,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6412,
+      "severity": "warning",
+      "body": "Permission lookup is attempted whenever the webhook association misses the allow-list, including on **public** repos. Docs/CHANGELOG say the collaborator-permission call is private/internal only; on public the result never grants access, so each external PR still pays one GitHub REST call on the exact abuse path this gate is meant to keep cheapest-first.\n\nGate the call on visibility (and treat missing login as a non-lookup deny on public):\n\n```suggestion\n    if _author_gate_needs_permission_lookup(\n        gate=author_gate_raw,\n        webhook_association=pr_author_association,\n    ) and _is_private_or_internal_visibility(repo_visibility):\n        author_login: str = _read_github_event_pr_author_login()\n        if author_login and \"/\" in repo:\n            owner, name = repo.split(\"/\", 1)\n            collaborator_permission, permission_lookup_failed = (\n                gh_get_collaborator_permission(\n                    token=gh_token,\n                    owner=owner,\n                    repo=name,\n                    username=author_login,\n                )\n            )\n```\n\nWith this, public stays association-only end-to-end (no REST call, no fail-closed-via-lookup branch)."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "`repository.visibility` is read alone. When it is absent/empty, visibility becomes `unknown`, and both the write-tier override and private fail-open require `_is_private_or_internal_visibility` \u2014 so a private org admin under-reported as `CONTRIBUTOR` is still denied even after a successful `permission=admin` lookup (verified: `unknown` + `admin` \u2192 deny; `unknown` + lookup failure \u2192 fail-closed).\n\n`repository.private` has been on webhook payloads far longer than `visibility`. Fall back to it (and map `private: true` without `visibility` to at least `private`):\n\n```suggestion\ndef _read_github_event_repo_visibility() -> str:\n    \"\"\"Return repo visibility from the event payload, or `unknown`.\"\"\"\n    payload = _read_github_event_payload()\n    repository = payload.get(\"repository\")\n    if not isinstance(repository, dict):\n        return \"unknown\"\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if visibility in (\"public\", \"private\", \"internal\"):\n        return visibility\n    if repository.get(\"private\") is True:\n        return \"private\"\n    if repository.get(\"private\") is False:\n        return \"public\"\n    return \"unknown\"\n```"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 141,
+      "severity": "warning",
+      "body": "This says removing `COLLABORATOR` gates on org membership only and that \"permission fallback does not widen this preset.\" On **private/internal** repos the enhanced resolver *does* widen any non-matching allow-list when collaborator permission is `admin`/`maintain`/`write` \u2014 including `OWNER` alone and `OWNER,MEMBER` (e.g. private + gate `OWNER` + webhook `MEMBER` + `write` \u2192 allow).\n\nTighten the wording so setup agents do not promise association-only narrowing on private repos:\n\n```suggestion\n  - Remove `COLLABORATOR` to gate on org membership only on **public** repos (association-only; permission fallback does not widen). On **private/internal** repos, write-tier collaborator permission still passes when the webhook association misses the list.\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSolid permission-aware gate fix for private-org webhook under-reporting, with good fail-open/fail-closed split and strong pure-logic tests. A few warnings before merge: the permission API is still invoked on public repos, visibility ignores the long-standing `repository.private` boolean, and setup reference over-claims that narrowed presets are never widened.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:6399` | Permission lookup runs on public repos (rate-limit on abuse path; docs say private-only) |\n| 2 | \u26a0\ufe0f warning | `scripts/reviewer.py:5317` | Visibility reader ignores `repository.private` \u2192 `unknown` defeats override + fail-open |\n| 3 | \u26a0\ufe0f warning | `skills/ai-diff-reviewer/setup/reference.md:141` | Claims permission fallback does not widen `OWNER,MEMBER`; private path does |\n\n## Notes\n\n- **Design (private narrowed gates):** On private/internal repos, any `admin`/`maintain`/`write` collaborator passes even when the allow-list is stricter than write-tier (e.g. `OWNER` only). That matches Option B for the default gate; call it out clearly in `docs/SECURITY.md` so consumers do not expect association-only narrowing on private repos.\n- **Tests:** `AuthorAssociationGatePermissionTests` covers the resolver matrix well (private allow/deny, public strictness, fail-open/closed, internal). No direct tests for `gh_get_collaborator_permission` HTTP mapping (404\u2192`none`, non-404\u2192`lookup_failed`) or `_read_github_event_repo_visibility`.\n- **Docs sync:** `action.yml`, `README.md`, `CHANGELOG.md`, and `docs/SECURITY.md` are mostly aligned with the private/internal-only decision rule.\n- **Stdlib / subprocess / path safety:** No issues; `urllib.parse.quote` on the username is good (consider `safe=\"\"` as hardening).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 3,
+    "coverage_paths": 2,
+    "changed_files": 8
+  }
+}

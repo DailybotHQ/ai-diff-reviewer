@@ -1,0 +1,57 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 26.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.6,
+  "usage": {
+    "in": 28572,
+    "cache_read": 55168,
+    "cache_write": 0,
+    "out": 1604,
+    "source": "cli"
+  },
+  "cost_usd": 0.0833184,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "**Credentialed CORS now allows any origin.** Returning `Access-Control-Allow-Origin` set to the request `origin` together with `Access-Control-Allow-Credentials: true` means any malicious site can trigger cookie/session-authenticated cross-origin requests and read the responses. The previous `ALLOWED` set blocked that; this removes the only gate.\n\nRestore an explicit allowlist (include any real mobile-webview origins you need), and only attach `Allow-Credentials` when the origin matches. Example:\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    },
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "**`Allow-Origin: *` with credentials is invalid, and native clients ignore CORS.** When `origin` is null this emits `Access-Control-Allow-Origin: *` and `Access-Control-Allow-Credentials: true`, which browsers must reject per the Fetch CORS rules. Native mobile HTTP clients do not enforce CORS at all, so this fallback does not unlock them. Prefer keeping credentials only for allowlisted browser origins; leave non-browser callers outside the CORS path."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical CORS regression: this change turns a fixed allowlist into a credentialed reflect-any-origin policy, which lets any website read authenticated API responses in the browser.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/middleware/cors.ts:4` | Reflects arbitrary `Origin` with `Access-Control-Allow-Credentials: true` |\n| 2 | \u26a0\ufe0f warning | `src/middleware/cors.ts:4` | `origin ?? \"*\"` plus credentials is invalid per CORS and does not help native clients |\n\n## Notes\n\nCORS is enforced by browsers only. Native mobile HTTP stacks do not consult `Access-Control-*` headers, so loosening CORS is the wrong lever for \u201cmobile clients.\u201d If the real need is mobile *webviews* on known hosts, extend the allowlist (or a verified pattern) for those origins instead of reflecting every caller.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

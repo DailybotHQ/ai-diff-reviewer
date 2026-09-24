@@ -1,0 +1,72 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 11,
+  "tool_calls": null,
+  "seconds": 214.5,
+  "setup_seconds": 2.0,
+  "total_seconds": 216.4,
+  "usage": {
+    "in": 170979,
+    "cache_read": 802432,
+    "cache_write": 0,
+    "out": 9627,
+    "source": "cli"
+  },
+  "cost_usd": 0.6404496,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "warning",
+      "body": "The findings schema example always injects a `complexity` field, and when `require_complexity=False` (the **default** for most consumers) it includes a `// optional` JavaScript comment inside a ` ```json ` fence.\n\nFailure mode: agent-runner models that template from the example write non-JSON (`json.loads` fails). With `allow_malformed_summary_fallback=True` that degrades to **summary-only** \u2014 every inline finding is dropped (`docs/PROVIDERS.md` \u00a7 malformed CLI JSON fallback). This is a regression on the default complexity-off path; previously the schema had no such comment.\n\nFix: only emit the `complexity` key in the fenced example when `require_complexity` is true, and never put `//` comments inside the JSON example. Put optional notes in the Rules section instead."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity": "warning",
+      "body": "With `complexity-labels-enabled: true` on **every** matrix leg, each provider calls `gh_remove_labels_by_prefix` + `gh_apply_label` for the same `complexity:` prefix. Legs finish at different times and can disagree on `low|medium|high`, so the final label is nondeterministic (last writer wins) and intermediate remove/apply races can briefly clear the label.\n\nBefore this PR only chat-completions actually applied complexity labels; agent-runners no-oped. Enabling the bridge on a multi-provider matrix introduces thrash that dashboards / routing rules will see as flaky.\n\nFix: enable complexity labeling on a single designated leg (e.g. `anthropic` only), or document and accept last-writer semantics for multi-provider consumers in `docs/PR_METADATA_CHECKS.md` / `docs/PROVIDERS.md`."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5443,
+      "severity": "warning",
+      "body": "`infer_pr_complexity_fallback` treats any path containing the substrings `auth`, `token`, `secret`, etc. as `high`. That over-fires on ordinary paths: `tests/test_author.py` matches `auth`, `docs/token-guide.md` matches `token`, `oauth_client.py` matches `auth` via `oauth`.\n\nThis matters because the fallback always runs when the model omits `complexity` (still common even with a \"required\" prompt rule), and `action.yml` / README / `PR_METADATA_CHECKS.md` advertise cognitive-load labeling that is **not** line-count based \u2014 yet the fallback also uses `additions+deletions` thresholds (`>100` / `>500`). Downstream routing on `complexity:high` will then mis-route.\n\nFix: match path segments (split on `/` / `_` / `-`) or an allowlist of known security paths; keep line-count only as a weak tie-break and say so in the docs; prefer leaving the label unset over a misleading heuristic if the model omitted the field."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid provider-bridge for complexity labels \u2014 the `findings.json` field, unified post-review apply path, and test coverage are the right shape. Three warnings should be fixed before merge: an invalid JSON example in the agent-runner output contract (default path), multi-provider label thrash on dogfood, and a brittle heuristic fallback.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5645` | Schema example embeds `// optional` (invalid JSON) on the default agent-runner path |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:331` | Every matrix leg applies `complexity:*` \u2014 last writer wins |\n| 3 | \u26a0\ufe0f warning | `scripts/reviewer.py:5443` | Heuristic markers use bare substrings (`auth`\u2282`author`); also line-count based while docs claim otherwise |\n\n## Notes\n\n- Runtime stays stdlib-only; no new subprocess/shell, path, or secret surfaces.\n- Public contract preserved (optional behavior only); docs matrix + setup reference + CHANGELOG are in sync for the agent-runner bridge.\n- `parse_complexity_level` / `resolve_pr_complexity` / noop-warning regression tests look correct; targeted unittest subset passed.\n- Self-review gate rename `AIReview` \u2192 `ready` matches existing docs/TRIGGER_MODES.md and AGENTS.md.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 2,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 10
+  }
+}

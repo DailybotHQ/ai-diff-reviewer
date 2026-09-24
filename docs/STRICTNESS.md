@@ -55,6 +55,48 @@ The check fails if the reviewer posted **any** inline comment, including `info`.
 
 **Escape hatches:** treat `block-on-any` the same way you would treat "must pass linter" — if the reviewer is wrong, the fix is to tighten the prompt (downgrade a whole class of `info` to "don't post it in the first place") rather than override the gate on a per-PR basis.
 
+## Incomplete and timed-out reviews (v3)
+
+A review that did not finish is never a clean review. Since v3 every review ends in one of four statuses (`completed`, `incomplete`, `timeout`, `failed`; also written to the run record):
+
+| Status | When | Under `block-on-*` | Under `lenient` |
+|---|---|---|---|
+| `incomplete` | the in-process loop hit `max-turns` without `submit_review`, or the model ended its turn with no summary; a CLI exited without writing its findings file | **red** — reason `incomplete review — <cause>; re-run the review` | green, reviewed label **not** stamped |
+| `timeout` | a CLI was killed at `CLI_INVOCATION_TIMEOUT` but had already written a findings file | **red** — reason `timed-out review — …` | green, label not stamped |
+| `failed` | no review was produced (provider / CLI error) | red (the run fails) | red |
+
+In both non-completed cases the findings gathered so far are still posted, the summary carries a `Review incomplete: <cause>` (or `Review timed out: …`) footer, and the tracking comment shows `**Review incomplete:** ⚠️ <cause>`. This replaces the v2 behaviour where a capped in-process review could pass silently (RFC-07 BC-04).
+
+## Verified criticals (v3)
+
+Since v3 a `critical` is published as `critical` only when the **verifier** confirmed it (RFC-03). The verifier is a second, short, read-only model call on the same checkout: it re-reads the anchor, greps callers, reads the base version when a regression is claimed and the instruction file for `contradicts-documented-rule`, then records `verified` / `refuted` / `downgraded` / `unverified` with its checks. It runs on every claimed critical and a deterministic 30 % sample of warnings; `info` is never verified.
+
+| Model claimed | Verifier status | Published severity | Visible how |
+|---|---|---|---|
+| critical | verified | **critical** | inline; gates under `block-on-critical` |
+| critical | downgraded | warning | inline; body opens with `Claimed critical; verifier found: …` |
+| critical | unverified / skipped | warning | inline, same annotation; gates only under `block-on-warning` / `block-on-any` |
+| critical | refuted | — | not inline; listed in the structured output's refuted section |
+| warning | verified / unverified / skipped | warning | inline |
+| warning | downgraded | info | inline |
+| warning | refuted | — | refuted section |
+| info | any | info | inline (never verified) |
+
+The strictness gate reads the **published** severity, so `block-on-critical` blocks only on verified criticals (RFC-07 **BC-07**). The verifier fails **open into visibility**: an error, a timeout, `verifier: off`, or a lane with no in-process backend (`cursor`) leaves the claim visible as an annotated warning — never a silent block, never silence. The critical-always-surfaces rail keys on the *claimed* severity, so a downgraded claim is still never dropped by dedup or caps.
+
+Verifier lanes: in-process runners verify on their own backend with the `economy` tier alias (`balanced` where no cheaper tier reviews); CLI lanes verify runtime-side on the in-process runner of the same backend with the same credential — `grok` → xAI's OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible base (Z.ai or default), `codex` → the configured OpenAI base. Inputs: `verifier` (`on` / `off`), `verifier-model` (alias or id), `strict-unverified-criticals` (transition knob: gate on the claim as in v2; removed in v3.1.0).
+
+
+## Aggregated reviews (v3, `mode: aggregate`)
+
+When several legs emit and one job aggregates ([RFC-04](rfc/v3/04-ensemble-consolidation.md)), the strictness modes keep their meaning over the **consolidated, verified** set:
+
+- Duplicates across legs are merged by anchor (same path, lines within ±3 or overlapping ranges, same anchor content) with text as a tie-break; each consolidated finding carries `agreement = {legs_total, legs_reporting, reported_by}`. Calibrated on the six-leg PR #58 round: two different claims at one anchor (token overlap 0.07) stay apart, same-defect pairs (overlap ≥ 0.24) merge, and a leg never duplicates itself.
+- **Severity** is the maximum claim across reporters, then the verifier and the severity policy apply as on a single leg: a `critical` publishes only when verified, however many legs claimed it — agreement is not evidence.
+- `min-agreement` (default `1`): a `warning` counts toward `block-on-warning` / `block-on-any` only when `legs_reporting ≥ min-agreement`; criticals ignore it.
+- `require-all-legs` (default `false`): `true` fails the check when a leg is missing or did not complete; `false` publishes with the delivered legs (`legs_total` counts complete legs; partial legs still contribute their findings and are named).
+- The check line names the knob when it decided the outcome, and the job summary lists legs expected / delivered / partial / missing, findings in → out, and the agreement histogram.
+
 ## Choosing your mode
 
 A short decision tree:

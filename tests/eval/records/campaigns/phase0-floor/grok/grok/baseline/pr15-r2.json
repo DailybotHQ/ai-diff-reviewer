@@ -1,0 +1,56 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 289.6,
+  "setup_seconds": 1.7,
+  "total_seconds": 291.4,
+  "usage": {
+    "in": 133436,
+    "cache_read": 155776,
+    "cache_write": 0,
+    "out": 12136,
+    "source": "cli"
+  },
+  "cost_usd": 0.3864208,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 238,
+      "severity": "warning",
+      "body": "Unrelated `labeled` events fail a previously green merge gate on the same SHA.\n\n`on.pull_request.types` includes every `labeled` event. For a non-`ready` label the scope job correctly emits `matrix=[]` and skips review \u2014 then this branch **fails** the stable required check. GitHub keeps the **latest** check run per name on the SHA, so:\n\n1. Apply `ready` \u2192 review passes \u2192 `Self-review gate` is green \u2192 mergeable.\n2. Later add `bug` / `dependencies` / any other label \u2192 new workflow run \u2192 empty matrix \u2192 gate **red** again.\n\nThat breaks the documented happy path (\u201creview passed \u2192 mergeable\u201d) during normal PR labeling. `GITHUB_TOKEN` label adds (e.g. `self-reviewed:*`) do not re-fire workflows, but human/bot labels do.\n\n**Fix direction:** on empty matrix, do not blindly `exit 1` for noise `labeled` events. e.g. if `github.event.action == 'labeled'` and the event label is not `ready`, re-assert prior success on this SHA (Checks API: any `Self-review \u2014 *` with `conclusion == success` for `github.sha`) and `exit 0`, otherwise fail. Mirror the same guard in the `docs/TRIGGER_MODES.md` technique 3 snippet so consumers do not copy the footgun.\n\nAlso worth a clearer message when `matrix=[]` despite `ready` already on the PR (usually missing provider secrets) \u2014 the current text only says to apply `ready`."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 120,
+      "severity": "info",
+      "body": "Technique 3\u2019s job id is `gate` with `needs: [gate-decision, review]`, while technique 2\u2019s decision job is already named `gate` and the multi-provider note still refers to `needs.gate.outputs.matrix`.\n\nCopy-pasting the three techniques into one workflow collides on the `gate` key or leaves `gate-decision` undefined. Align names with the reference implementation (`scope` / `self-review` / `gate`), or rename technique 2\u2019s decision job to `gate-decision` in both the single-provider example and the multi-provider paragraph."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid direction on the Skipped-required-check gotcha, but the gate as written is **fail-closed on every empty matrix**, including **unrelated `labeled` events** after a successful review \u2014 which re-fails a previously green required check on the same SHA.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml` (gate step) | Unrelated `labeled` events empty the matrix and fail the gate, clobbering a prior green `Self-review gate` on the same SHA |\n| 2 | \u2139\ufe0f info | `docs/TRIGGER_MODES.md` (technique 3 snippet) | Recipe job ids (`gate-decision` / `gate`) do not line up with technique 2's `gate` decision job |\n\n## Notes (no inline)\n\n- **`README.md` still links the old recipe title** (`Recipe: run once when labelled ready, and show Skipped (not green)`). The section was renamed in this PR; update that sentence so the deep-link text matches.\n- Empty-matrix error text assumes \"missing `ready`\" only; missing provider secrets also yields `matrix=[]` with the same message.\n- Branch-protection cutover (require only `Self-review gate`, drop dynamic leg names) is correctly called out in the PR body \u2014 operational step outside the diff.\n- Security posture of the new job looks fine: `if: always()`, no checkout, values via `env:`, no secrets, workflow-level `permissions:` already present.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

@@ -35,6 +35,7 @@ The docs tree is organised by intent: *what the product is* → *how it's built*
 | [PR_METADATA_CHECKS.md](PR_METADATA_CHECKS.md) | PR description review (`pr-description-mode`) and AI-driven complexity labeling (`complexity-labels-enabled`) — how each works, the tool schema, threat model. |
 | [ITERATION_AWARENESS.md](ITERATION_AWARENESS.md) | Iteration-Aware Review (IAR) subsystem — converges multi-round self-review loops via content-anchored fingerprints, four convergence policies, generation tracking, and a hardcoded critical-always-surfaces safety rail. Runs on every review; wrapped in `try/except` so an IAR failure degrades to the baseline review path. |
 | [MIGRATION_v2.md](MIGRATION_v2.md) | v2 default pin, contract, and IAR / skip-review platform notes. |
+| [MIGRATION_v3.md](MIGRATION_v3.md) | v3 pin lines, contract (no inputs renamed), what you must change (verified-critical gating, unfinished reviews are red, generated review body, in-process wire shape), what you may adopt, transition knobs, the eval gate. |
 
 ## Local companion skill (`skills/ai-diff-reviewer/`)
 
@@ -47,10 +48,16 @@ The action also ships a **local companion skill** that runs the same review meth
 | [`skills/ai-diff-reviewer/setup/SKILL.md`](../skills/ai-diff-reviewer/setup/SKILL.md) | Interactive installer for the GitHub Action itself — six-question wizard that writes `.github/workflows/pr-review.yml` tailored to the repo's stack and visibility. |
 | [`skills/ai-diff-reviewer/setup/reference.md`](../skills/ai-diff-reviewer/setup/reference.md) | Reference manual for every `action.yml` input (description, default, choices, per-scenario recommendations). Any coding agent with the skill installed can answer *"what does `strictness` do?"* without opening the action source. |
 | [`skills/ai-diff-reviewer/open-pr/SKILL.md`](../skills/ai-diff-reviewer/open-pr/SKILL.md) | Sub-skill that authors a well-documented PR title + body from the current branch's diff (Conventional-Commits inference, structured body sections, merges with `.github/pull_request_template.md` when present, executes via `gh pr create`/`edit`). |
-| [`skills/ai-diff-reviewer/apply-review/SKILL.md`](../skills/ai-diff-reviewer/apply-review/SKILL.md) | Sub-skill that closes the CI-back-to-local loop — reads the live AI review on the PR (filters minimized/outdated comments), presents findings in the same shape as a local review, and walks the developer through apply / defer / skip per finding under the same trust boundary as the parent skill. Never commits, never pushes; edits source files only under per-finding *"apply"* consent with pre-image safety. |
+| [`skills/ai-diff-reviewer/apply-review/SKILL.md`](../skills/ai-diff-reviewer/apply-review/SKILL.md) | Sub-skill that closes the CI-back-to-local loop — reads the live AI review on the PR (the v3 `review-output/3.0` artifact first — findings, verification, refuted, prior ledger — then the non-minimized threads as the fallback), presents findings in the same shape as a local review, and walks the developer through apply / defer / skip per finding under the same trust boundary as the parent skill. Never commits, never pushes; edits source files only under per-finding *"apply"* consent with pre-image safety. |
 | [`skills/ai-diff-reviewer/prompt.md`](../skills/ai-diff-reviewer/prompt.md) | Byte-identical copy of [`prompts/default.md`](../prompts/default.md); a CI invariant (`Skills — prompt-sync invariant` in [`code_check.yml`](../.github/workflows/code_check.yml)) fails PRs where the copy has drifted. |
 
 See [PROMPTS.md § "Local coding-agent parity"](PROMPTS.md#local-coding-agent-parity) for the user-facing story on how the two surfaces stay in sync, and [ARCHITECTURE.md § "The local companion skill pack"](ARCHITECTURE.md) for the architectural view.
+
+## Design records (v3 RFCs)
+
+| Document | Purpose |
+|---|---|
+| [rfc/v3/README.md](rfc/v3/README.md) | Index of the v3 design records: evidence ledger, eval-gate contract, unified runner, verification and Finding v3, ensemble consolidation, structured output, risk-tiered budgets, breaking-change ledger, roadmap and decision log — plus the three JSON schemas. Design records are not living docs: shipped behavior is documented in the pages above. |
 
 ## AI-agent playbooks
 

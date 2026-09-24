@@ -1,0 +1,77 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C076",
+  "title": "parseAmount now returns cents but checkout still multiplies by 100",
+  "stack": "typescript",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G76",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "src/utils/parse.ts": "export function parseAmount(s: string): number {\n  // dollars as a float\n  return parseFloat(s);\n}\n",
+      "src/checkout.ts": "import { parseAmount } from './utils/parse';\n\nexport function chargeCents(input: string): number {\n  return Math.round(parseAmount(input) * 100);\n}\n"
+    },
+    "head": {
+      "src/utils/parse.ts": "export function parseAmount(s: string): number {\n  // integer cents — avoids float drift downstream\n  return Math.round(parseFloat(s) * 100);\n}\n",
+      "src/checkout.ts": "import { parseAmount } from './utils/parse';\n\nexport function chargeCents(input: string): number {\n  return Math.round(parseAmount(input) * 100);\n}\n"
+    },
+    "pr_metadata": {
+      "title": "parseAmount: return integer cents",
+      "body": "Float drift showed up in reports; cents are exact.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:d48c48682a031cb4f9ac81e8028f1967574bd716b44a9301ce5f177def979f2a"
+  },
+  "labels": [
+    {
+      "id": "C076-d1",
+      "severity": "warning",
+      "path": "src/utils/parse.ts",
+      "defect": "Unit change (dollars → cents) in a shared helper without updating the caller",
+      "evidence": "chargeCents('12.34') now returns 123400 instead of 1234 — a 100× overcharge; the only caller still multiplies by 100.",
+      "keywords": [
+        "cents",
+        "100",
+        "chargeCents",
+        "parseAmount"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C076-d2",
+      "severity": "warning",
+      "path": "src/checkout.ts",
+      "defect": "chargeCents double-scales the amount after the helper's unit change",
+      "evidence": "Math.round(parseAmount(input) * 100) with parseAmount already in cents.",
+      "keywords": [
+        "* 100",
+        "cents",
+        "parseAmount"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C076-d1",
+      "C076-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

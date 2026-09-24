@@ -1,0 +1,81 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 13,
+  "tool_calls": null,
+  "seconds": 555.7,
+  "setup_seconds": 2.0,
+  "total_seconds": 557.7,
+  "usage": {
+    "in": 86214,
+    "cache_read": 587648,
+    "cache_write": 0,
+    "out": 21012,
+    "source": "cli"
+  },
+  "cost_usd": 1.2501939999999998,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity": "warning",
+      "body": "The lookup fires on **every** webhook mismatch \u2014 including public and unknown-visibility repos \u2014 but on those the result can never change the outcome: the override below requires `_is_private_or_internal_visibility`, and lookup failures fail-closed on non-private. So denied public-repo PRs (exactly the spam path this gate exists to keep free) each spend one GitHub API call, contradicting `README.md:246` (\"a denied gate costs **zero API calls**\") and the new `docs/SECURITY.md` text that scopes the lookup to \"private/internal\". Guard by visibility so the cheapest-first contract holds and docs match code:\n\n```suggestion\n    if _is_private_or_internal_visibility(\n        repo_visibility\n    ) and _author_gate_needs_permission_lookup(\n        gate=author_gate_raw,\n        webhook_association=pr_author_association,\n    ):\n```"
+    },
+    {
+      "path": "action.yml",
+      "line": 71,
+      "severity": "warning",
+      "body": "The input's documented behaviour changed, but the `examples/` mirror of the docs-sync set is missing: `examples/open-source-safe.yml` documents this exact input (comment block at lines 11\u201330, usage at line 79) and `examples/README.md` describes it, yet neither was touched. Per this repo's sync rule (README + CHANGELOG + setup reference + at least one `examples/` file), add a one-line note to the example \u2014 e.g. that private/internal repos additionally get the collaborator-permission fallback while public repos stay association-only."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "info",
+      "body": "If the payload lacks `repository.visibility` (older GHES payloads, relayed event shapes), this returns `\"unknown\"` and the whole permission fallback becomes inert \u2014 the override requires private/internal and failures fail-closed on unknown \u2014 so the fix this PR ships silently doesn't apply. Every `pull_request` payload also carries the older `repository.private` boolean; a one-line fallback keeps the feature working there:\n\n```suggestion\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if not visibility and repository.get(\"private\") is True:\n        visibility = \"private\"\n    return visibility or \"unknown\"\n```"
+    },
+    {
+      "path": "tests/test_reviewer.py",
+      "line": 2411,
+      "severity": "info",
+      "body": "This is the same call as `test_permission_api_failure_private_fail_open` (line 2354) \u2014 the resolver cannot distinguish \"lookup attempted and failed\" from \"lookup never attempted\" (both arrive as `permission_lookup_failed=True`), so it adds no coverage. The actually uncovered branch is the `main()` wiring (missing `user.login` or malformed `AIPRR_REPO` \u2192 `permission_lookup_failed=True`); a small `unittest.mock.patch` case (pattern already used in `tests/test_iar_*.py`) would cover it for real."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 632,
+      "severity": "info",
+      "body": "The known permission-levels vocabulary is inlined here while its write-tier subset lives in the module constant `COLLABORATOR_PERMISSION_WRITE_TIER` added in this same PR. Promote the full set beside it (e.g. `COLLABORATOR_PERMISSION_KNOWN_LEVELS`) so both follow the constants-at-top convention."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-tested feature \u2014 the permission-aware gate is implemented defensively (fail-closed on unknown visibility, 404 \u2192 non-collaborator, username URL-quoted) and all 12 new tests pass locally along with `py_compile`. One warning needs a small fix before merge: the new API call fires on public repos where its result can never change the outcome, breaking the documented \"denied gate costs zero API calls\" contract.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:6399` | Permission lookup runs on public/unknown-visibility repos where the result is discarded \u2014 contradicts README's \"zero API calls\" and SECURITY.md's \"on private/internal\" text |\n| 2 | \u26a0\ufe0f warning | `action.yml:71` | `examples/open-source-safe.yml` documents this exact input but wasn't updated (docs-sync set is 3 of 4) |\n| 3 | \u2139\ufe0f info | `scripts/reviewer.py:5317` | No `repository.private` fallback when `visibility` is absent \u2014 the fix silently becomes inert on such payloads |\n| 4 | \u2139\ufe0f info | `tests/test_reviewer.py:2411` | `test_lookup_skipped_private_fail_open_via_lookup_failed` duplicates the test at line 2354; the real gap is `main()` wiring |\n| 5 | \u2139\ufe0f info | `scripts/reviewer.py:632` | Known permission-levels tuple inlined; its write-tier sibling is already a module constant |\n\n## What I verified\n\n- **No wasted call on the disabled/local path**: empty gate and empty webhook association both short-circuit in `resolve_author_association_gate` (`scripts/reviewer.py:4911`, `:4936`) before `_author_gate_needs_permission_lookup` can return True \u2014 local runs and `workflow_dispatch` still cost zero API calls. Good.\n- **No stale caller**: the old resolver is now only invoked from the two new paths; every runtime decision funnels through the enhanced resolver.\n- **Stdlib-only, no contract break**: `urllib.error`/`urllib.parse` are already imported; the endpoint is a path through `gh_request` (host resolved via `GITHUB_REST_B",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 3,
+    "changed_files": 8
+  }
+}

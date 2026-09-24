@@ -23,6 +23,32 @@ Each matrix leg goes through the same lifecycle independently when enabled. The 
    - One to four live tracking comments, each with the marker.
    - One to four labels (`self-reviewed:*`) showing which provider legs successfully completed.
 
+## The structured output artifact (v3) — the machine path
+
+Since v3 every run uploads its `review-output/3.0` document as the workflow artifact `ai-diff-reviewer-<head12>-<provider>-<kind>-<model>` (90-day retention) and exposes `structured-output-path` / `structured-output-sha256` / `structured-output-artifact` as step outputs. **Tools read the artifact; humans read the thread.** The document carries what the thread cannot: the published findings with evidence and `verification`, the **refuted** findings with reasons, the prior-findings ledger (retired with reason / still open / regressed / unverified claims), the gate decision, usage and cost, and `summary.rendered_markdown` — the exact body that was posted, so the two can never disagree.
+
+To fetch it for a PR head:
+
+```bash
+RUN_ID="$(gh run list --repo "$REPO" --commit "$HEAD_SHA" --json databaseId,status --jq '[.[] | select(.status == "completed")] | sort_by(.databaseId) | reverse | .[0].databaseId')"
+gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[] | select(.name | startswith("ai-diff-reviewer-")) | .name'
+gh run download "$RUN_ID" --repo "$REPO" -n "<artifact name>" -D /tmp/aiprr-out
+```
+
+Guards: `change_inventory.head_sha` must equal the head you are reading for; compare the file's SHA-256 with the `structured-output-sha256` output when you can read it; treat `run.status` `incomplete` / `timeout` as partial. One artifact per matrix leg — the name suffix identifies the leg, so no label lookup is needed. When no artifact exists (pre-v3 review, expired, in flight), the thread rules below remain the contract.
+
+## Aggregated reviews (v3, `mode: aggregate`)
+
+When the workflow runs a matrix of emit legs and one aggregate job ([RFC-04](rfc/v3/04-ensemble-consolidation.md)), there is **one** review, **one** tracking comment and **one** label per head, whatever the number of legs:
+
+- The tracking comment and the review body carry `<!-- ai-pr-reviewer-aggregate -->` beside `<!-- ai-pr-reviewer-marker -->` in place of a per-provider marker; the IAR state block lives there, so there is one dedup history per PR instead of one per leg.
+- The body starts with a legs line (`Legs: N delivered / M expected · partial: … · missing: …`), a per-leg table (status, findings, turns, cost) and the agreement histogram; each consolidated finding carries `agreement = {legs_total, legs_reporting, reported_by}` in the structured output and an "Also reported by" line inline.
+- `collapse-previous` is scoped to the aggregate marker; on the first aggregated round it also minimizes surviving per-leg reviews from the previous shape (migration, logged).
+- The job summary (`$GITHUB_STEP_SUMMARY`) repeats the legs table and the check line; the outputs `legs-expected`, `legs-delivered`, `duplicates-removed`, `agreement-histogram` are set on the aggregate step.
+- Failure modes: a leg that timed out contributes its partial findings and is named as *partial*; a missing leg is named; with `require-all-legs: true` either fails the check. No delivered leg at all is red. A document for another head SHA is ignored; two documents for one leg — the newest `recorded_at` wins.
+
+Emit legs post nothing (with `expected-legs` set) or a single marked note (`<!-- ai-pr-reviewer-emit-note -->`) reminding you to add the aggregate job.
+
 ## Reading review feedback correctly
 
 When applying bot feedback on a PR, the only source of truth is the **most recent non-minimized** artefacts. Everything older is stale by construction.

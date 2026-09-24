@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C095",
+  "title": "Cleanup script deletes with an unquoted, possibly empty variable",
+  "stack": "shell",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G95",
+  "gap_tags": [
+    "new_stack_shell"
+  ],
+  "fixture": {
+    "base": {
+      "scripts/clean.sh": "#!/usr/bin/env bash\nset -euo pipefail\nBUILD_DIR=\"${1:?build dir required}\"\nrm -rf \"${BUILD_DIR:?}/\"*\n"
+    },
+    "head": {
+      "scripts/clean.sh": "#!/usr/bin/env bash\nset -eo pipefail\nBUILD_DIR=$1\nrm -rf $BUILD_DIR/*\n"
+    },
+    "pr_metadata": {
+      "title": "clean.sh: simplify",
+      "body": "Drop the parameter-expansion noise.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:cbfcd51ecf284dd932852660b367dd998b987885b4a29d8e2598cc5667c2b726"
+  },
+  "labels": [
+    {
+      "id": "C095-d1",
+      "severity": "warning",
+      "path": "scripts/clean.sh",
+      "defect": "rm -rf on an unquoted variable that can now be empty (-u removed, :? removed)",
+      "evidence": "With no argument BUILD_DIR is empty and the command becomes `rm -rf /*`; word-splitting on paths with spaces deletes unrelated entries.",
+      "keywords": [
+        "rm -rf",
+        "unquoted",
+        "empty",
+        "$BUILD_DIR"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C095-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

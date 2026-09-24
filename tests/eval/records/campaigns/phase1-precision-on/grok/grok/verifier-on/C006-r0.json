@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30249,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1634,
+    "source": "cli"
+  },
+  "cost_usd": 0.0962988,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Issue:** `identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no longer passes `SECRET`, `algorithms`, `audience`, or `issuer`.\n\n**Failure mode:** Anyone who can hit an endpoint that calls `identity(token)` can mint an unsigned/forged JWT (e.g. `{\"sub\": \"admin\", \"aud\": \"api\"}`) and receive a fully trusted claims dict. This is full authentication bypass, not a staging-only inconvenience \u2014 nothing in the function limits the bypass to staging.\n\n**Fix:** Restore verified decode. Resolve TICKET-412 by re-issuing tokens under the current secret/aud/iss (or by rotating `SECRET` and updating issuers in lockstep). If a temporary staging escape hatch is mandatory, gate it on an explicit environment check and keep production on the verified path:\n\n```python\ndef identity(token: str) -> dict:\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer checks in `identity()`, so any caller that trusts the returned claims will accept forged tokens.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts an attacker-constructed token with arbitrary `sub` / role / tenant claims. The comment cites staging token re-issuance (TICKET-412), but the code path is unconditional: there is no env/stage guard, feature flag, or alternate verified path.\n\n`SECRET`, `audience=\"api\"`, and `issuer=\"accounts.internal.example\"` were the load-bearing checks. Removing them turns authentication into parse-only JWT decoding.\n\n## Safer directions (for the author)\n\n- Keep verification on; fix token issuance (correct secret, aud, iss) so staging tokens validate.\n- If a temporary bypass is unavoidable, gate it explicitly (e.g. only when `ENV == \"staging\"` and a dedicated kill-switch is set), log loudly, and add a tracked removal date \u2014 still a serious risk on any shared staging environment.\n- Never ship signature verification off in a module that other environments could import unchanged.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "identity() previously verified JWTs with SECRET, HS256, audience, and issuer; head disables verify_signature/aud/iss with no production gate, so forged tokens are accepted \u2014 a full auth bypass as claimed."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.753,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4629,
+      "out": 281
+    },
+    "cost_usd": 0.01143
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

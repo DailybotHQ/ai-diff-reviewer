@@ -1,0 +1,72 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 16,
+  "tool_calls": null,
+  "seconds": 262.7,
+  "setup_seconds": 8.3,
+  "total_seconds": 271.0,
+  "usage": {
+    "in": 107700,
+    "cache_read": 1362560,
+    "cache_write": 0,
+    "out": 10406,
+    "source": "cli"
+  },
+  "cost_usd": 0.686604,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "warning",
+      "body": "The optional-complexity schema example embeds a JavaScript `// optional` comment inside a fenced `json` block. If an agent-runner model copies the example literally, `json.load` fails and `_invoke_cli_agent(..., allow_malformed_summary_fallback=True)` drops every inline finding (summary-only recovery). This fires on **every** agent-runner run when `complexity-labels-enabled` is false (the optional branch), not only when labeling is on.\n\nKeep the example valid JSON and document optionality only in the rules text (as the required branch already does):\n\n```suggestion\n        else ',\\n  \"complexity\": \"low | medium | high\"\\n'\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5444,
+      "severity": "warning",
+      "body": "`infer_pr_complexity_fallback` treats bare substrings (`auth`, `token`, `secret`, \u2026) as path matches via `marker in path`. That labels ordinary paths as `high` whenever the model omits `complexity` \u2014 e.g. `AUTHORS` (`auth`), `docs/authentication.md`, `src/foo_token.py`. Consumers routing on `complexity:high` then get false positives on the documented safety-net path.\n\nMatch path segments or anchored patterns instead of raw substring containment (for example split on `/` and `.` and compare whole components, or require markers like `/auth/` / `auth.` as path parts), and add regression cases for the false positives above."
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 97,
+      "severity": "info",
+      "body": "`parse_findings_file()` does **not** require `complexity` even when labeling is enabled \u2014 it only normalises a present value via `parse_complexity_level`, and `main()` falls back to `infer_pr_complexity_fallback` when the field is missing. Saying the parser \"validates\" a required field overstates the contract.\n\nPrefer wording like: the prompt marks `complexity` required; the parser accepts/normalises it when present; if absent, the runtime applies the heuristic fallback and still stamps the label."
+    }
+  ],
+  "summary": "### Verdict\n\nSolid feature bridge for complexity labels across provider families, with good tests and docs sync \u2014 two warnings should be fixed before merge (invalid JSON in the agent-runner schema example, and over-broad heuristic path markers).\n\n### Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5645` | Optional-complexity schema embeds `// optional`, which is invalid JSON |\n| 2 | \u26a0\ufe0f warning | `scripts/reviewer.py:5444` | Heuristic high-markers use bare substrings (`auth`, `token`, \u2026) and false-positive common paths |\n| 3 | \u2139\ufe0f info | `docs/PR_METADATA_CHECKS.md:97` | Docs say `parse_findings_file()` enforces required complexity; parser only normalises when present |\n\n### Notes\n\n- End-to-end path is coherent: agent-runners get `require_complexity_in_findings` \u2192 findings.json `complexity` \u2192 `resolve_pr_complexity` \u2192 label apply; chat-completions still use `set_pr_complexity`; fallback covers omissions with a logged WARNING.\n- `build_agent_runner_noop_warning` correctly stops treating complexity as a CLI no-op; autocomplete remains the only warned no-op.\n- Self-review restore of `ready` / `no-ready-label` matches `docs/TRIGGER_MODES.md` and AGENTS.md dogfood docs.\n- Unit suite: `python3 -m unittest discover -s tests` \u2014 490 tests OK; `py_compile` clean.\n- **Merge risk:** this branch is substantially behind current `main` (main already has a later findings-contract that keeps the complexity example free of `//` comments, plus other runtime work). Rebase before merge to avoid re-introducing the schema comment or losing mainline fixes.\n\n### Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 2,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 10
+  }
+}

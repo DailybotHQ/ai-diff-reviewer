@@ -1,0 +1,79 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 41.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.3,
+  "usage": {
+    "in": 17548,
+    "cache_read": 102144,
+    "cache_write": 0,
+    "out": 2613,
+    "source": "cli"
+  },
+  "cost_usd": 0.0814172,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**SQL injection:** `account` is interpolated into the query via `fmt.Sprintf`, so attacker-controlled input can alter the statement (e.g. `'` OR `'1'`=`'1`) and return another row's balance; richer payloads can read or modify data depending on the driver.\n\nRestore a bound parameter and only use `LIKE` for the pattern, with LIKE metacharacters escaped in Go:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\n(Still escape `%`, `_`, and `\\` in `account` before wrapping \u2014 add a small `escapeLike` helper.) Also note `QueryRow` is wrong if multiple accounts can match the partial pattern; handle multi-row results explicitly."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection in `ledger/query.go`.\n\n## Narrative\n\n`Balance` previously used a parameterized equality check (`WHERE number = $1`). The partial-number UI change builds the query with `fmt.Sprintf` and embeds `account` directly into the SQL string. Any caller-controlled value (UI input, API param, etc.) can break out of the LIKE quote and alter the statement \u2014 classic injection.\n\nA safe partial match keeps the value as a bound parameter and escapes LIKE metacharacters in the Go layer:\n\n```go\npattern := \"%\" + escapeLike(account) + \"%\"\nerr := db.QueryRow(\n    \"SELECT balance_cents FROM accounts WHERE number LIKE $1\", pattern,\n).Scan(&cents)\n```\n\nwhere `escapeLike` escapes `\\`, `%`, and `_`.\n\nSecondary correctness concern (same line): `QueryRow` expects a single row. A partial `LIKE` can match many accounts; the driver returns one arbitrary row or `sql.ErrNoRows`, which is the wrong API shape for a balance lookup over a prefix/substring search. Prefer an exact match after resolution, `LIMIT` + explicit multi-match error, or a different query that returns a list.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

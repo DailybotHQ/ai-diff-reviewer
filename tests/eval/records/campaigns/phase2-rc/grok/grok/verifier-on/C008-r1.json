@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 88.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 88.9,
+  "usage": {
+    "in": 61503,
+    "cache_read": 144256,
+    "cache_write": 0,
+    "out": 3993,
+    "source": "cli"
+  },
+  "cost_usd": 0.1902408,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` POST to any caller-supplied URL. A customer-configured endpoint of `http://169.254.169.254/` or `http://127.0.0.1:8300/...` makes this process initiate the request from inside your network; `urlopen` will also follow redirects onto further internal targets.\n\nRestore an egress policy before merging: allow only `https`, resolve and reject private/link-local/metadata addresses, re-validate hosts after redirects (or disable redirects), and keep an explicit host/domain allowlist or a locked-down egress proxy for customer callbacks."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change opens a server-side request forgery (SSRF) path by deleting the only host allowlist on outbound webhook delivery.\n\n## Narrative\n\n`deliver()` previously refused any URL whose hostname was outside `ALLOWED_HOSTS`. The PR removes that guard and posts directly to the caller-supplied `url` via `urllib.request.urlopen`. Anyone who can influence the webhook URL (customer config, a compromised tenant setting, or a poisoned event pipeline) can make the runner/server issue HTTP requests to:\n\n- link-local cloud metadata (`169.254.169.254`)\n- loopback and internal RFC1918 services\n- other hosts reachable only from the application network\n\n`urlopen` also follows redirects by default, so a single open redirect on an \u201cexternal\u201d host is enough to bounce the request deeper into the internal network even if a weaker check were re-added later.\n\nSupporting enterprise customer endpoints is a valid product goal; it needs an egress policy (allowlist/denylist of schemes and hosts/CIDRs, block of link-local and private ranges, no redirects or redirect re-validation, and ideally a dedicated egress proxy), not an unconditional `urlopen` on user input.\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch deletes ALLOWED_HOSTS and the urlsplit hostname gate that previously raised ValueError, so deliver() now urlopen-POSTs to any caller-supplied URL with no scheme/host/IP checks remaining\u2014an SSRF regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.204,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3422,
+      "out": 338
+    },
+    "cost_usd": 0.009922
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

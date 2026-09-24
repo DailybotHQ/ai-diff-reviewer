@@ -1,0 +1,56 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 11,
+  "tool_calls": null,
+  "seconds": 151.1,
+  "setup_seconds": 2.3,
+  "total_seconds": 153.3,
+  "usage": {
+    "in": 91236,
+    "cache_read": 762496,
+    "cache_write": 0,
+    "out": 6745,
+    "source": "cli"
+  },
+  "cost_usd": 0.4516908,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity": "warning",
+      "body": "**Codex is agent-runner, so it will not apply complexity labels.**\n\nThis comment groups `codex` with `anthropic` as a chat-completions leg that \"perform[s] the assessment\". In the runtime, `CodexProvider` subclasses `AgentRunnerProvider`; `docs/PR_METADATA_CHECKS.md` \u00a7 Provider support matrix marks `complexity-labels-enabled` as a no-op for `cursor` / `claude-code` / `codex`. Only `provider: anthropic` exposes `set_pr_complexity` and writes `complexity:*`.\n\nFailure mode: maintainers reading this workflow (or the matching commit risk note) expect the Codex leg to stamp a complexity label and treat a missing label as a regression.\n\n```suggestion\n          # (anthropic) perform the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n```"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity": "warning",
+      "body": "**Dogfood trigger rename is not mirrored in `AGENTS.md`.**\n\n`label-gate` (and the scope bash gate above) now require `AIReview`, but `AGENTS.md` \u00a7 \"CI surface (this repo)\" still says the self-review workflow is \"label-gated on `ready`\". Agents and contributors following the SSoT will apply `ready`, the scope job emits `empty_reason=no-gate-label`, every leg stays Skipped, and under the opt-in gate design the PR stays mergeable with no dogfood review.\n\nUpdate that AGENTS.md sentence (and the PR test plan, which still says apply `ready`) to `AIReview` in the same change. Consumer recipe docs that use `ready` as an *example* label name can stay as-is."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfood enablement for complexity labels, plus a coherent `ready` \u2192 `AIReview` trigger rename inside `self-review.yml`. Two warnings should be fixed before merge: the complexity comment misclassifies `codex`, and the label rename leaves `AGENTS.md` telling contributors/agents to apply the old gate label.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:330` | Comment (and matching commit risk note) lists `codex` as chat-completions; it is agent-runner and no-ops complexity labeling |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:217` | Gate label renamed to `AIReview`, but `AGENTS.md` still documents `ready` as the dogfood trigger |\n\n## Notes outside inline comments\n\n- **Complexity dogfood itself is correct for `anthropic`.** `complexity-labels-enabled: true` + default `complexity:` prefix match `action.yml` / `docs/PR_METADATA_CHECKS.md`. Permissions already include `pull-requests: write`. Only the Anthropic chat-completions leg will call `set_pr_complexity` and apply the label; `claude-code`, `cursor`, and `codex` will log the designed no-op WARNING.\n- **Scope/gate coupling for the rename looks consistent** inside this file: bash match (`aireview`), `label-gate: AIReview`, `empty_reason=no-gate-label`, and the gate `if:` all agree. Event label still arrives via `env:` (no `${{ github.event.* }}` shell interpolation).\n- **Consumer docs can keep `ready` as an example name** (`README.md`, `docs/TRIGGER_MODES.md` recipes). Those are copy-paste patterns, not this repo's operational trigger. The load-bearing drift is `AGENTS.md` \u00a7 \"CI surface (this repo)\" (`label-gated on \\`ready\\``).\n- **PR description / test plan still say apply `ready`.** After this lands, the smoke path is: apply `AIReview` \u2192 confirm `anthropic` posts `complexity:*` \u2192 remove + re-add `AIReview` to re-review.\n- Enabling complexity on every matrix leg is a reasonable way to dogfood the agen",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

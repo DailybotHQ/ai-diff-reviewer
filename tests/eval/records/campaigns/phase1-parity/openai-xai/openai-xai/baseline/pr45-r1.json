@@ -1,0 +1,140 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 9,
+  "tool_calls": 36,
+  "seconds": 298.1,
+  "setup_seconds": 1.7,
+  "total_seconds": 299.8,
+  "usage": {
+    "in": 64732,
+    "cache_read": 413440,
+    "cache_write": 0,
+    "out": 3029,
+    "source": "api"
+  },
+  "cost_usd": 0.230326,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "warning",
+      "body": "When `require_complexity` is false (the default for every agent-runner run that does not enable complexity labels), the mandatory findings schema example embeds a `// optional` JS-style comment inside a fenced `json` block. Models are also told the file MUST parse with `json.load()`, which rejects comments.\n\nIf a CLI agent copies the example faithfully, `parse_findings_file` fails and the agent-runner path falls back to summary-only (`allow_malformed_summary_fallback=True`), silently dropping every inline finding. Prefer a pure-JSON example and keep optionality only in the Rules section (as the required branch already does without the comment).\n\n```suggestion\n        else ',\\n  \"complexity\": \"low | medium | high\"\\n'\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5478,
+      "severity": "warning",
+      "body": "High-path markers are checked before the docs-only short-circuit, and matching is bare substring (`marker in path`). A single-file docs PR on `docs/SECURITY.md` (or any path containing `auth` / `token` / `secret` / `security`) is forced to `complexity:high` and never reaches the docs \u2192 `low` branch.\n\nThat fights the feature\u2019s own \u201cnot line-count / cognitive load\u201d story and will mislabel routine doc edits whenever the model omits `complexity` (the path this fallback exists for). Check doc suffixes first, or match path segments / known runtime paths more tightly than substrings like `auth` and `token`."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5482,
+      "severity": "warning",
+      "body": "The fallback thresholds `8` / `500` / `3` / `100` are meaningful caps (file count and line delta) inlined in `infer_pr_complexity_fallback`. Repo convention is to promote these to module-level `SCREAMING_SNAKE_CASE` constants next to the other complexity constants (`PR_COMPLEXITY_*`), with full LHS annotations.\n\n```suggestion\n    if len(paths) >= _COMPLEXITY_FALLBACK_HIGH_FILE_COUNT or line_delta > _COMPLEXITY_FALLBACK_HIGH_LINE_DELTA:\n        return PR_COMPLEXITY_HIGH\n    if len(paths) >= _COMPLEXITY_FALLBACK_MEDIUM_FILE_COUNT or line_delta > _COMPLEXITY_FALLBACK_MEDIUM_LINE_DELTA:\n        return PR_COMPLEXITY_MEDIUM\n```\n\n(Define the four constants beside `_COMPLEXITY_HIGH_PATH_MARKERS`.)"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity": "warning",
+      "body": "Enabling `complexity-labels-enabled: true` on the parallel provider matrix means every eligible leg (`anthropic` + each CLI) now races `gh_remove_labels_by_prefix` + `gh_apply_label` for `complexity:*`. The final label is whichever leg finishes last, so the same PR can flip `low` \u2194 `high` across runs with no code change.\n\nEither document that multi-provider setups should pick one leg for complexity, gate the input to a single provider in this workflow, or make label application idempotent/cooperative (e.g. only the first successful writer, or max-severity wins via a shared artifact)."
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 43,
+      "severity": "info",
+      "body": "The matrix below correctly says agent-runners use `complexity` in `findings.json`, but this section still describes assessment only as \u201cthe model receives an explicit tool (`set_pr_complexity`)\u201d. Readers enabling the flag on `cursor` / `claude-code` / `codex` will look here first and miss the findings.json contract (and the new heuristic fallback).\n\nAdd a short branch: chat-completions \u2192 `set_pr_complexity`; agent-runners \u2192 top-level `complexity` in `.aiprr/findings.json`; omit \u2192 `infer_pr_complexity_fallback`."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid feature direction \u2014 complexity labeling is correctly bridged through `findings.json` for agent-runners, with docs/tests mostly in sync \u2014 but I\u2019d **request changes** before merge for a few correctness issues in the new fallback/schema path and the multi-provider dogfood setup.\n\n## Narrative\n\nThe core wiring looks right: `ReviewResult.complexity`, `parse_complexity_level` / `resolve_pr_complexity`, `require_complexity_in_findings` threaded through all three CLI providers, noop-warning narrowed to autocomplete-only, and the post-loop label block now resolves model output **or** heuristic fallback. Tests cover the happy paths and the noop regression.\n\nWhat needs attention:\n\n1. **`// optional` in the findings JSON example** (`write_findings_prompt_directive`) is the highest-signal bug. Default agent-runner runs (complexity off) still inject a non-JSON comment into the mandatory schema example while requiring `json.load()`-valid output. A faithful copy \u2192 malformed findings \u2192 summary-only fallback and **lost inline comments**. Easy one-line fix: drop the comment; keep optionality in the Rules bullet only.\n\n2. **Heuristic ordering / substring markers** make `docs/SECURITY.md` (and many `*token*` / `*auth*` paths) always `high`, bypassing the docs-only `low` branch. That undermines \u201ccognitive load, not crude proxies\u201d the moment the model omits `complexity` \u2014 which is exactly when fallback runs.\n\n3. **Magic thresholds** `8` / `500` / `3` / `100` should be module-level constants per this repo\u2019s reviewer rules / `DEVELOPMENT_GUIDELINES`.\n\n4. **Self-review matrix race**: turning `complexity-labels-enabled: true` on every provider leg means N concurrent writers of `complexity:*`. Last finisher wins; labels can thrash. Gate to one leg, or document/coordinate.\n\n5. **Docs nit**: `PR_METADATA_CHECKS.md` assessment section still reads as tool-only; matrix is updated but the how-to paragraph isn\u2019t.\n\nNon-blocking positives: CHANGELOG / PROVIDERS / setup reference / ext",
+  "verification": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5478,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5482,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 43,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 4,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 2,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 3,
+    "changed_files": 10
+  }
+}

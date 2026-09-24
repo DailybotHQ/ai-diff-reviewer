@@ -1,0 +1,79 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 51.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 51.5,
+  "usage": {
+    "in": 31500,
+    "cache_read": 118144,
+    "cache_write": 0,
+    "out": 2652,
+    "source": "cli"
+  },
+  "cost_usd": 0.1143552,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query with `fmt.Sprintf`, so any value that leaves the LIKE quotes becomes attacker-controlled SQL. The previous `$1` bind prevented this.\n\nConcrete failure mode: UI input that closes the quote (for example a single quote plus OR/boolean payload) alters the predicate or appends SQL. Balances for other accounts can be read; destructive payloads are possible depending on DB permissions and whether the driver allows multiple statements.\n\nKeep partial match, but bind the value:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'\"\n\terr := db.QueryRow(q, account).Scan(&cents)\n```\n\nIf `%`/`_` in user input must be literal, escape them before binding. `QueryRow` is also ambiguous when several numbers match the pattern \u2014 consider an explicit ordering with a limit, or return an error on multiple matches."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by replacing a parameterized query with `fmt.Sprintf` string interpolation of the `account` argument.\n\n## Analysis\n\n`Balance` previously bound `account` via `$1`. The new code builds a LIKE clause by embedding the raw `account` value in the SQL text. Any caller that passes UI/user input (the PR description says the UI now accepts partial numbers) can break out of the LIKE string and execute arbitrary SQL.\n\nPartial-match intent is fine; keep it parameterized:\n\n```go\nerr := db.QueryRow(\n    `SELECT balance_cents FROM accounts WHERE number LIKE '%' || $1 || '%'`,\n    account,\n).Scan(&cents)\n```\n\nAlso escape `%` / `_` in `account` if those should be literal characters, and decide what happens when multiple rows match (`QueryRow` returns one arbitrary row).\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head interpolates `account` via fmt.Sprintf into a LIKE predicate, while base correctly bound it as `$1`; that is a real SQL-injection regression. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.991,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6502,
+      "out": 318
+    },
+    "cost_usd": 0.015066
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

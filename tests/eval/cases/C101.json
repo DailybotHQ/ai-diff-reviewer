@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C101",
+  "title": "Network bytes decoded with from_utf8_unchecked",
+  "stack": "rust",
+  "change_class": "security",
+  "risk_class": "warning_positive",
+  "family_group": "G101",
+  "gap_tags": [
+    "new_stack_rust"
+  ],
+  "fixture": {
+    "base": {
+      "src/proto.rs": "pub fn name(buf: &[u8]) -> Result<&str, std::str::Utf8Error> {\n    std::str::from_utf8(buf)\n}\n"
+    },
+    "head": {
+      "src/proto.rs": "pub fn name(buf: &[u8]) -> &str {\n    // validated upstream\n    unsafe { std::str::from_utf8_unchecked(buf) }\n}\n"
+    },
+    "pr_metadata": {
+      "title": "proto: skip redundant UTF-8 check",
+      "body": "Hot path; bytes are validated by the framer.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:505996c8b77740799eb2f1e866778e2b5c7451d106bfa318d384a1f4d5570cd6"
+  },
+  "labels": [
+    {
+      "id": "C101-d1",
+      "severity": "warning",
+      "path": "src/proto.rs",
+      "defect": "Undefined behaviour on invalid UTF-8 from the network: unsafe from_utf8_unchecked on peer-controlled bytes",
+      "evidence": "The framer does not validate UTF-8 (it frames lengths); a malformed frame now produces an invalid &str — UB, not an error.",
+      "keywords": [
+        "from_utf8_unchecked",
+        "unsafe",
+        "UTF-8",
+        "network"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C101-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

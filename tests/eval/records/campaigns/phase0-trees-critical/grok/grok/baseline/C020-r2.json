@@ -1,0 +1,57 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 36.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.7,
+  "usage": {
+    "in": 16663,
+    "cache_read": 124672,
+    "cache_write": 0,
+    "out": 2229,
+    "source": "cli"
+  },
+  "cost_usd": 0.0841016,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "**SQL injection:** `account` is interpolated into the query with `fmt.Sprintf`, so any value that reaches `Balance` can alter the SQL (e.g. `' OR '1'='1` or stacked statements depending on the driver).\n\nThe previous `$1` binding avoided this. Keep the value out of the SQL text:\n\n```suggestion\n\tq := \"SELECT balance_cents FROM accounts WHERE number LIKE $1\"\n\terr := db.QueryRow(q, \"%\"+account+\"%\").Scan(&cents)\n```\n\nAlso escape `%` and `_` in `account` if the UI intends a literal substring match rather than caller-controlled wildcards."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "**Ambiguous match:** `LIKE '%\u2026%'` can match multiple accounts, and `QueryRow` keeps only the first row. Callers expecting a single balance for a partial number can get an arbitrary account's balance with no error.\n\nIf the UI is partial search, prefer a list/lookup that returns all matches (or requires uniqueness) before reading a balance; if it must remain a single-row read, enforce an exact match or `LIMIT 1` with a deterministic `ORDER BY` and document that behavior."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by interpolating the account argument into the query string.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `ledger/query.go:12` | SQL injection via `fmt.Sprintf` into LIKE clause |\n| 2 | warning  | `ledger/query.go:12` | `QueryRow` + partial LIKE can return an arbitrary first match |\n\n## Notes\n\nThe previous query correctly bound `account` as `$1`. Partial-number search can keep that safety with a parameterized `LIKE` and bound wildcards (for example pass `\"%\" + account + \"%\"` as the bound parameter), plus escaping of `%`/`_` in the user input if literal substring match is intended.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

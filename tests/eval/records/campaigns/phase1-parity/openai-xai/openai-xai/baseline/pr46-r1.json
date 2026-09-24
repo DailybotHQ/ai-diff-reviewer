@@ -1,0 +1,124 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 49,
+  "seconds": 355.6,
+  "setup_seconds": 2.0,
+  "total_seconds": 357.7,
+  "usage": {
+    "in": 132273,
+    "cache_read": 391936,
+    "cache_write": 0,
+    "out": 3014,
+    "source": "api"
+  },
+  "cost_usd": 0.361017,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity": "warning",
+      "body": "Permission lookup is triggered whenever the webhook association misses the allow-list, with no visibility check. On public repos that means every denied external PR still hits `GET .../collaborators/{user}/permission`, even though the enhanced resolver ignores the result and docs claim public stays association-only / cheapest-first with no GH round-trip.\n\nGate the call on private/internal first (and treat missing visibility via the `repository.private` fallback below):\n\n```suggestion\n    if (\n        _is_private_or_internal_visibility(repo_visibility)\n        and _author_gate_needs_permission_lookup(\n            gate=author_gate_raw,\n            webhook_association=pr_author_association,\n        )\n    ):\n```\n\nThat restores the public-repo \u201cdenied = zero GitHub API calls\u201d contract and matches `docs/SECURITY.md`."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "Visibility is read only from `repository.visibility`. GitHub webhook payloads always carry the older required boolean `repository.private`; `visibility` is newer and can be absent depending on payload shape/API version. If it is missing, this returns `\"unknown\"`, `_is_private_or_internal_visibility` is false, and a private-org admin with webhook `CONTRIBUTOR` + REST `admin` is still denied \u2014 the exact false-skip this PR aims to fix.\n\nFall back to the boolean when `visibility` is empty:\n\n```python\nvisibility = str(repository.get(\"visibility\", \"\") or \"\").lower()\nif visibility in (\"public\", \"private\", \"internal\"):\n    return visibility\nif \"private\" in repository:\n    return \"private\" if repository.get(\"private\") else \"public\"\nreturn \"unknown\"\n```\n\nAdd a unit case for `private: true` without `visibility`."
+    },
+    {
+      "path": "README.md",
+      "line": 246,
+      "severity": "warning",
+      "body": "This still claims a denied gate costs **zero API calls**. After this change the author gate can perform one collaborator-permission REST call (and today it does so even on public denies). `docs/SECURITY.md` already wording is accurate (\u201czero LLM / provider API calls\u201d + optional GH permission lookup on private/internal). Align this sentence the same way so operators are not surprised by an extra GitHub request on the \u201ccheapest\u201d gate."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5050,
+      "severity": "info",
+      "body": "When `permission_lookup_failed` is true and visibility is anything other than private/internal (including `\"unknown\"`), the reason is hard-coded as `fail-closed on public`. That mis-labels unknown/missing visibility in logs and makes operator triage harder if the private-boolean fallback is still missing.\n\nPrefer branching on the actual visibility, e.g. `fail-closed on {visibility}` (or a dedicated `unknown` reason), so the actionable log line matches reality."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid Option B fix for private-org webhook under-reporting, with good pure-logic coverage and docs mostly in sync \u2014 but the `main()` wiring still calls the permission API on public denies, and visibility detection is brittle without a `repository.private` fallback, which can leave the original false-skip intact.\n\n## What works well\n\n- Clear separation: base association gate unchanged; `resolve_author_association_gate_enhanced` layers private/internal permission override + fail-open/fail-closed.\n- Public association-only semantics in the resolver are correct (write permission does not widen `OWNER,MEMBER` on public).\n- Username is URL-quoted; 404 \u2192 `none` (not lookup failure); broad except is annotated with an approved BLE001 pattern.\n- Docs/contract surface is largely updated (`action.yml`, `SECURITY.md`, setup skill + reference, CHANGELOG). Tests cover the important enhanced-resolver matrix.\n\n## Issues worth fixing before merge\n\n1. **`main()` should not call the permission API unless the repo is private/internal** (`scripts/reviewer.py` ~6399). Today every public external PR that fails the allow-list still pays a collaborators/permission round-trip the resolver ignores. That breaks the documented cheapest-first / public association-only contract and is free rate-limit surface under PR spam.\n2. **`_read_github_event_repo_visibility` only reads `repository.visibility`** (~5318). Prefer falling back to the long-standing `repository.private` boolean. If `visibility` is missing \u2192 `\"unknown\"`, permission override and private fail-open never apply, so a private admin reported as `CONTRIBUTOR` can still be skipped.\n3. **README (and `examples/open-source-safe.yml`) still say a denied author gate costs zero API / is payload-only.** `SECURITY.md` already uses the accurate \u201czero LLM calls + optional GH lookup\u201d wording \u2014 mirror that.\n\nMinor: fail-closed reason string always says `on public` even when visibility is `unknown`.\n\n## Test / dogfood notes\n\n- Enhanced reso",
+  "verification": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6402,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "README.md",
+      "line": 246,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5050,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "46-fail-open-missing-login"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 8
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "596242c",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 408.3,
+  "setup_seconds": 1.8,
+  "total_seconds": 410.1,
+  "usage": {
+    "in": 76293,
+    "cache_read": 324224,
+    "cache_write": 0,
+    "out": 16763,
+    "source": "cli"
+  },
+  "cost_usd": 0.9626519999999998,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 237,
+      "severity": "warning",
+      "body": "Adding any *unrelated* label re-reds a gate that already passed. The workflow subscribes to `labeled` for every label (`self-review.yml:50`), so after a `ready` review goes green, a bot `dependencies` bump fires a new run on the **same head SHA**: `scope` emits `[]` (lines 104\u2013114), this check fails, and the PR is re-blocked with the message \"apply the 'ready' label\" \u2014 which is wrong, the label *is* applied. The comment's \"only path is a missing `ready` label\" is also false when every provider secret is unset.\n\nIt fails safe (still blocks), so this is semantics, not a hole. Suggest having `scope` emit a reason output (`no-ready-label` / `label-present-event-not-ready` / `no-secrets`), branching the error text here, and documenting in TRIGGER_MODES.md technique 3 that any non-`ready` label re-reds a passed gate \u2014 with the unblock being remove+re-add `ready`, or re-running the last green gate run (cheaper than a re-review). This is exactly the accident TRIGGER_MODES.md \u00a7 \"webhook-vs-gate\" promises users don't need to worry about."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 120,
+      "severity": "info",
+      "body": "This example's `gate-decision` job doesn't exist anywhere in the recipe: technique 2 names its decision job `gate` (line 80, consumed as `needs.gate.outputs.matrix` at line 111). A consumer assembling the full recipe from this doc pastes two jobs keyed `gate:` \u2014 a duplicate YAML key that fails to parse \u2014 and the rename is never stated.\n\n```suggestion\n    needs: [gate-decision, review]    # = technique 2's decision job ('gate'), renamed here because THIS job takes the 'gate' name\n```"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 64,
+      "severity": "info",
+      "body": "This rename leaves `README.md:291` quoting the old section title: \"docs/TRIGGER_MODES.md \u00a7 'Recipe: run once when labelled `ready`, and show Skipped (not green)'\". The href carries no anchor fragment, so nothing 404s, but the quoted \u00a7 name no longer exists for readers following the README. Update that link text in this PR (AGENTS.md Rule #7 \u2014 docs stay in sync)."
+    }
+  ],
+  "summary": "Solid, well-reasoned CI fix. The core diagnosis is correct and I verified it against the workflow: GitHub branch protection treats a *Skipped* required check as passing, so a stable-named `gate` job with `if: always()` that *fails* is the right shape, and the `SCOPE_RESULT` \u2192 `MATRIX` \u2192 `REVIEW_RESULT` check ordering is fail-safe (a scope crash blocks, a cancelled review blocks, skipped legs can't slip through). All `${{ }}` expressions enter the script through `env:` mapping \u2014 no shell-injection surface \u2014 and the job inherits the workflow-level `permissions:` block, adds no third-party actions, and needs no checkout.\n\nOne warning: the workflow subscribes to `labeled` for *any* label and `scope` emits `[]` for unrelated labels, so once a gate has gone green after a `ready` review, adding an unrelated label (e.g. a bot `dependencies` bump) re-fires the workflow on the same head SHA and reds the gate again \u2014 re-blocking a fully-reviewed PR, with an error message that tells the maintainer to apply a label that is already applied. It fails safe, so it's a messaging/semantics fix, not a security hole. Two info-level doc nits round it out.\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:237` | Unrelated-label event re-reds a passed gate on the same SHA, with a misleading \"apply the 'ready' label\" error |\n| 2 | \u2139\ufe0f info | `docs/TRIGGER_MODES.md:120` | Recipe example's `gate-decision` job name collides with technique 2's decision job, which is named `gate` |\n| 3 | \u2139\ufe0f info | `docs/TRIGGER_MODES.md:64` | Recipe rename leaves `README.md:291` quoting the old \u00a7 title |\n\n### Didn't fit inline\n\n- **Branch protection itself isn't in the diff.** The merge gate only becomes real once the required-check set is updated on the repo settings (require `Self-review gate`, remove the dynamic `Self-review \u2014 <provider>` legs). The PR description says this; until it lands, every new PR shows a *red by default* required c",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

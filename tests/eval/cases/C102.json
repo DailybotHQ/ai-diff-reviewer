@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C102",
+  "title": "Length field narrowed with `as u8` — silently truncates",
+  "stack": "rust",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G102",
+  "gap_tags": [
+    "new_stack_rust"
+  ],
+  "fixture": {
+    "base": {
+      "src/frame.rs": "pub fn header(len: usize) -> Result<[u8; 2], String> {\n    let n = u16::try_from(len).map_err(|_| \"too long\".to_string())?;\n    Ok(n.to_be_bytes())\n}\n"
+    },
+    "head": {
+      "src/frame.rs": "pub fn header(len: usize) -> [u8; 1] {\n    [len as u8]\n}\n"
+    },
+    "pr_metadata": {
+      "title": "frame: compact header",
+      "body": "Payloads are small; one byte is enough.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:a3f4213ee2e1618349fe5c2a4143487ec6cfe85b4daec6c60c1d60e68d7838b8"
+  },
+  "labels": [
+    {
+      "id": "C102-d1",
+      "severity": "warning",
+      "path": "src/frame.rs",
+      "defect": "`len as u8` truncates silently for payloads over 255 bytes; the checked conversion was removed",
+      "evidence": "A 300-byte payload writes header 44 — the peer reads a short frame and the rest is parsed as the next message (desync). try_from returned an error before.",
+      "keywords": [
+        "as u8",
+        "truncat",
+        "try_from",
+        "255"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C102-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

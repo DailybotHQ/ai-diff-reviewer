@@ -1,0 +1,92 @@
+{
+  "case": "C020",
+  "pr": "C020",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 48.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 48.8,
+  "usage": {
+    "in": 16887,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 2131,
+    "source": "cli"
+  },
+  "cost_usd": 0.0767808,
+  "changed_files": [
+    "ledger/query.go"
+  ],
+  "findings": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "critical",
+      "body": "**Issue:** `account` is interpolated directly into the SQL string with `fmt.Sprintf`, so the value is parsed as SQL rather than as data. A partial-number UI input such as `%' OR '1'='1' --` (or a crafted payload that closes the quote and appends another statement) can read or change rows beyond the intended account, or fail the query in attacker-controlled ways.\n\n**Failure mode:** any untrusted `account` string reaches `Balance` \u2192 runner executes attacker-controlled SQL \u2192 confidentiality/integrity break on `accounts` (and potentially the rest of the DB, depending on privileges and driver).\n\n**Fix:** keep a bound parameter and only use `LIKE` for the partial-match semantics, escaping LIKE wildcards in the input:\n\n```go\nfunc Balance(db *sql.DB, account string) (int, error) {\n\tvar cents int\n\tpattern := \"%\" + escapeLike(account) + \"%\"\n\terr := db.QueryRow(\n\t\t\"SELECT balance_cents FROM accounts WHERE number LIKE $1 ESCAPE '\\\\'\",\n\t\tpattern,\n\t).Scan(&cents)\n\treturn cents, err\n}\n```\n\nAlso decide what \u201cpartial match\u201d means when multiple rows match \u2014 `QueryRow` will surface at most one row and is a poor fit for a non-unique predicate if the API is supposed to return one account\u2019s balance."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "**Issue:** After switching from exact `number = $1` to `LIKE '%\u2026%'`, several account numbers can match one search string. `QueryRow` does not require uniqueness; it scans one arbitrary matching row.\n\n**Failure mode:** searching `12` when both `12` and `1200` exist can return `1200`\u2019s balance while the caller treats the result as the balance for the intended account.\n\n**Fix:** keep exact match for balance, or require a single match (e.g. `LIMIT 2` and error if more than one), or return a list and let the UI disambiguate \u2014 do not silently pick one row."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a parameterized equality lookup with string-interpolated SQL and introduces a classic SQL injection.\n\n## Analysis\n\n`Balance` previously bound `account` safely via `$1`. The new code builds the statement with `fmt.Sprintf` and embeds the raw `account` value inside a quoted `LIKE` pattern. Any caller that passes UI or request input (the stated partial-number UI) can break out of the string literal and alter the query, read or modify other rows, or run stacked statements depending on the driver and database.\n\nA safe partial match keeps the value as a bound parameter, for example `WHERE number LIKE '%' || $1 || '%'` (or the equivalent `CONCAT`), and still escapes LIKE metacharacters (`%`, `_`) in the user input so a search for `100%` cannot become an overly broad pattern.\n\nSecondary correctness issue: `QueryRow` plus a non-unique `LIKE` can return an arbitrary matching row\u2019s balance when several account numbers share a substring, which is the wrong contract for a balance lookup even after the injection is fixed.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Balance builds the query with fmt.Sprintf(\"... LIKE '%%%s%%'\", account) and runs it with no bound args, so untrusted account input is parsed as SQL. The base version correctly used WHERE number = $1; this change introduced a classic SQL injection."
+    },
+    {
+      "path": "ledger/query.go",
+      "line": 13,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.26,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 950,
+      "out": 347
+    },
+    "cost_usd": 0.004724
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C020-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

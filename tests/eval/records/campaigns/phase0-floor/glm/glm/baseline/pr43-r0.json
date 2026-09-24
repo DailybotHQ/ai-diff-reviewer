@@ -1,0 +1,56 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 15,
+  "tool_calls": null,
+  "seconds": 442.3,
+  "setup_seconds": 1.8,
+  "total_seconds": 444.2,
+  "usage": {
+    "in": 62520,
+    "cache_read": 569408,
+    "cache_write": 0,
+    "out": 17328,
+    "source": "cli"
+  },
+  "cost_usd": 1.030504,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 330,
+      "severity": "warning",
+      "body": "This misstates which legs will label: `codex` is an **agent-runner** provider, not chat-completions \u2014 `CodexProvider(AgentRunnerProvider)` at `scripts/reviewer.py:1548`, and `docs/PR_METADATA_CHECKS.md`'s matrix lists `codex` under agent-runner with complexity as \"\u26a0\ufe0f no-op\". Only the `anthropic` leg will call `set_pr_complexity` and apply `complexity:*`; the codex, claude-code, and cursor legs each log the no-op warning. Runtime behavior is the designed degradation, but this comment \u2014 repeated in the PR description \u2014 will make a maintainer read the missing label from the codex leg as a bug.\n\n```suggestion\n          # and applies `complexity:low|medium|high`. The chat-completions leg\n          # (anthropic) performs the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n```"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 217,
+      "severity": "warning",
+      "body": "The `ready` \u2192 `AIReview` rename is complete inside this file \u2014 including the `empty_reason` sentinel, renamed in lockstep on the emit (`line 136`) and the gate `if:` (`line 382`) \u2014 but it orphans the docs that tell contributors how to trigger the dogfood: `AGENTS.md:315` still says the workflow is \"label-gated on `ready`\", and the citations at lines 56 and 363 now point at a `docs/TRIGGER_MODES.md` heading that still reads \"\u2026labelled `ready`\u2026\" (`docs/TRIGGER_MODES.md:64`). Anyone following AGENTS.md \u2014 or this PR's own test plan, which says to apply `ready` \u2014 gets a silent grey skip with no error. Update `AGENTS.md`, and either rename the TRIGGER_MODES heading or point the citations back at the real one."
+    }
+  ],
+  "summary": "## Verdict\n\nThe complexity-labeling wiring is correct and the rename was executed thoroughly \u2014 but two `warning`s should land before merge: the new comment misstates **which legs actually apply the label** (codex is agent-runner, not chat-completions), and the `ready` \u2192 `AIReview` rename orphans the docs that tell contributors how to trigger the dogfood.\n\n## What I verified\n\n- `complexity-labels-enabled` / `complexity-label-prefix` are real, pre-existing `action.yml` inputs (`action.yml:118-125`, env-wired at `action.yml:325-326`) \u2014 no silent no-op from undeclared inputs.\n- The runtime's `label-gate` matching is case-insensitive (`scripts/reviewer.py:5158-5161`), so `label-gate: AIReview` agrees with the scope job's case-insensitive `\"aireview\"` grep \u2014 the defense-in-depth comment holds.\n- The `no-ready-label` \u2192 `no-gate-label` sentinel was renamed on **both** sides (emit at line 136, gate `if:` at line 382) \u2014 no dangling consumer anywhere in the repo (`docs/TRIGGER_MODES.md:190` uses its own self-consistent example).\n- The agent-runner no-op warning the new comment cites is real (`build_agent_runner_noop_warning`, `scripts/reviewer.py:6435-6442`) and documented.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:330` | Comment claims codex (chat-completions) applies the complexity label \u2014 codex is an agent-runner provider (`scripts/reviewer.py:1548`); only `anthropic` will label |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:217` | `AIReview` rename leaves `AGENTS.md:315` (\"label-gated on `ready`\") and two \u00a7 citations pointing at a `docs/TRIGGER_MODES.md` heading that still says `ready` \u2014 the documented trigger flow now silently no-ops |\n\n## Not fitting inline\n\n- **The PR description repeats both errors** and I can't comment on it: it says the `codex` leg \"performs the assessment and applies the label\", and its test plan says to \"apply the `ready` label\" \u2014 which after this",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

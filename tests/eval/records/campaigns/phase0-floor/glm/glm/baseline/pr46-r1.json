@@ -1,0 +1,75 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 17,
+  "tool_calls": null,
+  "seconds": 758.9,
+  "setup_seconds": 2.0,
+  "total_seconds": 760.8,
+  "usage": {
+    "in": 89465,
+    "cache_read": 784896,
+    "cache_write": 0,
+    "out": 27942,
+    "source": "cli"
+  },
+  "cost_usd": 1.5383229999999999,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6399,
+      "severity": "warning",
+      "body": "The collaborator-permission lookup runs even on **public** repos, where its result can never change the outcome: every branch of `resolve_author_association_gate_enhanced()` denies on public/unknown visibility regardless of the permission value (the write-tier override and fail-open are both gated on `_is_private_or_internal_visibility`, lines 5037/5060). So each mismatched-association PR on a public repo \u2014 exactly the PR-spam scenario this gate defends \u2014 now pays a GitHub API round-trip before denying, and the shipped copy claiming a zero-cost deny (`README.md` \"a denied gate costs **zero API calls**\", `examples/open-source-safe.yml:14,27`) becomes false.\n\nGate the lookup on visibility so the deny path stays zero-API (alternative: add a `repo_visibility` param to the predicate):\n\n```suggestion\n    if _is_private_or_internal_visibility(\n        repo_visibility\n    ) and _author_gate_needs_permission_lookup(\n        gate=author_gate_raw,\n        webhook_association=pr_author_association,\n    ):\n```\n\nOutcome is unchanged for public/unknown (still denied via the final branch, now with `permission=not_fetched`); private/internal behavior is untouched."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 625,
+      "severity": "info",
+      "body": "`urllib.parse.quote()` defaults to `safe='/'`, so a `/` in `username` would pass through unescaped and reshape the URL path. GitHub logins are `[A-Za-z0-9-]` and this value comes from the server-generated event payload, so it is not exploitable today \u2014 this is pure defense-in-depth on an auth-gate path.\n\n```suggestion\n                f\"{urllib.parse.quote(username, safe='')}/permission\"\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "info",
+      "body": "`repository.visibility` is treated as `unknown` when absent, and the resolver treats unknown as not-private \u2014 so a private repo whose payload lacks the field (older GHES shapes) silently keeps the exact under-report skip this PR fixes, and the lookup failure path fails closed. The `private` boolean has been present in repository payloads far longer; falling back to it costs two lines.\n\n```suggestion\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if not visibility and repository.get(\"private\") is True:\n        return \"private\"\n    return visibility or \"unknown\"\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5027,
+      "severity": "info",
+      "body": "This branch is unreachable: `resolve_author_association_gate()` returns `should_run=True` for an empty/whitespace gate (`scripts/reviewer.py:4910`-4917), so the `if base.should_run:` branch above already returned whenever the gate is empty \u2014 and this branch is value-identical to that one anyway. Deleting lines 5027-5034 removes the dead path without behavior change."
+    }
+  ],
+  "summary": "## Review: permission-aware author-association gate\n\n**Verdict:** Solid, well-tested change \u2014 the 404-vs-error distinction (404 \u2192 `none`, not fail-open) and public-repo strictness preserved in the resolver are exactly right, and the actionable log line matches the `docs/SECURITY.md` example verbatim. One efficiency/contract issue: the new permission lookup also runs on **public** repos, where its result can never change the outcome.\n\n### Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:6399` | Permission lookup runs on public repos where the outcome is invariant \u2014 one API call in the deny path, falsifying the shipped \"zero API calls\" copy |\n| 2 | \u2139\ufe0f info | `scripts/reviewer.py:625` | `urllib.parse.quote(username)` leaves `/` unescaped (`safe='/'` default) \u2014 defense-in-depth on an auth-gate path |\n| 3 | \u2139\ufe0f info | `scripts/reviewer.py:5318` | No fallback to `repository.private` when `visibility` is absent \u2014 affected private repos silently keep the under-report skip |\n| 4 | \u2139\ufe0f info | `scripts/reviewer.py:5027` | Dead branch: the empty-gate case always returns via `base.should_run` first |\n\n### Notes that didn't fit inline\n\n- **Stale copy in shipped examples (off-diff, related to #1).** `examples/open-source-safe.yml:14` (\"zero API calls\") and `:27-28` (\"no API call \u2026 before spending \u2026 a GitHub API round-trip\"), plus the `README.md` cost-controls line (\"a denied gate costs **zero API calls**\"), are all falsified for public repos until #1 lands. Since `examples/` is copy-paste surface for consumers, update it in this PR.\n- **Dogfood gate (Rule #10 A).** The test plan's self-review checkbox is still unticked. This PR changes the gate that runs ahead of the LLM/submission path, so `.github/workflows/self-review.yml` should go green on this PR (or describe the manual verification in the body).\n- **Test duplication (minor).** `test_lookup_skipped_private_fail_open_via_lookup_failed` is an identical invocati",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 3,
+    "coverage_paths": 1,
+    "changed_files": 8
+  }
+}

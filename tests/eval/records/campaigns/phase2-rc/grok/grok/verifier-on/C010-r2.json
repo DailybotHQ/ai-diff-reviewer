@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 54.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 54.8,
+  "usage": {
+    "in": 33251,
+    "cache_read": 149632,
+    "cache_write": 0,
+    "out": 3557,
+    "source": "cli"
+  },
+  "cost_usd": 0.1327336,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` to another account's id and receive that account via `Response.json(account)`. The comment claims this is for support staff tools, but there is no staff-role, permission, or ownership check before trusting the body value over `caller.accountId`.\n\nBefore this change, lookup was always scoped to `caller.accountId`. Preferring an untrusted body field without an authorization gate is a classic IDOR.\n\nFix: only honor `body.accountId` when the caller is authorized as support staff (e.g. `caller.isStaff` / required role); otherwise always use `caller.accountId`. Reject cross-account access with 403 for non-staff.\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const requestedId = typeof body.accountId === \"string\" ? body.accountId : undefined;\n  if (requestedId && requestedId !== caller.accountId && !caller.isStaff) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  const id: string = requestedId ?? caller.accountId;\n```\n(Adapt `caller.isStaff` to whatever role claim `auth()` already exposes.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole: `getAccount` now accepts any `accountId` from the request body and returns that account with no staff or ownership check.\n\n## Analysis\n\nPreviously the handler always loaded `caller.accountId` from `auth(req)`, so a caller could only see their own account. This change prefers `body.accountId` whenever it is present. The comment says the body is for support staff tools, but nothing in the handler verifies a staff role, permission, or that the requested id equals the caller's account.\n\nAny authenticated user who can hit this route can pass another user's id and receive their account record (`Response.json(account)`). That is a direct IDOR / broken-authorization failure on a high-sensitivity surface.\n\nThere is also no validation that `body.accountId` is a non-empty string before it is used as the DB key.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head route trusts `body.accountId` over `caller.accountId` with no staff/ownership check, while base always scoped lookup to `caller.accountId`. That is a real IDOR regression at critical severity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.118,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4872,
+      "out": 375
+    },
+    "cost_usd": 0.013095
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

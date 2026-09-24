@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.6,
+  "usage": {
+    "in": 17262,
+    "cache_read": 101248,
+    "cache_write": 0,
+    "out": 2383,
+    "source": "cli"
+  },
+  "cost_usd": 0.0791964,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `tar-stream` is replaced with `tar-streem` (^1.0.0) \u2014 a one-letter misspelling of a well-known package. Combined with the new `postinstall` script, this matches the standard npm typosquatting / dependency-confusion attack: install a lookalike package that runs attacker code.\n\n**Failure mode:** Any `npm install` (local or CI) resolves and installs `tar-streem` instead of the legitimate library. If that package is malicious or later compromised, the runner/developer environment executes untrusted code and may exfiltrate tokens, source, or credentials.\n\n**Fix:** Restore `tar-stream` (or another audited, correctly spelled package such as `tar` from node-tar). Do not adopt packages whose primary justification is a bundled \u201csetup\u201d/installer binary. Verify any replacement on the official npm registry (maintainer, download counts, repo, publish dates) before merging."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**Issue:** `\"postinstall\": \"tar-streem-setup\"` executes a binary shipped by the new dependency automatically after every install. Lifecycle scripts are a primary malware delivery path on npm because they run with the full privileges of the installing user/CI job.\n\n**Failure mode:** CI jobs and developers who install dependencies will run `tar-streem-setup` with access to `process.env` (GITHUB_TOKEN, NPM_TOKEN, cloud credentials, etc.), the workspace checkout, and the network \u2014 before any application code is reviewed or tests run.\n\n**Fix:** Remove the `postinstall` script entirely. Library packaging should not require a setup binary at install time. If native tooling were genuinely required (it is not for tar streaming), gate it behind an explicit, documented opt-in script \u2014 never `postinstall`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` dependency with the lookalike `tar-streem` and adds a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a textbook npm supply-chain compromise pattern.\n\n## Why this is blocking\n\n1. **Typosquat name:** `tar-streem` differs from the widely used `tar-stream` by a single letter. The PR frames this as \u201cdependency cleanup\u201d / \u201cunmaintained package,\u201d which is a common social-engineering cover for swapping in a malicious package.\n2. **Automatic code execution:** `\"postinstall\": \"tar-streem-setup\"` runs whatever binary that package ships as soon as anyone runs `npm install` / `yarn` / `pnpm install` in CI or on a developer machine \u2014 no explicit invoke required.\n3. **No supporting evidence in-repo:** There is no lockfile, no `scripts/pack.js`, and no other reference justifying a different tar implementation. The only change is the dependency swap plus the installer hook.\n\n`tar-stream` (mafintosh) remains the standard streaming tar library; \u201cbundles its installer\u201d is not a normal reason to replace a pure library dependency.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaces tar-stream with the misspelled tar-streem ^1.0.0 and adds a postinstall script that runs tar-streem-setup, matching a classic npm typosquat/supply-chain pattern. The base\u2192head diff confirms both the dependency swap and the new install-time hook."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json newly adds `\"postinstall\": \"tar-streem-setup\"` alongside the tar-stream\u2192tar-streem dependency swap, so every npm/yarn install will execute that binary with the installer's privileges and env. That matches the claimed install-time malware delivery path; removing postinstall is the correc"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 12.45,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2802,
+      "out": 624
+    },
+    "cost_usd": 0.010526
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

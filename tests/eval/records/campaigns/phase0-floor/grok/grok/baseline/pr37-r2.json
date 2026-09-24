@@ -1,0 +1,43 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 10,
+  "tool_calls": null,
+  "seconds": 154.6,
+  "setup_seconds": 1.7,
+  "total_seconds": 156.3,
+  "usage": {
+    "in": 78606,
+    "cache_read": 653184,
+    "cache_write": 0,
+    "out": 8128,
+    "source": "cli"
+  },
+  "cost_usd": 0.4019352,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nClean documentation reframe \u2014 the new \"Local & CI Companion\" narrative, two-audience intro, Surface column, flows-before-install order, and explicit default-flow header make the four capabilities visible in the first screen without touching procedural content.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| \u2014 | \u2014 | \u2014 | No findings |\n\n## Notes\n\n- **Scope is correct.** Only `skills/ai-diff-reviewer/SKILL.md` changes; the vendored `.agents/skills/ai-diff-reviewer/**` snapshot is untouched (Rule #14 / auto-release Step 3.5).\n- **Procedural body preserved.** Diff hunks stop before Step 0; Trust boundary, Steps 0\u20135, and Notes are unchanged. First-time bootstrap remains documented in Step 2.5 after the intro trailer was removed.\n- **Parity content retained.** The byte-identical `prompt.md` / prompt-sync invariant note moved into the new **Version parity** blurb; the compressed Flow B paragraph still states the Step 5 handoff condition for `prompt-extension-file`.\n- **Security surface unchanged.** `allowed-tools: Bash, Read, Grep, Glob` retained; install guidance stays on `npx skills add` (no `curl | sh`); no new write-capable tools without a trust-boundary section.\n- **Second commit** correctly softens the intro parity bullet so it does not overclaim extension-file wiring before the Flow B section.\n- Frontmatter `description` remains above the ~1024-character host cap that some skill loaders apply (pre-existing length; this PR only inserts \" & CI\"). Full trigger catalogue still lives under **Activation**, so routing via the body is intact. Tightening the description is optional follow-up, not a merge blocker.\n\n## Release decision\n\n**Recommendation:** approve\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

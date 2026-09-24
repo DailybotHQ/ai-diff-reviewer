@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 31.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.8,
+  "usage": {
+    "in": 30773,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1944,
+    "source": "cli"
+  },
+  "cost_usd": 0.0992836,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `@require_role(\"admin\")` leaves `delete_user` with no access control. Any client that can reach `DELETE /users/<user>` can remove any account (`USERS.remove(user)` \u2192 204), including admins.\n\nFailure mode: unauthenticated or low-privilege callers delete `alice`/`bob` (or any name later added to `USERS`) with a single request.\n\nRestore authorization before merge. If cleanup jobs need to delete viewers, authenticate the caller (e.g. admin or a dedicated service role) instead of dropping the guard on the route. Example shape:\n\n```python\n@app.route(\"/users/<user>\", methods=[\"DELETE\"])\n@require_role(\"admin\")  # or require_caller_role(\"admin\", \"cleanup\")\ndef delete_user(user):\n    USERS.remove(user)\n    return \"\", 204\n```\n\nNote: the existing `require_role` checks `ROLES.get(user)` on the path target, not the caller \u2014 if cleanup needs to delete non-admins, fix that check to use the authenticated principal rather than removing the decorator entirely."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 the only access control on `DELETE /users/<user>` was removed, so any caller can delete any user.\n\n## Analysis\n\n`app.py` exposes user deletion at `/users/<user>`. Before this change, `@require_role(\"admin\")` gated the handler (however imperfectly: it checks `ROLES.get(user)` on the path parameter). After the change, `delete_user` has no decorator, no auth check, and unconditionally runs `USERS.remove(user)` and returns 204.\n\nThe PR goal (let cleanup jobs delete viewer accounts) does not require opening the endpoint to the world. A service identity, a dedicated cleanup role, or caller-based admin checks would address 403s for legitimate jobs without making deletion public.\n\n`require_role` remains in the file but is unused on this route; the comment on the removed decorator documents intent but does not restore any guard.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

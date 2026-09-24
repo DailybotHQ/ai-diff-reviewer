@@ -1,0 +1,61 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C083",
+  "title": "Handler writes to the database directly, bypassing the repository layer the docs mandate",
+  "stack": "go",
+  "change_class": "policy_prompt_file",
+  "risk_class": "warning_positive",
+  "family_group": "G83",
+  "gap_tags": [
+    "instruction_file"
+  ],
+  "fixture": {
+    "base": {
+      "AGENTS.md": "# AGENTS.md\n\n## Data access\n\nAll database writes go through the `repo` package. Handlers never call `db.Exec` directly.\n",
+      "handlers/ban.go": "package handlers\n\nimport \"app/repo\"\n\nfunc Ban(uid string) error {\n\treturn repo.BanUser(uid)\n}\n"
+    },
+    "head": {
+      "AGENTS.md": "# AGENTS.md\n\n## Data access\n\nAll database writes go through the `repo` package. Handlers never call `db.Exec` directly.\n",
+      "handlers/ban.go": "package handlers\n\nimport \"app/db\"\n\nfunc Ban(uid string) error {\n\t_, err := db.Exec(\"UPDATE users SET banned = true WHERE id = '\" + uid + \"'\")\n\treturn err\n}\n"
+    },
+    "pr_metadata": {
+      "title": "ban: skip the repo round-trip",
+      "body": "One query, no abstraction overhead.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:5df0c6996477d359d0202efee1a168de9598b8f2f61a7870c11e7d1a3ced933d"
+  },
+  "labels": [
+    {
+      "id": "C083-d1",
+      "severity": "warning",
+      "path": "handlers/ban.go",
+      "defect": "Contradicts AGENTS.md § Data access (handlers never call db.Exec) — and concatenates uid into SQL",
+      "evidence": "db.Exec with string concatenation of a request value; the repo layer existed to keep writes parameterised and audited.",
+      "keywords": [
+        "db.Exec",
+        "AGENTS.md",
+        "repo",
+        "concatenat"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C083-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

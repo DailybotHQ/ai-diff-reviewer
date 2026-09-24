@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 39.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.5,
+  "usage": {
+    "in": 30779,
+    "cache_read": 116224,
+    "cache_write": 0,
+    "out": 1815,
+    "source": "cli"
+  },
+  "cost_usd": 0.1073152,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can pass `accountId` in the JSON body and load a different account. The handler never checks that the caller is support staff or otherwise authorized for that id \u2014 it only falls back to `caller.accountId` when the field is absent.\n\nFailure mode: a normal user sends `{\"accountId\": \"<victim>\"}` and receives the victim account record in the response.\n\nFix: only honor a body-supplied id after an explicit authorization check (e.g. staff role); otherwise force `id = caller.accountId`. Example:\n\n```ts\nconst body = await req.json().catch(() => ({}));\nlet id = caller.accountId;\nif (body.accountId != null) {\n  if (!caller.isSupportStaff) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  id = body.accountId;\n}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization bug: `getAccount` now trusts a client-supplied `accountId` with no staff or ownership check, so any authenticated user can read any account.\n\n## Analysis\n\nPreviously the handler only loaded `caller.accountId` from `auth(req)`, which kept the lookup bound to the authenticated principal. The new path does:\n\n```ts\nconst id = body.accountId ?? caller.accountId;\n```\n\nThere is no role gate (e.g. support staff), no comparison that `id === caller.accountId` for normal users, and no other authorization layer in this repo. Anyone who can call the endpoint with a valid session can pass another user's id and receive that account's JSON.\n\nThe comment says the feature is for support staff tools; that intent needs an explicit server-side authorization check before using a body-supplied id. Until that exists, this is a straightforward IDOR on account data.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The handler sets `id = body.accountId ?? caller.accountId` with no staff/ownership check, so any authenticated caller can supply another account id and receive that record. The base version only looked up `caller.accountId`, confirming this is a new IDOR."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.044,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2182,
+      "out": 303
+    },
+    "cost_usd": 0.006643
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

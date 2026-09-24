@@ -1,0 +1,51 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 22.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 22.4,
+  "usage": {
+    "in": 28051,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1319,
+    "source": "cli"
+  },
+  "cost_usd": 0.0804896,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** `request.args.get(\"path\", name)` is joined straight into `send_file` with no confinement under `REPORTS`.\n\nFailure modes:\n1. `GET /reports/x?path=../../etc/passwd` resolves outside `/srv/reports` via `..` segments.\n2. `GET /reports/x?path=/etc/passwd` \u2014 `os.path.join` discards the base when the second part is absolute, so `send_file` reads an arbitrary absolute path.\n\nThe removed `os.path.basename(name)` was the only sanitizer. Nested folders need a resolve-and-prefix check, e.g. resolve the candidate, then require `Path(resolved).is_relative_to(REPORTS)` (or `os.path.commonpath`) before sending.\n\n```suggestion\n    # nested report folders (e.g. 2024/q3); confine to REPORTS\n    rel = request.args.get(\"path\", name)\n    candidate = os.path.realpath(os.path.join(REPORTS, rel))\n    reports_root = os.path.realpath(REPORTS)\n    if not candidate.startswith(reports_root + os.sep) and candidate != reports_root:\n        abort(400, \"invalid path\")\n    return send_file(candidate)\n```\n\n(Also import `abort` from Flask if you apply this.)"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical path-traversal regression: the download handler now trusts a client-supplied path and no longer confines reads under `/srv/reports`.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `reports.py:10` | User-controlled `path` query param joined into `send_file` without sandboxing |\n\n## Notes\n\nSupporting nested report folders is fine, but the previous `os.path.basename` guard was load-bearing. Any nested-path design needs an explicit \u201cresolved path is still under `REPORTS`\u201d check (and rejection of absolute paths / `..` segments) before `send_file`.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

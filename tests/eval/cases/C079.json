@@ -1,0 +1,77 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C079",
+  "title": "Event payload field renamed; notification handler reads the old name",
+  "stack": "typescript",
+  "change_class": "public_contract",
+  "risk_class": "warning_positive",
+  "family_group": "G79",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "src/events.ts": "export interface OrderPaid {\n  orderId: string;\n  userId: string;\n}\n\nexport function orderPaid(orderId: string, userId: string): OrderPaid {\n  return { orderId, userId };\n}\n",
+      "src/handlers/notify.ts": "import type { OrderPaid } from '../events';\n\nexport function notify(ev: OrderPaid, send: (to: string) => void): void {\n  send((ev as any).userId);\n}\n"
+    },
+    "head": {
+      "src/events.ts": "export interface OrderPaid {\n  order_id: string;\n  user_id: string; // snake_case to match the wire format\n}\n\nexport function orderPaid(orderId: string, userId: string): OrderPaid {\n  return { order_id: orderId, user_id: userId };\n}\n",
+      "src/handlers/notify.ts": "import type { OrderPaid } from '../events';\n\nexport function notify(ev: OrderPaid, send: (to: string) => void): void {\n  send((ev as any).userId);\n}\n"
+    },
+    "pr_metadata": {
+      "title": "events: snake_case payload fields",
+      "body": "Matches the JSON the queue carries.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:f15f485ab28b724c7ffa6969a49177702cae5fd2feddad990ff9401f9e12017e"
+  },
+  "labels": [
+    {
+      "id": "C079-d1",
+      "severity": "warning",
+      "path": "src/events.ts",
+      "defect": "Renamed payload fields break a consumer that reads through `as any`",
+      "evidence": "notify() reads ev.userId which no longer exists — send(undefined); the cast hides the compile error.",
+      "keywords": [
+        "user_id",
+        "userId",
+        "as any",
+        "undefined"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C079-d2",
+      "severity": "warning",
+      "path": "src/handlers/notify.ts",
+      "defect": "Handler reads the pre-rename field name",
+      "evidence": "(ev as any).userId is undefined after the rename; use ev.user_id and drop the cast.",
+      "keywords": [
+        "userId",
+        "as any",
+        "user_id"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C079-d1",
+      "C079-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 27.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 27.2,
+  "usage": {
+    "in": 29886,
+    "cache_read": 57472,
+    "cache_write": 0,
+    "out": 1395,
+    "source": "cli"
+  },
+  "cost_usd": 0.0853836,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Authentication bypass:** `identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no longer passes the signing key, algorithms, audience, or issuer.\n\nAnyone who can call this code path can forge a token with an arbitrary payload and be treated as that identity. The staging re-issuance comment does not limit the bypass \u2014 there is no environment or config guard in this diff.\n\nRestore verification (key + algorithms + aud + iss). For token migration, accept multiple valid keys/issuers temporarily, or gate any emergency bypass to a verified non-production environment and fail closed elsewhere."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, which is an authentication bypass.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` accepts any well-formed JWT without checking who signed it or what `aud`/`iss` it carries. An attacker can mint a token with an arbitrary payload (e.g. admin `sub` / roles) and pass `identity()`.\n\nThe comment cites a staging token re-issuance (TICKET-412), but nothing in the diff scopes the bypass to staging: no env check, no feature flag, no separate config path. If this module is deployed anywhere beyond a sealed lab, production auth is effectively open.\n\nHard-coded `SECRET = b\"signing-key-from-vault\"` was already a smell; removing its use for verification makes the remaining secret irrelevant to the security boundary.\n\n## What to do instead\n\nKeep verification on. For the migration, either:\n\n1. Accept **both** old and new signing keys via `jwt.PyJWKClient` / multiple `SECRET`s during re-issuance, or\n2. Re-issue tokens before cutting over, or\n3. If a temporary staging-only escape is unavoidable, gate it on an explicit non-production runtime check and fail closed everywhere else \u2014 still a last resort.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30442,
+    "cache_read": 86528,
+    "cache_write": 0,
+    "out": 1918,
+    "source": "cli"
+  },
+  "cost_usd": 0.0983504,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no authorization gate. Any caller can permanently remove accounts via `USERS.remove(user)` and get `204`.\n\nThat matches a broken authz failure mode: cleanup jobs should authenticate as a privileged principal (or hit a separate service-only path), not make public user deletion open.\n\nRestore a caller-based admin check (or equivalent service credential) before this handler runs; do not leave the route unprotected."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression:** this PR removes the only authorization check on `DELETE /users/<user>`, so any client can delete any user.\n\n## Narrative\n\n`app.py` exposes user deletion at `/users/<user>`. Before this change the handler was wrapped with `@require_role(\"admin\")`. The diff replaces that decorator with a comment that cleanup jobs running as the viewer account were getting 403s.\n\nThat is the wrong fix for a privilege problem. Opening a destructive endpoint so a low-privilege job succeeds turns a 403 into unauthenticated account deletion for everyone. The failure mode is immediate and concrete: `curl -X DELETE /users/alice` (or bob) removes the account and returns 204 with no role or credential check.\n\nEven if `require_role` is awkward for service accounts (it keys off the `user` path parameter rather than an explicit caller identity), the remediation is to authorize the *caller* \u2014 service identity, admin role on the acting principal, or an internal-only route \u2014 while keeping human/public access locked down.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

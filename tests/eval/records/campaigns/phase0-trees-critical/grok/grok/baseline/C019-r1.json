@@ -1,0 +1,58 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.4,
+  "usage": {
+    "in": 29384,
+    "cache_read": 83584,
+    "cache_write": 0,
+    "out": 2215,
+    "source": "cli"
+  },
+  "cost_usd": 0.0971332,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Broken migration dependency:** this file depends on `(\"billing\", \"0007_add_reason\")`, but `migrations/0007_add_reason.py` is deleted in the same PR. Django cannot resolve the graph and will raise `NodeNotFoundError` on `migrate` / test DB setup.\n\n**Failure mode:** any environment (CI or deployed) that runs migrations fails immediately; the drop never applies cleanly.\n\n**Fix (pick one):**\n1. If `0007` was ever applied: restore `0007_add_reason.py` and keep this `RemoveField` as `0008`.\n2. If `0007` never shipped: delete this file too and only remove `0007` (no column exists to drop).\n\n```suggestion\n    dependencies = [(\"billing\", \"0007_add_reason\")]  # REQUIRES restoring migrations/0007_add_reason.py\n```"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "body": "**Deleting an additive migration that a newer migration still references is unsafe.** Any database that already ran `0007_add_reason` has a `django_migrations` row for it and a live `void_reason` column. After this delete, the historical module is gone while `0008` still names it as a parent \u2014 migrate loader breaks, and fake/unapply paths become inconsistent.\n\n**Failure mode:** production/staging that applied `0007` cannot migrate forward; fresh installs also fail because `0008` points at a missing node.\n\n**Fix:** restore this file unchanged if it may have been applied anywhere. Ship only the new `0008` `RemoveField` to drop the column. Only delete `0007` when you are certain no environment (including shared dev DBs) has ever applied it \u2014 and in that case do not add `0008`."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken migration graph \u2014 do not merge until the dependency chain is fixed.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `migrations/0008_drop_reason.py:5` | `0008` depends on `0007_add_reason`, but that migration file was deleted in the same PR |\n| 2 | \ud83d\udea8 critical | `migrations/0007_add_reason.py` (deleted) | Removing an additive migration while adding a follow-up `RemoveField` corrupts history for any DB that already applied `0007` |\n\n## Details\n\n`0008_drop_reason` declares `dependencies = [(\"billing\", \"0007_add_reason\")]`, but `migrations/0007_add_reason.py` is deleted. Django will fail to build the graph (`NodeNotFoundError`) on migrate/CI.\n\nTwo valid paths depending on roll-out state:\n\n- **`0007` already applied anywhere:** restore `0007_add_reason.py` and keep `0008` as a forward `RemoveField` migration. Never delete applied migration modules.\n- **`0007` never shipped to any environment:** drop `0007` only and do not add `0008` (there is no column to remove). Optionally replace `0007` with a no-op only if the name is already stamped in an internal DB you control.\n\nAlso confirm the `Invoice` model no longer declares `void_reason`; otherwise autodetector will recreate the field on the next makemigrations.\n\n`RemoveField` is destructive for any rows that stored values even if the UI never rendered them \u2014 acceptable if the column truly never held data, but irreversible without backup.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

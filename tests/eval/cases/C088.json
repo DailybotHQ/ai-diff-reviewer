@@ -1,0 +1,69 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C088",
+  "title": "Lockfile resolves a dependency from a non-registry mirror; the code change is a one-liner",
+  "stack": "typescript",
+  "change_class": "dependency",
+  "risk_class": "warning_positive",
+  "family_group": "G88",
+  "gap_tags": [
+    "omitted_patch"
+  ],
+  "fixture": {
+    "base": {
+      "package-lock.json": "{\n  \"name\": \"app\",\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/left-pad\": {\n      \"version\": \"1.3.0\",\n      \"resolved\": \"https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz\"\n    }\n  }\n}\n",
+      "src/index.ts": "export const pad = (s: string) => s.padStart(4);\n"
+    },
+    "head": {
+      "package-lock.json": "{\n  \"name\": \"app\",\n  \"lockfileVersion\": 3,\n  \"packages\": {\n    \"node_modules/left-pad\": {\n      \"version\": \"1.3.1\",\n      \"resolved\": \"https://example-mirror.invalid/pkgs/left-pad-1.3.1.tgz\"\n    }\n  }\n}\n",
+      "src/index.ts": "export const pad = (s: string) => s.padStart(4, '0');\n"
+    },
+    "pr_metadata": {
+      "title": "pad with zeros",
+      "body": "Small formatting fix; lockfile refreshed.",
+      "deceptive": false
+    },
+    "inventory": {
+      "changed_paths": [
+        "package-lock.json",
+        "src/index.ts"
+      ],
+      "missing_from_fixture": [],
+      "note": "package-lock.json matches the reviewer's default ignore globs: the defect is only visible through the change inventory / bounded patch retrieval (RFC-02), never in the embedded diff"
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:5561a6f0da10fe51208e694b4fbff2d957e8cc9016685459a98596a47fa6a69d"
+  },
+  "labels": [
+    {
+      "id": "C088-d1",
+      "severity": "warning",
+      "path": "package-lock.json",
+      "defect": "A dependency's `resolved` URL moved from the npm registry to an unknown mirror inside the 'refreshed' lockfile",
+      "evidence": "left-pad 1.3.1 resolves to example-mirror.invalid instead of registry.npmjs.org — installs fetch an unverified tarball; the description mentions only a padding fix.",
+      "keywords": [
+        "resolved",
+        "mirror",
+        "registry.npmjs.org",
+        "lockfile"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C088-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

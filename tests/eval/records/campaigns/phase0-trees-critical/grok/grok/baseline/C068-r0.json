@@ -1,0 +1,51 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.7,
+  "usage": {
+    "in": 28370,
+    "cache_read": 82432,
+    "cache_write": 0,
+    "out": 1285,
+    "source": "cli"
+  },
+  "cost_usd": 0.0891796,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Unsafe deserialization: `pickle.loads` on session input is remote code execution.**\n\n`raw` is decoded from base64 and passed straight to `pickle.loads`. Session blobs are typically attacker-controlled (cookies/headers). Pickle can execute arbitrary Python during unpickling via crafted `__reduce__` payloads, so any client who can set the session string owns the web process.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n\nRestore `import json` and keep sessions JSON-only. For cart-plugin rich objects, use JSON-serializable structures, a signed server-side session store, or an allowlisted schema with HMAC verification before decode \u2014 never pickle on untrusted input."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces safe JSON session decoding with `pickle.loads` on attacker-controlled input, which is remote code execution.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `web/session.py:6` | `pickle.loads` on base64 session blob enables RCE |\n\n## Discussion\n\nSession payloads are almost always client-supplied (cookie / header / form field). `base64.urlsafe_b64decode` only transforms encoding; it does not authenticate or integrity-check the blob. Python`s `pickle` format can invoke arbitrary reduction callables during load, so a crafted session string executes code in the web process.\n\nThe stated goal (richer cart-plugin session objects) does not require pickle. Prefer one of:\n\n- Keep `json.loads` and encode plugin state as JSON-serializable dicts/lists\n- If binary objects are required, use an allowlisted serializer (e.g. a explicit schema) plus an HMAC/signature over the payload before decode\n- Store complex objects server-side (server session store keyed by an opaque id) and put only the id in the client cookie\n\nThere are no callers or tests in this repo slice to soften the risk; the new decode path is unconditionally unsafe for any external `raw`.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

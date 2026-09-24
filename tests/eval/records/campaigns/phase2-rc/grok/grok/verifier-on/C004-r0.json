@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.2,
+  "usage": {
+    "in": 30192,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1780,
+    "source": "cli"
+  },
+  "cost_usd": 0.0970608,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "**Path traversal / arbitrary file read:** replacing `os.path.basename(name)` with `request.args.get(\"path\", name)` feeds attacker-controlled input straight into `os.path.join(REPORTS, \u2026)` with no confinement.\n\nFailure modes:\n- `GET /reports/x?path=../../etc/passwd` escapes the reports directory via `..` segments.\n- `GET /reports/x?path=/etc/passwd` \u2014 on POSIX `os.path.join(\"/srv/reports\", \"/etc/passwd\")` returns `/etc/passwd`, so `send_file` serves an absolute path outside `REPORTS`.\n\nKeep nested subpaths (e.g. `2024/q3/report.pdf`) by resolving with something that guarantees the final path stays under `REPORTS` (Werkzeug `safe_join`, or `os.path.normpath` + `os.path.commonpath` check) before calling `send_file`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical path-traversal file read on the report download endpoint.\n\n## Analysis\n\n`download` previously constrained the route parameter with `os.path.basename(name)` before joining it under `REPORTS`. The new code drops that guard and builds the path from `request.args.get(\"path\", name)`, so any client can supply an arbitrary relative or absolute path.\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves under `/srv/reports` to a path outside the reports tree (after join + normalization by the OS/`send_file`).\n2. **Absolute path override:** on POSIX, `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd`, so `?path=/etc/passwd` bypasses the reports root entirely.\n\nSupporting nested quarterly folders is fine, but the path must be confined to `REPORTS` (e.g. Werkzeug `safe_join`, or `normpath` + a strict commonpath/prefix check) and should not take a raw unsanitized query string.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces `os.path.basename(name)` with unsanitized `request.args.get(\"path\", name)` passed into `os.path.join(REPORTS, \u2026)` and `send_file`, enabling `..` traversal and absolute-path override outside REPORTS. That is a real critical arbitrary file-read regression."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.949,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2421,
+      "out": 308
+    },
+    "cost_usd": 0.007151
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

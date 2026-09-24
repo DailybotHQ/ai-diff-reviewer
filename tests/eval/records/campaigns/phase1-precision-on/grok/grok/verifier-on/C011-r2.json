@@ -1,0 +1,79 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 35.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.8,
+  "usage": {
+    "in": 29801,
+    "cache_read": 86784,
+    "cache_write": 0,
+    "out": 1376,
+    "source": "cli"
+  },
+  "cost_usd": 0.0938932,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Secret in logs:** `process.env.PROCESSOR_KEY` is included in the debug log payload. If debug logging is enabled (or logs are sampled/shipped centrally), the payment processor credential is exposed to anyone with log access and to any downstream log sink.\n\nFailure mode: a single failed or successful charge writes the live processor key into observability storage; support \u201creplay\u201d then becomes credential exfiltration.\n\nRemove `key` from the log fields. Keep `orderId` and `ref` (and non-secret processor error codes if needed). If support must replay charges, use a controlled internal tool that reads the key from the secret store at runtime \u2014 never from log lines.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change writes the payment processor credential into application logs.\n\n## Narrative\n\n`charge()` previously logged only `orderId` and `ref` at info level after a successful charge. The new code adds `key: process.env.PROCESSOR_KEY` to a debug payload, and the inline comment states that credentials are included so support can replay failures.\n\nThat is a secret leak. `PROCESSOR_KEY` is a credential-bearing env var. Once it enters structured logs it typically lands in log aggregators, CI artifacts, support tooling, and anyone with log-read access. Debug level does not make this safe \u2014 production debug logging and log shipping are common, and the value is still present in the log record whenever debug is enabled.\n\nSupport can diagnose payment failures with non-secret charge context already available (`orderId`, `ref`, processor response codes/ids). Replay should use a secured internal path or vault-backed tooling, not log payloads.\n\nAlso note: the previous `log.info(\"charge created\", \u2026)` success breadcrumb is gone, so operational visibility of successful charges is reduced even if the key line is removed.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of `src/payments/charge.ts` explicitly includes `key: process.env.PROCESSOR_KEY` in `log.debug(\"charge context\", ...)`, so the live processor credential is written to debug logs on every charge. That matches the claimed secret-in-logs defect."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.271,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2028,
+      "out": 304
+    },
+    "cost_usd": 0.006341
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 90.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 90.1,
+  "usage": {
+    "in": 34076,
+    "cache_read": 152576,
+    "cache_write": 0,
+    "out": 4744,
+    "source": "cli"
+  },
+  "cost_usd": 0.1423888,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "Removing the `BLOCKED` guard lets attacker-controlled patch keys reach `(base as any)[k] ??= {}` and `(base as any)[k] = v`.\n\n**Failure mode:** `JSON.parse('{\"__proto__\":{\"hacked\":true}}')` still produces an own enumerable `__proto__` key. Merging that patch into a normal object sets `Object.prototype.hacked = true`, so every subsequent `{}` inherits it. The same merge with `{\"constructor\":{\"prototype\":{\"pwned\":true}}}` pollutes via `base.constructor.prototype`.\n\nThe PR claim that `JSON.parse` never yields dangerous keys is false \u2014 verified in Node against this function body. The `Record<string, unknown>` parameter also admits non-JSON callers.\n\n**Fix:** restore the blocklist (or skip keys where `k === \"__proto__\" || k === \"constructor\" || k === \"prototype\"`), and/or assign only via `Object.defineProperty` onto `Object.create(null)` targets.\n\n```suggestion\n      if (k === \"__proto__\" || k === \"constructor\" || k === \"prototype\") continue;\n      deepMerge((base as any)[k] ??= {}, v as Record<string, unknown>);\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`.\n\n## Why the PR rationale is wrong\n\nThe description claims `JSON.parse` never yields dangerous keys. That is incorrect:\n\n- `Object.entries(JSON.parse('{\"__proto__\":{\"hacked\":true}}'))` yields `[[\"__proto__\", {hacked: true}]]`.\n- Assigning through `(base as any)[k] = v` / `(base as any)[k] ??= {}` when `k === \"__proto__\"` invokes the inherited setter and mutates `Object.prototype`.\n- The nested path `{\"constructor\":{\"prototype\":{\"pwned\":true}}}` also pollutes via `base.constructor.prototype`.\n\nI verified both payloads against the post-change merge body in Node: `{}.hacked === true` and `{}.pwned === true` after merge.\n\nIndependently of JSON, the signature is `patch: Record<string, unknown>` \u2014 any caller can pass plain objects with those keys. The blocklist was the only guard on this recursive assignment path.\n\n## Recommendation\n\nRestore the `BLOCKED` set (or equivalent safe-merge using `Object.create(null)` targets and `Object.defineProperty`). \n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The PR removed the `BLOCKED` set that skipped `__proto__`/`constructor`/`prototype`, leaving unrestricted `(base as any)[k] ??= {}` and `(base as any)[k] = v` assignments that enable classic prototype pollution from attacker-controlled patch keys (including via `JSON.parse`). Critical severity is ap"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.982,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3665,
+      "out": 404
+    },
+    "cost_usd": 0.01088
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

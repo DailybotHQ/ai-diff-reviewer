@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 33.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.2,
+  "usage": {
+    "in": 30114,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1548,
+    "source": "cli"
+  },
+  "cost_usd": 0.0868728,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "Missing `SMTP_PASSWORD` no longer fails closed: `os.environ.get(..., \"smtp-prod-backup-77\")` embeds a production-looking credential in source and will silently authenticate cron jobs with that shared password whenever the secret is not mounted.\n\nAnyone with repository read access can reuse this credential against `smtp.internal.example`, and the string will persist in git history even after a revert.\n\nRemove the default entirely. Keep `os.environ[\"SMTP_PASSWORD\"]` (or an explicit check that raises a clear ConfigError), and fix the cron environment so the secret is mounted. If the internal relay allows unauthenticated submit, gate `login` on the variable being set \u2014 never commit a password literal.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a live-looking SMTP credential in source as a default password.\n\n## Narrative\n\n`mailer.py` previously required `SMTP_PASSWORD` from the environment (`os.environ[\"SMTP_PASSWORD\"]`), which correctly fails closed when the secret is missing. The PR replaces that with `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` so cron jobs keep sending mail when the secret is not mounted.\n\nThat fixes the crash symptom by introducing a much worse failure mode:\n\n1. **Secret in VCS** \u2014 anyone with repo read access (and every future clone, fork, CI log mirror, and backup) gets the production SMTP password.\n2. **Silent credential use** \u2014 when the mount is missing, the process still authenticates successfully, so misconfigured environments look healthy while using a shared backup password.\n3. **No rotation path** \u2014 rotating the real secret does not help if the hardcoded fallback remains valid; operators must edit code and rewrite history to scrub it.\n\nThe right fix for \u201ccron env without SMTP_PASSWORD\u201d is operational: mount/inject the secret into the cron environment, or fail with a clear error and alert. If unauthenticated/anonymous SMTP is intentionally allowed on the internal relay, skip `login` when the env var is absent \u2014 do not substitute a password literal.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces fail-closed `os.environ[\"SMTP_PASSWORD\"]` with `os.environ.get(..., \"smtp-prod-backup-77\")`, embedding a production-looking SMTP password in source that is used whenever the env var is unset. That is a real credential leak and silent auth fallback; critical severity is appropriate"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.779,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2052,
+      "out": 292
+    },
+    "cost_usd": 0.006317
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

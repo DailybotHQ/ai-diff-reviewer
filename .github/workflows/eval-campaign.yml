@@ -1,0 +1,251 @@
+name: Eval Campaign
+
+# The ONLINE half of the v3 eval gate (RFC-01 § CI wiring): replicated review
+# runs of the pinned corpus on the provider lanes whose secrets exist, stored
+# as `run-record/3.0` artifacts, summarised into an RFC-01 verdict that the
+# release precondition reads. It spends real provider tokens, so it only runs
+# on demand, refuses to start without an explicit USD budget, and stops at
+# 90 % of it (experiment contract F8). The OFFLINE half — schema, records and
+# corpus validation — runs on every PR in `code_check.yml` (`eval-gate-offline`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget_usd:
+        description: 'Hard cap for this campaign in USD (required; the driver stops at 90 % of it)'
+        required: true
+        type: string
+      campaign_id:
+        description: 'Campaign id (default: run-<run_id>)'
+        required: false
+        type: string
+        default: ''
+      manifest:
+        description: 'Path to the campaign manifest (repo-relative)'
+        required: false
+        type: string
+        default: 'tests/eval/campaigns/phase0-floor.json'
+      lanes:
+        description: 'Comma-separated lane names to run, or `auto` for every lane whose secret exists'
+        required: false
+        type: string
+        default: 'auto'
+      baseline:
+        description: 'Repo-relative records dir of the baseline campaign to compute a verdict against (empty = summarise only)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-campaign-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scope:
+    name: 'Decide lanes and check the budget input'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.decide.outputs.matrix }}
+      campaign_id: ${{ steps.decide.outputs.campaign_id }}
+    steps:
+      - name: Decide which lanes run (secret presence only — values never enter the shell)
+        id: decide
+        shell: bash
+        env:
+          BUDGET: ${{ inputs.budget_usd }}
+          LANES: ${{ inputs.lanes }}
+          CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          RUN_ID: ${{ github.run_id }}
+          HAS_XAI: ${{ secrets.XAI_API_KEY != '' }}
+          HAS_ZAI: ${{ secrets.ZAI_CODING_API_KEY != '' }}
+          HAS_ANTHROPIC: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_OPENAI: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          # F8: no cap, no spend. The guard is here, before any secret is mounted.
+          if ! printf '%s' "$BUDGET" | grep -Eq '^[0-9]+(\.[0-9]+)?$' || [ "$(printf '%s' "$BUDGET" | awk '{print ($1 > 0)}')" != "1" ]; then
+            echo "::error::budget_usd must be a positive number (got '$BUDGET'). Refusing to run."
+            exit 1
+          fi
+          cid="${CAMPAIGN_ID:-run-$RUN_ID}"
+          matrix='[]'
+          add() { matrix=$(printf '%s' "$matrix" | jq -c --arg l "$1" --arg s "$2" '. += [{lane:$l, secret:$s}]'); }
+          want() { [ "$LANES" = "auto" ] || printf ',%s,' "$LANES" | grep -q ",$1,"; }
+          [ "$HAS_XAI" = "true" ]       && want grok      && add grok XAI_API_KEY
+          [ "$HAS_ZAI" = "true" ]       && want glm       && add glm ZAI_CODING_API_KEY
+          [ "$HAS_ANTHROPIC" = "true" ] && want anthropic && add anthropic ANTHROPIC_API_KEY
+          [ "$HAS_OPENAI" = "true" ]    && want openai    && add openai OPENAI_API_KEY
+          if [ "$matrix" = "[]" ]; then
+            echo "::error::No requested lane has its secret configured (XAI_API_KEY, ZAI_CODING_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY)."
+            exit 1
+          fi
+          echo "::notice::Campaign $cid lanes: $matrix (budget $BUDGET USD, stop at 90 %)"
+          {
+            echo "matrix=$matrix"
+            echo "campaign_id=$cid"
+          } >> "$GITHUB_OUTPUT"
+
+  campaign:
+    name: 'Campaign — ${{ matrix.lane }}'
+    needs: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    # PR cells fetch PR metadata and files through the API (read scope only).
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.scope.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+
+      - name: Install the xAI Grok CLI (verified installer, same path as action.yml)
+        if: matrix.lane == 'grok'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Same supply-chain gate as the composite action and code_check.yml:
+          # official x.ai installer through verified_install.sh (sha256 gate,
+          # docs/SECURITY.md § "Cursor and Grok installer supply chain"). No npm fallback.
+          echo "::group::Install grok (via verified_install.sh, unpinned)"
+          bash .github/scripts/verified_install.sh grok "" ""
+          echo "::endgroup::"
+          echo "$HOME/.grok/bin" >> "$GITHUB_PATH"
+          "$HOME/.grok/bin/grok" --version
+
+      - name: Install the Claude Code CLI (glm lane runs Claude Code against Z.ai)
+        if: matrix.lane == 'glm'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Pinned: the campaign spends real credentials, so the CLI it runs must not move under a
+          # workflow that did not change (same version the action resolves when `claude-code-version` is set).
+          echo "::group::npm install -g @anthropic-ai/claude-code@2.1.281"
+          npm install -g @anthropic-ai/claude-code@2.1.281
+          echo "::endgroup::"
+          claude --version
+
+      - name: Materialise the PR worktrees the manifest's `pr` cells point at
+        # PR cells review a merged PR at its head from a worktree (the same
+        # thing run_eval.py needs locally). Fetch each `refs/pull/N/head` and
+        # add a worktree at the manifest path; tree cells need nothing.
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import json,sys; [print(c["pr"], c["worktree"]) for c in json.load(open(sys.argv[1]))["cells"] if c.get("kind") == "pr"]' "$MANIFEST" > /tmp/pr-cells.txt
+          while read -r pr wt; do
+            [ -n "$pr" ] || continue
+            echo "::group::worktree for PR #$pr → $wt"
+            git fetch --no-tags origin "refs/pull/$pr/head:refs/remotes/origin/pr/$pr"
+            mkdir -p "$(dirname "$wt")"
+            git worktree add --detach "$wt" "refs/remotes/origin/pr/$pr"
+            echo "::endgroup::"
+          done < /tmp/pr-cells.txt
+          echo "materialised $(wc -l < /tmp/pr-cells.txt) PR worktree(s)"
+
+      - name: Dry-run the projection against the budget
+        env:
+          BUDGET: ${{ inputs.budget_usd }}
+          MANIFEST: ${{ inputs.manifest }}
+        run: python3 tests/eval/campaign.py dry-run --manifest "$MANIFEST" --lane "${{ matrix.lane }}" --budget-usd "$BUDGET"
+
+      - name: Run the lane under the cap
+        env:
+          BUDGET: ${{ inputs.budget_usd }}
+          MANIFEST: ${{ inputs.manifest }}
+          CAMPAIGN_ID: ${{ needs.scope.outputs.campaign_id }}
+          # Only the lane's own secret is mounted, under the name the manifest's api_key_env declares.
+          XAI_API_KEY: ${{ matrix.secret == 'XAI_API_KEY' && secrets.XAI_API_KEY || '' }}
+          ZAI_CODING_API_KEY: ${{ matrix.secret == 'ZAI_CODING_API_KEY' && secrets.ZAI_CODING_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ matrix.secret == 'ANTHROPIC_API_KEY' && secrets.ANTHROPIC_API_KEY || '' }}
+          OPENAI_API_KEY: ${{ matrix.secret == 'OPENAI_API_KEY' && secrets.OPENAI_API_KEY || '' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tests/eval/campaign.py run --manifest "$MANIFEST" --lane "${{ matrix.lane }}" \
+            --budget-usd "$BUDGET" --records-out "eval-records/$CAMPAIGN_ID/${{ matrix.lane }}" \
+            --runtime-sha "$GITHUB_SHA"
+
+      - name: Upload the lane's run records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-records-${{ needs.scope.outputs.campaign_id }}-${{ matrix.lane }}
+          path: eval-records/
+          retention-days: 90
+          if-no-files-found: warn
+
+  verdict:
+    name: 'Validate records and compute the verdict'
+    needs: [scope, campaign]
+    # Only a campaign that finished can mint a verdict — a failed, timed-out or
+    # cancelled lane must never produce the non-blocking verdict that unlocks a release.
+    if: always() && needs.scope.result == 'success' && needs.campaign.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+
+      - name: Download every lane's records
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-records-${{ needs.scope.outputs.campaign_id }}-*
+          path: eval-records/
+          merge-multiple: true
+
+      - name: Validate the records offline
+        run: python3 tests/eval/records_validate.py --records eval-records
+
+      - name: Summarise (and compute the verdict when a baseline is given)
+        env:
+          CAMPAIGN_ID: ${{ needs.scope.outputs.campaign_id }}
+          BASELINE: ${{ inputs.baseline }}
+        run: |
+          set -euo pipefail
+          python3 tests/eval/determinism.py summarize --records "eval-records/$CAMPAIGN_ID" --out "eval-records/$CAMPAIGN_ID/summary.json"
+          if [ -n "$BASELINE" ]; then
+            prompt_sha=$(sha256sum prompts/default.md | cut -d' ' -f1)
+            content_sha=$(sha256sum scripts/reviewer.py | cut -d' ' -f1)
+            mkdir -p tests/eval/records/verdicts
+            python3 tests/eval/determinism.py verdict --baseline "$BASELINE" --candidate "eval-records/$CAMPAIGN_ID" \
+              --out "tests/eval/records/verdicts/$CAMPAIGN_ID.json" --runtime-sha "$GITHUB_SHA" --prompt-sha256 "$prompt_sha" \
+              --content-sha256 "$content_sha" --baseline-ref "$(basename "$BASELINE")" || echo "::warning::verdict has blocking findings — see the file"
+          fi
+
+      - name: Open a PR with the verdict (records stay as artifacts — RFC-08 D-01)
+        if: inputs.baseline != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAMPAIGN_ID: ${{ needs.scope.outputs.campaign_id }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="eval/verdict-$CAMPAIGN_ID"
+          git checkout -b "$branch"
+          git add "tests/eval/records/verdicts/$CAMPAIGN_ID.json"
+          git commit -m "test(eval): verdict for campaign $CAMPAIGN_ID [skip release]" || { echo "nothing to commit"; exit 0; }
+          git push -u origin "$branch"
+          gh pr create --title "test(eval): verdict for campaign $CAMPAIGN_ID" --body "Eval-gate verdict computed by \`eval-campaign.yml\` run ${{ github.run_id }}. Raw run records are workflow artifacts (90 days)." --base main --head "$branch"

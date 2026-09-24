@@ -1,0 +1,72 @@
+{
+  "campaign_id": "phase0-floor",
+  "repetitions": 3,
+  "lanes": {
+    "grok": {
+      "provider": "grok",
+      "model": "balanced",
+      "api_base": "",
+      "api_key_env": "XAI_API_KEY",
+      "indicative_max_cost_usd": 1.5
+    },
+    "glm": {
+      "provider": "claude-code",
+      "model": "economy",
+      "api_base": "https://api.z.ai/api/anthropic",
+      "api_key_env": "ZAI_CODING_API_KEY",
+      "indicative_max_cost_usd": 2.5
+    }
+  },
+  "arms": [
+    {
+      "name": "baseline",
+      "prompt": "prompts/default.md",
+      "extension": ".review/extension.md"
+    }
+  ],
+  "cells": [
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 46,
+      "worktree": "tmp/worktrees/pr-46"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 45,
+      "worktree": "tmp/worktrees/pr-45"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 43,
+      "worktree": "tmp/worktrees/pr-43"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 37,
+      "worktree": "tmp/worktrees/pr-37"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 25,
+      "worktree": "tmp/worktrees/pr-25"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 15,
+      "worktree": "tmp/worktrees/pr-15"
+    },
+    {
+      "kind": "pr",
+      "repo": "DailybotHQ/ai-diff-reviewer",
+      "pr": 39,
+      "worktree": "tmp/worktrees/pr-39"
+    }
+  ],
+  "note": "Phase 0 floor re-measurement (RFC-01 \u00a7 Thresholds): the 7 historical PRs \u00d7 3 repetitions on the lanes whose secrets exist. Worktrees are checked out at each PR head (tmp/worktrees/pr-N \u2014 gitignored); on a fresh clone recreate them with `git fetch origin pull/N/head:refs/remotes/origin/pr-N && git worktree add tmp/worktrees/pr-N origin/pr-N`."
+}

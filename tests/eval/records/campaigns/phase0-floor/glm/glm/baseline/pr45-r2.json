@@ -1,0 +1,72 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 16,
+  "tool_calls": null,
+  "seconds": 400.5,
+  "setup_seconds": 2.2,
+  "total_seconds": 402.7,
+  "usage": {
+    "in": 69441,
+    "cache_read": 737600,
+    "cache_write": 0,
+    "out": 14601,
+    "source": "cli"
+  },
+  "cost_usd": 1.08103,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5465,
+      "severity": "warning",
+      "body": "`fetch_pr_context` normalizes changed files to key `\"path\"` (`scripts/reviewer.py:4272`), but this reads `\"filename\"` \u2014 so every entry resolves to `\"\"` and the whole `_COMPLEXITY_HIGH_PATH_MARKERS` signal (auth/token/crypto/`scripts/reviewer.py`/`action.yml` \u2192 HIGH) plus the single-docs LOW carve-out are dead code. Concrete failure: with `complexity-labels-enabled: true`, a 2-file `src/auth/login.py` change (+15/\u22123) that omits the model-assessed level gets `complexity:low` instead of the documented `complexity:high`; only the file-count/line-delta signals work. The new tests pass because their fixtures (`tests/test_findings_parser.py:83`, `:98`) use `\"filename\"` too \u2014 switch those to `\"path\"` and add one case asserting the marker path actually returns `high`.\n\n```suggestion\n        str(f.get(\"path\") or \"\") for f in pr_ctx.changed_files\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5452,
+      "severity": "info",
+      "body": "These are raw substring matches, so `auth` hits `docs/AUTHORS.md`, `AuthorCard.astro`, or any `oauth-*` path, and `token` hits `tokenize.py` \u2014 a one-line docs edit to such a path returns `complexity:high` because this check runs *before* the `_COMPLEXITY_DOC_SUFFIXES` carve-out below, contradicting the \"docs-only \u2192 typically low\" contract in `.review/extension.md`. Once finding #1 is fixed this becomes live behavior. Consider matching path segments (e.g. `set(p.lower().split(\"/\")) & marker_set`) or dropping the doc suffixes from the HIGH check."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "info",
+      "body": "The optional-variant schema embeds a `// optional` comment inside the ```json fence, while the same directive two rules below demands the file \"MUST parse with Python `json.load()`\". A CLI model that mirrors the template verbatim emits a JSON comment, `json.load` fails, and the whole findings file drops to the malformed-fallback path (losing every inline comment). Move the annotation outside the fence \u2014 e.g. `(the \"complexity\" field is optional)` in the prose rules."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid provider-bridging feature \u2014 the `run_review` kwarg threading, the findings.json contract extension, and the doc sync are all complete and consistent. **One real bug in the new heuristic fallback: it reads the wrong dict key, so its entire path-based signal is dead code** (and the new tests enshrine the wrong shape). Fix that before merge; the two `info` items are optional.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5465` | `infer_pr_complexity_fallback` reads `f.get(\"filename\")`, but `fetch_pr_context` emits `\"path\"` \u2014 the security-surface HIGH signal never fires |\n| 2 | \u2139\ufe0f info | `scripts/reviewer.py:5452` | Substring path markers over-match (`auth` in `AUTHORS.md`, `token` in `tokenize.py`) \u2192 docs edits labeled `complexity:high` |\n| 3 | \u2139\ufe0f info | `scripts/reviewer.py:5645` | `// optional` sits inside the ```json fence while the directive demands strict `json.load()` output |\n\n## What I verified (clean)\n\n- **`require_complexity_in_findings` threading**: base `AgentRunnerProvider.run_review` + all three implementations (`ClaudeCodeProvider`, `CursorProvider`, `CodexProvider`) + the single `main()` call site all agree; default `False` keeps the change non-breaking for any out-of-tree subclass.\n- **Cap enforcement** (`scripts/reviewer.py:6589`): mutates `result.findings` in place after `_sort_findings_criticals_first`, so `result.complexity` survives truncation and the criticals-always-surfaces rail (docs \u00a7 7.1) is preserved.\n- **Label block** (`scripts/reviewer.py:6786`): both GH calls wrapped with the sanctioned \"best-effort GH API call\" pattern; `pr_ctx` is unconditionally assigned before use; provider precedence (`state.proposed_pr_complexity` \u2192 `result.complexity` \u2192 heuristic) is correct for both families.\n- **`self-review.yml` rename**: `empty_reason` producer (`no-ready-label`) and the gate's `if:` consumer renamed consistently; no other workflow keys on a `ready` l",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 10
+  }
+}

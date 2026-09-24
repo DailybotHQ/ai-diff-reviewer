@@ -1,0 +1,50 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "d0bcc0d",
+  "turns": 14,
+  "tool_calls": null,
+  "seconds": 304.5,
+  "setup_seconds": 1.8,
+  "total_seconds": 306.3,
+  "usage": {
+    "in": 65464,
+    "cache_read": 388928,
+    "cache_write": 0,
+    "out": 12657,
+    "source": "cli"
+  },
+  "cost_usd": 0.8382090000000001,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [
+    {
+      "path": "skills/ai-diff-reviewer/SKILL.md",
+      "line": 51,
+      "severity": "info",
+      "body": "The rewritten Version-parity sentence hard-codes `@v1.4.2` as the exemplar pin \u2014 two minors behind this file's own `version: \"1.6.2\"` frontmatter (published tags now reach v1.6.2+), so a first-time reader copies a stale pin out of a paragraph this PR just rewrote. A tag-agnostic phrasing can't go stale at the next release. The same staleness also survives in the moved Install block (lines 98 and 107) \u2014 byte-identical moves, but worth refreshing in the same pass.\n\n```suggestion\n(enforced by CI's `Skills \u2014 prompt-sync invariant` job). Pinning the\nsame tag on both surfaces guarantees identical reviews.\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nClean docs-only rework \u2014 every factual claim I checked against the codebase holds. One stale-version nit; nothing blocking.\n\n## What I verified\n\nThis PR's value is narrative accuracy for first-time readers, so I fact-checked the new claims rather than just reading the prose:\n\n- **`prompt-extension-file: .review/extension.md`** (intro + Flow B paragraph) \u2014 real input at `action.yml:54`; the local\u2194CI parity wiring described is accurate.\n- **\"enforced by CI's `Skills \u2014 prompt-sync invariant` job\"** \u2014 the job exists with that exact name (`.github/workflows/code_check.yml:86`) and diffs `prompt.md` against `prompts/default.md`.\n- **Compressed Parity-guarantee (Flow B) paragraph lost no information** \u2014 cross-checked against `setup/SKILL.md` Step 5: **yes** \u2192 `prompt-extension-file` added to the freshly-composed workflow; **no** \u2192 stop after Step 4 (input omitted). The compressed text preserves both directions plus the recovery paths.\n- **Removed \"First-time bootstrap\" paragraph was truly duplicated** \u2014 the yes/no/never semantics and the `.review/.skip-bootstrap` opt-out marker are fully specified in Step 2.5 (`skills/ai-diff-reviewer/SKILL.md:285-336`) and the Notes section (`skills/ai-diff-reviewer/SKILL.md:505-509`). Nothing lost.\n- **\"Steps 0-5 and Notes are byte-identical\"** \u2014 confirmed via hunk inspection against the merge base (`7f75f05`): the last hunk ends at the new \"Default flow\" header; everything below is untouched.\n- **Sibling links resolve** \u2014 `generate-extension/SKILL.md`, `setup/SKILL.md`, `open-pr/SKILL.md`, `setup/reference.md`, and `prompt.md` all exist at the linked relative paths.\n- **Frontmatter stays valid** \u2014 the new `&` in `description:` sits mid-scalar (YAML-safe; parses cleanly with a real YAML parser), `version: \"1.6.2\"` is still SemVer, and `allowed-tools` / `user-invocable` / `metadata` are untouched \u2014 all `scripts/validate-frontmatter.py` requirements still satisfied.\n- **Security/convention scan of the new content** \u2014 no fetch-a",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

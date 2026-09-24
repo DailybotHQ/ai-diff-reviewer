@@ -1,0 +1,77 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C078",
+  "title": "Session TTL shortened in auth module; cleanup job keeps the old constant and purges live sessions",
+  "stack": "python",
+  "change_class": "logic_bug",
+  "risk_class": "warning_positive",
+  "family_group": "G78",
+  "gap_tags": [
+    "cross_file"
+  ],
+  "fixture": {
+    "base": {
+      "auth/session.py": "SESSION_TTL_SECONDS = 7 * 24 * 3600\n\n\ndef expires_at(created):\n    return created + SESSION_TTL_SECONDS\n",
+      "jobs/cleanup.py": "import time\n\nSESSION_TTL_SECONDS = 7 * 24 * 3600\n\n\ndef purge(sessions):\n    now = time.time()\n    return [s for s in sessions if now - s['created'] < SESSION_TTL_SECONDS]\n"
+    },
+    "head": {
+      "auth/session.py": "# security review: 7 days was too long\nSESSION_TTL_SECONDS = 12 * 3600\n\n\ndef expires_at(created):\n    return created + SESSION_TTL_SECONDS\n",
+      "jobs/cleanup.py": "import time\n\nSESSION_TTL_SECONDS = 7 * 24 * 3600\n\n\ndef purge(sessions):\n    now = time.time()\n    return [s for s in sessions if now - s['created'] < SESSION_TTL_SECONDS]\n"
+    },
+    "pr_metadata": {
+      "title": "Shorten session TTL to 12h",
+      "body": "Per the security review.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:3e4276ab3c730cad235ce94b9b231f41eaca5357473cf4ba32e448b36237a4c1"
+  },
+  "labels": [
+    {
+      "id": "C078-d1",
+      "severity": "warning",
+      "path": "auth/session.py",
+      "defect": "TTL constant duplicated in two modules; only one was changed",
+      "evidence": "Sessions expire after 12h for auth but the cleanup job retains them for 7 days — expired-but-retained sessions remain resumable through any path that trusts the store.",
+      "keywords": [
+        "SESSION_TTL_SECONDS",
+        "12 * 3600",
+        "cleanup",
+        "duplicated"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    },
+    {
+      "id": "C078-d2",
+      "severity": "warning",
+      "path": "jobs/cleanup.py",
+      "defect": "Cleanup uses its own stale TTL copy instead of importing auth.session's",
+      "evidence": "SESSION_TTL_SECONDS = 7 * 24 * 3600 here vs 12 * 3600 in auth/session.py.",
+      "keywords": [
+        "SESSION_TTL_SECONDS",
+        "7 * 24",
+        "import"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C078-d1",
+      "C078-d2"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

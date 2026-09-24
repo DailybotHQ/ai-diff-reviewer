@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 37.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 37.3,
+  "usage": {
+    "in": 30263,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1624,
+    "source": "cli"
+  },
+  "cost_usd": 0.0963436,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "`identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no longer passes `SECRET`, `algorithms`, `audience`, or `issuer`.\n\n**Failure mode:** any client can forge a token with arbitrary claims (user id, roles, tenant) and this function will return them as a trusted identity. The TICKET-412 comment says \"staging\", but there is no environment or config guard \u2014 the bypass applies wherever this code runs.\n\nRe-enable verification (restore key, algorithms, audience, and issuer checks). If staging tokens are invalid after a migration, fix issuance or accept a controlled re-login/re-issue path instead of disabling authn."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, so any crafted token is accepted as a valid identity.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` no longer uses `SECRET`, `algorithms`, `audience`, or `issuer`. The comment mentions staging re-issuance (TICKET-412), but nothing in the function scopes the bypass to staging, a feature flag, or a temporary allowlist. In this tree `identity()` is the auth gate; turning verification off here is equivalent to trusting client-supplied claims.\n\nFailure mode: an attacker mints an unsigned/HS256-forged JWT with arbitrary `sub` / roles / tenant claims and passes `identity()` the same way a real user would.\n\n## What would make this acceptable\n\n- Keep verification on; fix token issuance or rotate keys so existing staging tokens verify again, or\n- If a temporary bypass is unavoidable, gate it behind an explicit non-production environment check, log/alert loudly, and pair with a tracked removal deadline \u2014 still a last resort.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "identity() previously verified JWTs with SECRET, HS256, audience, and issuer; head disables verify_signature/aud/iss with no env guard, so any forged token is accepted as identity."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.821,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2161,
+      "out": 269
+    },
+    "cost_usd": 0.006883
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

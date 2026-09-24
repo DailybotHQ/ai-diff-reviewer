@@ -1,0 +1,75 @@
+{
+  "pr": 46,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 16,
+  "tool_calls": null,
+  "seconds": 557.8,
+  "setup_seconds": 1.8,
+  "total_seconds": 559.6,
+  "usage": {
+    "in": 77751,
+    "cache_read": 743040,
+    "cache_write": 0,
+    "out": 19235,
+    "source": "cli"
+  },
+  "cost_usd": 1.404318,
+  "changed_files": [
+    "CHANGELOG.md",
+    "README.md",
+    "action.yml",
+    "docs/SECURITY.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/SKILL.md",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5318,
+      "severity": "warning",
+      "body": "Every payload without `repository.visibility` resolves to `\"unknown\"`, which `_is_private_or_internal_visibility()` treats as public \u2014 so on GitHub Enterprise Server (or any payload variant that omits the field) the permission override never fires and this PR's headline fix silently doesn't apply, while the lookup still burns an API call. Fall back to the always-present `private` boolean so those consumers get the fix too. Note none of the new tests exercise `repo_visibility=\"unknown\"` \u2014 worth a case either way.\n\n```suggestion\n    visibility: str = str(repository.get(\"visibility\", \"\") or \"\").lower()\n    if visibility:\n        return visibility\n    # Older GHES webhook payloads omit `visibility` but always carry the\n    # `private` boolean \u2014 keep the permission fallback working there.\n    return \"private\" if repository.get(\"private\") is True else \"unknown\"\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 6399,
+      "severity": "warning",
+      "body": "On a public repo this lookup can never change the outcome \u2014 write-tier permission is ignored by design and a failed lookup fails closed to the same deny \u2014 so the GET only enriches the deny log line. That contradicts README's unchanged \"a denied gate costs **zero API calls**\" promise three lines above the text this PR edits, and SECURITY.md's new claim that the lookup happens \"on private/internal\". Skip the call when visibility is already known-public:\n\n```suggestion\n    if repo_visibility != \"public\" and _author_gate_needs_permission_lookup(\n```"
+    },
+    {
+      "path": "skills/ai-diff-reviewer/setup/reference.md",
+      "line": 141,
+      "severity": "info",
+      "body": "This reads as a blanket claim, but on private/internal repos the fallback *does* widen this preset: an author with `write` collaborator permission passes even though `COLLABORATOR` is not in the list. Worth scoping the sentence so setup answers stay accurate:\n\n```suggestion\n  - Remove `COLLABORATOR` to gate on org membership only (association-based\n    on public repos; on private / internal repos the permission fallback\n    still admits write-tier collaborators).\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 4978,
+      "severity": "info",
+      "body": "`_author_gate_needs_permission_lookup()` re-resolves the gate that `resolve_author_association_gate_enhanced()` resolves again in `main()` \u2014 and a typo'd gate value logs the unknown-value WARNING twice per run on the lookup path. Consider resolving the base decision once in `main()` and threading it to both call sites."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-tested security fix \u2014 the permission-aware gate logic is correct (checked 404\u2192deny, fail-open/fail-closed matrix, URL quoting, error ordering), all 12 new tests pass, and the docs sync required by Rule #7 is complete. Two warnings worth a quick pass before merge; nothing blocking.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5317` | Missing `private`-boolean fallback: payloads without `repository.visibility` (older GHES) resolve to `unknown` \u2192 the fix silently no-ops there |\n| 2 | \u26a0\ufe0f warning | `scripts/reviewer.py:6399` | Permission lookup runs on public repos where it can't change the outcome; contradicts README's \"a denied gate costs zero API calls\" and SECURITY.md's \"on private/internal\" claim |\n| 3 | \u2139\ufe0f info | `skills/ai-diff-reviewer/setup/reference.md:140` | \"permission fallback does not widen this preset\" is false on private repos for the `OWNER,MEMBER` preset |\n| 4 | \u2139\ufe0f info | `scripts/reviewer.py:4978` | Gate resolved twice per run; duplicate unknown-value warning on the lookup path |\n\n## What checked out\n\n- **Security posture is sound.** The username is quoted via `urllib.parse.quote` before URL interpolation; `owner`/`repo` come from validated `AIPRR_REPO`; HTTP 404 maps to `none` (deny); `HTTPError` is caught before the broad `except`, which carries the approved \"best-effort gate lookup\" WHY comment. No new env forwarding, no marker/IAR/contract changes; the `action.yml` change is description-only, so Rule #4 is untouched. Stdlib-only respected (`urllib.parse` already imported).\n- **Fail-open on private is defensible.** Private repos already restrict PR openers to people with at least read access, and the default allow-list already admits a `COLLABORATOR` association regardless of actual permission \u2014 the gate was never a hard permission boundary on private repos. The tradeoff is documented in `docs/SECURITY.md` and logged.\n- **One new network call on the ",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "46-fail-open-missing-login"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 3,
+    "coverage_paths": 2,
+    "changed_files": 8
+  }
+}

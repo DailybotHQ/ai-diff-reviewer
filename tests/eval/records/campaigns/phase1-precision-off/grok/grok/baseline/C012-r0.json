@@ -1,0 +1,79 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 6,
+  "tool_calls": null,
+  "seconds": 80.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 80.2,
+  "usage": {
+    "in": 21096,
+    "cache_read": 168832,
+    "cache_write": 0,
+    "out": 4540,
+    "source": "cli"
+  },
+  "cost_usd": 0.1200816,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving the `BLOCKED` set reopens prototype pollution on `deepMerge`. The claim that `JSON.parse` never yields dangerous keys is false: `JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an own enumerable `\"__proto__\"` key, and `Object.entries` surfaces it.\n\nWith the guard gone, the recursive branch does `(base as any)[\"__proto__\"] ??= {}` and then assigns into `Object.prototype`. The `constructor`/`prototype` chain works the same way (`{\"constructor\": {\"prototype\": {\"hacked\": true}}}`). Verified in Node against this merge shape: after merge, `({}).polluted` / `({}).hacked` were `true`.\n\nRestore the blocklist (or merge via `Object.hasOwn` + `Object.defineProperty` on `Object.create(null)` targets) before merging any external JSON.\n\n```suggestion\nconst BLOCKED = new Set([\"__proto__\", \"constructor\", \"prototype\"]);\n\nexport function deepMerge<T>(base: T, patch: Record<string, unknown>): T {\n  for (const [k, v] of Object.entries(patch)) {\n    if (BLOCKED.has(k)) continue;\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this removes the only prototype-pollution guard on `deepMerge`, and the stated rationale is incorrect.\n\n## Why the rationale fails\n\n`JSON.parse('{\"__proto__\": {\"polluted\": true}}')` **does** produce an own enumerable `\"__proto__\"` key. `Object.entries` yields it, and the unguarded merge then walks into `Object.prototype` (via `base[\"__proto__\"] ??= {}` / recursive assignment). The same holds for `{\"constructor\": {\"prototype\": {...}}}`.\n\nI verified both payloads against this function shape in Node: after merge, `({}).polluted` and `({}).hacked` were `true`.\n\n## Impact\n\nAny caller that merges user- or file-supplied JSON into a shared object graph can pollute `Object.prototype` for the whole process \u2014 classic integrity break (authz bypasses, polluted defaults, surprising control flow).\n\n## Fix\n\nRestore the blocklist (or equivalent): skip `__proto__`, `constructor`, and `prototype`, or merge only into `Object.create(null)` targets with `Object.hasOwn` checks and `Object.defineProperty` rather than `[[Set]]` on dynamic keys.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

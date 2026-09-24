@@ -1,0 +1,79 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.0,
+  "usage": {
+    "in": 30240,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1671,
+    "source": "cli"
+  },
+  "cost_usd": 0.0965028,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "body": "This always sets `Access-Control-Allow-Origin` to the request `origin` (or `*`) together with `Access-Control-Allow-Credentials: true`, and drops the allowlist.\n\n**Failure mode:** a page at `https://evil.example` can make credentialed cross-origin calls to this API and read the responses, because the browser will accept the reflected ACAO. That exposes any cookie-authenticated or credentialed endpoint to cross-site data theft / CSRF-with-read.\n\n**Also broken for the stated null-origin case:** `ACAO: *` + `ACAC: true` is rejected by browsers, so native clients that omit `Origin` still do not get a usable CORS result.\n\nRestore an explicit allowlist (include known mobile webview origins if needed). Only set `ACAC: true` when the origin matches. Never pair `*` with credentials:\n\n```suggestion\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return {};\n```\n\n(Re-introduce `const ALLOWED = new Set([...])` with the real app and webview origins.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical CORS misconfiguration** \u2014 this change disables origin allowlisting and reflects arbitrary `Origin` values while always sending `Access-Control-Allow-Credentials: true`.\n\n## Why this is blocking\n\nThe previous code only echoed an origin when it was in a fixed allowlist (`https://app.example.com`). The new code returns ACAO for **any** caller-supplied origin (or `*` when `origin` is null), still with credentials enabled.\n\nFailure mode: any malicious site can trigger a credentialed cross-origin request (cookies / client certs / Authorization in some setups) and **read the response**, because the browser will treat that site as an allowed origin. That is a direct break of the prior same-origin trust boundary.\n\nSecondary issue: `Access-Control-Allow-Origin: *` combined with `Access-Control-Allow-Credentials: true` is invalid per the Fetch/CORS spec; browsers reject it. So the `origin ?? \"*\"` branch does not actually help null-Origin native clients either.\n\nMobile webviews with varying origins need an explicit allowlist (or a non-cookie auth model), not open reflection.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed the origin allowlist and now always sets Access-Control-Allow-Origin to the request origin (or *) together with Access-Control-Allow-Credentials: true, which enables credentialed cross-origin reads and is invalid for the * case."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.014,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 5759,
+      "out": 344
+    },
+    "cost_usd": 0.013915
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 44.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.4,
+  "usage": {
+    "in": 28333,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 1264,
+    "source": "cli"
+  },
+  "cost_usd": 0.0806852,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "body": "**Authorization removed on a destructive endpoint.** Deleting `@require_role(\"admin\")` leaves `DELETE /users/<user>` with no access control \u2014 any caller can remove any user from `USERS` and get `204`.\n\nConcrete failure mode: `curl -X DELETE /users/alice` (no auth) succeeds and drops `alice` from the in-memory user list. Cleanup jobs getting 403 as `viewer` means those jobs lack the right role; they should authenticate as a principal that is allowed to delete (service account / admin), or use a separate authenticated internal cleanup path.\n\nRestoring a caller-based admin check (from session/token, not the path `<user>`) is the minimum fix; do not ship an open delete."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only authorization check on `DELETE /users/<user>`, turning a privileged destructive endpoint into a fully open delete API.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `app.py:19` | AuthZ decorator removed; anyone can delete any user |\n\n## Analysis\n\nThe PR drops `@require_role(\"admin\")` from `delete_user` because cleanup jobs running as the viewer account were getting 403s. That is an authorization failure being \u201cfixed\u201d by removing authorization.\n\nAfter this change, any client can call `DELETE /users/<user>` with no role gate and mutate the shared `USERS` list (204 on success). That is a broken access-control / IDOR-class failure on a destructive route.\n\nThe cleanup-job 403 needs a dedicated identity and role (or a separate internal cleanup path with real service auth), not a public unauthenticated delete.\n\nNote on adjacent context (not a new inline finding): `require_role` currently compares `ROLES.get(user)` where `user` is the *path* target, not the caller. Even before this PR the check was misfocused; removing it entirely is still a strict regression to no checks at all.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

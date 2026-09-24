@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.1,
+  "usage": {
+    "in": 16224,
+    "cache_read": 100480,
+    "cache_write": 0,
+    "out": 1599,
+    "source": "cli"
+  },
+  "cost_usd": 0.072186,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hard-coded on the shared `NewClient()` transport with no environment, build-tag, or config gate. Every consumer of this client \u2014 including production \u2014 will accept any certificate (or no valid chain), enabling MITM on ledger traffic.\n\nThe staging self-signed cert note and TICKET-77 do not constrain runtime behavior. Keep verification enabled by default; only skip (or prefer: trust the staging CA / custom `RootCAs`) when an explicit non-prod signal is set, and refuse to start prod with skip enabled.\n\n```suggestion\n\t\tTransport: &http.Transport{\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},\n\t\t},\n```\n\nIf staging still needs a temporary bypass, gate it explicitly (e.g. `if cfg.AllowInsecureTLS && cfg.Env == \"staging\"`) and never default it on."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every ledger HTTP client, including production.\n\n## Narrative\n\n`NewClient()` now always installs `tls.Config{InsecureSkipVerify: true}`. The comment mentions a self-signed staging cert and TICKET-77, but nothing in the code limits the bypass to staging. Any caller of `NewClient()` inherits a transport that accepts arbitrary certificates, so a network-path attacker can MITM ledger traffic (credentials, account movements, PII) in every environment that uses this client.\n\nA ticket and a \"revisit before prod\" comment are not a control. Gate the skip on an explicit staging/dev signal (or better: ship the staging CA / pin the cert), keep verification on by default, and fail closed in production.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "NewClient() hard-codes tls.Config{InsecureSkipVerify: true} with only a comment/TICKET note and no env, build-tag, or config gate; the base version used a plain http.Client with normal verification. Any consumer of this shared factory will skip cert validation and be exposed to MITM."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 13.146,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2398,
+      "out": 430
+    },
+    "cost_usd": 0.008349
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 34.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 34.9,
+  "usage": {
+    "in": 30385,
+    "cache_read": 87040,
+    "cache_write": 0,
+    "out": 1640,
+    "source": "cli"
+  },
+  "cost_usd": 0.096722,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`pickle.loads` on base64-decoded `raw` is unsafe deserialization. Session blobs are typically attacker-controlled (cookies/headers); a crafted pickle payload executes arbitrary Python on the server during load (classic `__reduce__` / `os.system` gadget).\n\nKeep a data-only format for sessions (e.g. JSON + schema, or a signed token with an allowlisted type set). If the cart plugin needs richer objects, serialize a plain dict/list structure and rehydrate in trusted code after decode \u2014 never unpickle untrusted input.\n\n```suggestion\n    return json.loads(base64.urlsafe_b64decode(raw))\n```\n(restore `import json` and drop `import pickle`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces remote code execution via unsafe deserialization.\n\n## Analysis\n\n`load_session` previously decoded a base64 blob with `json.loads`, which can only produce plain JSON values. Replacing that with `pickle.loads` means any caller that passes request-controlled session material (cookie, header, query param, POST body) will execute arbitrary Python during unpickle. Pickle reconstructs objects by invoking reducers/`__reduce__`; a crafted payload can run `os.system`, open a reverse shell, or read secrets on the runner/app host.\n\nThe module exposes no signature or MAC check before deserialize, and the annotated return type `dict` is not enforced at runtime \u2014 pickle can return any object. The cart-plugin motivation does not justify this tradeoff; richer session shapes should use a constrained format (JSON with an explicit schema, `msgspec`/`dataclass` round-trip, or a signed token with allowlisted types).\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

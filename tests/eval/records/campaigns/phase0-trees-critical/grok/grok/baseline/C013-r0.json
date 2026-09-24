@@ -1,0 +1,57 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 32.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 33.0,
+  "usage": {
+    "in": 28672,
+    "cache_read": 55040,
+    "cache_write": 0,
+    "out": 1590,
+    "source": "cli"
+  },
+  "cost_usd": 0.083396,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "**Critical: password-reset tokens are no longer cryptographically secure.**\n\n`Math.floor(Math.random() * 1e12)` yields at most ~10^12 values (~40 bits) from a non-CSPRNG. The previous `randomBytes(32)` produced 256 bits of secure entropy. An attacker can brute-force or predict reset tokens and take over accounts.\n\nFor Edge compatibility, use Web Crypto instead of `Math.random`:\n\n```suggestion\n  const bytes = new Uint8Array(32);\n  crypto.getRandomValues(bytes);\n  return Array.from(bytes, (b) => b.toString(16).padStart(2, \"0\")).join(\"\");\n```\n\n`crypto.getRandomValues` is available in Edge runtimes, browsers, and modern Node."
+    },
+    {
+      "path": "src/auth/reset.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "**Token length / space collapsed from 64 hex chars to ~9 characters.**\n\n`toString(36)` on a value `< 1e12` produces roughly 7\u20138 base-36 digits; `padStart(9, \"0\")` only left-pads. That shrinks the identifier space enough for practical online guessing and raises collision risk under normal issuance volume. Keep a 32-byte (or at least 16-byte) random token encoded as hex or base64url regardless of the CSPRNG source."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change replaces a cryptographically secure 256-bit reset token with a predictable, low-entropy `Math.random()` value. Password-reset tokens are a classic attack surface; guessing or predicting one is account takeover.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/auth/reset.ts:3` | CSPRNG replaced with `Math.random`; ~40 bits entropy, brute-forceable |\n| 2 | \u26a0\ufe0f warning  | `src/auth/reset.ts:4` | Token length collapsed from 64 hex chars to ~7\u20139 chars |\n\n## Details\n\n### Critical: insecure token generator\n\nPreviously `randomBytes(32).toString(\"hex\")` produced 64 hex characters (256 bits of CSPRNG entropy). The new implementation:\n\n```ts\nconst t = Math.floor(Math.random() * 1e12).toString(36);\nreturn t.padStart(9, \"0\");\n```\n\nFailure modes:\n- **Brute force:** at most `1e12` distinct values (~40 bits). An attacker who can hit a reset-confirm endpoint can enumerate the space offline or online far faster than against a 256-bit token.\n- **Predictability:** `Math.random()` is not a CSPRNG; in many engines it is a seeded PRNG whose outputs can be predicted from observed samples.\n- **Edge-safe fix exists:** Web Crypto is available on Edge runtimes \u2014 e.g. `crypto.getRandomValues()` (global in modern Edge / browsers) or `import { randomBytes } from \"crypto\"` via Node crypto polyfills where supported. Prefer `crypto.getRandomValues(new Uint8Array(32))` then hex/base64url encode.\n\n### Warning: truncated identifier space\n\n`padStart(9, \"0\")` implies tokens are treated as ~9-character identifiers. Collisions become likely under birthday bounds long before the old 32-byte space would, and logs/URLs that once carried unguessable secrets now carry short guessable ones.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C013-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1201,7 +1201,7 @@ class ToolsSchemaGatingTests(unittest.TestCase):
         names = [t["name"] for t in schema]
         self.assertIn("set_pr_description", names)
         self.assertIn("set_pr_complexity", names)
-        self.assertEqual(len(names), 7)
+        self.assertEqual(len(names), 11)  # 9 base (incl. v3 parity tools + emit_finding) + 2 optional
 
 
 class ComposeSystemPromptTests(unittest.TestCase):
@@ -1879,7 +1879,8 @@ class BuildProviderTests(unittest.TestCase):
 
 
 class ToolsSchemaTests(unittest.TestCase):
-    def test_all_five_tools_present(self) -> None:
+    def test_all_base_tools_present(self) -> None:
+        # Five classic tools, the three v3 parity tools (RFC-02) and emit_finding (RFC-03).
         names = {t["name"] for t in reviewer.tools_schema(10)}
         self.assertEqual(
             names,
@@ -1889,6 +1890,10 @@ class ToolsSchemaTests(unittest.TestCase):
                 "glob",
                 "post_inline_comment",
                 "submit_review",
+                "get_change_inventory",
+                "get_patch",
+                "read_instruction_files",
+                "emit_finding",
             },
         )
 
@@ -2528,10 +2533,11 @@ class OmittedFilesPromptTests(unittest.TestCase):
             text = reviewer.render_user_prompt(ctx, for_agent_runner=agent)
             self.assertIn(reviewer.OMITTED_FILES_HEADING, text)
             self.assertIn("`package-lock.json` (6 diff lines)", text)
-            self.assertIn("- package-lock.json (modified) +1/-1 — omitted from the diff below", text)
-            self.assertIn("- src/app.py (modified) +1/-0\n", text)
-            # the block sits between the diff and the closing instructions
-            self.assertLess(text.index("## Full Diff"), text.index(reviewer.OMITTED_FILES_HEADING))
+            # v3 (Task 11): the changed-files list became the inventory table
+            self.assertIn("| `package-lock.json` | modified | +1/-1 | omitted (generated / lock file) |", text)
+            self.assertIn("| `src/app.py` | modified | +1/-0 | — |", text)
+            # the block sits between the patches and the closing instructions
+            self.assertLess(text.index(reviewer.PATCHES_HEADING), text.index(reviewer.OMITTED_FILES_HEADING))
             self.assertLess(text.index(reviewer.OMITTED_FILES_HEADING), text.index("---\n\nReview this PR"))
 
 

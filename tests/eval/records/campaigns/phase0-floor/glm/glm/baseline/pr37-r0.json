@@ -1,0 +1,43 @@
+{
+  "pr": 37,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "d0bcc0d",
+  "turns": 12,
+  "tool_calls": null,
+  "seconds": 347.9,
+  "setup_seconds": 1.8,
+  "total_seconds": 349.7,
+  "usage": {
+    "in": 61263,
+    "cache_read": 382912,
+    "cache_write": 0,
+    "out": 13893,
+    "source": "cli"
+  },
+  "cost_usd": 0.845096,
+  "changed_files": [
+    "skills/ai-diff-reviewer/SKILL.md"
+  ],
+  "findings": [],
+  "summary": "## Verdict\n\nClean docs-only reframe \u2014 approve. Every factual claim in the rewritten narrative checks out against the repo, the procedural content (Steps 0\u20135) is untouched as claimed, and no skill-file security surface regresses.\n\n## Findings\n\nNo inline findings. Verification evidence for what I checked:\n\n- **Links and structure** \u2014 all three sibling sub-skill files referenced by the new `## Default flow` section exist (`generate-extension/SKILL.md`, `setup/SKILL.md`, `open-pr/SKILL.md`), as does `setup/reference.md`. Removing the `## What it does` header breaks no inbound anchor: a repo-wide grep for `#what-it-does` / `local-companion-skill` links returns only a historical CHANGELOG mention, and no doc references the old \"Local Companion Skill\" H1 prose.\n- **Factual claims** \u2014 the `Skills \u2014 prompt-sync invariant` job name is exact (`.github/workflows/code_check.yml:87`); `prompt-extension-file` is a real `action.yml` input (`action.yml:54`); the Flow B rewrite's \"Step 5 handoff\" is real (`setup/SKILL.md:382`), and the setup sub-skill does cover the \"strictness, triggers, and external-contributor policy\" defaults the intro promises.\n- **Security surfaces** \u2014 the moved Install block uses the official `npx skills add` installer with a pinned-tag variant (no fetch-and-execute pattern); `allowed-tools:` is unchanged so the Step 0 trust boundary remains matched; no vendored `.agents/skills/ai-diff-reviewer/**` files touched (Rule #14 preserved \u2014 it refreshes at next release).\n\n## Notes\n\n- One nit found and deliberately **not** flagged inline: the moved Install note still says \"published tags v1.0.0\u2013v1.4.2 anchor the URL space\" and the rewritten parity sentence keeps the `@v1.4.2` pin example \u2014 both stale at PR time (v1.5.0\u2013v1.6.2 were already published). I verified current `main` no longer contains either string, so the staleness was caught and fixed by the later docs audits; an inline comment would be noise.\n- Context: this PR's head content is byte-identical to what lan",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "37-parity-paragraph-contradiction"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

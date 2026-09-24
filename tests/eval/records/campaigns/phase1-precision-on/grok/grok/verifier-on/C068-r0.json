@@ -1,0 +1,79 @@
+{
+  "case": "C068",
+  "pr": "C068",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.8,
+  "usage": {
+    "in": 30162,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1643,
+    "source": "cli"
+  },
+  "cost_usd": 0.0962556,
+  "changed_files": [
+    "web/session.py"
+  ],
+  "findings": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`pickle.loads` on the decoded session blob is unsafe: pickle can execute arbitrary Python during deserialization. If `raw` comes from a cookie, header, or any client-controlled value, an attacker can ship a crafted base64 pickle and get code execution in the app process the moment `load_session` runs.\n\nKeep a data-only codec (JSON, or a signed structured format). If the cart plugin needs richer types, encode them explicitly (e.g. known JSON fields / a versioned schema) and validate on load \u2014 do not unpickle untrusted input.\n\n```suggestion\nimport json\n\ndef load_session(raw: str) -> dict:\n    return json.loads(base64.urlsafe_b64decode(raw))\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces remote code execution by deserializing session blobs with `pickle.loads`.\n\n## Analysis\n\n`load_session` takes a raw string (typically a cookie or other client-supplied session token), base64-decodes it, and previously parsed it as JSON. That was a safe, data-only format. Replacing `json.loads` with `pickle.loads` means any crafted pickle payload in that blob runs arbitrary Python during unpickling (via `__reduce__` / opcode gadgets). No signature or MAC check was added, so the client fully controls the bytes that reach the deserializer.\n\nThe cart-plugin motivation does not justify this: richer session objects should be expressed as an explicit schema (JSON with known fields, or a signed structured format), not via pickle.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "web/session.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "web/session.py was changed from json.loads to pickle.loads on base64-decoded raw session input; pickle deserialization executes attacker-controlled bytecode, so any client-supplied session blob yields RCE. Critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.639,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2226,
+      "out": 362
+    },
+    "cost_usd": 0.007546
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C068-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

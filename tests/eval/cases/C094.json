@@ -1,0 +1,74 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C094",
+  "title": "Round 2 fixes the flagged SQL concatenation in one function and reintroduces it in another (regression)",
+  "stack": "python",
+  "change_class": "injection",
+  "risk_class": "warning_positive",
+  "family_group": "G94",
+  "gap_tags": [
+    "iar_multi_round"
+  ],
+  "fixture": {
+    "base": {
+      "q.py": "def by_name(db, name):\n    return db.execute(\"SELECT * FROM t WHERE name = '\" + name + \"'\")\n"
+    },
+    "head": {
+      "q.py": "def by_name(db, name):\n    return db.execute(\"SELECT * FROM t WHERE name = ?\", (name,))\n\n\ndef by_email(db, email):\n    return db.execute(\"SELECT * FROM t WHERE email = '\" + email + \"'\")\n"
+    },
+    "pr_metadata": {
+      "title": "q: parameterise by_name; add by_email",
+      "body": "Fixed the injection the bot flagged and added the email lookup.",
+      "deceptive": false
+    },
+    "iar": {
+      "round1_head": {
+        "q.py": "def by_name(db, name):\n    return db.execute(\"SELECT * FROM t WHERE name = '\" + name + \"'\")\n"
+      },
+      "round1_findings": [
+        {
+          "path": "q.py",
+          "line": 2,
+          "severity": "warning",
+          "body": "SQL built by string concatenation of `name` — parameterise."
+        }
+      ],
+      "note": "multi-round fixture (RFC-01 corpus gap): base → round1_head produced round1_findings; head is the round-2 push. Scoring: labels describe what must still be flagged (open / regressed) after round 2."
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:a07a349485e8a04bfd4693ad57d8b0295dce45e37d3743cf05520941bdffa4a8"
+  },
+  "labels": [
+    {
+      "id": "C094-d1",
+      "severity": "warning",
+      "path": "q.py",
+      "defect": "The round-1 defect class regressed into a new function while the flagged line was fixed",
+      "evidence": "by_email concatenates `email` into SQL exactly as by_name did; retiring the round-1 finding is correct only for by_name — the new occurrence must surface as regressed/new.",
+      "keywords": [
+        "by_email",
+        "concatenat",
+        "email",
+        "parameteri"
+      ],
+      "line": 6,
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C094-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

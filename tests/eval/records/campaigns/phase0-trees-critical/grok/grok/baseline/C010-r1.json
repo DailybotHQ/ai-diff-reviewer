@@ -1,0 +1,51 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 293.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 293.3,
+  "usage": {
+    "in": 27492,
+    "cache_read": 83456,
+    "cache_write": 0,
+    "out": 1278,
+    "source": "cli"
+  },
+  "cost_usd": 0.0876888,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "**IDOR: any authenticated user can read any account.**\n\n`body.accountId` is trusted whenever it is present. A normal user can POST `{\"accountId\":\"<victim>\"}` and receive that account\u2019s record. The support-tools comment does not enforce staff-only access.\n\nRequire an explicit staff/support authorization check before accepting a client-supplied id, and keep the default path as `caller.accountId` only:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nlet id = caller.accountId;\nif (body.accountId != null) {\n  if (!caller.isSupportStaff) { // or whatever role flag auth() provides\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  id = body.accountId;\n}\n```\n\nAlso confirm this route\u2019s method: reading `req.json()` on a GET is unreliable in many runtimes; staff tools should use a dedicated staff route or a validated query/body on an allowed method."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole \u2014 do not merge until account lookup is gated to support staff (or equivalent).\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/routes/account.ts:8` | Any authenticated caller can look up any account via `body.accountId` (IDOR) |\n\n## Notes\n\n`auth(req)` only establishes the caller; nothing in this diff checks a staff/support role before honoring a client-supplied `accountId`. The comment documents intent for support tools, but the code applies the override to every authenticated request.\n\n`auth` / `db` are imported and not present in this tree, so role helpers could exist elsewhere \u2014 if they do, this handler still does not call them.\n\n## Recommendation\n\n**request-changes**",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -69,6 +69,7 @@ correctness, clarity, simplicity, and verified completion.
 | Performance | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | Iteration-Aware Review | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
 | v2 pin + platform notes | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
+| v3 design records (RFCs) | [docs/rfc/v3/README.md](docs/rfc/v3/README.md) |
 | Docs index | [docs/README.md](docs/README.md) |
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
@@ -84,7 +85,7 @@ correctness, clarity, simplicity, and verified completion.
 - **Python 3.10+ standard library only.** No `requirements.txt`, no `pyproject.toml`, no virtualenv. Every dependency is a supply-chain question for every consumer.
 - **Composite GitHub Action** — not Docker, not Node. The runtime is whatever Python ships with `ubuntu-latest`.
 - **Single source file** for the runtime: `scripts/reviewer.py`. The simplicity is the feature.
-- **Runner × backend abstraction.** Six runners (`anthropic`, `openai` in-process; `claude-code`, `cursor`, `codex`, `grok` CLIs) and an `EndpointProfile` resolved from the optional `api-base` input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom). Every backend URL comes from `resolve_endpoint_profile`; empty `api-base` keeps each runner byte-identical to earlier releases.
+- **Runner × backend abstraction.** Six runners (`anthropic`, `openai` in-process; `claude-code`, `cursor`, `codex`, `grok` CLIs) and an `EndpointProfile` resolved from the optional `api-base` input (Anthropic, OpenAI, Azure Foundry, xAI, Z.ai, custom). Every backend URL comes from `resolve_endpoint_profile`; an empty `api-base` selects the vendor's default endpoint (the v2 "byte-identical to earlier releases" promise ended with v3's request shape — BC-17, `docs/MIGRATION_v3.md`).
 
 ---
 
@@ -216,7 +217,7 @@ Whenever you change runtime behaviour:
 
 ### 8. SemVer for Releases (MANDATORY)
 
-Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. Never delete a published tag — consumers pin to it.
+Releases follow Semantic Versioning. Tags are `vX.Y.Z`. The `release.yml` workflow auto-updates the moving major tag for the current line (`v2`) on every `v2.x.y` release; consumers pinning `@v2` get patches and minor features automatically. Never delete a published tag — consumers pin to it. **v3 adds an eval gate (BC-02):** `auto-release.yml` cuts a release only when `tests/eval/release_gate.py` finds a current, non-blocking `verdict/1.0` for the candidate's runtime + prompt; a missing or stale verdict skips the cut (see `docs/RELEASE_RECOVERY.md`).
 
 ### 9. Marketplace Branding Stable
 
@@ -470,8 +471,9 @@ For the full collaboration model — when to spawn sub-agents, how to coordinate
 This repository **dogfoods itself**: every PR is reviewed by the action it ships, via `.github/workflows/self-review.yml`. When applying review feedback:
 
 - Skip `isMinimized == true` comments (those are previous reviews collapsed by `collapse-previous`).
-- Anchor on the most recent `<!-- ai-pr-reviewer-marker -->` comment to identify the authoritative review SHA.
+- Anchor on the most recent `<!-- ai-pr-reviewer-marker -->` comment to identify the authoritative review SHA. Since v3 the self-review runs the RFC-04 ensemble topology: the provider legs emit artifacts and post nothing, and **one** aggregate job publishes the review — its body and tracking comment carry `<!-- ai-pr-reviewer-aggregate -->` beside the marker, one `self-reviewed` label replaces the per-provider labels, and each finding says how many legs reported it.
 - The action collapses prior reviews on every push, so reading all comments blindly will mix live and stale feedback.
+- Prefer the structured artifact (`review-output/3.0`, uploaded by the aggregate job) over scraping the body: it carries the findings with evidence, verification and agreement, the refuted list and the legs block.
 
 Full workflow + ready-to-copy GraphQL query: [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md).
 

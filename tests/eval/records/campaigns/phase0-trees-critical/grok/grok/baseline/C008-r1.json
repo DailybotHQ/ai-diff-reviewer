@@ -1,0 +1,51 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 142.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 142.2,
+  "usage": {
+    "in": 28091,
+    "cache_read": 54784,
+    "cache_write": 0,
+    "out": 1429,
+    "source": "cli"
+  },
+  "cost_usd": 0.0811912,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "**SSRF: customer-controlled URL is fetched with no host/scheme restrictions.**\n\nRemoving `ALLOWED_HOSTS` and the `urlsplit` check means `deliver()` will `urlopen` any attacker- or tenant-supplied URL. Concrete failure modes:\n\n- `http://169.254.169.254/latest/meta-data/` (cloud metadata credentials)\n- `http://127.0.0.1:6379/` / `http://10.0.0.0/8` (internal service probing)\n- `file:///` or unexpected schemes if the opener allows them\n\nCustomer-configured endpoints need a deliberate egress policy before merge, for example:\n\n1. HTTPS only\n2. Resolve hostname and reject private/link-local/loopback/metadata IP ranges (and re-check after redirect)\n3. Per-tenant allowlist of registered callback base URLs (not free-form arbitrary hosts on every call)\n4. No redirects, or redirect targets re-validated with the same rules\n\nRestore a guard before `Request`/`urlopen`; do not ship open `urlopen(url)` on runner/app network path."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this PR removes the webhook host allowlist and posts to whatever URL the caller supplies, with no scheme, host, or network-range checks.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | critical | `webhooks.py:4` | SSRF \u2014 arbitrary customer URL fetched server-side after allowlist removal |\n\n## Notes\n\nEnterprise delivery to customer endpoints is a valid goal, but it needs an explicit outbound policy (HTTPS-only, DNS rebinding protections, block of link-local/private/metadata ranges, and preferably an allowlist or per-tenant registered base URLs). Blindly deleting `ALLOWED_HOSTS` turns `deliver()` into an open server-side request primitive.\n\n`json_dumps` is still referenced with no import/definition in this module; that looks pre-existing and is outside the diff, but it will break the happy path once any URL is accepted.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

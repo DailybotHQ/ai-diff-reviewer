@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 29.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 29.1,
+  "usage": {
+    "in": 29863,
+    "cache_read": 57472,
+    "cache_write": 0,
+    "out": 1481,
+    "source": "cli"
+  },
+  "cost_usd": 0.0858536,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "`email` is interpolated directly into the SQL string, so a value like `' OR 1=1--` changes the query predicate and can return every order (or worse). The previous `?` placeholder already prevented this.\n\nRestore a bound parameter. For partial match, use `LIKE` with the pattern as a parameter:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```"
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The comment and PR title say support needs fragment/partial email search, but the predicate is still `email = '{email}'`. An input like `user@` will not match `user@example.com`.\n\nAfter restoring parameterization, switch to `LIKE` (or equivalent) with a bound pattern such as `% || ? || %` / `f\"%{email}%\"` as the parameter value so partial match works without opening injection."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical SQL injection by replacing a parameterized query with f-string interpolation of `email`.\n\n## Narrative\n\n`get_orders` previously bound `email` safely via `?`. The new query builds SQL with `f\"... email = '{email}'\"`, so any value containing a single quote can break out of the string literal and alter the statement (e.g. dump other rows, attach a database, or run stacked statements depending on SQLite configuration and call sites).\n\nThe PR title and comment claim partial-match search for support, but the predicate is still `=`, so fragments still will not match. Partial match should use a bound parameter with `LIKE` (and appropriate wildcards), keeping the value out of the SQL text.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head replaces the safe `?` bound parameter with an f-string that embeds `email` directly into the SQL, so attacker-controlled input can alter the query. This is a real critical SQL-injection regression from the base version."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 6.203,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2028,
+      "out": 263
+    },
+    "cost_usd": 0.006069
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

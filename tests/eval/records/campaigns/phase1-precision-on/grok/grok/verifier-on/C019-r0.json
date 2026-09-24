@@ -1,0 +1,93 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 102.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 102.6,
+  "usage": {
+    "in": 18030,
+    "cache_read": 101760,
+    "cache_write": 0,
+    "out": 2974,
+    "source": "cli"
+  },
+  "cost_usd": 0.084432,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`dependencies = [(\"billing\", \"0007_add_reason\")]` points at a migration this PR deletes. Django will not be able to build the graph: fresh installs fail looking up node `billing.0007_add_reason`, and any database that already applied 0007 is left with a `django_migrations` row and column that no longer have a matching source file or a reachable `RemoveField` plan.\n\n**Fix:** restore `migrations/0007_add_reason.py` and keep this file as the forward drop. Only if 0007 was never applied in any environment may you delete 0007 \u2014 in that case delete this `0008` as well and leave the model aligned with `0006_initial`.\n\n```suggestion\n    dependencies = [(\"billing\", \"0007_add_reason\")]  # keep 0007_add_reason.py in the tree\n```"
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "body": "Deleting `0007_add_reason` rewrites migration history instead of forwarding it. If any environment already ran this migration, `invoice.void_reason` still exists in the database and `django_migrations` still records `billing.0007_add_reason`, but the operation that introduced the column is gone from source. That desync blocks `migrate`, `migrate --plan`, and squash/rollback tooling, and pairs badly with a new `0008` that cannot attach to a missing parent.\n\n**Fix:** do not delete this file. Leave `0007` as-is and drop the column only via `0008_drop_reason.RemoveField`. Reserve deletion of `0007` for the never-deployed case, with no replacement `RemoveField` migration."
+    }
+  ],
+  "summary": "## Verdict\n\nDo not merge \u2014 the migration graph is broken and will fail on apply.\n\n## What went wrong\n\n`migrations/0007_add_reason.py` (which adds `invoice.void_reason`) is deleted, while the new `migrations/0008_drop_reason.py` still declares `dependencies = [(\"billing\", \"0007_add_reason\")]` and runs `RemoveField` for that column.\n\nDjango resolves the graph by migration module name. With `0007_add_reason` gone from the tree:\n\n1. **Fresh environments** raise `NodeNotFoundError` (or equivalent) because the parent node is missing.\n2. **Environments that already applied 0007** still have the row in `django_migrations` and the column on `invoice`, but the source file that produced that node is gone \u2014 `migrate` cannot build a consistent plan, and `RemoveField` never becomes a reachable leaf from `0006_initial`.\n3. Even if the dependency were repointed at `0006_initial`, `RemoveField(\"void_reason\")` would fail on databases that never had the column (0007 never applied) and would be the wrong history rewrite for databases that did.\n\n## Correct approach\n\nKeep `0007_add_reason` in the tree and ship only the forward migration that drops the field (this PR's `0008`). That preserves history for any DB that already ran 0007 and makes 0008 a normal forward step. If 0007 was **never** deployed anywhere, the alternative is to delete 0007 and **not** add a RemoveField migration \u2014 restore the model to match `0006_initial` with no intermediate add/drop pair.\n\nThe comment that the field was never shown in the UI does not make deleting the add-migration safe; migration identity is about applied database state, not UI surface area.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "0008_drop_reason.py depends on billing.0007_add_reason, but this PR deletes 0007_add_reason.py while adding 0008, so the migration graph is broken for fresh installs and for any DB that already applied 0007."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Base still has billing.0007_add_reason (AddField void_reason); head deletes that file while new 0008_drop_reason depends on billing.0007_add_reason and RemoveField. That leaves a missing parent in the graph, so migrate tooling breaks for any env that applied 0007 (and 0008 cannot load at all)."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 36.548,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 6115,
+      "out": 1072
+    },
+    "cost_usd": 0.02048
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

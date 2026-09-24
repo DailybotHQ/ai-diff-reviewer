@@ -1,0 +1,51 @@
+{
+  "case": "C011",
+  "pr": "C011",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 120.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 120.2,
+  "usage": {
+    "in": 14722,
+    "cache_read": 67840,
+    "cache_write": 0,
+    "out": 991,
+    "source": "cli"
+  },
+  "cost_usd": 0.055742,
+  "changed_files": [
+    "src/payments/charge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Secret leakage:** `process.env.PROCESSOR_KEY` is included in the log payload. Debug logs routinely ship to centralized logging, support tooling, and long-retention stores; any reader of those logs gets the live processor credential.\n\nFailure mode: a single failed charge writes the key into logs \u2192 support export, log spill, or compromised log backend yields full payment-processor access.\n\nKeep `orderId` and `ref` (and other non-secret charge metadata). Drop `key` entirely. If support needs to replay, use a separate audited mechanism that never echoes the raw secret into log lines.\n\n```suggestion\n  log.debug(\"charge context\", { orderId: order.id, ref });\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change logs the payment processor credential into application logs.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/payments/charge.ts:7` | `PROCESSOR_KEY` written into log payload |\n\n## Discussion\n\nSupport can already correlate failures with `orderId` and `ref` (the previous info log). Adding the processor key does not improve replay safety; it puts a secret into whatever sink consumes `log.debug` (stdout, log agents, support tooling, retained log stores).\n\nIf support needs richer charge context, log non-secret fields only (order id, charge ref, amount, currency, processor error codes). Credential-bearing replay belongs in a controlled, audited path \u2014 never in routine debug lines.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C011-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

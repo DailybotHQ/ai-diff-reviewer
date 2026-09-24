@@ -1,0 +1,72 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 11,
+  "tool_calls": null,
+  "seconds": 220.1,
+  "setup_seconds": 1.9,
+  "total_seconds": 222.0,
+  "usage": {
+    "in": 106228,
+    "cache_read": 912768,
+    "cache_write": 0,
+    "out": 10027,
+    "source": "cli"
+  },
+  "cost_usd": 0.5464484,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5466,
+      "severity": "warning",
+      "body": "**Fallback reads the wrong key on `changed_files`, so path heuristics never run in production.**\n\n`fetch_pr_context` stores each file as `{\"path\": filename, ...}` (`scripts/reviewer.py:4270-4276`), and `render_user_prompt` already indexes `f['path']`. This helper uses `f.get(\"filename\")`, so every path is `\"\"`.\n\n**Failure mode:** a small `scripts/reviewer.py`-only change where the model omits `complexity` gets `complexity:low` (line-delta path) instead of `high`. Verified: production-shaped `{\"path\": \"scripts/reviewer.py\"}` \u2192 `low`; test-shaped `{\"filename\": ...}` \u2192 `high`. The new unit tests construct the test shape, so CI stays green while the safety net is dead.\n\n```suggestion\n    paths: list[str] = [\n        str(f.get(\"path\") or f.get(\"filename\") or \"\")\n        for f in pr_ctx.changed_files\n    ]\n    paths = [p for p in paths if p]\n```\n\nAlso retarget `InferPrComplexityFallbackTests` fixtures to `{\"path\": ...}` so they match production."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5646,
+      "severity": "warning",
+      "body": "**Optional-complexity schema example is not valid JSON.** When `require_complexity=False` (default for every agent-runner consumer that does not enable complexity labels), the directive embeds:\n\n```text\n\"complexity\": \"low | medium | high\"  // optional\n```\n\nThe same directive requires the file to parse with `json.load()`. Models that copy the template literally will write a comment, fail parse, and lose the whole review \u2014 a regression on the default CLI path even when complexity labeling is off.\n\nPrefer omitting the field from the fenced example unless required, and document optionality only in the Rules bullet (already present). If the field stays in the example, drop the `//` comment:\n\n```suggestion\n    complexity_schema: str = (\n        ',\\n  \"complexity\": \"low | medium | high\"\\n'\n        if require_complexity\n        else \"\"\n    )\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5448,
+      "severity": "info",
+      "body": "**Short substring markers will over-classify once the `path` key fix lands.** `\"auth\" in path` matches `docs/AUTHORS.md`; `\"token\"` matches `packages/tokenizer/...`. Verified both currently classify as `high` under the test-shaped key.\n\nPrefer path-segment checks (split on `/` and match whole segments / known basenames) or longer anchors (`/auth/`, `oauth`, `secrets/`) so a docs-only AUTHORS edit does not become `complexity:high` on the fallback path."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid feature direction \u2014 complexity labeling is correctly bridged into `findings.json` for agent-runners, the noop warning no longer misleads on CLIs, and docs/self-review dogfood stay in sync. **One correctness bug in the heuristic fallback must be fixed before merge**, plus a schema foot-gun on the default agent-runner path.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `scripts/reviewer.py:5465` | Fallback reads `filename` but `PRContext.changed_files` stores `path` \u2014 path heuristics never fire in production |\n| 2 | \u26a0\ufe0f warning | `scripts/reviewer.py:5646` | Optional-complexity schema example embeds `// optional`, which is invalid JSON and can poison `findings.json` writes |\n| 3 | \u2139\ufe0f info | `scripts/reviewer.py:5443` | Short substring markers (`auth`, `token`) over-match once the key bug is fixed |\n\n## Notes\n\n- **Bridge path looks right:** `ReviewResult.complexity` \u2190 `parse_findings_file` / `parse_complexity_level`; `resolve_pr_complexity` prefers `state.proposed_pr_complexity` then `result.complexity`; post-loop label block applies when enabled; `require_complexity_in_findings=complexity_labels_enabled` is threaded through all three CLI providers.\n- **`self-review.yml` `AIReview` \u2192 `ready`** restores the documented dogfood gate (`docs/TRIGGER_MODES.md`, `AGENTS.md`); `empty_reason=no-ready-label` stays consistent.\n- **Tests:** suite is green (490), but the new fallback cases construct `changed_files` with `filename`, so they do not catch finding 1. Prefer fixtures shaped like `fetch_pr_context` (`{\"path\": ...}`).\n- **Multi-provider dogfood:** parallel legs can race the shared `complexity:*` label (last writer wins). Acceptable for dogfood; worth a one-line note in `PR_METADATA_CHECKS.md` if consumers matrix the same way.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 2,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 10
+  }
+}

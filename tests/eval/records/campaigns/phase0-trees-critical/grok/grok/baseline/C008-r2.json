@@ -1,0 +1,51 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 122.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 122.1,
+  "usage": {
+    "in": 28007,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1388,
+    "source": "cli"
+  },
+  "cost_usd": 0.0808156,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "**SSRF: host allowlist removed; arbitrary customer URL is fetched server-side.**\n\n`deliver()` now passes the caller-supplied `url` straight into `urllib.request.Request` / `urlopen` with no hostname, scheme, or IP-range validation. Anyone who can set the webhook URL (customer config, compromised tenant, PR/input injection upstream) can make this host POST to:\n\n- cloud metadata (`http://169.254.169.254/...`) and steal credentials\n- loopback/RFC1918 services (`http://127.0.0.1`, `http://10.x.x.x`)\n- other internal hooks the old `ALLOWED_HOSTS` gate blocked\n\nRestoring customer endpoints safely means an allow-policy, not an open egress: e.g. HTTPS-only, resolve host and reject private/link-local/metadata IPs, disable redirects, and optionally keep a per-tenant allowlist. Do not merge until outbound URL validation is restored."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical SSRF regression** \u2014 this PR removes the only host allowlist on outbound webhook delivery and posts attacker- or customer-controlled URLs with no scheme/host/IP validation.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `webhooks.py:5` | Host allowlist removed; arbitrary URL POST enables SSRF |\n\n## Details\n\n`deliver()` previously rejected any host outside `ALLOWED_HOSTS` (`hooks.internal.example`). The new path builds a `Request` from the raw `url` string and calls `urllib.request.urlopen` with no checks.\n\nConcrete failure modes on a typical cloud runner/app host:\n\n- `http://169.254.169.254/latest/meta-data/` (or cloud-equivalent) \u2014 credential/metadata theft\n- `http://127.0.0.1:<port>/...` / `http://10.x.x.x/...` \u2014 internal service scan or abuse\n- `file://` / unexpected schemes depending on opener behavior\n\nEnterprise \u201ccustomer-configured endpoints\u201d is a valid product goal, but it requires an explicit egress policy (HTTPS-only, DNS resolve + block private/link-local/metadata ranges, optional per-tenant allowlist, redirect blocking), not deletion of the gate.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

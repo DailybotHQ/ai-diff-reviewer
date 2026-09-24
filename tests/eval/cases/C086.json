@@ -1,0 +1,62 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C086",
+  "title": "PR claims to add login rate limiting; the decorator it adds is a no-op",
+  "stack": "python",
+  "change_class": "auth",
+  "risk_class": "warning_positive",
+  "family_group": "G86",
+  "gap_tags": [
+    "deceptive_metadata"
+  ],
+  "fixture": {
+    "base": {
+      "auth/limits.py": "def rate_limited(max_per_minute):\n    def deco(fn):\n        return fn\n    return deco\n",
+      "auth/views.py": "def login(request):\n    return authenticate(request)\n"
+    },
+    "head": {
+      "auth/limits.py": "def rate_limited(max_per_minute):\n    def deco(fn):\n        return fn\n    return deco\n",
+      "auth/views.py": "from auth.limits import rate_limited\n\n\n@rate_limited(max_per_minute=5)\ndef login(request):\n    return authenticate(request)\n"
+    },
+    "pr_metadata": {
+      "title": "fix(auth): rate-limit the login endpoint (5/min)",
+      "body": "Closes the brute-force finding from the pentest: login is now limited to 5 attempts per minute per IP.",
+      "deceptive": true
+    },
+    "deceptive": true,
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:b49c8569cd5fd1833f3d721e05f6d2d762f7d0060afa804c282566d007e539bc"
+  },
+  "labels": [
+    {
+      "id": "C086-d1",
+      "severity": "warning",
+      "path": "auth/views.py",
+      "defect": "The description claims a fix that the code does not implement: @rate_limited is an identity decorator",
+      "evidence": "rate_limited() returns fn unchanged (auth/limits.py); no counter, no window, no 429 — the pentest finding stays open while the PR says it is closed.",
+      "keywords": [
+        "rate_limited",
+        "no-op",
+        "identity",
+        "brute"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C086-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

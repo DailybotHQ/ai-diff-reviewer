@@ -1,0 +1,56 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 10,
+  "tool_calls": null,
+  "seconds": 129.2,
+  "setup_seconds": 2.1,
+  "total_seconds": 131.3,
+  "usage": {
+    "in": 83299,
+    "cache_read": 647296,
+    "cache_write": 0,
+    "out": 5928,
+    "source": "cli"
+  },
+  "cost_usd": 0.3963548,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 330,
+      "severity": "warning",
+      "body": "**Issue:** This comment classifies `codex` as a chat-completions leg that performs `set_pr_complexity`. In the runtime, `codex` is an `AgentRunnerProvider` (`scripts/reviewer.py` `CodexProvider`); with `complexity-labels-enabled=true` it only emits the agent-runner no-op warning and never applies a label.\n\n**Failure mode:** A maintainer verifying dogfood on the `codex` leg will expect a `complexity:*` label, see none, and debug a non-bug. Only `provider: anthropic` is chat-completions today (`docs/PR_METADATA_CHECKS.md` \u00a7 Provider support matrix).\n\n**Fix:**\n\n```suggestion\n          # PR complexity labeling \u2014 dogfood docs/PR_METADATA_CHECKS.md\n          # \u00a7 `complexity-labels-enabled`. The model calls `set_pr_complexity`\n          # and applies `complexity:low|medium|high`. The chat-completions leg\n          # (anthropic) performs the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n```"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 218,
+      "severity": "warning",
+      "body": "**Issue:** The dogfood gate label is renamed from `ready` to `AIReview` in this workflow, but the in-repo docs that point *at this file* still say `ready`.\n\n**Failure mode:** Maintainers and agents following `AGENTS.md` (\"label-gated on `ready`\"), `docs/TRIGGER_MODES.md` (\"this repo's own self-review.yml\" recipe), `README.md`, or this PR's test plan will apply `ready`, get `empty_reason=no-gate-label`, and never run self-review.\n\n**Fix:** Either keep `label-gate: ready` (smallest change if the rename was incidental), or finish the rename in the same PR: update `AGENTS.md` \u00a7 CI surface, the self-review references in `docs/TRIGGER_MODES.md` / `README.md`, and the PR test plan to say `AIReview`. Consumer *example* recipes may keep `ready` as a sample name."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfood enablement for complexity labels, but two correctness/docs issues should be fixed before merge: the complexity comment misclassifies `codex`, and the `ready` \u2192 `AIReview` rename is incomplete outside this workflow.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:330` | Comment claims `codex` applies complexity labels; it is agent-runner and no-ops |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:218` | Gate label renamed to `AIReview` while AGENTS.md / TRIGGER_MODES / README / PR test plan still say `ready` |\n\n## Notes\n\n**Complexity labeling config looks correct.** `complexity-labels-enabled: true` with default prefix `complexity:` matches `action.yml` / `docs/PR_METADATA_CHECKS.md`. Permissions already include `pull-requests: write`. Only the `anthropic` matrix leg is chat-completions and will call `set_pr_complexity`; `claude-code`, `cursor`, and `codex` will log the designed no-op warning.\n\n**Label rename scope.** The internal gate mechanics (`no-gate-label`, case-insensitive `aireview` match, defense-in-depth `label-gate`) are consistent inside this file. Consumer recipe examples that still use `ready` as *an example label name* are fine; the problem is the places that claim *this repo's* `self-review.yml` is gated on `ready`:\n\n- `AGENTS.md` \u00a7 CI surface \u2014 \"label-gated on \\`ready\\`\"\n- `docs/TRIGGER_MODES.md` \u00a7 Recipe \u2014 \"this repo's own self-review.yml is the reference\" with \\`ready\\`\n- `README.md` links that say self-review uses the \\`ready\\` pattern\n- This PR's own test plan still says \"apply the \\`ready\\` label\"\n\nAnyone following those instructions will get a permanently skipped dogfood run.\n\n**Praise.** Env-mapped label values (no raw \\`${{ github.event.pull_request.* }}\\` interpolation into the shell script), honest empty-matrix/`empty_reason` split, and `[skip release]` on the commits are all the right patterns.\n\n**Recommendation:** reque",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

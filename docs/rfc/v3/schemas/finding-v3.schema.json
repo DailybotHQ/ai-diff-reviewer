@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DailybotHQ/ai-diff-reviewer/docs/rfc/v3/schemas/finding-v3.schema.json",
+  "title": "AI Diff Reviewer v3 finding",
+  "description": "One review finding with its evidence bundle and verification state. Invariant enforced by the runtime and the aggregator (not expressible in JSON Schema without conditionals): severity == critical requires verification.status == verified; any other state is downgraded to warning before publication.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "path", "line", "severity", "category", "title", "body", "evidence", "verification", "origin"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^f-[0-9a-f]{16}$", "description": "Content-anchored fingerprint (finding_fingerprint) prefixed with f-." },
+    "path": { "type": "string", "minLength": 1 },
+    "line": { "type": "integer", "minimum": 1 },
+    "start_line": { "type": ["integer", "null"], "minimum": 1 },
+    "side": { "enum": ["LEFT", "RIGHT"] },
+    "severity": { "enum": ["critical", "warning", "info"] },
+    "severity_claimed": { "enum": ["critical", "warning", "info"], "description": "The severity the reviewing model asserted before verification; equals severity unless downgraded." },
+    "category": {
+      "enum": ["correctness", "security", "data-loss", "broken-contract", "concurrency", "performance", "maintainability", "contradicts-documented-rule", "test-gap", "style", "other"]
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "body": { "type": "string", "minLength": 1 },
+    "suggestion": { "type": ["string", "null"] },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["anchor_sha256", "excerpt", "files_read", "checks"],
+      "properties": {
+        "anchor_sha256": { "type": "string", "pattern": "^[0-9a-f]{16,64}$", "description": "Hash of the code lines around the anchor at head (same radius as the fingerprint)." },
+        "excerpt": { "type": "string", "maxLength": 2000, "description": "Redacted, bounded code excerpt at the anchor; never PR metadata." },
+        "files_read": { "type": "array", "items": { "type": "string" }, "maxItems": 20 },
+        "tool_trace_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 50 },
+        "checks": {
+          "type": "array", "maxItems": 20,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "result"],
+            "properties": {
+              "kind": { "enum": ["read_anchor", "grep_callers", "read_base_version", "read_instruction_file", "run_test", "type_check", "other"] },
+              "target": { "type": ["string", "null"] },
+              "result": { "enum": ["supports", "contradicts", "inconclusive"] },
+              "note": { "type": ["string", "null"], "maxLength": 300 }
+            }
+          }
+        },
+        "documented_rule": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "required": ["file", "quote"],
+          "properties": {
+            "file": { "type": "string" },
+            "quote": { "type": "string", "maxLength": 500 }
+          },
+          "description": "Filled for category contradicts-documented-rule: the instruction file and the rule the change violates."
+        }
+      }
+    },
+    "verification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": { "enum": ["unverified", "verified", "refuted", "downgraded", "skipped"] },
+        "verifier_model_alias": { "type": ["string", "null"], "enum": ["economy", "balanced", "deep", null] },
+        "verifier_endpoint_kind": { "type": ["string", "null"] },
+        "reason": { "type": "string", "maxLength": 500 },
+        "verified_at": { "type": ["string", "null"], "format": "date-time" },
+        "checks": {
+          "type": "array", "maxItems": 20,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["kind", "result"],
+            "properties": {
+              "kind": { "enum": ["read_anchor", "grep_callers", "read_base_version", "read_instruction_file", "run_test", "type_check", "other"] },
+              "target": { "type": ["string", "null"] },
+              "result": { "enum": ["supports", "contradicts", "inconclusive"] },
+              "note": { "type": ["string", "null"], "maxLength": 300 }
+            }
+          }
+        }
+      }
+    },
+    "agreement": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["legs_total", "legs_reporting"],
+      "properties": {
+        "legs_total": { "type": "integer", "minimum": 1 },
+        "legs_reporting": { "type": "integer", "minimum": 1 },
+        "reported_by": { "type": "array", "items": { "type": "string" } }
+      },
+      "description": "Filled by the aggregator (RFC-04); null on a single-leg review."
+    },
+    "lifecycle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["new", "open", "retired", "regressed"] },
+        "first_seen_run_id": { "type": ["string", "null"] },
+        "retired_reason": { "type": ["string", "null"], "enum": ["verified_fixed", "maintainer_resolved", "file_removed", null] }
+      }
+    },
+    "origin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "provider", "endpoint_kind", "model"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "provider": { "enum": ["anthropic", "openai", "claude-code", "cursor", "codex", "grok"] },
+        "endpoint_kind": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    }
+  }
+}

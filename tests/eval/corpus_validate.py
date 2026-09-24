@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "ai-diff-reviewer/eval-case/1"
-STACKS = {"python", "typescript", "go"}
+STACKS = {"python", "typescript", "go", "shell", "rust"}
 RISK_CLASSES = {"critical_positive", "warning_positive", "negative_control"}
 SEVERITIES = {"critical", "warning"}
 ADJUDICATOR = "independent-reviewer-v1"
@@ -261,8 +261,10 @@ def validate_case(case: dict[str, Any], name: str, f: Findings) -> None:
 # replaced case cannot silently pass the aggregate floors. C072 was never
 # published (see CORPUS.md); ids are assigned at authoring time and never
 # reused.
+# C075–C102: the v3 corpus-gap batch (cross-file, instruction-file, deceptive
+# metadata, omitted patch, multi-round IAR, shell + rust stacks) — PLAN_v3_implementation Task 5.
 EXPECTED_CASE_IDS: frozenset[str] = frozenset(
-    f"C{i:03d}" for i in range(1, 75) if i != 72
+    f"C{i:03d}" for i in range(1, 103) if i != 72
 )
 
 

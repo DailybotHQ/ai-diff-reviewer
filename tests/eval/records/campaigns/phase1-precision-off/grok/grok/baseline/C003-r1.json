@@ -1,0 +1,79 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 26.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 26.5,
+  "usage": {
+    "in": 29846,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1365,
+    "source": "cli"
+  },
+  "cost_usd": 0.0852004,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` embeds a production credential as a default. If `SMTP_PASSWORD` is unset (the cron case the comment describes), every runner authenticates with this shared secret. The value is also permanent git history once merged, so repo readers can reuse it against `smtp.internal.example`.\n\n**Fix:** Require the env var and fail (or no-op with an error log) when it is missing; mount the secret into the cron job. Rotate this password if it was ever real.\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default fallback.\n\n## Why this is blocking\n\n`mailer.py` replaces the required `SMTP_PASSWORD` env lookup with:\n\n```python\nos.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")\n```\n\nThat default is a real-looking shared secret checked into the repo. Anyone with read access to the code (or the git history after merge) can authenticate as `notifications` against `smtp.internal.example`. The comment makes the intent explicit: keep mail working when the secret is not mounted, which means the fallback is meant for production-shaped environments.\n\n## What to do instead\n\nFail fast when `SMTP_PASSWORD` is missing (or skip send with a clear log), and mount the secret into the cron environment the same way other jobs get credentials. Rotate `smtp-prod-backup-77` immediately if it was ever a live password \u2014 it is now exposed in this branch even if the PR is closed.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

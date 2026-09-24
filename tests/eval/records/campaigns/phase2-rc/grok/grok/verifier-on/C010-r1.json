@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 50.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 50.5,
+  "usage": {
+    "in": 31902,
+    "cache_read": 118528,
+    "cache_write": 0,
+    "out": 2089,
+    "source": "cli"
+  },
+  "cost_usd": 0.1118964,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated user can pass `accountId` in the request body and read a different account. The previous code always used `caller.accountId` from `auth(req)`; this change substitutes `body.accountId` with no check that the caller is support staff or otherwise authorized for cross-account access.\n\nFailure mode: attacker authenticates as themselves, sends `{\"accountId\":\"<victim>\"}`, and receives the victim account payload from `Response.json(account)`.\n\nRequire an explicit staff/admin authorization check before honoring a client-supplied id (or move this to a separate staff-only endpoint). Non-staff callers must always resolve to `caller.accountId` only \u2014 e.g.:\n\n```typescript\nconst body = await req.json().catch(() => ({}));\nlet id = caller.accountId;\nif (body.accountId != null && body.accountId !== caller.accountId) {\n  if (!caller.isSupportStaff) {\n    return new Response(\"Forbidden\", { status: 403 });\n  }\n  id = body.accountId;\n}\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical IDOR that lets any authenticated caller read arbitrary accounts.\n\n## Analysis\n\n`getAccount` previously scoped the lookup to `caller.accountId` from `auth(req)`, which correctly bound the result to the authenticated principal. The new code takes `body.accountId` and uses it as the lookup key with no authorization check that the caller is support staff (or otherwise permitted to cross account boundaries).\n\nThe comment says support tools need an explicit id, but nothing in this handler enforces a staff role, permission, or allowlist. Any client that can authenticate and send JSON can pass another user's `accountId` and receive that account record via `Response.json(account)`.\n\nThere is also no validation that `accountId` is a well-formed id before it hits the DB layer.\n\n## Recommendation\n\nGate cross-account lookup behind an explicit staff/admin authorization check (or a separate staff-only route), and keep the default path strictly `caller.accountId`. Reject non-staff callers that supply a different `accountId` with 403.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head handler sets `id` from `body.accountId ?? caller.accountId` and returns that account with no staff/role check; base always used `caller.accountId` only. Any authenticated caller can therefore supply another account id and read it (IDOR)."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.68,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 7483,
+      "out": 405
+    },
+    "cost_usd": 0.018087
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

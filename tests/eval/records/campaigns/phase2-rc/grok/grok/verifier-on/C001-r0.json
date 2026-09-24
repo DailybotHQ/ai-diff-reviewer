@@ -1,0 +1,79 @@
+{
+  "case": "C001",
+  "pr": "C001",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 41.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.9,
+  "usage": {
+    "in": 16818,
+    "cache_read": 100864,
+    "cache_write": 0,
+    "out": 1675,
+    "source": "cli"
+  },
+  "cost_usd": 0.0739452,
+  "changed_files": [
+    "app.py"
+  ],
+  "findings": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity": "critical",
+      "body": "Removing `@require_role(\"admin\")` leaves `delete_user` with no authorization gate. Any client that can call `DELETE /users/<user>` can remove arbitrary accounts (`USERS.remove(user)` \u2192 204), including via a compromised viewer session or an unauthenticated caller if nothing else sits in front of Flask.\n\nCleanup jobs need a deliberate privilege path (authenticate the **caller**, allow a service/admin role, or a separate internal endpoint with its own credential) \u2014 not an open delete.\n\n```suggestion\n@require_role(\"admin\")\ndef delete_user(user):\n```\n\nIf viewers must delete, change `require_role` to check the authenticated principal (e.g. from `request`) and permit the specific cleanup role; do not drop the decorator."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 this change must not merge as-is.\n\n## Narrative\n\n`DELETE /users/<user>` previously required `@require_role(\"admin\")`. This PR removes that decorator so cleanup jobs running as a viewer stop getting 403s. The effect is that the destructive delete endpoint no longer enforces any role check at all: any caller who can reach the route can remove arbitrary users and receive `204`.\n\nThat matches a classic broken-access-control failure mode. The PR description frames this as unblocking an internal job, but the implementation does not scope the relaxation to a service identity, internal network path, or separate cleanup credential \u2014 it drops the gate for everyone.\n\nThe existing `require_role` helper is itself awkward (it compares `ROLES.get(user)` against the path parameter rather than an authenticated caller from `request`), which likely *is* why viewer-driven cleanup got 403s. The right fix is to authorize the **caller** (session/token/service account) and allow an explicit cleanup/admin principal \u2014 not to delete the check.\n\n## Release decision\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "app.py",
+      "line": 20,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes `@require_role(\"admin\")` from `delete_user`, leaving `DELETE /users/<user>` with no auth check so any caller can `USERS.remove(user)` and get 204. Base still had the decorator; head has only a comment explaining the removal."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.268,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2449,
+      "out": 331
+    },
+    "cost_usd": 0.007831
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C001-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

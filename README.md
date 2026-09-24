@@ -238,6 +238,11 @@ Six runners ship, each pointing at any of **thirteen backends**. Pick the **vend
 
 Ready-to-copy workflows per provider: [`examples/provider-openai.yml`](examples/provider-openai.yml), [`examples/provider-anthropic-zai.yml`](examples/provider-anthropic-zai.yml), [`examples/provider-claude-code.yml`](examples/provider-claude-code.yml), [`examples/provider-claude-code-glm.yml`](examples/provider-claude-code-glm.yml), [`examples/provider-codex-azure.yml`](examples/provider-codex-azure.yml), [`examples/provider-grok.yml`](examples/provider-grok.yml), [`examples/provider-cursor.yml`](examples/provider-cursor.yml), [`examples/provider-codex.yml`](examples/provider-codex.yml).
 
+
+### Several providers, one review (v3)
+
+Run each provider as a matrix leg with `mode: emit` and one `mode: aggregate` job after them: the legs review and upload their `review-output/3.0` document without touching the PR, the aggregate merges duplicates by anchor, records how many legs agree on each finding, verifies the criticals once and publishes **one** review with one marker and one label. Knobs: `expected-legs`, `min-agreement`, `require-all-legs`. Copy [`examples/ensemble-matrix.yml`](examples/ensemble-matrix.yml); the reading rules are in [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md#aggregated-reviews-v3-mode-aggregate).
+
 ### Bill Claude Code against a subscription (instead of API tokens)
 
 Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. Run `claude setup-token` on a machine logged into your plan, store the resulting `sk-ant-oat…` token as a secret, and pass it as `api-key` — the action auto-detects the prefix and uses subscription auth:
@@ -277,6 +282,13 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `pr-description-min-length` | | `50` | Char threshold below which the PR body is treated as vague. |
 | `complexity-labels-enabled` | | `false` | When `true`, the reviewer applies a `complexity:low/medium/high` label to the PR. |
 | `complexity-label-prefix` | | `complexity:` | Prefix for the complexity label (change to match your labeling conventions). |
+| `verifier` | | `on` | v3: a second, code-grounded check of every claimed `critical` (and a 30 % sample of warnings). A critical publishes as `critical` only when verified; otherwise it stays visible as an annotated warning. Refuted findings are listed, never posted inline. `off` skips the call. See [docs/STRICTNESS.md](docs/STRICTNESS.md#verified-criticals-v3). |
+| `verifier-model` | | `''` | Verifier model: empty = the `economy` tier of the lane's backend (`balanced` fallback); a tier alias or explicit id is accepted. CLI lanes verify on the in-process runner of the same backend (`grok` → xAI API, `claude-code` → the configured Anthropic-compatible base, `codex` → the OpenAI base); `cursor` cannot verify. |
+| `strict-unverified-criticals` | | `false` | Transition knob (removed in v3.1.0): gate on the *claimed* critical even when the verifier did not verify it (v2 behaviour). |
+| `mode` | | `review` | v3 role (RFC-04): `review` publishes as always; `emit` runs the review, writes the `review-output/3.0` document + artifact and performs **no** GitHub write (a matrix leg needs only read permissions; exits 0, the gate is recorded for the aggregate job); `aggregate` consolidates the emitted legs and publishes once (Phase 2). `emit` without `expected-legs` posts one note so a forgotten aggregate job is visible. |
+| `expected-legs` | | `''` | v3: comma/newline list of leg ids (`<provider>\|<endpoint_kind>\|<model>`) the aggregate job waits for; on an `emit` leg it suppresses the note. |
+| `min-agreement` | | `1` | v3 aggregate only: a `warning` counts toward `block-on-warning` / `block-on-any` only when at least this many legs reported it; criticals ignore it. `2` is the noise-reduction setting for matrices of three or more legs. |
+| `require-all-legs` | | `false` | v3 aggregate only: `true` fails the check when a leg is missing, failed or timed out; `false` publishes with the delivered legs and names the missing one. |
 | `max-turns` | | `30` | Hard cap on the agentic-loop iterations (chat-completions providers only). |
 | `agent-max-turns` | | `''` | Turn cap for agent-runner CLIs. Enforced natively on `grok` (`--max-turns`); Claude Code / Codex / Cursor expose no stable turn flag, so the run logs a per-provider warning with the equivalent knob (`--max-budget-usd` via `agent-extra-args` for Claude Code) and the 900 s timeout bounds the run. Ignored for chat-completions providers. |
 | `agent-extra-args` | | `''` | Raw string appended to the CLI invocation. Parsed with `shlex.split` (never `shell=True`). Escape hatch for provider-specific flags. |
@@ -305,6 +317,13 @@ Like Cursor, `claude-code` can bill against a **Claude Pro/Max subscription**. R
 | `inline-dropped` | int | Inline comments dropped because GitHub returned 422. |
 | `blocked` | bool | Whether strictness blocked the check. When `true`, the action exits with code 2. |
 | `skipped` | bool | Whether the run was skipped without invoking the LLM (label/author gate OR `skip-review-label` emergency bypass). |
+| `structured-output-path` | string | v3: absolute path of the `review-output/3.0` document (`.aiprr/review-output.json`): run record, change inventory, findings with evidence and verification, refuted findings, prior-findings ledger, generated summary (`rendered_markdown` = the posted body), gate, usage, cost. Written on every exit path. |
+| `structured-output-sha256` | string | v3: SHA-256 of that document, so a downstream step can verify it reads what this run wrote. |
+| `legs-expected` | string | v3 aggregate: comma-separated leg ids the aggregate job expected (empty on review/emit runs). |
+| `legs-delivered` | string | v3 aggregate: leg ids that delivered a complete document for this head. |
+| `duplicates-removed` | int | v3 aggregate: findings merged away by the dedup key. |
+| `agreement-histogram` | string | v3 aggregate: JSON `{"<legs reporting>": <findings>}` over the consolidated findings. |
+| `structured-output-artifact` | string | v3: name of the uploaded artifact carrying the document (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90-day retention). |
 | `iteration-round` | int (as string) | IAR round number within the current generation. Populated on every successful IAR pipeline run; empty if the pipeline crashed mid-flight (caught by the try/except safety net). |
 | `iteration-generation` | int (as string) | IAR generation counter; increments on new commits or rebase. Empty if the IAR pipeline crashed. |
 | `iteration-policy-applied` | string | Which IAR policy actually fired this run. Usually matches `convergence-policy`; the 30% new-lines safety net overrides it to `safety-net-forced-first-pass-exhaustive` and the escape label overrides to `escape-label-forced-full-review`. Empty if the IAR pipeline crashed. |
@@ -328,11 +347,13 @@ Consume them in a later step by giving the action step an `id`:
 | Mode | What fails the check |
 |---|---|
 | `lenient` (default) | Nothing. The review posts; the check is always green. |
-| `block-on-critical` | One or more inline comments tagged `critical`. |
+| `block-on-critical` | One or more **verified** `critical` findings (v3: a claimed critical the verifier could not confirm publishes as an annotated `warning` and does not block; `strict-unverified-criticals: true` restores v2 gating for one minor cycle). |
 | `block-on-warning` | One or more inline comments tagged `critical` or `warning`. |
 | `block-on-any` | Any inline comment at all, including `info`. Zero-tolerance mode — use for security-critical or regulated stacks where every finding must be resolved before merge. |
 
 The model decides severity per inline comment via the tool's `severity` argument; the bundled default prompt explains the levels in detail. Customise the prompt to make the model more or less aggressive about each tier.
+
+**Reviews that do not finish are red (v3).** A review that hits its turn cap without submitting (`status: incomplete`) or its wall-clock cap (`timeout`) posts the partial findings with a note and **fails the check under `block-on-critical` and stricter**; `lenient` stays green. The status is in the run record and the structured output.
 
 Full guide: [docs/STRICTNESS.md](docs/STRICTNESS.md).
 
@@ -704,7 +725,7 @@ The Action's runtime (the local skill mirrors these steps in your coding agent):
 4. **Tracking comment** — posts a `Working…` comment with a stable marker.
 5. **Fetch PR** — pulls metadata, file list, and `git diff origin/<base>...HEAD`.
 6. **IAR pre-LLM** — reads prior iteration state from the marker, detects generation transitions (including `USER_FORCED_RESET`), shapes the effective cap + exhaustive prompt addendum, and checks the escape label / safety net. See [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md).
-7. **Agentic loop** — runs the model with five tools: `read_file`, `grep`, `glob`, `post_inline_comment`, `submit_review`. Inline comments are queued in memory and posted atomically with the final review. Conversation history is pruned in pairs to bound token cost.
+7. **Agentic loop** — runs the model with eight tools: `read_file` (head or base revision), `grep`, `glob`, `get_change_inventory`, `get_patch`, `read_instruction_files`, `post_inline_comment`, `submit_review`. Inline comments are queued in memory and posted atomically with the final review. Conversation history is pruned in pairs to bound token cost.
 8. **IAR post-LLM** — dedupes findings against prior fingerprints (criticals always surface), advances generation/round state, embeds the state block in the tracking marker, and writes the five IAR action outputs.
 9. **Submit** — `POST /pulls/{n}/reviews` with the summary and queued inline comments. On HTTP 422 (one bad anchor line in any comment ⇒ entire request rejected), the action first retries with only the comments whose anchor is provably inside a diff hunk (v2.3.1), then summary-only as a last resort, and reports the dropped count in the tracking comment.
 10. **Apply label** — applies `applied-label` if set and the strictness gate didn't block.
@@ -756,10 +777,13 @@ The deep-dive docs live under [`docs/`](docs/) and are cross-linked from every r
 | Trigger modes, branch-protection recipes & emergency-bypass label | [docs/TRIGGER_MODES.md](docs/TRIGGER_MODES.md) |
 | Iteration-Aware Review (dedup, policies, escape label, outputs) | [docs/ITERATION_AWARENESS.md](docs/ITERATION_AWARENESS.md) |
 | v2 pin + platform notes | [docs/MIGRATION_v2.md](docs/MIGRATION_v2.md) |
+| v3 migration (contract, must-change list, transition knobs, eval gate) | [docs/MIGRATION_v3.md](docs/MIGRATION_v3.md) |
 | PR-metadata checks (autocomplete, warn, block) | [docs/PR_METADATA_CHECKS.md](docs/PR_METADATA_CHECKS.md) |
 | Security model (author-association, egress surfaces, provider trust) | [docs/SECURITY.md](docs/SECURITY.md) |
 | Performance (turn budgets, prompt caching, token cost) | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | Testing guide | [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) |
+| Review quality & the eval gate (measured noise floor, `verdict/1.0`, release precondition) | [docs/rfc/v3/01-eval-gate-contract.md](docs/rfc/v3/01-eval-gate-contract.md) · [PERFORMANCE.md → measured floor](docs/PERFORMANCE.md#measured-noise-floor-and-the-eval-gate-verdict-v3) |
+| v3 design records (RFC-00…08: evidence, eval gate, unified runner, verification, ensemble, output, budgets, breaking changes, roadmap) | [docs/rfc/v3/README.md](docs/rfc/v3/README.md) |
 | PR-review workflow (reading past comments, marker-anchored) | [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md) |
 | Release recovery playbook | [docs/RELEASE_RECOVERY.md](docs/RELEASE_RECOVERY.md) |
 | Full docs index | [docs/README.md](docs/README.md) |

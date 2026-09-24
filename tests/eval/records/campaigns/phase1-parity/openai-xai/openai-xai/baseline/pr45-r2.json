@@ -1,0 +1,127 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 36,
+  "seconds": 224.8,
+  "setup_seconds": 2.1,
+  "total_seconds": 226.9,
+  "usage": {
+    "in": 63097,
+    "cache_read": 511872,
+    "cache_write": 0,
+    "out": 3054,
+    "source": "api"
+  },
+  "cost_usd": 0.246892,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "tests/test_findings_parser.py",
+      "line": 83,
+      "severity": "warning",
+      "body": "These fixtures use `{\"filename\": ...}`, which matches the buggy reader in `infer_pr_complexity_fallback` but **not** the production `PRContext.changed_files` shape (`{\"path\": ...}` from `fetch_pr_context`).\n\nThat is why `test_runtime_path_is_high` / `test_docs_only_is_low` stay green while real runs never see path markers. Build fixtures with `\"path\"` (and ideally one case that would fail if the reader still used `filename`)."
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 97,
+      "severity": "warning",
+      "body": "The new agent-runner bridge is documented, but the **diff-based heuristic fallback** (CHANGELOG + `infer_pr_complexity_fallback`) is not. Consumers reading this page still think labels only come from `set_pr_complexity` / `findings.json` complexity, and the \u201cwhy not just count lines?\u201d section is now incomplete: when the model omits a level, labeling *does* fall back to path markers + file/line counts.\n\nPlease document when the fallback runs, that it is best-effort, and that an explicit model level always wins."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5481,
+      "severity": "info",
+      "body": "Even after fixing the `path` key, this fallback ranks primarily by `len(paths)` and `additions+deletions`, which collides with the product promise that complexity labels are **not** line-count based (`docs/PR_METADATA_CHECKS.md` \u00a7 \u201cWhy not just count lines?\u201d, README feature blurb).\n\nPath markers help, but any multi-file or >100-line PR without those substrings becomes `medium`/`high` purely from size. Prefer keeping fallback conservative (`low` unless a high-signal marker matches) or document clearly that fallback is size-biased and only a last resort when the model omits a level."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5465,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`fetch_pr_context` stores each changed file as `{\"path\": f.get(\"filename\", ...), ...}`, but this fallback reads `f.get(\"filename\")`. On every real run `paths` is a list of empty strings, so high-path markers never fire and docs-only detection never sees `.md` suffixes \u2014 only the crude `len(paths)` / `line_delta` branches remain.\n\nThat breaks the advertised safety net whenever the model omits `complexity` (common on agent-runners). Read `path` (optionally keep `filename` as a legacy alias).\n\n```suggestion\n    paths: list[str] = [\n        str(f.get(\"path\") or f.get(\"filename\") or \"\") for f in pr_ctx.changed_files\n    ]\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nSolid feature direction \u2014 complexity labeling on agent-runners via `findings.json` is the right bridge \u2014 but **do not merge until the heuristic fallback key bug is fixed**. Production `PRContext.changed_files` never carries `filename`, so the new safety net is largely dead on real runs.\n\n## Narrative\n\n### What works\n- Provider plumbing looks correct: `require_complexity_in_findings` flows through Claude Code / Cursor / Codex into `write_findings_prompt_directive`, `ReviewResult.complexity` is parsed, and `resolve_pr_complexity` prefers chat-completions `set_pr_complexity` over findings.json.\n- `build_agent_runner_noop_warning` correctly stops treating complexity as a CLI no-op; autocomplete remains the only warned gap.\n- Docs/matrix updates in `PROVIDERS.md`, setup reference, README feature blurb, CHANGELOG, and self-review dogfood (`complexity-labels-enabled: true`, gate label `ready`) are coherent with the runtime intent.\n- Self-review label rename `AIReview` \u2192 `ready` matches `AGENTS.md` / `docs/TRIGGER_MODES.md` (already documented as `ready`).\n\n### Blocking issue\n`infer_pr_complexity_fallback` reads `f.get(\"filename\")`, but `fetch_pr_context` normalizes GitHub\u2019s API field into **`path`**. On real PRs every path becomes `\"\"`, so:\n- `scripts/reviewer.py` / `action.yml` / `auth` markers never match \u2192 no forced `high`\n- single-doc `.md` detection never matches \u2192 no forced `low`\n- only empty-path count + `additions+deletions` remain\n\nThe new unit tests construct fixtures with `filename`, so they **encode the bug** and stay green. Fix the reader to use `path` (and update fixtures to the production shape).\n\n### Other notes\n- Document the heuristic fallback in `docs/PR_METADATA_CHECKS.md` (CHANGELOG already advertises it; the user-facing page does not).\n- Even after the key fix, size thresholds quietly reintroduce line-count labeling contrary to the \u201cnot line-count based\u201d product promise \u2014 keep fallback conservative or document the bias.\n- JSON schema place",
+  "verification": [
+    {
+      "path": "tests/test_findings_parser.py",
+      "line": 83,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 97,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5481,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5465,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 4,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 3,
+    "changed_files": 10
+  }
+}

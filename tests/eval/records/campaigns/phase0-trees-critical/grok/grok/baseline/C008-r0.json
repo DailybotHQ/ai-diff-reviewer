@@ -1,0 +1,51 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 49.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 49.4,
+  "usage": {
+    "in": 28773,
+    "cache_read": 54528,
+    "cache_write": 0,
+    "out": 1437,
+    "source": "cli"
+  },
+  "cost_usd": 0.0825264,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "body": "**SSRF: host allowlist removed for customer-provided webhook URLs.**\n\n`deliver()` used to resolve the URL hostname and reject anything outside `ALLOWED_HOSTS`. That gate is gone, so any caller-supplied `url` is fetched server-side via `urllib.request.urlopen`.\n\nIf a customer (or an attacker who can set the webhook URL) configures `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:<internal-port>/`, or another private/internal host, this process will POST the event payload there and return the response status \u2014 full SSRF from the delivery path.\n\nRestoring customer endpoints safely needs an egress policy before `urlopen`, for example: HTTPS-only, block loopback/private/link-local/metadata ranges (and DNS rebinding), plus an optional per-tenant allowlist. Do not ship open URL fetch as the enterprise feature."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns customer-configured URLs into an open SSRF primitive.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `webhooks.py:4` | Host allowlist removed; arbitrary customer URLs enable SSRF |\n\n## Details\n\n`deliver()` previously rejected any URL whose hostname was outside `ALLOWED_HOSTS` (`hooks.internal.example`). The PR deletes that check and posts to whatever `url` the caller passes.\n\nConcrete failure mode: a customer (or anyone who can set the webhook URL) supplies `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:6379/`, or an internal admin host. The runner then issues a server-side POST with the event body and returns the status \u2014 classic SSRF against cloud metadata, localhost, and private network services.\n\nSupporting customer endpoints is a valid product goal, but it needs an explicit egress policy (HTTPS-only, DNS rebinding protections, block private/link-local/metadata ranges, optional per-tenant allowlist), not deletion of the existing gate.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

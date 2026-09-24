@@ -1,0 +1,79 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 53.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 53.2,
+  "usage": {
+    "in": 31868,
+    "cache_read": 88576,
+    "cache_write": 0,
+    "out": 2196,
+    "source": "cli"
+  },
+  "cost_usd": 0.1034848,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `corsHeaders` now sets `Access-Control-Allow-Origin` to the request\u2019s `origin` (any value) while always sending `Access-Control-Allow-Credentials: true`.\n\n**Failure mode:** A malicious site at `https://evil.example` can make a credentialed cross-origin XHR/fetch against this API. The browser will include cookies and expose the response body to JS because ACAO echoes `https://evil.example`. That bypasses the previous allowlist (`https://app.example.com` only) and enables session theft / authenticated data exfiltration.\n\n**Spec conflict:** when `origin` is null, ACAO becomes `*` with credentials `true`, which browsers reject per the CORS credentials check \u2014 so null-origin clients still fail while every non-null attacker origin succeeds.\n\n**Fix:** restore an explicit allowlist (add known mobile-webview origins as needed). Only emit ACAO + credentials when `ALLOWED.has(origin)`; return `{}` otherwise. Native apps that are not browsers do not need CORS headers.\n\n```suggestion\n  const ALLOWED = new Set([\"https://app.example.com\"]);\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return { Vary: \"Origin\" };\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change disables origin allowlisting and reflects any `Origin` with `Access-Control-Allow-Credentials: true`, which is a classic CORS credential-theft misconfiguration.\n\n## Why this is blocking\n\nThe previous code only echoed `Access-Control-Allow-Origin` for `https://app.example.com`. The new code returns:\n\n- `Access-Control-Allow-Origin: <whatever the client sent>` (or `*` when `origin` is null)\n- `Access-Control-Allow-Credentials: true` unconditionally\n\nAny attacker-controlled page can trigger a credentialed cross-origin request (cookies / client certs / HTTP auth) and **read the response**, because the browser will treat that attacker origin as allowed.\n\nThe PR rationale (\u201cnative mobile clients do not send a fixed origin\u201d) does not justify this:\n\n1. **CORS is a browser policy.** Native HTTP clients are not bound by CORS; they do not need `Access-Control-Allow-Origin` at all.\n2. **Mobile webviews do send an Origin** (often a custom scheme or https host). Those legitimate origins belong on an explicit allowlist, same as the web app.\n3. **`Origin: null` \u2192 `*` plus credentials is invalid.** The Fetch CORS spec forbids `ACAOrigin: *` combined with `ACACredentials: true`; browsers will ignore the response for credentialed calls, so the null path fails open for security *and* fails closed for the clients it claims to help.\n\n`Vary: Origin` is correct for any varying ACAO response, but it does not mitigate reflecting untrusted origins.\n\n## Safer direction\n\nKeep the allowlist (extend it with known webview/app origins). Only set `Access-Control-Allow-Credentials: true` when the origin matched. For non-browser clients, omit CORS headers entirely rather than wildcarding.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `corsHeaders` always sets `Access-Control-Allow-Origin` to the request origin (or `*`) with `Access-Control-Allow-Credentials: true`, removing the prior `ALLOWED` allowlist that only permitted `https://app.example.com`. That is a real credentialed CORS bypass enabling cross-origin session/d"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.774,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2642,
+      "out": 460
+    },
+    "cost_usd": 0.009042
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

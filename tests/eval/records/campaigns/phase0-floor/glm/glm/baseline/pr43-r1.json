@@ -1,0 +1,56 @@
+{
+  "pr": 43,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "claude-code",
+  "api_base": "https://api.z.ai/api/anthropic",
+  "model": "glm-5.3-flash",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "05c581a",
+  "turns": 12,
+  "tool_calls": null,
+  "seconds": 386.6,
+  "setup_seconds": 1.7,
+  "total_seconds": 388.3,
+  "usage": {
+    "in": 83656,
+    "cache_read": 489024,
+    "cache_write": 0,
+    "out": 15400,
+    "source": "cli"
+  },
+  "cost_usd": 1.047792,
+  "changed_files": [
+    ".github/workflows/self-review.yml"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 331,
+      "severity": "warning",
+      "body": "`codex` is an **agent-runner** provider in this codebase, not chat-completions: `build_provider()` dispatches `provider_id == \"codex\"` to `CodexProvider(AgentRunnerProvider)` (`scripts/reviewer.py:1548`, dispatch at `scripts/reviewer.py:1777`), and only `anthropic` takes the chat-completions path whose tool loop exposes `set_pr_complexity`. So on this matrix only the `anthropic` leg performs the assessment \u2014 `claude-code`, `cursor` **and `codex`** all log the no-op warning (`build_agent_runner_noop_warning`, `scripts/reviewer.py:5245`), exactly as the referenced `docs/PR_METADATA_CHECKS.md` provider table (line 93) states. The PR description repeats the same claim, so the dogfood coverage of the feature is documented as 2 legs when it is 1. A maintainer reading this could later assume `codex` re-labels complexity when the `anthropic` leg is absent.\n\n```suggestion\n          # (anthropic) performs the assessment; agent-runner legs\n          # (claude-code, cursor, codex) log a no-op warning by design.\n```"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 56,
+      "severity": "warning",
+      "body": "This citation now misquotes the section it points at: `docs/TRIGGER_MODES.md:64` still heads the recipe \"Recipe: run once when labelled `ready`, block merge until it passes\". More importantly, the rename isn't mirrored in the docs that instruct how to trigger this workflow \u2014 `AGENTS.md:315` still says the dogfood is \"label-gated on `ready`\". Since this repo's pre-commit checklist requires `self-review.yml` to run on every PR and agents follow `AGENTS.md`, the next agent-driven PR will apply `ready`, the scope gate won't match it, and the self-review will silently never fire. Update `AGENTS.md` and the `TRIGGER_MODES.md` recipe heading in this PR (README.md:318/350 cite the same recipe by its old name), or state the follow-up explicitly."
+    }
+  ],
+  "summary": "## Verdict\n\nThe change works \u2014 both new inputs match the `action.yml` contract (`complexity-labels-enabled` / `complexity-label-prefix` \u2192 `AIPRR_COMPLEXITY_LABELS_ENABLED` / `AIPRR_COMPLEXITY_LABEL_PREFIX`), the `ready` \u2192 `AIReview` rename is internally consistent across the whole workflow (`no-gate-label`, scope logic, gate `if:`, comments), and both sides of the label match are case-insensitive (the scope job's `tr`+grep and `reviewer.py`'s `label-gate` matching per `tests/test_reviewer.py:779`), so there is no mismatch foot-gun. I also verified the skip-review-label short-circuit (`reviewer.py:6187`) still fires well before the complexity-label block (`reviewer.py:6664`), so the skip path stays side-effect-free. But two documentation errors should be fixed before merge: the new comment misstates which provider legs can actually perform the complexity assessment, and the label rename leaves the repo's own agent-facing trigger docs stale.\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:330` | Comment claims `codex` is a chat-completions leg that assesses complexity \u2014 it is an agent-runner provider and no-ops |\n| 2 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:56` | `ready` \u2192 `AIReview` rename not mirrored in `AGENTS.md:315` / `docs/TRIGGER_MODES.md:64`, breaking the quoted citation and the agent-facing trigger instructions |\n\n### Notes that didn't fit inline\n\n- **Operational follow-up for the rename:** any open PR currently carrying `ready` stops being reviewable after this merges \u2014 the label must be re-applied as `AIReview`. Also, if branch protection or a ruleset/labeler enforces the `ready` label on this repo (I can't inspect repo settings from the review), it needs the same rename; the required-check names (`Self-review gate`) are unchanged, so branch protection itself is unaffected.\n- `README.md:318` and `README.md:350` present this workflow as the reference implementation of the `r",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "43-complexity-vs-docs"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

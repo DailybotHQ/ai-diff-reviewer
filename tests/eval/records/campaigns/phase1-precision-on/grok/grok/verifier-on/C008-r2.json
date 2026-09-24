@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 45.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.6,
+  "usage": {
+    "in": 30350,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1762,
+    "source": "cli"
+  },
+  "cost_usd": 0.0886288,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "Removing the `ALLOWED_HOSTS` check lets `deliver()` POST to any caller-supplied URL. If customers can set `url`, this is classic SSRF: the server will hit internal hosts (e.g. `http://169.254.169.254/`, `http://localhost:\u2026`, RFC1918) and `urlopen` will follow redirects.\n\nRestore host validation before the request. For customer endpoints, allow only `https` and public hostnames (deny localhost, link-local, private ranges, and metadata IPs), or route through a locked-down egress proxy \u2014 do not call `urlopen` on a raw customer URL with no checks."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change removes the only host allowlist on outbound webhook delivery and turns `deliver()` into an open server-side request proxy.\n\n## Analysis\n\n`webhooks.py` previously rejected any URL whose hostname was outside `ALLOWED_HOSTS` (`hooks.internal.example`). The PR deletes that check and posts directly to the caller-supplied `url` via `urllib.request.urlopen`.\n\nAny caller that can influence `url` (customer webhook config, API input, stored endpoint) can force the runner/service to POST attacker-chosen destinations, including link-local metadata (`169.254.169.254`), localhost admin ports, and internal RFC1918 hosts. `urlopen` also follows redirects by default, which widens the blast radius after the first hop.\n\nSupporting customer-owned endpoints is a valid product goal; it needs an allowlist/denylist (block private/link-local/metadata ranges), scheme restriction (`https` only), and preferably a pinned egress proxy \u2014 not an unconditional fetch.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes the ALLOWED_HOSTS check that previously rejected non-allowlisted hosts; deliver() now POSTs via urlopen to any caller-supplied URL, and the new comment states endpoints are customer-provided\u2014classic SSRF with no remaining guard."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.107,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2309,
+      "out": 382
+    },
+    "cost_usd": 0.007832
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

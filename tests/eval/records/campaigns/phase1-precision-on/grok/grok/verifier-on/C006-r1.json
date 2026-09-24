@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 39.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.0,
+  "usage": {
+    "in": 27178,
+    "cache_read": 60288,
+    "cache_write": 0,
+    "out": 1525,
+    "source": "cli"
+  },
+  "cost_usd": 0.0815924,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "`identity()` now decodes JWTs with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and no longer passes `SECRET`, `algorithms`, `audience`, or `issuer`.\n\n**Failure mode:** any client can mint an unsigned (or arbitrarily signed) token such as `{\"sub\":\"admin\",\"aud\":\"api\",\"iss\":\"accounts.internal.example\"}` and `identity()` will return those claims as a trusted identity. That is a complete authentication bypass for every caller of this function.\n\nThe staging re-issuance note (TICKET-412) does not mitigate this: there is no environment guard, feature flag, or dual-key verify path in the diff, so the bypass applies wherever this code is deployed.\n\n**Fix:** restore signature and claim verification. For migration, prefer verifying against both old and new secrets/issuers, or gate any temporary relaxation behind an explicit staging-only configuration that fails closed outside that environment \u2014 do not ship unconditional `verify_signature: False`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification in `identity()`, so any caller that trusts the returned claims will accept forged tokens.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` no longer passes `SECRET`, `algorithms`, `audience`, or `issuer`. PyJWT will parse an attacker-controlled payload and return its claims as a normal identity dict. That is full authentication bypass for every flow that uses `identity()`.\n\nThe comment cites staging token re-issuance (TICKET-412), but nothing in the diff scopes the bypass to staging (no env/flag guard, no alternate verifier). If this module is what production (or any shared staging with real data) runs, the bypass is live there too.\n\n## Additional notes\n\n- `SECRET` remains defined but is unused after this change \u2014 a signal the security path was removed rather than temporarily branched.\n- A safer interim would keep verification on for a dual-key/accept-list during re-issuance, or gate an unverified path behind an explicit non-default staging-only flag that fails closed in production. Token re-issuance does not require globally disabling signature checks.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head `identity()` calls `jwt.decode` with `verify_signature`, `verify_aud`, and `verify_iss` all False and omits SECRET/algorithms/audience/issuer; base still verified those. That is an unconditional authentication bypass with no staging/env gate in the diff."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.584,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2429,
+      "out": 377
+    },
+    "cost_usd": 0.008042
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

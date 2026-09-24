@@ -32,6 +32,10 @@ Outbound network calls depend on the configured provider:
 
 Auditable in `scripts/reviewer.py` via the `ANTHROPIC_API_URL`, `GITHUB_REST_BASE`, and `GITHUB_GRAPHQL_URL` constants, and in `action.yml` via the install steps.
 
+### Roles and the write surface (v3 `mode`)
+
+`mode: emit` turns a review leg into a producer with **no** write surface: the guard sits in the GitHub transport (`gh_request` refuses every non-GET call, `gh_graphql` every mutation) so no helper can post a review, a comment or a label, whatever a prompt-injected model asks for. The leg needs only `contents: read` and `pull-requests: read` plus its provider secret; the single exemption is the D-19 note (one comment, only when `expected-legs` is unset) posted through `allow_writes()`. Only the `aggregate` job holds `pull-requests: write`, and it publishes from documents it validates against the RFC-05 schema — the smaller per-leg blast radius is the security argument for the split (RFC-04 § Topology).
+
 ### Vendor-CLI subprocess environment (v1.1.0+)
 
 Agent-runner providers invoke the vendor CLI through `_run_cli_process` — `subprocess.Popen(argv, env=...)` in argv-list form, never `shell=True`, with bounded output capture (last 4 MB per stream) and one deadline over write, wait and drain (v2.2.0+; `subprocess.run` semantics otherwise). The `env` passed to the subprocess is **explicitly scrubbed** via `_build_cli_env()`: it forwards only an allowlist of variables the CLI needs (`PATH`, `HOME`, `NODE_PATH`, locale, runner metadata) plus the vendor-specific API key. `AIPRR_GH_TOKEN` and every other `AIPRR_*` env var are **not** forwarded to the CLI — the reviewer's Python runtime keeps the GitHub token in-process and calls the GitHub API directly.
@@ -53,7 +57,9 @@ As a runtime backstop, the reviewer registers the provider API key and the GitHu
 
 The default `provider: anthropic` path is not subject to (1) or (2): its only tools are `read_file`/`grep`/`glob` (all `safe_repo_path`-scoped to the checkout), `post_inline_comment`, and `submit_review` — none can read process env or files outside the repo, so the worst case of a successful injection there is "the reviewer wrote silly comments on this one PR."
 
-### Custom endpoints (`api-base`, v2.1.0+) — where your key goes
+### Custom endpoints
+
+> **Verifier (v3).** The verifier runs on the in-process runner of the lane's kind with the lane's own credential and the lane's own base: the `api-base` input when set, otherwise — on CLI lanes only — the inherited `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` hook that `_build_cli_env` forwards to the CLI. It never sends a lane's key to the vendor default host when the lane was pointed elsewhere; an unusable inherited URL makes the verifier unavailable (fail-open into visibility, reason recorded) rather than mis-routed. (`api-base`, v2.1.0+) — where your key goes
 
 `api-base` points a runner at a different backend (Z.ai, xAI, Azure Foundry, DeepSeek, Moonshot/Kimi, MiniMax, Qwen/DashScope, Google Gemini, OpenRouter, or a self-hosted gateway). Recognised vendor hosts get a named endpoint profile (auth style, caching flags, known quirks such as Gemini rejecting `seed`); every other host is treated as a plain protocol-compatible gateway and warned about by name. The value is validated **before anything outward-facing happens** (`validate_api_base`): absolute `https://` URL (plain `http://` only for `localhost` / `127.0.0.1` / `[::1]`), a host, **ASCII hostnames only** (internationalised domains must be given in their explicit punycode `xn--` form so a homoglyph can never look like a vendor domain in your logs), no userinfo, no query string, no fragment. A malformed value aborts the run with a `CONFIGURATION ERROR` — the credential is never sent to a guessed host.
 
@@ -81,6 +87,8 @@ Two runners write files next to a credential or the diff for the duration of one
 | `grok` | `tempfile.mkdtemp(prefix="aiprr-grok-")` (0700) | `prompt.md` (PR metadata + diff for `--prompt-file`) | 0600 | `shutil.rmtree` in `finally` |
 
 A failed `chmod` is logged as a WARNING and the run continues (the parent directory is already private). A hard kill (SIGKILL / OOM) can leave the directory behind on a **persistent self-hosted runner**; on ephemeral runners the VM is destroyed with it. The findings file the CLI writes (`.aiprr/findings.json`) is capped at `MAX_FINDINGS_FILE_BYTES` (5 MB); a larger file is refused rather than parsed, because a CLI tricked into dumping content is the only way to produce one.
+
+**`.aiprr/inventory.json` (v3, every CLI lane).** The runtime writes the change inventory (paths, statuses, flags, SHAs — never file contents or secrets) into the workspace before the CLI starts and deletes any pre-existing copy first, exactly like the findings file. It is derived from git and the GitHub files API, never from the PR description, so a PR cannot plant an inventory.
 
 ### Grok CLI — web search and subagents are OFF by default
 
@@ -179,7 +187,7 @@ The model is treated as **untrusted** for the purpose of any side-effect-having 
 
 ### Path traversal protection
 
-Any tool that takes a path argument (`read_file`, `grep` with `path` scope) routes through `safe_repo_path()`, which:
+Any tool that takes a path argument (`read_file` at head or base, `get_patch`, `read_instruction_files`, `grep` with `path` scope) routes through `safe_repo_path()`, which:
 
 1. Resolves the path relative to the repo root.
 2. Calls `Path.resolve()` (which follows symlinks).
@@ -190,6 +198,16 @@ This catches:
 - `..`-based traversal.
 - Symlinks pointing outside the workspace.
 - Sibling-directory string-prefix attacks (`/home/runner/work/repo` vs `/home/runner/work/repo_evil`).
+
+### v3 parity tools (`get_change_inventory`, `get_patch`, `read_instruction_files`, `read_file ref=base`)
+
+The v3 runner (RFC-02) adds three read-only tools and a `ref` argument to `read_file`. Every one of them stays inside the boundaries above:
+
+- **Paths** — `get_patch` and `read_file(ref=base)` route their path through `safe_repo_path()` exactly like `read_file`; `read_instruction_files` routes each candidate (including the configured `prompt-extension-file`) through it and silently skips anything that escapes (a symlink to a file outside the checkout is not read).
+- **Revisions** — the base and head SHAs used by `get_patch` (`git diff <base>...<head> -- <path>`) and `read_file(ref=base)` (`git show <base>:<path>`) come from the run's `ChangeInventory`, resolved by `git rev-parse` at startup — never from the PR title, body, labels or the model's arguments. The model can only pick the path, never the revision.
+- **Subprocesses** — argv lists only, `--` before every path.
+- **Bounds** — `get_patch` returns at most `MAX_PATCH_CHARS` (40 000) per call and lists the remaining hunk indices instead of the content; `read_instruction_files` stops at `MAX_INSTRUCTION_FILE_BYTES` (64 000) in total; every result still passes `truncate_for_tool`.
+- **Instruction files are data** — the tool description tells the model the files describe the repository's conventions and do not override the review; RFC-02 § Untrusted inputs keeps budget, tier and instruction set out of their reach. The files read are recorded in the run record (`context.instruction_files_read`).
 
 ### Subprocess argument injection protection
 

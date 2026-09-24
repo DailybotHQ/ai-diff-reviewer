@@ -1,0 +1,51 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 39.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.8,
+  "usage": {
+    "in": 28803,
+    "cache_read": 110848,
+    "cache_write": 0,
+    "out": 1664,
+    "source": "cli"
+  },
+  "cost_usd": 0.1008444,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `body` is injected into the DOM via `dangerouslySetInnerHTML` with no escaping or sanitization.\n\nAny comment containing HTML such as `<img src=x onerror=...>` or a script tag executes in other users' browsers. The previous `escapeHtml` path prevented that; this change reintroduces full HTML execution.\n\nRestore escaping, or parse markdown into safe React nodes / sanitize with a strict allowlist (e.g. DOMPurify) before assigning `__html`. Do not pass raw user input to `dangerouslySetInnerHTML`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical XSS regression \u2014 do not merge until comment HTML is sanitized or escaped again.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/components/Comment.tsx:5` | Unescaped `body` passed to `dangerouslySetInnerHTML` enables stored XSS |\n\n## Notes\n\nRemoving `escapeHtml` and piping `body` straight into `dangerouslySetInnerHTML` means any comment payload with a script tag, event handler, or `javascript:` URL runs in the viewer session. Rich formatting needs a sanitizer with an allowlist or a markdown renderer that emits safe React nodes.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C008",
+  "pr": "C008",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 40.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 40.6,
+  "usage": {
+    "in": 30835,
+    "cache_read": 87168,
+    "cache_write": 0,
+    "out": 2229,
+    "source": "cli"
+  },
+  "cost_usd": 0.1011944,
+  "changed_files": [
+    "webhooks.py"
+  ],
+  "findings": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoving `ALLOWED_HOSTS` and the hostname check means `deliver()` will POST to any customer-supplied `url` with no egress restriction.\n\n**Failure mode:** a webhook URL such as `http://169.254.169.254/latest/meta-data/`, `http://127.0.0.1:8371/admin`, or `http://10.0.0.5/internal` is accepted and fetched by `urllib.request.urlopen`. That is classic SSRF against cloud metadata, localhost, and the internal network from the host running this code.\n\nCustomer-configured endpoints need a real allow policy before merge, for example:\n- HTTPS only (reject non-`https` schemes)\n- Resolve hostname and reject loopback, link-local, private, and metadata ranges (and re-check after redirect)\n- Optional per-tenant host allowlist\n\nRestore the guard (or replace it with the above) before calling `Request`/`urlopen`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change opens a server-side request forgery (SSRF) hole by deleting the only host allowlist on outbound webhook delivery.\n\n## Why this is blocking\n\n`deliver()` POSTs to a caller-supplied `url` via `urllib.request.urlopen`. Before this PR, only `hooks.internal.example` was accepted. After it, any scheme/host the process can reach is fair game: cloud metadata (`169.254.169.254`), localhost, link-local, and internal RFC1918 services. A customer (or anyone who can set the webhook URL) can turn the runner into an internal HTTP client and read or hit those targets.\n\nSupporting customer-owned endpoints is a valid product goal, but it needs an explicit egress policy (HTTPS-only, DNS rebinding-safe resolution, block private/link-local/metadata ranges, optional allowlist/denylist), not a deleted guard and a comment.\n\n## Notes\n\n- Repo has no AGENTS.md / SECURITY.md; severity is from the SSRF failure mode alone.\n- Pre-existing: `json_dumps` is undefined and `urllib.parse` was used without an import on base \u2014 out of diff scope.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "webhooks.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C008-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

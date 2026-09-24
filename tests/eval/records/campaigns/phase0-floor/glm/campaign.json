@@ -1,0 +1,15 @@
+{
+  "schema": "ai-diff-reviewer/campaign/1",
+  "campaign_id": "phase0-floor",
+  "repetitions": 3,
+  "cells": [
+    "glm|baseline|pr15",
+    "glm|baseline|pr25",
+    "glm|baseline|pr37",
+    "glm|baseline|pr39",
+    "glm|baseline|pr43",
+    "glm|baseline|pr45",
+    "glm|baseline|pr46"
+  ],
+  "budget_usd": 80.0
+}

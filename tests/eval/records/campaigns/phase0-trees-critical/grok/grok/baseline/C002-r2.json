@@ -1,0 +1,57 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 31.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 31.1,
+  "usage": {
+    "in": 28979,
+    "cache_read": 83200,
+    "cache_write": 0,
+    "out": 1834,
+    "source": "cli"
+  },
+  "cost_usd": 0.093922,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection:** `email` is interpolated directly into the query string. Any value containing a single quote can break out of the string literal and execute arbitrary SQL (e.g. `' OR 1=1--` returns all orders; more hostile payloads can modify or drop data).\n\nRestore a bound parameter. For partial match, use `LIKE` with a bound pattern:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nKeep the value out of the SQL text entirely \u2014 never build the statement with an f-string or `+` concatenation."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Stated goal not met:** the comment says partial-match search, but the predicate is still `email = '...'`, which only matches the full string. Support pasting a fragment (e.g. `alice@`) will return no rows.\n\nAfter fixing parameterization, switch to `LIKE ?` with a bound `%fragment%` pattern (and document whether match should be case-insensitive via `COLLATE NOCASE` if needed)."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change introduces SQL injection and does not implement the stated partial-match behavior.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `store.py:6` | User-controlled `email` interpolated into SQL via f-string |\n| 2 | \u26a0\ufe0f warning | `store.py:6` | Comment claims partial-match but query still uses exact `=` |\n\n## Notes\n\n`get_orders` previously used a parameterized `?` placeholder, which is the correct and safe pattern for sqlite3. Replacing it with an f-string undoes that protection. Even for a support-tool use case, `email` remains untrusted input (paste from tickets, customer text, etc.).\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

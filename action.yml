@@ -139,6 +139,34 @@ inputs:
     description: 'Prefix for the applied complexity label. Default `complexity:` produces `complexity:low` / `complexity:medium` / `complexity:high`. Any prior label matching the prefix is removed before the current one is applied.'
     required: false
     default: 'complexity:'
+  verifier:
+    description: 'v3 verifier (RFC-03). `on` (default): every finding the model claims `critical` — plus a 30 % sample of warnings — gets a second, short, code-grounded check by a separate model call; a critical publishes as `critical` only when verified, otherwise as an annotated warning that stays visible; refuted findings are listed, never posted inline. `off`: no second call — claimed criticals publish as annotated warnings (set `strict-unverified-criticals: true` to gate on the claim instead).'
+    required: false
+    default: 'on'
+  verifier-model:
+    description: 'Model for the verifier call. Empty (default) resolves the `economy` tier alias of the lane''s backend (falls back to `balanced` where no cheaper tier reviews reliably); a tier alias or an explicit model id is accepted. CLI lanes verify runtime-side on the in-process runner of the same backend with the same credential (`grok` → xAI OpenAI-compatible API, `claude-code` → the configured Anthropic-compatible base, `codex` → the configured OpenAI base); `cursor` has no in-process equivalent and publishes claimed criticals as annotated warnings.'
+    required: false
+    default: ''
+  strict-unverified-criticals:
+    description: 'When `true`, a claimed `critical` gates the check even when the verifier did not verify it (v2 behaviour; the annotation is still added). Transition knob — removed in v3.1.0 (RFC-07 BC-18).'
+    required: false
+    default: 'false'
+  mode:
+    description: 'v3 role of this step (RFC-04, BC-09). `review` (default): run and publish, exactly the single-leg flow. `emit`: run the review, write the `review-output/3.0` document and upload it as an artifact, and perform NO GitHub write (no review, no comment, no label — a matrix leg needs only `contents: read` + `pull-requests: read`); the gate is recorded, not enforced, so the step exits 0 unless the run itself fails. `aggregate`: download the emitted legs for this head, consolidate, verify once and publish one review (Phase 2). With `mode: emit` and no `expected-legs`, one note is posted on the PR so a forgotten aggregate job cannot silently review nothing.'
+    required: false
+    default: 'review'
+  expected-legs:
+    description: 'v3 (RFC-04): comma- or newline-separated leg ids the aggregate job waits for (`<provider>|<endpoint_kind>|<model>`, as recorded in each leg''s run record). On an `emit` leg, setting it suppresses the D-19 note. Empty by default.'
+    required: false
+    default: ''
+  min-agreement:
+    description: 'v3 aggregate only (RFC-04 § Gating policy): a `warning` counts toward `block-on-warning` / `block-on-any` only when at least this many legs reported it; criticals ignore it (a verified critical from one leg still gates). `1` keeps single-leg semantics; `2` is the noise-reduction setting for matrices of three or more legs.'
+    required: false
+    default: '1'
+  require-all-legs:
+    description: 'v3 aggregate only (RFC-04): when `true`, a missing, failed or timed-out leg fails the check. Default `false` publishes with the delivered legs and names the missing one in the review and the job summary.'
+    required: false
+    default: 'false'
 
   max-turns:
     description: 'Hard cap on the agentic loop iterations. Each turn = one Anthropic API call + a batch of tool calls. Only used by chat-completions providers; agent-runner providers use `agent-max-turns` instead.'
@@ -228,6 +256,28 @@ outputs:
   skipped:
     description: 'Whether the run was skipped without invoking the LLM (`true`/`false`). Set to `true` when EITHER (a) the label gate suppressed the run (missing `label-gate` label, `author-association` filter, `trigger-mode: label-once` already reviewed this label toggle, etc.) OR (b) the configured `skip-review-label` was present on the PR at trigger time (the emergency-bypass short-circuit).'
     value: ${{ steps.review.outputs.skipped }}
+
+  structured-output-path:
+    description: 'v3: absolute path of the `review-output/3.0` document this run wrote (`.aiprr/review-output.json` in the workspace) — the run record, the change inventory, the findings with evidence and verification, the refuted findings, the prior-findings ledger, the generated summary (`rendered_markdown` is the posted body), the gate, usage and cost. Written on every exit path; empty only when the document could not be written.'
+    value: ${{ steps.review.outputs.structured-output-path }}
+  structured-output-sha256:
+    description: 'v3: SHA-256 of the document at `structured-output-path`, so a downstream step can verify it reads what this run wrote.'
+    value: ${{ steps.review.outputs.structured-output-sha256 }}
+  structured-output-artifact:
+    description: 'v3: name of the workflow artifact that carries the document (`ai-diff-reviewer-<head12>-<provider>-<kind>-<model>`, 90-day retention).'
+    value: ${{ steps.review.outputs.structured-output-artifact }}
+  legs-expected:
+    description: 'v3 aggregate: comma-separated leg ids the aggregate job expected (`expected-legs`, or every delivered leg when unset). Empty on review/emit runs.'
+    value: ${{ steps.review.outputs.legs-expected }}
+  legs-delivered:
+    description: 'v3 aggregate: comma-separated leg ids that delivered a complete document for this head.'
+    value: ${{ steps.review.outputs.legs-delivered }}
+  duplicates-removed:
+    description: 'v3 aggregate: findings merged away by the dedup key (findings in minus findings published).'
+    value: ${{ steps.review.outputs.duplicates-removed }}
+  agreement-histogram:
+    description: 'v3 aggregate: JSON object `{"<legs reporting>": <findings>}` over the consolidated findings.'
+    value: ${{ steps.review.outputs.agreement-histogram }}
 
   # ---------------- Iteration-Aware Review (IAR) outputs ----------------
   # Populated on every run. If the IAR pipeline crashes mid-flight
@@ -360,6 +410,19 @@ runs:
     # Main review runtime — invoked for every provider (chat-completions
     # OR agent-runner). scripts/reviewer.py dispatches on AIPRR_PROVIDER.
     # ---------------------------------------------------------------
+    - name: Download the emitted leg documents (mode=aggregate)
+      # RFC-04: the aggregate job consolidates the `review-output/3.0`
+      # artifacts the emit legs uploaded for this head. Every artifact of the
+      # run is downloaded into one sub-directory each; the runtime keys on the
+      # head SHA inside the documents and ignores other heads. Pinned by SHA
+      # (v4.3.0).
+      if: inputs.mode == 'aggregate'
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        pattern: ai-diff-reviewer-*
+        path: ${{ runner.temp }}/ai-diff-reviewer-legs
+        merge-multiple: false
+
     - name: Run AI Diff Reviewer
       id: review
       shell: bash
@@ -392,6 +455,14 @@ runs:
         AIPRR_PR_DESCRIPTION_MIN_LENGTH: ${{ inputs.pr-description-min-length }}
         AIPRR_COMPLEXITY_LABELS_ENABLED: ${{ inputs.complexity-labels-enabled }}
         AIPRR_COMPLEXITY_LABEL_PREFIX: ${{ inputs.complexity-label-prefix }}
+        AIPRR_VERIFIER: ${{ inputs.verifier }}
+        AIPRR_VERIFIER_MODEL: ${{ inputs.verifier-model }}
+        AIPRR_STRICT_UNVERIFIED_CRITICALS: ${{ inputs.strict-unverified-criticals }}
+        AIPRR_MODE: ${{ inputs.mode }}
+        AIPRR_EXPECTED_LEGS: ${{ inputs.expected-legs }}
+        AIPRR_MIN_AGREEMENT: ${{ inputs.min-agreement }}
+        AIPRR_REQUIRE_ALL_LEGS: ${{ inputs.require-all-legs }}
+        AIPRR_ARTIFACT_DIR: ${{ runner.temp }}/ai-diff-reviewer-legs
 
         # Agent-runner (CLI) provider parameterisation. Consumed only by the
         # `claude-code`, `cursor`, `codex`, and `grok` provider branches.
@@ -424,3 +495,16 @@ runs:
       run: |
         set -euo pipefail
         python3 "${AIPRR_ACTION_PATH}/scripts/reviewer.py"
+
+    - name: Upload the structured review output (review-output/3.0)
+      # RFC-05: the document is the input of the aggregator, the eval gate and
+      # the apply-review skill. `always()` so a failed or skipped run still
+      # ships its (minimal) document; the step is a no-op when nothing was
+      # written. Pinned by SHA (v4.6.2).
+      if: always() && steps.review.outputs.structured-output-path != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ steps.review.outputs.structured-output-artifact }}
+        path: ${{ steps.review.outputs.structured-output-path }}
+        retention-days: 90
+        if-no-files-found: ignore

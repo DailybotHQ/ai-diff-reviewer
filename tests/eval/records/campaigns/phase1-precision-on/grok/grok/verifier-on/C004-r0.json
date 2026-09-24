@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 38.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 38.7,
+  "usage": {
+    "in": 30391,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 1689,
+    "source": "cli"
+  },
+  "cost_usd": 0.0969128,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "body": "Removing `os.path.basename` and joining `request.args.get(\"path\", name)` directly under `REPORTS` lets any client read arbitrary files the process can open.\n\n**Failure modes:**\n- `GET /reports/x?path=../../etc/passwd` walks out of `/srv/reports`.\n- `GET /reports/x?path=/etc/passwd` \u2014 `os.path.join(\"/srv/reports\", \"/etc/passwd\")` returns `/etc/passwd` on POSIX (absolute second segment wins).\n\n**Fix:** accept only a relative subpath, normalize it, and ensure the resolved path stays inside `REPORTS` (e.g. `send_from_directory` + realpath prefix check). Do not trust raw query/path input."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical arbitrary-file-read via path traversal on the report download endpoint.\n\n## Analysis\n\n`download` previously constrained the route parameter with `os.path.basename(name)` before joining under `REPORTS`. The new code:\n\n1. Takes an attacker-controlled query parameter `path` with no validation.\n2. Falls back to the raw `name` route segment without `basename`.\n3. Passes the result straight to `os.path.join(REPORTS, \u2026)` and `send_file`.\n\nConcrete failure modes:\n\n- `GET /reports/x?path=../../etc/passwd` resolves outside `/srv/reports` and serves host files the app can read.\n- `GET /reports/x?path=/etc/passwd` \u2014 on POSIX, `os.path.join(\"/srv/reports\", \"/etc/passwd\")` yields `/etc/passwd` because an absolute second segment discards the base.\n- Nested folders (e.g. `2024/q3/report.pdf`) can be supported safely by resolving the candidate under `REPORTS`, then rejecting any path whose realpath is not still under the reports root (and/or using `send_from_directory` with a sanitized relative path).\n\n## Recommendation\n\nRestore path confinement before merge: allow relative subpaths only after normalizing and verifying the final path stays inside `REPORTS`.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The change removed `os.path.basename` and joins unsanitized `request.args.get(\"path\", name)` into `REPORTS`, so `../` and absolute path segments escape the reports directory and allow arbitrary file reads via `send_file`."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.259,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2386,
+      "out": 290
+    },
+    "cost_usd": 0.006922
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

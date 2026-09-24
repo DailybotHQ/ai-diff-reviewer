@@ -1,5 +1,7 @@
 # AI Diff Reviewer v2
 
+> Moving to v3? See [MIGRATION_v3.md](MIGRATION_v3.md). This page stays the v2 record.
+
 **Default pin:** `uses: DailybotHQ/ai-diff-reviewer@v2`  
 **Skill:** `npx skills add DailybotHQ/ai-diff-reviewer@v2 --skill ai-diff-reviewer`  
 (or `npx skills update ai-diff-reviewer`)

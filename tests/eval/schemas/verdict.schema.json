@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DailybotHQ/ai-diff-reviewer/tests/eval/schemas/verdict.schema.json",
+  "title": "AI Diff Reviewer eval-gate verdict",
+  "description": "Output of tests/eval/determinism.py verdict: RFC-01 promotion and blocking rules applied to a baseline campaign vs a candidate campaign of run records. The release precondition (auto-release.yml) reads the newest verdict for the candidate runtime and prompt; blocking must be empty for a release to proceed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_runtime_sha",
+    "prompt_sha256",
+    "baseline_ref",
+    "computed_at",
+    "paired_cells",
+    "descriptive_only",
+    "measurements",
+    "promotable",
+    "blocking",
+    "notes",
+    "thresholds"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "verdict/1.0"
+    },
+    "candidate_runtime_sha": {
+      "type": "string"
+    },
+    "candidate_content_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "SHA-256 of scripts/reviewer.py on the candidate; the release precondition matches on this + prompt_sha256 so docs-only commits after the measured commit still pass."
+    },
+    "prompt_sha256": {
+      "type": "string"
+    },
+    "baseline_ref": {
+      "type": "string"
+    },
+    "computed_at": {
+      "type": "string"
+    },
+    "paired_cells": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "descriptive_only": {
+      "type": "boolean"
+    },
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cost_relative_delta_point",
+        "cost_relative_delta_ci95",
+        "recall_net_defects",
+        "recall_ci95",
+        "candidate_noise_floor"
+      ],
+      "properties": {
+        "cost_relative_delta_point": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cost_relative_delta_ci95": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "recall_net_defects": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "recall_ci95": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          }
+        },
+        "candidate_noise_floor": {
+          "type": "object"
+        }
+      }
+    },
+    "promotable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cost",
+        "recall",
+        "precision"
+      ],
+      "properties": {
+        "cost": {
+          "type": "boolean"
+        },
+        "recall": {
+          "type": "boolean"
+        },
+        "precision": {
+          "type": "boolean"
+        }
+      }
+    },
+    "blocking": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "thresholds": {
+      "type": "object"
+    }
+  }
+}

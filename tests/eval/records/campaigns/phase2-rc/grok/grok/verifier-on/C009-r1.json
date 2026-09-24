@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 38.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.0,
+  "usage": {
+    "in": 29825,
+    "cache_read": 57728,
+    "cache_write": 0,
+    "out": 1445,
+    "source": "cli"
+  },
+  "cost_usd": 0.0856384,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**XSS: unescaped user-controlled HTML is injected into the DOM.**\n\nRemoving `escapeHtml` and passing `body` directly to `dangerouslySetInnerHTML` means any comment containing HTML runs in the page origin. A body like `<img src=x onerror=\" stealsession()\">` or `<script>...</script>` executes for every reader.\n\nRich bold/links need a markdown renderer or an HTML sanitizer with a strict allowlist *before* this API \u2014 deleting escaping alone is not formatting support.\n\n```suggestion\n  return <div className=\"comment\" dangerouslySetInnerHTML={{ __html: escapeHtml(body) }} />;\n```\n\n(Restore `escapeHtml`, or replace this path with a sanitizer/markdown renderer and tests for script/onerror payloads.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical XSS regression** \u2014 this change must not merge as written.\n\n## What went wrong\n\n`Comment` previously ran `body` through `escapeHtml` before `dangerouslySetInnerHTML`, which made the DOM path safe (plain text only). The PR deletes that escaping and feeds `body` straight into `__html`.\n\nAny caller that passes user- or third-party-controlled comment text (typical for a `Comment` component) can inject arbitrary HTML/JS: `<script>`, `<img onerror=...>`, `<a href=\"javascript:...\">`, etc. The comment about \"rich formatting (bold/links)\" does not implement sanitization or a markdown renderer; it only removes the safety rail.\n\n## What would make this safe\n\nRender rich text with a dedicated path that cannot execute scripts, for example:\n\n1. **Markdown \u2192 React elements** via a well-known parser/renderer with default-safe link handling, or\n2. **HTML sanitization** (e.g. DOMPurify with a tight allowlist) *before* `dangerouslySetInnerHTML`, or\n3. **Structured formatting** (bold/link props) without raw HTML.\n\nAlso add a regression test that asserts hostile payloads do not survive into the DOM as executable markup.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes the body string straight into dangerouslySetInnerHTML, so untrusted comment HTML executes in-page with no sanitizer or markdown path added. That is a real XSS regression; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.404,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2336,
+      "out": 390
+    },
+    "cost_usd": 0.007959
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

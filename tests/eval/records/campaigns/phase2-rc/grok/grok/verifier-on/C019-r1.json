@@ -1,0 +1,93 @@
+{
+  "case": "C019",
+  "pr": "C019",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 80.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 80.4,
+  "usage": {
+    "in": 31934,
+    "cache_read": 87936,
+    "cache_write": 0,
+    "out": 2929,
+    "source": "cli"
+  },
+  "cost_usd": 0.1078228,
+  "changed_files": [
+    "migrations/0007_add_reason.py",
+    "migrations/0008_drop_reason.py"
+  ],
+  "findings": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "body": "`dependencies` pins `(\"billing\", \"0007_add_reason\")`, but this PR **deletes** `migrations/0007_add_reason.py`. Django\u2019s migration loader will fail to resolve that node (`NodeNotFoundError`), so migrate/CI cannot run.\n\n**Fix:** restore `0007_add_reason.py` and keep this `RemoveField` migration as the forward drop. Only if you can guarantee `0007` was never applied in any environment, delete `0007` and drop this file entirely (no dependency on a missing parent)."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "body": "Deleting an existing migration that already added `void_reason` rewrites history. Any database that applied `0007` still has the column and a `django_migrations` row for `0007_add_reason`, while the repo no longer ships that file \u2014 loader/history drift and a column that `0008` cannot reliably drop once the parent node is gone.\n\n**Fix:** leave `0007_add_reason.py` in the tree; add only a new `RemoveField` migration (this PR\u2019s `0008` once its dependency exists again)."
+    }
+  ],
+  "summary": "## Verdict\n\nBroken migration chain \u2014 do not merge until the dependency graph is restored.\n\n## Narrative\n\nThis PR deletes `migrations/0007_add_reason.py` (the migration that added `Invoice.void_reason`) and adds `migrations/0008_drop_reason.py`, which both **depends on** `(\"billing\", \"0007_add_reason\")` and `RemoveField`s that column.\n\nDjango cannot load the graph: `0008` names a parent node whose file no longer exists, so `manage.py migrate` (and any startup that builds the loader) fails with `NodeNotFoundError` / missing-dependency errors.\n\nEven if `0007` had never been applied anywhere, the safe shapes are:\n\n1. **Already applied (or may be applied):** keep `0007_add_reason`, ship only `0008` with `RemoveField` (the usual forward drop).\n2. **Never applied in any environment:** delete `0007` only and do not add a drop migration that points at it.\n\nThis change does neither: it removes the add migration and leaves a drop that still requires it. The comment that the field was never shown in the UI does not repair the graph or historical `django_migrations` rows.\n\nNo model/app code in this repo references `void_reason`; the defect is entirely in migration history continuity.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "0008_drop_reason.py depends on billing.0007_add_reason, but this PR deletes migrations/0007_add_reason.py and leaves no replacement parent, so Django\u2019s loader cannot resolve the graph (NodeNotFoundError)."
+    },
+    {
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head deletes applied migration `0007_add_reason.py` (AddField void_reason) while new `0008_drop_reason.py` still depends on `(\"billing\", \"0007_add_reason\")`, so any DB that applied 0007 keeps the column and django_migrations row with a missing parent node\u2014classic history rewrite and a broken loader "
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 30.141,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 9800,
+      "out": 927
+    },
+    "cost_usd": 0.026186
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C019-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 2
+  }
+}

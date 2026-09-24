@@ -1,0 +1,56 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 183.5,
+  "setup_seconds": 1.9,
+  "total_seconds": 185.3,
+  "usage": {
+    "in": 67492,
+    "cache_read": 224640,
+    "cache_write": 0,
+    "out": 7927,
+    "source": "cli"
+  },
+  "cost_usd": 0.249938,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity": "warning",
+      "body": "Empty-matrix always fails, so any non-`ready` `labeled` event re-fails the required check on the same head SHA after a successful review.\n\nSequence: apply `ready` \u2192 legs + gate go green \u2192 apply `bug`/`dependencies` \u2192 `scope` emits `matrix=[]` (correct) \u2192 this block `exit 1` \u2192 latest `Self-review gate` check on the SHA is red \u2192 merge blocked again. Branch protection keys off the latest check run name, and `on.pull_request.types` includes every label.\n\nFix: on empty matrix, fail only when this head SHA has no prior successful self-review (check-runs for `Self-review \u2014 *` or a prior green gate on `github.event.pull_request.head.sha`); if one exists, exit 0. Still fail when `SCOPE_RESULT != success` or when the matrix ran and `REVIEW_RESULT != success`. Same hole is copied in `docs/TRIGGER_MODES.md` technique 3."
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 236,
+      "severity": "info",
+      "body": "Comment says the only path to an empty matrix (with secrets configured) is a missing `ready` label, but `matrix` also stays `[]` when `ready` is present and every `HAS_*` secret is unset \u2014 the gate still fails with \u201capply the ready label\u201d.\n\nLow likelihood in this repo\u2019s dogfood, but the user-facing `::error::` then points maintainers at the wrong fix. Consider branching the message on whether `ready` is present vs secrets missing, or noting the secrets case in the comment."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid diagnosis of the Skipped-required-check gotcha, and the stable-named `Self-review gate` is the right shape for branch protection. One real correctness hole remains: the gate fails on **every** empty-matrix run, including unrelated `labeled` events after a successful review on the same SHA, which flips a green required check back to red.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning | `.github/workflows/self-review.yml:238` | Empty-matrix path always fails \u2014 unrelated labels re-block after a green review |\n| 2 | \u2139\ufe0f info | `.github/workflows/self-review.yml:234` | Error copy assumes empty matrix only means missing `ready` |\n\n## Details\n\n**Unrelated-label overwrite.** `on.pull_request.types` includes all `labeled` events. `scope` correctly emits `matrix=[]` for non-`ready` labels (and the review leg stays Skipped), but the new `gate` job still runs via `if: always()` and exits 1 on empty matrix. Branch protection uses the **latest** check run named `Self-review gate` on the head SHA, so:\n\n1. Apply `ready` \u2192 review passes \u2192 gate green \u2192 mergeable  \n2. Apply `bug` / `dependencies` / any other label \u2192 new workflow run \u2192 gate red on the same SHA \u2192 merge blocked again  \n\nThat breaks the documented happy path (\u201cgate turn green \u2192 mergeable\u201d) whenever maintainers use other labels after dogfood. The docs recipe in `TRIGGER_MODES.md` technique 3 copies the same pattern.\n\n**Fix direction:** on empty matrix, fail only when this head SHA has no successful self-review yet (e.g. query check-runs for `Self-review \u2014 *` / prior gate success on `github.event.pull_request.head.sha`); if a prior success exists for this SHA, exit 0. Keep failing hard when matrix is non-empty and `REVIEW_RESULT != success`, and when `scope` itself failed.\n\n**Stale pointer (not in diff):** `README.md:291` still names the old recipe title (\u201cshow Skipped (not green)\u201d); worth updating in a follow-up so the Marketplace-facing link matches `TRI",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 2,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 3
+  }
+}

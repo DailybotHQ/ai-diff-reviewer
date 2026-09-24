@@ -1,0 +1,92 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 65.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 65.7,
+  "usage": {
+    "in": 32134,
+    "cache_read": 117760,
+    "cache_write": 0,
+    "out": 3464,
+    "source": "cli"
+  },
+  "cost_usd": 0.12038,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can pass `accountId` in the JSON body and read that account. The comment says this is for support staff, but there is no role, permission, or staff check before using the client-supplied id \u2014 only `auth(req)`.\n\n**Failure mode:** A request with body `{\"accountId\":\"victim-id\"}` returns the victim account JSON for a normal user session.\n\nGate explicit-id lookup on a verified staff/support principal (or a separate staff-only route). Non-privileged callers must keep resolving solely to `caller.accountId`.\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const requestedId = typeof body.accountId === \"string\" ? body.accountId : undefined;\n  if (requestedId !== undefined && !caller.isSupportStaff) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  const id: string = requestedId ?? caller.accountId;\n```\n\n(Adapt `caller.isSupportStaff` to whatever auth model this codebase uses.)"
+    },
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "body": "`body.accountId` is assigned to `id: string` without checking that it is a non-empty string. A number, object, or array from JSON will flow into `findUnique` and can cause a DB/driver error or unexpected query behavior.\n\nAfter fixing authorization, validate before use, e.g. only accept `typeof body.accountId === \"string\" && body.accountId.length > 0`, otherwise fall back to `caller.accountId` (or 400)."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization bypass: `getAccount` now trusts a client-supplied `accountId` with no staff/role check, so any authenticated caller can read arbitrary accounts.\n\n## Analysis\n\nPreviously the handler scoped the lookup to `caller.accountId` from `auth(req)`. This change prefers `body.accountId` whenever present. The comment mentions support staff tools, but nothing in the handler (or elsewhere in this diff) verifies staff privileges, a support scope, or that the caller is allowed to read the target account.\n\n**Failure mode:** An ordinary authenticated user sends `{\"accountId\": \"<victim>\"}` and receives that account's full JSON payload.\n\n**Fix direction:** Gate explicit-id lookup behind a real authorization check (staff role / support permission / internal service identity). Reject or ignore `body.accountId` for non-privileged callers, and keep the default path as `caller.accountId` only.\n\nSecondary note: `body.accountId` is taken unvalidated (any JSON type). Even after authz is fixed, coerce/validate to a non-empty string before the DB query.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head route uses `body.accountId ?? caller.accountId` after only `auth(req)`, with no role/staff gate; base only looked up `caller.accountId`. Any authenticated client can therefore read arbitrary accounts via a supplied id."
+    },
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.443,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2463,
+      "out": 344
+    },
+    "cost_usd": 0.007963
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

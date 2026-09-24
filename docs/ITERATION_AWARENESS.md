@@ -317,6 +317,8 @@ Two safety rails apply to **every** policy, unconditionally. They are non-negoti
 
 **Hardcoded rule.** Not a knob. Not a policy variant. Not conditional.
 
+**v3 (RFC-03):** the rail keys on the *claimed* severity (`is_critical_claim`: `severity == critical` **or** `severity_claimed == critical`). The verifier's severity policy may publish a claimed critical as an annotated `warning`; that changes the label, never the visibility — dedup, the round cap and the criticals-first sort still treat it as critical.
+
 In `scripts/reviewer.py`, the dedup engine (`dedupe_findings_against_prior`) contains the following early-return:
 
 ```python
@@ -366,6 +368,8 @@ IAR: safety net triggered (45.2% new lines exceeds threshold 30%) — forcing fi
 **The interaction.** `collapse-previous: true` (the shipped default) minimizes the reviewer's previous tracking marker on the next run so the PR conversation stays scannable. But that marker is exactly where IAR embeds its state block — so a naive implementation that only reads *visible* markers would see no prior state on every run and treat every review as `first_review`, which would defeat dedup + generation tracking entirely (every consumer on defaults would burn round-1 exhaustive on every run and never converge).
 
 **The rescue.** `_fetch_latest_marker_body` uses a three-tier ordering to find the latest marker that carries state, in priority order:
+
+**v3 aggregate role (RFC-04).** When the review is published by a `mode: aggregate` job, the IAR state is embedded on the tracking comment that carries `<!-- ai-pr-reviewer-aggregate -->` and read back with that scope on the next round — one history per PR. Emit legs never write a marker, but they **read** the aggregate history (`iar_read_scope`), so each leg sees the prior findings, reviews incrementally and reports them resolved / still open in its document; the aggregate merges those claims (`prior_finding_updates`, a regression wins over a resolution) and reconciles them itself — corroboration and the anchor re-read run against the aggregate job's own checkout. On the first aggregated round the runtime collapses surviving per-leg markers (migration) and starts the aggregate history fresh. Refuted fingerprints are dropped from the open set before the state is embedded.
 
 1. **Newest non-minimized marker WITH an `IAR_STATE_TAG_OPEN` block** — the common path when `collapse-previous: false` or the current run is the first review since collapse.
 2. **Newest minimized marker WITH state block** — the collapse-boundary rescue. Under `collapse-previous: true` the last real tracking comment has been minimized, but the state block is still in its body. Reading it here is what makes IAR persistence work on defaults.
@@ -785,7 +789,7 @@ There is no input to enable it; the `iteration-escape-label` is the per-PR off s
 
 ### 14.2 What the model receives
 
-The `## Full Diff` section is replaced by:
+The `## Patches` section (v3; `## Full Diff` before v3) is replaced by:
 
 1. `## Changes since your last review (<prior> → <head>)` — the actual two-tree delta between those heads, respecting file omissions before applying its own size limit;
 2. `## Other files changed in this PR (unchanged since your last review)` — one line per remaining file;
@@ -807,6 +811,10 @@ The model reports `resolved`, `open` or `regressed` for each prior finding throu
 | `verified` | is honoured only when the runtime can corroborate it: the fingerprint is absent from this round **and** the file changed since the finding was raised (or no longer exists) | the runtime replies (`✅ Resolved in <sha> — verified by the reviewer…`) and resolves the thread, best-effort | the finding stops counting; `resolved_fingerprints` gains it |
 
 Under both policies an edited file and an absent fingerprint are **not** taken as proof on their own: they are the corroboration required *in addition to* the model's verdict, and anything the runtime cannot corroborate stays open and is listed as unverified. `regressed` is model-asserted in both. Outstanding prior findings continue to contribute to the strictness gate even when the model correctly avoids reposting them; an incremental pass retains outstanding fingerprints instead of marking unmentioned findings resolved.
+
+#### 14.4.0 The anchor re-read (v3, RFC-03 § Finding retirement — BC-08)
+
+The corroboration above stays the **necessary** condition. Since v3 retirement also needs a **sufficient** one: the runtime re-reads the finding's anchor at the new head (`verify_anchor_fixed`) and compares the lines around it with the same lines at the head where the finding was raised (`PriorFinding.review_sha`). A corroborated `resolved` claim retires as `verified_fixed` only when those lines changed, or as `file_removed` when the path is gone. A claim whose anchor is **identical** stays open — the footer says `N kept open (anchor unchanged at head)` and the prior-findings ledger lists it as `claimed resolved, anchor unchanged at head` — so a file that changed elsewhere no longer retires a finding whose defect is untouched. When the raising head is not in the checkout (shallow clone, unknown review SHA) the re-read is unavailable and the v2 rule applies, with the reason recorded (`verified_fixed (anchor re-read unavailable …)`). Absence from a later review still never retires; `regressed` stays model-asserted. Retirement reasons are kept on `PriorFindingReconciliation.retired_reasons` and every current finding carries a `lifecycle.state` (`new` / `open` / `regressed`).
 
 #### 14.4.1 The collapsed-thread escape (v2.3.1)
 
@@ -836,7 +844,9 @@ The escape depends on an ordering invariant in `main()`: `gh_collapse_previous_r
 
 The model writes its `Recommendation:` line before the runtime knows the gate outcome, so the two could disagree. Since v2.3.1 `compute_check_gate()` is the single decision point — the review body, the tracking comment's `**Strictness gate:**` line and the process exit code all derive from one call, evaluated **before** the review is posted. Every review body ends with a runtime-written `> **Check status: ✅ passing | 🚫 failing**` block, and a model `Recommendation: approve` is rewritten to `request-changes` when the gate is failing. A review that recommends approval can no longer ship with a red check.
 
-The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J` (plus `· policy: verified` when opted in), and the tracking marker annotation carries `mode=incremental`.
+**v3 order.** The verifier and the severity policy run *after* `run_iar_post_llm()` and rebuild `overall_severity` from this round's published findings; the runtime then re-applies the prior-finding escalation (`restore_prior_severity_escalation`, verified-resolved priors excluded) before `compute_check_gate()`, so an empty or info-only follow-up with an open prior critical stays red exactly as in v2.3.1. Refuted findings are removed from the persisted open set (`drop_refuted_from_open_set`) so a false positive never silences a later honest report at the same anchor.
+
+The review summary ends with `Since last review (<prior> → <head>): resolved N · still open M · regressed K · new J` (plus `· policy: verified` when opted in, `· N kept open (anchor unchanged at head)` since v3), and the tracking marker annotation carries `mode=incremental`. Since v3 the posted body is generated by the runtime from the findings array (counts, verification, the findings table, the bounded narrative, the refuted section and a `### Prior findings` ledger with each retirement's reason); the model's summary is the narrative inside it.
 
 ### 14.5 Budget scaling
 

@@ -1,0 +1,79 @@
+{
+  "case": "C014",
+  "pr": "C014",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.3,
+  "usage": {
+    "in": 32501,
+    "cache_read": 88320,
+    "cache_write": 0,
+    "out": 2332,
+    "source": "cli"
+  },
+  "cost_usd": 0.10549,
+  "changed_files": [
+    "src/middleware/cors.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nRemoves the `ALLOWED` origin check and always returns `Access-Control-Allow-Origin` set to the caller-supplied `origin` (or `*`) together with `Access-Control-Allow-Credentials: true`.\n\n**Failure mode:** a malicious page at `https://evil.example` sends a credentialed XHR/fetch to this API. The browser attaches the victim's cookies; the response includes `ACAO: https://evil.example` and `ACAC: true`, so the attacker can read authenticated API responses (account data, tokens in body, etc.).\n\nNative mobile HTTP stacks do not enforce CORS, so this does not unlock them. Webviews still need an explicit allowlist of known origins \u2014 restore something like:\n\n```ts\nconst ALLOWED = new Set([\n  \"https://app.example.com\",\n  // add known webview origins only\n]);\n\nexport function corsHeaders(origin: string | null): Record<string, string> {\n  if (origin && ALLOWED.has(origin)) {\n    return {\n      \"Access-Control-Allow-Origin\": origin,\n      \"Access-Control-Allow-Credentials\": \"true\",\n      Vary: \"Origin\",\n    };\n  }\n  return {};\n}\n```\n\nAlso: `ACAO: *` + `ACAC: true` (the `origin ?? \"*\"` branch) is invalid per the CORS spec and browsers will reject it, so null-Origin clients still fail while every real browser Origin is trusted."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change turns a strict origin allowlist into a credentialed CORS reflector for every caller.\n\n## What broke\n\n`corsHeaders` previously returned `Access-Control-Allow-Origin` + `Access-Control-Allow-Credentials: true` only when `origin` was in `ALLOWED` (`https://app.example.com`). The new code always echoes the request `Origin` (or `*` when absent) and always pairs it with credentials.\n\n**Failure mode:** any site the user visits can trigger a credentialed cross-origin request to this API (cookies / auth headers the browser attaches). Because ACAO mirrors the attacker's origin, the browser exposes the response body to that page \u2014 session data, account details, CSRF-sensitive mutations with readable results.\n\nThe PR framing (\u201cnative mobile clients / mobile webviews\u201d) does not justify this:\n\n- Pure native HTTP clients are not subject to browser CORS; loosening CORS does not help them.\n- Webviews that do enforce CORS still need an explicit allowlist of known app origins (custom schemes, `https://app.example.com`, etc.), not \u201cany Origin\u201d.\n\n## Secondary issue on the same path\n\nWhen `origin` is `null`, the headers become `Access-Control-Allow-Origin: *` **and** `Access-Control-Allow-Credentials: true`. Per the Fetch/CORS spec that combination is invalid; browsers discard the CORS grant. So the null-origin path both fails open on security intent and fails closed for actual mobile clients that omit Origin.\n\n## What to do instead\n\nKeep an allowlist (env-driven if you need multiple webview origins). Only set ACAO to a concrete allowed origin; never `*`. Only set `Allow-Credentials: true` for those allowlisted origins. Native apps authenticate without CORS changes.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/middleware/cors.ts",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C014-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

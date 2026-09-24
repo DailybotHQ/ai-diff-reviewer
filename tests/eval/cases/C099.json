@@ -1,0 +1,59 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C099",
+  "title": "Request handler unwraps a parse of user input (panic = denial of service)",
+  "stack": "rust",
+  "change_class": "error_handling",
+  "risk_class": "warning_positive",
+  "family_group": "G99",
+  "gap_tags": [
+    "new_stack_rust"
+  ],
+  "fixture": {
+    "base": {
+      "src/handler.rs": "pub fn page(q: &str) -> Result<u32, String> {\n    q.parse::<u32>().map_err(|e| e.to_string())\n}\n"
+    },
+    "head": {
+      "src/handler.rs": "pub fn page(q: &str) -> u32 {\n    q.parse::<u32>().unwrap()\n}\n"
+    },
+    "pr_metadata": {
+      "title": "handler: simplify page parsing",
+      "body": "Callers never send garbage.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:6191cc34e9edf21ea0dfa9f5b577fabf25d1a6a9d188738cd134ad48bc45de4f"
+  },
+  "labels": [
+    {
+      "id": "C099-d1",
+      "severity": "warning",
+      "path": "src/handler.rs",
+      "defect": "unwrap() on user-controlled input in a request path — a malformed query panics the worker",
+      "evidence": "`?page=abc` panics; the previous Result surfaced a 400. In a thread-per-request or async runtime a panic aborts the task or the process.",
+      "keywords": [
+        "unwrap",
+        "parse",
+        "panic",
+        "user"
+      ],
+      "introduced_by_change": true,
+      "ambiguous": false,
+      "window": 25
+    }
+  ],
+  "expected": {
+    "must_flag": [
+      "C099-d1"
+    ],
+    "must_not_flag": []
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

@@ -243,7 +243,7 @@ class IncrementalPromptTests(unittest.TestCase):
     def test_incremental_sections_replace_full_diff(self) -> None:
         prior = (_prior(fp="c" * 16, sev="critical", path="src/z.py", line=3), _prior(fp="a" * 16))
         text = reviewer.render_user_prompt(self._ctx(_pre(prior=prior)))
-        self.assertNotIn("## Full Diff", text)
+        self.assertNotIn(reviewer.PATCHES_HEADING, text)
         self.assertIn(reviewer.IAR_INCREMENTAL_DIFF_HEADING, text)
         self.assertIn("diff --git a/src/x.py", text)
         self.assertNotIn("diff --git a/src/z.py", text, "unchanged-since-last-review files are summarised, not shown")
@@ -256,8 +256,10 @@ class IncrementalPromptTests(unittest.TestCase):
         self.assertIn("warning", rows[1]); self.assertIn("| yes |", rows[1])
 
     def test_full_mode_keeps_full_diff(self) -> None:
+        # v3 (Task 11): the full first message carries `## Patches` (inventory order,
+        # byte-budgeted) instead of the old `## Full Diff` blob.
         text = reviewer.render_user_prompt(self._ctx(_pre(mode="full")))
-        self.assertIn("## Full Diff", text)
+        self.assertIn(reviewer.PATCHES_HEADING, text)
         self.assertNotIn(reviewer.PRIOR_FINDINGS_HEADING, text)
 
     def test_empty_delta_states_no_code_changes(self) -> None:

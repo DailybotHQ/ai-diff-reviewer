@@ -1,0 +1,127 @@
+{
+  "pr": 45,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 9,
+  "tool_calls": 35,
+  "seconds": 321.9,
+  "setup_seconds": 2.0,
+  "total_seconds": 323.8,
+  "usage": {
+    "in": 113572,
+    "cache_read": 345216,
+    "cache_write": 0,
+    "out": 2781,
+    "source": "api"
+  },
+  "cost_usd": 0.312873,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "CHANGELOG.md",
+    "README.md",
+    "docs/PROVIDERS.md",
+    "docs/PR_METADATA_CHECKS.md",
+    "scripts/reviewer.py",
+    "skills/ai-diff-reviewer/setup/reference.md",
+    "tests/test_findings_parser.py",
+    "tests/test_reviewer.py"
+  ],
+  "findings": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity": "warning",
+      "body": "When `require_complexity=False` (the default for most consumers), the findings.json schema example embeds a JavaScript-style `// optional` comment. That example is not valid JSON, but the same directive still requires the file to parse with `json.load()`.\n\nFailure mode: agent-runner models often copy the schema literally. A findings file that includes `// optional` fails parse and aborts the whole CLI review \u2014 a regression on the default path even when complexity labeling is off.\n\nKeep optionality in the Rules bullet only (already present via `complexity_rule`), and emit a comment-free schema example:\n\n```suggestion\n        ',\\n  \"complexity\": \"low | medium | high\"\\n'\n```"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5476,
+      "severity": "warning",
+      "body": "`infer_pr_complexity_fallback` checks `_COMPLEXITY_HIGH_PATH_MARKERS` before the docs-only short-circuit. Substring markers like `security`, `auth`, and `token` therefore fire on pure documentation paths (`docs/SECURITY.md`, `docs/AUTHENTICATION.md`, etc.) and force `high`.\n\nThat contradicts the PR-hygiene guidance that docs-only PRs are typically `low`, and it undermines the product claim that complexity is cognitive-load based rather than path/line heuristics. Prefer: if every changed path is a doc suffix, return `low` first; only then apply high-risk markers to non-doc paths."
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 43,
+      "severity": "warning",
+      "body": "The main \u201cHow the reviewer assesses complexity\u201d section still describes only the chat-completions `set_pr_complexity` tool path. This PR makes complexity labeling work on agent-runners via `findings.json` and adds a heuristic fallback when the model omits a level, but those paths are only partially covered in the matrix footnotes.\n\nConsumers reading this section (linked from README and `action.yml`) will still think the feature is tool-only and purely AI-assessed, which is no longer accurate. Please document all three sources in order: `set_pr_complexity` \u2192 findings.json `complexity` \u2192 `infer_pr_complexity_fallback`, and note that the fallback is size/path-based."
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5485,
+      "severity": "info",
+      "body": "The fallback uses `len(paths)` and `line_delta` thresholds (`>100` / `>500`) after the path-marker check. That is fine as a last-resort safety net, but it directly conflicts with the user-facing promise in `action.yml` / README / this doc family that complexity is \u201cnot line-count based.\u201d\n\nWhen the model omits `complexity` (common on CLIs), every labeled PR silently becomes a size labeller. Either (a) document the fallback explicitly as size-based and best-effort, or (b) keep fallback conservative (`low`/`medium` only from coarse signals) and avoid advertising anti-line-count guarantees without the model path."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid, well-scoped fix that actually closes the agent-runner complexity gap \u2014 wiring is coherent across providers, parser, main(), docs matrix, setup skill, and tests. A few correctness/docs issues should be fixed before relying on the new fallback in production dogfood.\n\n## Narrative\n\n**What works well**\n- Bridging complexity via optional/required `complexity` on `.aiprr/findings.json`, threading `require_complexity_in_findings` through all three CLI providers, and unifying application through `resolve_pr_complexity()` is the right shape.\n- Removing complexity from `build_agent_runner_noop_warning` matches the new behavior; autocomplete remains correctly warned.\n- Self-review dogfood (`complexity-labels-enabled: true`) plus the `AIReview` \u2192 `ready` rename aligns with `docs/TRIGGER_MODES.md` and AGENTS.md.\n- Parser tests cover valid/invalid complexity and the required-directive string; noop-warning tests were updated correctly.\n- No public `action.yml` contract break, no non-stdlib imports, path/secret surfaces untouched.\n\n**Issues worth fixing**\n1. **Invalid JSON example in the findings directive (warning)** \u2014 the default (`require_complexity=False`) schema embeds `// optional` inside a fenced JSON block while still requiring `json.load()`. CLI models that copy the example will fail the whole agent-runner review even when complexity labeling is off. Drop the comment from the schema; keep optionality in the Rules bullet.\n2. **Docs-path false positives in the heuristic (warning)** \u2014 high markers (`security`, `auth`, `token`, \u2026) run before the docs-only short-circuit, so `docs/SECURITY.md`-only PRs become `complexity:high`. Invert: all-doc paths \u2192 `low` first.\n3. **Primary complexity docs still tool-only (warning)** \u2014 `docs/PR_METADATA_CHECKS.md` \u00a7 \u201cHow the reviewer assesses complexity\u201d (and `action.yml`\u2019s AI-only blurb) don\u2019t describe findings.json or the heuristic fallback; only the matrix footnotes do. Sync the how-to with the three-source resolution or",
+  "verification": [
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5645,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5476,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/PR_METADATA_CHECKS.md",
+      "line": 43,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "scripts/reviewer.py",
+      "line": 5485,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 2,
+    "must_find_hits": 2,
+    "hits": [
+      "45-complexity-not-validated",
+      "45-json-example-invalid"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 2,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 2,
+    "changed_files": 10
+  }
+}

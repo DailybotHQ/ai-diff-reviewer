@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 35.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.4,
+  "usage": {
+    "in": 30041,
+    "cache_read": 57344,
+    "cache_write": 0,
+    "out": 1378,
+    "source": "cli"
+  },
+  "cost_usd": 0.0855532,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Stored XSS:** `body` is assigned to `dangerouslySetInnerHTML` with no escaping or sanitization after `escapeHtml` was removed.\n\nAny comment payload such as `<img src=x onerror=alert(document.cookie)>` or `<script>\u2026</script>` executes in viewers\u2019 browsers. That breaks the prior plain-text safety contract of this component.\n\nRestore escaping, render markdown through a vetted parser into React nodes, or sanitize with a strict allowlist (e.g. tags `b`/`i`/`a` only, no event handlers) before setting `__html`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical XSS regression** \u2014 this change removes the only HTML escaping on comment bodies and feeds the raw string into `dangerouslySetInnerHTML`.\n\n## Narrative\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning to `__html`, which made the `dangerouslySetInnerHTML` path safe for plain text. The diff deletes `escapeHtml` and passes `body` through unchanged. Any comment author (or anyone who can influence `body`) can inject arbitrary HTML/JS that runs in every viewer\u2019s session \u2014 session theft, UI rewrite, credential exfiltration.\n\nThe comment claims \u201crich formatting (bold/links),\u201d but there is no markdown parser and no allowlist sanitizer (e.g. DOMPurify). Unfiltered HTML is not a formatting feature; it is an open XSS sink.\n\n## Release decision\n\nDo not merge until comment HTML is either (a) rendered as React text/nodes from a vetted markdown pipeline, or (b) sanitized with a strict allowlist before `dangerouslySetInnerHTML`.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch removes escapeHtml and passes unsanitized body into dangerouslySetInnerHTML, so any HTML/JS in comment content executes in viewers\u2019 browsers. That is a real stored-XSS regression from the prior escaped plain-text behavior."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.57,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4159,
+      "out": 309
+    },
+    "cost_usd": 0.010735
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

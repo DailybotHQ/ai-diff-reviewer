@@ -1,0 +1,139 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 10,
+  "tool_calls": 52,
+  "seconds": 193.7,
+  "setup_seconds": 1.8,
+  "total_seconds": 195.5,
+  "usage": {
+    "in": 102494,
+    "cache_read": 659840,
+    "cache_write": 0,
+    "out": 5405,
+    "source": "api"
+  },
+  "cost_usd": 0.369386,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity": "warning",
+      "body": "Step 3.5 sits between tag push (Step 3) and GitHub Release publish (Steps 4\u20135) with `set -euo pipefail` and no `continue-on-error`. If `npx skills update` fails (propagation lag, registry blip, lockfile conflict), the job dies and Steps 4\u20135 never run \u2014 leaving a public annotated tag + force-moved major alias **without** a GitHub Release. The PR Risks section treats \u201ctag already published\u201d as mitigation, but consumers and Marketplace tooling still expect the Release artifact. Prefer isolating dogfood failure from publish: log `::error::`, exit 0 (or `continue-on-error: true`), and keep Steps 4\u20135 on the critical path."
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity": "warning",
+      "body": "The comment correctly calls out REST/GraphQL lag after the tag push, but the only mitigation is a single `sleep 5` and one `npx skills update` attempt. A transient miss of the just-pushed tag is the most likely false-failure of this smoke test \u2014 and with the current step ordering it also blocks Release publish. Add a short retry loop (e.g. 5 attempts with backoff) and/or pin the update to `${NEW_VERSION}` if the CLI supports it, so lag does not look like a broken installer."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity": "warning",
+      "body": "Duplicate `**Option A \u2014 .review/extension.md**` heading, and the tree uses `mi-repo/` (Spanish) under an English-only product (AGENTS.md Rule #1). Same defect exists in source-of-truth `skills/ai-diff-reviewer/SKILL.md:358-363`. Per Rule #10 / DON'T #14, fix the source copy on this PR (or a fast follow before the next tag); do not hand-patch only the vendored tree \u2014 Step 3.5 will just re-copy the broken source on release."
+    },
+    {
+      "path": ".review/extension.md",
+      "line": 4,
+      "severity": "info",
+      "body": "The intro says `scripts/reviewer.py` is \u201c~4000 LOC\u201d; the file already ends at line 4018, and `docs/STANDARDS.md` still claims \u201cWe're at ~2400 today.\u201d The de-escalate rule that treats ceiling creep as `info` is fine, but shipping an extension that understates current size will mis-calibrate reviewers the moment this file is layered in self-review. Consider \u201c~4000+ LOC (at the soft ceiling)\u201d and a follow-up to refresh STANDARDS.md."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 86,
+      "severity": "info",
+      "body": "`[Unreleased] ### Added` covers Step 3.5 and the vendored skill bootstrap, but this PR also introduces `.review/extension.md` and wires `prompt-extension-file: .review/extension.md` into `self-review.yml` \u2014 the runtime dogfood half of Rule #10 pillar (A). Without a CHANGELOG bullet, the release notes will under-describe the dogfooding story this PR is meant to establish (AGENTS.md Rule #7)."
+    }
+  ],
+  "summary": "## Verdict\n\nSolid dogfooding infrastructure \u2014 the two-pillar Rule #10 model and the first `.review/extension.md` are the right shape \u2014 but Step 3.5 can leave a published tag without a GitHub Release, and the vendored skill snapshot already carries a small English/docs defect from source.\n\n## Narrative\n\nThis PR is mostly CI + docs + vendored artifacts; runtime `scripts/reviewer.py` is untouched, which keeps consumer risk low. The valuable pieces land cleanly:\n\n- **Rule #10 expanded** into runtime (A) + install-flow (B) with DON'T #14 \u2014 clear and enforceable.\n- **`self-review.yml` \u2192 `prompt-extension-file: .review/extension.md`** is the correct local\u2194CI parity wire-up; missing-file handling in `reviewer.py` fails the run loudly (return 1), so the path is load-bearing once merged.\n- **`.review/extension.md`** is unusually dense but code-anchored (stdlib-only, `shell=True`, `safe_repo_path`, marker contracts, env allowlist). That matches this repo\u2019s rules surface.\n- **First-time vendor via `skills-lock.json`** mirrors the existing `dailybot` / `deepworkplan` pattern.\n\n### What needs attention before relying on Step 3.5 in production\n\n1. **Release publish coupling (warning)** \u2014 Step 3.5 runs *after* the annotated tag + major-alias force-push and *before* Steps 4\u20135 (notes + `action-gh-release`). A failed `npx skills update` aborts the job and skips the GitHub Release while the tag is already public. Isolate dogfood failure from publish (`continue-on-error` or soft-fail after `::error::`).\n2. **No retry on acknowledged lag (warning)** \u2014 comments admit REST/GraphQL lag; only `sleep 5` + one attempt. Transient tag invisibility will look like a broken installer and (today) also block Release.\n3. **Skill doc defect in both trees (warning)** \u2014 duplicated \u201cOption A\u201d heading and `mi-repo/` (non-English) in `skills/ai-diff-reviewer/SKILL.md` and the vendored copy. Fix **source** first (DON\u2019T #14); the next Step 3.5 will refresh the vendored tree.\n\n### Nits\n\n- Extension intro still",
+  "verification": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 216,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 206,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 360,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".review/extension.md",
+      "line": 4,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 86,
+      "severity_claimed": "info",
+      "status": "unverified",
+      "reason": ""
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 5,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 4,
+    "changed_files": 12
+  }
+}

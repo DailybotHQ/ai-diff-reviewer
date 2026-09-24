@@ -1,0 +1,83 @@
+{
+  "pr": 25,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "f311d45",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 148.0,
+  "setup_seconds": 2.2,
+  "total_seconds": 150.2,
+  "usage": {
+    "in": 119346,
+    "cache_read": 678272,
+    "cache_write": 0,
+    "out": 8572,
+    "source": "cli"
+  },
+  "cost_usd": 0.4936056,
+  "changed_files": [
+    ".agents/skills/ai-diff-reviewer/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/generate-extension/examples.md",
+    ".agents/skills/ai-diff-reviewer/prompt.md",
+    ".agents/skills/ai-diff-reviewer/setup/SKILL.md",
+    ".agents/skills/ai-diff-reviewer/setup/reference.md",
+    ".github/workflows/auto-release.yml",
+    ".github/workflows/self-review.yml",
+    ".review/extension.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "skills-lock.json"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/auto-release.yml",
+      "line": 209,
+      "severity": "warning",
+      "body": "The install-flow smoke test can pass without proving the just-published tag installed.\n\n`npx skills update` picks \"the newest matching tag\" it can see. If GitHub's tag API still lags past the 5s sleep \u2014 or the lockfile hash already matches an older tree \u2014 `update` is a no-op, the working tree is unchanged, and this empty-diff branch exits 0 with \"already at ${NEW_VERSION}\". That is exactly the failure mode pillar (B) claims to catch.\n\nPin the fetch to the tag Step 3 just pushed, then assert the vendored frontmatter matches before treating empty-diff as success:\n\n```bash\nVERSION_NO_V=\"${NEW_VERSION#v}\"\nnpx --yes skills add \"DailybotHQ/ai-diff-reviewer@${NEW_VERSION}\" \\\n  --skill ai-diff-reviewer --force -y\nVENDORED_VERSION=$(sed -nE 's/^version:[[:space:]]*\"([^\"]+)\".*/\\1/p' \\\n  .agents/skills/ai-diff-reviewer/SKILL.md | head -n1)\nif [ \"${VENDORED_VERSION}\" != \"${VERSION_NO_V}\" ]; then\n  echo \"::error::vendored version ${VENDORED_VERSION} != ${VERSION_NO_V}\"\n  exit 1\nfi\n```\n\n(`-y` belongs on `skills add` as well as `npx --yes` \u2014 the subcommand has its own interactive agent picker on non-TTY runners.)"
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 363,
+      "severity": "warning",
+      "body": "Spanish placeholder `mi-repo/` in a consumer-facing layout example.\n\nThis repo's own extension (and AGENTS.md Rule #1) escalates non-English text in docs/examples to `warning` \u2014 global audience, English only. A copy-paste example is the highest-leverage place for that rule to fire.\n\nFix in the source-of-truth copy at `skills/ai-diff-reviewer/SKILL.md` (and any parallel `docs/PROMPTS.md` example); do not hand-edit this vendored path (DON'T #14). Suggested replacement:\n\n```suggestion\nmy-repo/\n```"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 60,
+      "severity": "warning",
+      "body": "`[Unreleased]` documents Step 3.5 and the first-time vendor, but omits the two behaviour changes consumers (and future us) will actually feel on every PR:\n\n1. New `.review/extension.md` \u2014 17 severity overrides layered on the default prompt.\n2. `self-review.yml` now passes `prompt-extension-file: .review/extension.md` on every provider leg.\n\nAGENTS.md Rule #7: runtime/behaviour changes land with a matching CHANGELOG entry. Without these bullets, the next release notes under-describe why self-review started enforcing stdlib-only / `shell=True` / marker rules. Add two short `### Added` bullets above or beside the existing dogfood entries."
+    },
+    {
+      "path": ".agents/skills/ai-diff-reviewer/SKILL.md",
+      "line": 358,
+      "severity": "info",
+      "body": "Duplicate `**Option A \u2014 .review/extension.md**` heading two lines apart \u2014 copy-paste leftover. Harmless but sloppy in a file consumers read as the install manual.\n\nDelete one of the two headings in `skills/ai-diff-reviewer/SKILL.md` (source of truth); the vendored copy refreshes on the next release."
+    },
+    {
+      "path": "CHANGELOG.md",
+      "line": 82,
+      "severity": "info",
+      "body": "\"Ran \u2026 on `main`\" reads as if the vendor command already landed on main before this PR merges. Prefer wording that matches reality, e.g. \"Lands with this PR \u2014 establishes the vendored baseline Step 3.5 will refresh going forward.\""
+    }
+  ],
+  "summary": "## Verdict\nSolid dogfooding PR \u2014 the extension is well-anchored and the self-review wiring is correct \u2014 but Step 3.5's smoke test can green without proving the just-published tag installed, and a few Rule #1 / Rule #7 nits need a pass before merge.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \u26a0\ufe0f warning  | `.github/workflows/auto-release.yml:209` | Soft `skills update` + empty-diff exit can no-op the install smoke test |\n| 2 | \u26a0\ufe0f warning  | `.agents/skills/ai-diff-reviewer/SKILL.md:363` | Spanish `mi-repo/` in example tree (Rule #1) |\n| 3 | \u26a0\ufe0f warning  | `CHANGELOG.md:60` | [Unreleased] omits extension bootstrap + self-review wiring |\n| 4 | \u2139\ufe0f info     | `.agents/skills/ai-diff-reviewer/SKILL.md:358` | Duplicate `**Option A**` heading |\n| 5 | \u2139\ufe0f info     | `CHANGELOG.md:82` | \"on main\" reads as already-landed before this PR merges |\n\n## Notes\n\n- **Extension quality is high.** The 17 severity overrides are concrete and code-anchored (stdlib-only, `shell=True`, `safe_repo_path()`, `_CLI_ENV_ALLOWLIST`, marker contracts, secret logging). Wiring `prompt-extension-file: .review/extension.md` into the self-review matrix is the right local\u2194CI parity move.\n- **Step 3.5 failure surface.** If the step fails after Step 3 has already pushed the tag, Steps 4\u20135 (release notes + GitHub Release) do not run. The tag still exists; recovery is manual. Worth accepting with eyes open, or moving dogfood after the Release create with `continue-on-error` only if you deliberately want a softer gate.\n- **Vendored vs source-of-truth.** The `mi-repo/` / duplicate-heading issues also exist in `skills/ai-diff-reviewer/SKILL.md` (not modified in this PR). Fix the source-of-truth copy; leave `.agents/` alone so DON'T #14 stays intact \u2014 Step 3.5 refreshes the vendored tree on the next release.\n- **Bootstrap exception.** Hand-adding `.agents/skills/ai-diff-reviewer/**` on this branch is the intentional first-time vendor; DON'T #14 applies to future feature ",
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 5,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 3,
+    "changed_files": 12
+  }
+}

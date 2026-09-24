@@ -1,0 +1,92 @@
+{
+  "case": "C021",
+  "pr": "C021",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 52.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 52.8,
+  "usage": {
+    "in": 17554,
+    "cache_read": 101376,
+    "cache_write": 0,
+    "out": 2535,
+    "source": "cli"
+  },
+  "cost_usd": 0.0807308,
+  "changed_files": [
+    "package.json"
+  ],
+  "findings": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "body": "**Typosquat dependency swap.** `tar-stream` (established tar streaming library) is replaced with `tar-streem` \u2014 a one-letter misspelling. That name collision is a common npm typosquatting vector: installers resolve the new name from the registry and pull attacker-controlled code.\n\nThere is no in-repo migration of imports, no lockfile pin, and no provenance for `tar-streem@^1.0.0`. Treat this as a malicious or at best untrusted package substitution until the exact registry package, publisher, and source repo are verified.\n\nRevert to `tar-stream` (or an explicitly vetted maintained fork with matching API and documented provenance):\n\n```suggestion\n    \"tar-stream\": \"^3.1.6\"\n```"
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "body": "**postinstall runs untrusted installer on every `npm install`.** `\"postinstall\": \"tar-streem-setup\"` executes a binary shipped by the newly added `tar-streem` package automatically for every developer and CI install. Combined with the typosquat rename, this is the standard execution stage of an npm supply-chain attack (credential theft, reverse shell, bundling malware into CI artifacts).\n\nRemove the postinstall hook entirely. Lifecycle scripts must not run setup binaries from an unverified package:\n\n```suggestion\n    \"package\": \"node scripts/pack.js\"\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This PR replaces the legitimate `tar-stream` dependency with the lookalike `tar-streem` and wires a `postinstall` hook that runs `tar-streem-setup` on every install \u2014 a textbook npm supply-chain / typosquat pattern.\n\n## Why this is dangerous\n\n1. **Typosquat package name:** `tar-streem` differs from the well-known `tar-stream` by a single letter. The PR framing (\u201cunmaintained\u201d; \u201cbundles its installer\u201d) is classic social engineering for a malicious or unknown package.\n2. **Automatic code execution:** `\"postinstall\": \"tar-streem-setup\"` runs whatever binary that package ships as soon as someone runs `npm install` / `yarn` / `pnpm install`, including on CI runners and developer machines. No explicit opt-in is required.\n3. **No supporting evidence in-repo:** There is no lockfile, no `scripts/pack.js`, and no other references justifying a migration. A real maintenance swap would keep the same API package (or document a maintained fork with provenance), update importers, and would not need a blind postinstall setup binary.\n\n## What would be needed for a legitimate change\n\n- Keep `tar-stream` (or pin a verified maintained successor with the same/proven API).\n- Remove any `postinstall` that executes third-party setup binaries unless the package is fully vetted and the hook is necessary and reviewed.\n- Show lockfile + usage updates and a clear provenance story for any new registry package.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "package.json",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json replaced legitimate tar-stream@^3.1.6 with typosquat tar-streem@^1.0.0 and added a postinstall script running tar-streem-setup \u2014 a classic malicious dependency substitution."
+    },
+    {
+      "path": "package.json",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "package.json at head adds both a typosquat dependency rename (tar-stream \u2192 tar-streem) and a postinstall script that runs tar-streem-setup on every npm install; base had neither. That is the standard npm supply-chain execution stage and supports the critical finding."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 2,
+    "seconds": 13.504,
+    "verified": 2,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 4490,
+      "out": 676
+    },
+    "cost_usd": 0.014367
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C021-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 2,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

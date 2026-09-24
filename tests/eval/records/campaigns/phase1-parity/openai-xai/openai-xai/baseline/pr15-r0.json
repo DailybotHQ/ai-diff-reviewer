@@ -1,0 +1,104 @@
+{
+  "pr": 15,
+  "repo": "DailybotHQ/ai-diff-reviewer",
+  "provider": "openai",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "default.md",
+  "extension": true,
+  "runtime_head": "4e469f0",
+  "turns": 8,
+  "tool_calls": 23,
+  "seconds": 427.8,
+  "setup_seconds": 1.7,
+  "total_seconds": 429.5,
+  "usage": {
+    "in": 121950,
+    "cache_read": 178560,
+    "cache_write": 0,
+    "out": 3377,
+    "source": "api"
+  },
+  "cost_usd": 0.299874,
+  "changed_files": [
+    ".github/workflows/self-review.yml",
+    "CHANGELOG.md",
+    "docs/TRIGGER_MODES.md"
+  ],
+  "findings": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nEmpty `matrix` is treated as \u201cnever reviewed \u2192 fail,\u201d but this workflow also fires on **every** `labeled` event. After a successful review the action stamps `self-reviewed:<provider>` (`scripts/reviewer.py` ~3989), which re-enters `scope`, forces `matrix=[]`, and this branch exits 1. Branch protection then sees the **latest** `Self-review gate` on the head SHA as **failure**, so a green gate flips red right after the review that was supposed to unlock merge \u2014 and the same happens for any unrelated label (`bug`, Dependabot, complexity labels).\n\nFix: emit a richer skip reason from `scope` (e.g. `unrelated_label` vs `not_ready`) and/or treat an existing `self-reviewed:*` (or sticky commit status) as a pass when the matrix is empty but `ready` is still on the PR. Do not map every `[]` to \u201capply the ready label.\u201d"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 235,
+      "severity": "warning",
+      "body": "The comment and error claim the only path to an empty matrix (with secrets configured) is a missing `ready` label. That is incomplete: `should_run=true` with every `HAS_*=false` also yields `matrix=[]`, and the gate still prints \u201capply the ready label.\u201d Maintainers will chase a label that is already present while the real issue is missing provider secrets. Prefer a `scope` output such as `skip_reason` (`not_ready` / `no_secrets` / `unrelated_label`) and branch the gate message on it."
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 137,
+      "severity": "warning",
+      "body": "Technique 3 is the consumer-facing copy of the same sticky-gate bug: `MATRIX == []` always `exit 1`, with no distinction between \u201cPR never armed\u201d and \u201cincidental `labeled` event after a real review.\u201d Anyone pasting this recipe into a `labeled`-driven workflow will reproduce the post-`applied-label` red gate.\n\nAlso, technique 2 already names the decision job `gate`, while technique 3 reuses `gate` for the merge job and `needs: [gate-decision, review]` \u2014 a literal combine of both snippets is invalid. Rename the merge job (e.g. `merge-gate` / `name: Self-review gate`) and document the sticky-pass condition once the workflow fix lands."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge until the sticky merge-gate failure mode is fixed** \u2014 the new `Self-review gate` correctly understands GitHub\u2019s \u201cSkipped required check = pass\u201d gotcha, but as written it **re-fails the required check on the next `labeled` event**, including the action\u2019s own `applied-label` stamp after a successful review.\n\n## Why this is blocking\n\nWorkflow `on:` is `opened` + `labeled` only. `scope` only puts legs in the matrix when the event is \u201cready was just applied\u201d (or opened-with-ready). Every other label path exits with `matrix=[]`.\n\nThe new gate then does:\n\n```bash\nif [ \"${MATRIX:-[]}\" = \"[]\" ]; then exit 1; fi\n```\n\nSequence that breaks the product goal:\n\n1. Maintainer adds `ready` \u2192 Anthropic (etc.) runs \u2192 gate green \u2192 merge should unlock.\n2. Action applies `self-reviewed:anthropic` (`scripts/reviewer.py` success path).\n3. That emits `pull_request` / `labeled` \u2192 workflow re-runs \u2192 `matrix=[]` \u2192 **gate red on the same head SHA**.\n\nBranch protection cares about the **latest** check named `Self-review gate`. So the review that was meant to unlock merge immediately locks it again. The same happens for `bug`, Dependabot labels, complexity labels, etc.\n\nThis is a correctness bug in the gate contract, not a docs nit. Fix before treating this as the dogfood merge gate (and before consumers copy the recipe).\n\n### Fix direction (minimal)\n\nFrom `scope`, emit something richer than a bare matrix, e.g.:\n\n- `skip_reason`: `not_ready` | `unrelated_label` | `no_secrets` | `ok`\n- and/or `ready_present`\n\nGate policy that matches the PR\u2019s intent:\n\n| Condition | Gate |\n|---|---|\n| `scope` failed | fail |\n| `matrix != []` | require `self-review.result == success` |\n| empty matrix, `ready` absent | fail (\u201capply ready\u201d) |\n| empty matrix, unrelated label / post-success label, and a prior success signal | **pass (sticky)** |\n| empty matrix, `ready` present, never successfully reviewed | fail |\n\n\u201cPrior success signal\u201d options: presence of `self-reviewed:*`, a dedicated stic",
+  "verification": [
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 240,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": ".github/workflows/self-review.yml",
+      "line": 235,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "docs/TRIGGER_MODES.md",
+      "line": 137,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 3,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 0,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 3,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 2,
+    "changed_files": 3
+  }
+}

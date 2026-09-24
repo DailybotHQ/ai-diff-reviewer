@@ -1,0 +1,41 @@
+{
+  "schema": "ai-diff-reviewer/eval-case/1",
+  "id": "C100",
+  "title": "Error propagation refactor with the ? operator — equivalent behaviour",
+  "stack": "rust",
+  "change_class": "refactor",
+  "risk_class": "negative_control",
+  "family_group": "G100",
+  "gap_tags": [
+    "new_stack_rust"
+  ],
+  "fixture": {
+    "base": {
+      "src/load.rs": "pub fn load(p: &str) -> Result<String, std::io::Error> {\n    match std::fs::read_to_string(p) {\n        Ok(s) => Ok(s),\n        Err(e) => Err(e),\n    }\n}\n"
+    },
+    "head": {
+      "src/load.rs": "pub fn load(p: &str) -> Result<String, std::io::Error> {\n    let s = std::fs::read_to_string(p)?;\n    Ok(s)\n}\n"
+    },
+    "pr_metadata": {
+      "title": "load: use ?",
+      "body": "Idiomatic error propagation.",
+      "deceptive": false
+    },
+    "kind": "trees",
+    "revision_pin": "fixture:sha256:9c802dd585a3e963652b41a736d9ac5fe75092cfb7a5b5e9a3296b7065a99463"
+  },
+  "labels": [],
+  "expected": {
+    "must_flag": [],
+    "must_not_flag": [],
+    "reference_review": "Adjudicated SAFE: the match arms returned the value and the error unchanged; `?` propagates the identical std::io::Error with the same type. No behaviour, error type or control flow changed — a reviewer flagging error handling here would be wrong."
+  },
+  "adjudication": {
+    "status": "pending",
+    "notes": "authored with the v3 corpus-gap batch (PLAN_v3_implementation Task 5); warning-labelled until a blinded adjudication (D-26) runs — an adjudicated critical upgrades the label"
+  },
+  "rights": {
+    "origin": "original synthetic fixture authored for this corpus (repository MIT)",
+    "egress": "synthetic; no real secrets, hosts, or user data"
+  }
+}

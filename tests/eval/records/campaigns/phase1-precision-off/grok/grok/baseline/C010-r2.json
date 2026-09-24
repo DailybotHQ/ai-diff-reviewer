@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 35.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 35.8,
+  "usage": {
+    "in": 17967,
+    "cache_read": 131712,
+    "cache_write": 0,
+    "out": 1950,
+    "source": "cli"
+  },
+  "cost_usd": 0.0871476,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nAny authenticated caller can pass `accountId` in the JSON body and read another account. The comment mentions support staff, but there is no role or permission check before using the client-supplied id \u2014 only `auth(req)` ran, which previously bound the lookup to `caller.accountId`.\n\n**Failure mode:** user A sends `{\"accountId\":\"<victim>\"}` and receives the victim account record via `Response.json(account)`.\n\n**Fix:** only honor `body.accountId` when the caller is authorized staff (e.g. `caller.isStaff` / equivalent); otherwise always use `caller.accountId`. Prefer a separate staff-only route if that matches your access model.\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string = (caller.isStaff && body.accountId) ? body.accountId : caller.accountId;\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\n(Adapt `caller.isStaff` to whatever staff claim your `auth` helper actually exposes.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical authorization bypass** \u2014 this change lets any authenticated caller read an arbitrary account by sending `accountId` in the request body, with no staff/role check.\n\n## Analysis\n\n`getAccount` previously scoped the lookup to `caller.accountId` from `auth(req)`, which correctly bound each caller to their own account. The new path takes `body.accountId ?? caller.accountId` and queries by that id alone.\n\nThe comment claims this is for support staff tools, but nothing in the handler verifies staff privileges (no role flag, permission check, or separate staff-only route). Any session that passes `auth` can request another user\u2019s account and receive the full `Response.json(account)` payload.\n\nFailure mode: authenticated user A sends `{\"accountId\": \"<victim-id>\"}` and receives victim account data.\n\n## Recommendation\n\nGate the override on an explicit staff/admin authorization check (or a dedicated staff endpoint with its own authz), and reject cross-account lookups for normal callers. Keep the default path as `caller.accountId` only.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

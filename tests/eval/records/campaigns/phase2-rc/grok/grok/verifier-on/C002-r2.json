@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 39.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.1,
+  "usage": {
+    "in": 30091,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 1790,
+    "source": "cli"
+  },
+  "cost_usd": 0.088202,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "body": "**SQL injection:** `email` is interpolated directly into the SQL string with an f-string, removing the parameterized binding that previously protected this query.\n\nIf an attacker (or a support paste containing a quote) supplies something like `x' OR 1=1 --`, the query becomes `WHERE email = 'x' OR 1=1 --'` and returns every row. Values with `';` can run additional statements depending on how the connection is used.\n\nRestore a bound parameter. For the intended partial match, keep the value out of the SQL text:\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```"
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "The comment and PR claim partial-match search for email fragments, but the predicate is still `email = '\u2026'`, which only matches the entire address.\n\nSupport pasting `user@` or a domain fragment will get an empty result set even after the injection issue is fixed, unless the operator is changed to something like `LIKE ?` with a bound `%fragment%` pattern (or `instr(email, ?)`).\n\nFix the match semantics with a bound parameter, not string formatting."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a classic SQL injection by interpolating `email` into the query string, and it still does not implement partial-match search.\n\n## Narrative\n\n`get_orders` previously bound `email` with a parameterized `?` placeholder. The new f-string builds:\n\n```sql\nSELECT id, total FROM orders WHERE email = '{email}'\n```\n\nAny caller-controlled value (support paste box, ticket field, API param) can break out of the quotes. Concrete failure mode: `email = \"x' OR 1=1 --\"` returns every order; `email = \"x'; DROP TABLE orders;--\"` can destroy data depending on SQLite settings and statement handling. Secrets and PII in `orders` become readable to anyone who can supply the search string.\n\nThe PR title/description claim partial-match lookup for email fragments, but the predicate is still `email = '\u2026'`, which only matches the full string. A fragment like `user@` returns no rows. The safe fix for substring search is still parameterized:\n\n```python\ncur = conn.execute(\n    \"SELECT id, total FROM orders WHERE email LIKE ?\",\n    (f\"%{email}%\",),\n)\n```\n\n(or `instr(email, ?)` / a proper FTS approach if you need different matching semantics). Keep the value out of the SQL text entirely.\n\nNo repository instruction files were present; severity follows the standard security/correctness rubric.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head `store.py` builds the query with `f\"... email = '{email}'\"`, dropping the base revision\u2019s `?` bound parameter; that is a real SQL-injection regression and warrants critical severity."
+    },
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 8.114,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2124,
+      "out": 278
+    },
+    "cost_usd": 0.006838
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

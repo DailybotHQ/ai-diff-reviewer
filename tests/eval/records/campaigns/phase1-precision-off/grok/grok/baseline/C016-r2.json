@@ -1,0 +1,92 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 46.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.8,
+  "usage": {
+    "in": 30766,
+    "cache_read": 86656,
+    "cache_write": 0,
+    "out": 2263,
+    "source": "cli"
+  },
+  "cost_usd": 0.1011068,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n`InsecureSkipVerify: true` is hardcoded in `NewClient()` with no staging/prod gate. Every caller gets a client that accepts any certificate, so an on-path attacker can intercept or modify ledger traffic (credentials, transfers, balances).\n\nA comment and TICKET-77 do not constrain deployment: the same constructor will ship insecure verify into production if this package is linked there.\n\n**Fix:** trust the staging CA (or pin the cert) via `tls.Config.RootCAs`, or gate the skip explicitly and default to verify:\n\n```go\nfunc NewClient(insecure bool) *http.Client {\n    tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}\n    if insecure {\n        tlsCfg.InsecureSkipVerify = true // staging only\n    }\n    return &http.Client{\n        Timeout: 10 * time.Second,\n        Transport: &http.Transport{\n            Proxy:           http.ProxyFromEnvironment,\n            TLSClientConfig: tlsCfg,\n        },\n    }\n}\n```\n\nDo not merge a global skip-verify on a shared client factory."
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity": "warning",
+      "body": "Assigning `&http.Transport{TLSClientConfig: ...}` replaces the default transport entirely. This client no longer honors `HTTP_PROXY`/`HTTPS_PROXY`, and loses DefaultTransport connection pool / HTTP/2 settings.\n\nIf a custom `TLSClientConfig` is required, clone `http.DefaultTransport` (type-assert to `*http.Transport` and copy) and only override `TLSClientConfig`, so proxy and pooling behavior stay intact."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every ledger HTTP client, which enables MITM on what is presumably sensitive financial traffic.\n\n## Analysis\n\n`NewClient()` always installs `tls.Config{InsecureSkipVerify: true}` with no environment, build-tag, or host gate. The comment mentions staging and TICKET-77, but nothing in the code limits the skip to staging. Any binary that links this package \u2014 including production \u2014 will accept attacker-controlled certificates.\n\nReplacing the client `Transport` with a bare `&http.Transport{}` also drops `http.DefaultTransport` defaults (proxy from environment, reasonable idle conn limits, HTTP/2). That is secondary to the TLS issue but worth fixing in the same change if a staging-only path is kept.\n\n## Safer directions\n\n- Prefer fixing staging properly: trust the staging CA via `RootCAs`, or pin the staging cert.\n- If a temporary skip is unavoidable, gate it on an explicit staging env check that defaults to secure verify, and fail closed in prod.\n- Keep `InsecureSkipVerify` off the default client constructor used by production code paths.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "internal/ledger/client.go",
+      "line": 12,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 1,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

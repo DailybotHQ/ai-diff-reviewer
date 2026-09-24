@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 7,
+  "tool_calls": null,
+  "seconds": 65.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 65.8,
+  "usage": {
+    "in": 47531,
+    "cache_read": 166272,
+    "cache_write": 0,
+    "out": 2991,
+    "source": "cli"
+  },
+  "cost_usd": 0.1628896,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hardcoded in `NewClient()` with no environment, build-tag, or configuration gate. Every consumer of this client \u2014 including production \u2014 will accept any certificate presented by the peer, so an on-path attacker can intercept ledger traffic.\n\nThe staging self-signed cert note and TICKET-77 do not limit the bypass at runtime. Keep verification enabled by default; if staging must use a private CA, load that CA into `tls.Config.RootCAs`, or only set `InsecureSkipVerify` when an explicit staging env var is set and fail closed otherwise."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 `NewClient()` unconditionally disables TLS certificate verification for every caller and environment.\n\n## Why this is blocking\n\n`TLSClientConfig: &tls.Config{InsecureSkipVerify: true}` is hardcoded in the shared client constructor. The comment and ticket reference describe staging intent, but nothing in the code restricts the skip to staging (no env check, build tag, or dialer split). Any production binary that uses `ledger.NewClient()` will accept arbitrary certificates, enabling MITM on ledger traffic (credentials, balances, postings).\n\nA ticket comment is not a control plane. If staging truly needs a self-signed cert, gate the skip on an explicit staging signal and keep verification on by default \u2014 or trust the staging CA via `RootCAs` / the system trust store so verification stays on.\n\n## Notes\n\n- Repo surface is only `internal/ledger/client.go`; no callers or env helpers exist yet to mitigate this.\n- Replacing `http.DefaultTransport` with a bare `&http.Transport{}` also drops `ProxyFromEnvironment` and other default transport behaviors; secondary to the TLS issue but worth fixing in the same change if you keep a custom transport.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 13,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "`NewClient()` hardcodes `tls.Config{InsecureSkipVerify: true}` with no env, build-tag, or config gate; the patch newly introduced this bypass versus base. Any consumer of this client accepts arbitrary peer certificates."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 14.944,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2301,
+      "out": 418
+    },
+    "cost_usd": 0.008544
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

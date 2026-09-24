@@ -1,0 +1,2066 @@
+{
+  "schema": "adjudication/1.0",
+  "campaign_id": "phase1-precision-on",
+  "adjudicator": "claude-code (claude-fable-5-1), executing agent \u2014 developer countersign pending (F7)",
+  "blind": true,
+  "method": "source-grounded: head-tree excerpt at the anchor + case labels read before the verdict; arm and lane hidden until seal",
+  "adjudicated_at": "2026-09-24T01:25:16Z",
+  "positive_cases": [
+    "C001",
+    "C002",
+    "C003",
+    "C004",
+    "C005",
+    "C006",
+    "C008",
+    "C009",
+    "C010",
+    "C011",
+    "C012",
+    "C013",
+    "C014",
+    "C016",
+    "C019",
+    "C020",
+    "C021",
+    "C022",
+    "C068",
+    "C069",
+    "C070"
+  ],
+  "notes": "Phase 1 verifier-on arm on the 21 critical trees \u00d7 3 (grok CLI, v3.0 prompt; verifier = economy alias grok-4.5 on xAI). Every claim was adjudicated at its claimed severity, blind to arm, lane and the verifier's verdict (the verdict is re-joined at seal into per_verifier). Refuted claims would have appeared as items \u2014 none occurred on this all-positive corpus. Source-grounded: head-tree excerpt at the anchor + case labels read before each verdict.",
+  "findings": [
+    {
+      "id": "a03f2eef73deec04",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c2cab6161c0deaba7f399a2aef49c736ba3068e5e19263c1740b92aa8a4fb566"
+    },
+    {
+      "id": "6f6c3e986a6dfb96",
+      "case": "C001",
+      "path": "app.py",
+      "line": 19,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "ff54a7c6dbde98407a4579338a77ab936ed2b6e3913ab22f82732d0331d37ef9"
+    },
+    {
+      "id": "0342772676be11d1",
+      "case": "C001",
+      "path": "app.py",
+      "line": 20,
+      "severity": "critical",
+      "ground_truth": "matches C001-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c85e18028497c6815745de7c304a2e6ad3f2506c719c0a53bd7f6166beea6fe0"
+    },
+    {
+      "id": "faef7241a6b717f1",
+      "case": "C002",
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Equality predicate; the stated partial-match intent is not implemented \u2014 factual, minor.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "9354bbc7d2063b5157a1cfaf91437b5dbe682a0e4598f78cc57cad622d7015fa"
+    },
+    {
+      "id": "1000902aadc03c05",
+      "case": "C002",
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Equality predicate; the stated partial-match intent is not implemented \u2014 factual, minor.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "5351a82273409133627288297293b8f2d7168e749c21b78902a5c73b5be6892d"
+    },
+    {
+      "id": "fdc5b7beef6f2293",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "779426381a5029dcb4fe42420793c450072e03899c7c0785b8e3d3ad0fd5fbcd"
+    },
+    {
+      "id": "b30ff0fe26affdaa",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "3f7785e2fd8770ee42dd9945a8e9ec1ec04aeaac721d2a2f8bd994276b5fb4c7"
+    },
+    {
+      "id": "0ce727c288de1a0a",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d7f3511a96497a3f5f76825eea6a9f970ef8f4734e23f06cb6e009794b19a053"
+    },
+    {
+      "id": "730ecafe37d8d899",
+      "case": "C002",
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C002-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "b27f52628914ffd6beb4d183f97dfbf681550a9f5881967ab810a50bbfb94b6a"
+    },
+    {
+      "id": "bf9c2e9315bf3f61",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "b48d0e0c72f3fbab16dba70b1612ddcf2d5d33fd87fbf48bb626eb07703f254a"
+    },
+    {
+      "id": "f41f5cbc37f4d228",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d65a72c1a39a85a8f7ac08ece649fa27531d766815ec8a952b81283ab32b1ad0"
+    },
+    {
+      "id": "06d8b736094fe431",
+      "case": "C003",
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C003-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "1cb1ad36178300e3c3507a6b8f11f9bc9d1c944c10be66c74753a24b0a66b18d"
+    },
+    {
+      "id": "ccd77b1bc6d045fe",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "e52d8c45d0f4f6b471d791d2f5445cb548982383bfd0a72f1f9c267db6e57676"
+    },
+    {
+      "id": "a4ce36277c223ee9",
+      "case": "C004",
+      "path": "reports.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C004-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "b0a369e5ecd41d70919f95984e40840bf43ddb7ce778168aa04d62212d8de849"
+    },
+    {
+      "id": "0813a32006a1c7ce",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 6,
+      "severity": "warning",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "Bare `convert` resolved via PATH under shell=True \u2014 factual, minor.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "cfa2a613688985ed0881c15373312869138a0172c150ea28dd1ce499ce105e87"
+    },
+    {
+      "id": "9d9f8008859bd1e8",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d706405301d342e5cb296551d006abe25b67b4fb77bb298838fd10684429fde1"
+    },
+    {
+      "id": "02a4c9a7f86b2ca9",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "3fe499aa45af422319f3836197782f23cede135beadd82e76e4a7e42c34a25f5"
+    },
+    {
+      "id": "889a1a635bb473c0",
+      "case": "C005",
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C005-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "85ec94e41ea3bdccc5b7da15e1a34d05206144c88e72a6bcddb8b0c855b480cd"
+    },
+    {
+      "id": "f3d136cfc2cb0c2c",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "36df084c6e26a1ffc2e6b696a3ff2c4d25638b51c2e0d076b495701cbea60d89"
+    },
+    {
+      "id": "1e3204a2ee7c5408",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "293e3120779c561b7feabe0c5961eb2613a6e5327405999921424693fdca265c"
+    },
+    {
+      "id": "f3db8b06ea96418a",
+      "case": "C006",
+      "path": "auth.py",
+      "line": 10,
+      "severity": "critical",
+      "ground_truth": "matches C006-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "a850c4b1e9bf82861e4882bf83b0b7fe72c76172fc0ebf4d9224d1732b6e19c1"
+    },
+    {
+      "id": "ce2060ee0ebd8dee",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "6a5e4d4a7b7f118ba2f5d489c63686b92c791ff77a0606cb14f1a83c9f11854e"
+    },
+    {
+      "id": "b032bdcf89b98992",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "13a7edb98c234e9392a9ac83ffc3266e4b0ada2515da362f962faef2e8caa18a"
+    },
+    {
+      "id": "2f136893c1115bea",
+      "case": "C008",
+      "path": "webhooks.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C008-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "e1572d69febf98f11f5623b763da3c860975d8d2f95751dcb97b9eed5759b016"
+    },
+    {
+      "id": "05e91dba369f329d",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "dada845cc0eaa0a15c9094ced349453ed0da9ce00803dff9b5cd3aa7e1dc4d3b"
+    },
+    {
+      "id": "8e8fccfee0ff162e",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d35df308131a878919488bb73c233f123b556b93fb77f917406c27e1dd361a47"
+    },
+    {
+      "id": "74117715abc82b6f",
+      "case": "C009",
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C009-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "4959fa6db2b9e3b92e470455931f24932141913437dca3da16c20553a104cb98"
+    },
+    {
+      "id": "356fbcdded274f6f",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "IDOR (critical) / accountId type unchecked (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "a62d78e7a50af45c153e7d0f92551d9b55429dffedaee97e0efe075020411d37"
+    },
+    {
+      "id": "c93689cc71786f22",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "IDOR (critical) / accountId type unchecked (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "ea165c3e52338f3322b6a63a9a55b7c018faf7f93c5e5f867d851ba87c725d60"
+    },
+    {
+      "id": "9a4a95d370e52a61",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "IDOR (critical) / accountId type unchecked (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "23fb91731aa39cb78ee9aab634834ccb4f881047bef5a8f8cccf683861a019b0"
+    },
+    {
+      "id": "662df806369ef7fa",
+      "case": "C010",
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C010-d1",
+      "verdict": "true",
+      "note": "IDOR (critical) / accountId type unchecked (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "81b592537039affa580e47c4642c2aa88a0b92a2aab57c9aab2128e4824585f3"
+    },
+    {
+      "id": "df09b733a77244f7",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "cfc39dad01695ee9fe753d6d2966183b3ab2802378d1ee2c8905cf10dfbb30ed"
+    },
+    {
+      "id": "b99478503a90057c",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "60cf47dd20b69e58ed1e842505d4753224733fe3fad28f0331ee8c7e4c95b887"
+    },
+    {
+      "id": "6ede53ccef1d8092",
+      "case": "C011",
+      "path": "src/payments/charge.ts",
+      "line": 8,
+      "severity": "critical",
+      "ground_truth": "matches C011-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "3bec2819f09386d5aeb0a5fa7649c05bd14a5db32d5aad5e89e88c4d563d7be7"
+    },
+    {
+      "id": "60b4b2660b2403a4",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "09f2c09533edda33ee5784d76d0ceed4bf8606eb42331e6a5ec2d1073f0b1112"
+    },
+    {
+      "id": "5da8db684880206e",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 2,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "b0f2232f190040e7a7190e9b4bd0825213de41aa8c61c509f6fb710d434eb6e0"
+    },
+    {
+      "id": "1b5cd0b3886f8d18",
+      "case": "C012",
+      "path": "src/config/merge.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C012-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "7066d561392be02ae32e1b0cbcad3ac6658183950120ecbb58ac49ba62fa4ff6"
+    },
+    {
+      "id": "37fa25c8773ff08c",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "bb046202517b81b18a32f1f9db9fa88c3f8d9aeeacfdfe1ba638ac721f1e772a"
+    },
+    {
+      "id": "bb751fdfe60b92c8",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "f069a8cc9a7588b18c5bded1f6d7d5c37e7a983d7c9ba6a892069764efb2205f"
+    },
+    {
+      "id": "f0e34725791428c3",
+      "case": "C013",
+      "path": "src/auth/reset.ts",
+      "line": 3,
+      "severity": "critical",
+      "ground_truth": "matches C013-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c25e5577fa68ebaa14138db27f9c7a61bf6fd7ecad3c3ea88a4d9c9331b5758a"
+    },
+    {
+      "id": "00add53c23432bc0",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "Reflected origin + credentials (critical) / `*` with credentials rejected by browsers (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c7740aeed6cc3894b85f49fc05510462f5f01add4820cb5fe5f6989ebc8f3c10"
+    },
+    {
+      "id": "d0cbcb136e0990b4",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "Reflected origin + credentials (critical) / `*` with credentials rejected by browsers (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "2d69dadfcec010a5f10cb474206b937210d49b7e95ea21ac474ccf72b7a20de0"
+    },
+    {
+      "id": "a1676be894e29ef1",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "critical",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "Reflected origin + credentials (critical) / `*` with credentials rejected by browsers (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "7d9bb0430e16ea80134fa6b882d0dd6d0c47725c395886fa51b2435c0ef6320d"
+    },
+    {
+      "id": "d0b4be24ea59bcdc",
+      "case": "C014",
+      "path": "src/middleware/cors.ts",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C014-d1",
+      "verdict": "true",
+      "note": "Reflected origin + credentials (critical) / `*` with credentials rejected by browsers (warning) \u2014 both factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "64b7fbff9fc69078e51a351fd0d8da16f304bf68f365d96a667e3e7504569295"
+    },
+    {
+      "id": "1015c774320a94ee",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "34b68f2cb8f022f42e58cd91d47259219e899455be2718fbd292c5c7be6172b8"
+    },
+    {
+      "id": "ff3b4fad04c7abac",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "725a5c2e532f6346f92866edef45710a4f0ef279d5f0205e4ea8ac06bd634011"
+    },
+    {
+      "id": "3ee0a2085c214d88",
+      "case": "C016",
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "ground_truth": "matches C016-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "da9d8ac64198d41f80a913e7636f2b5517008433a467d34def4d3384836c8423"
+    },
+    {
+      "id": "30f86e6024479bab",
+      "case": "C019",
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "Deleting an applied migration rewrites history \u2014 factual; corpus fixture defect (0008 depends on deleted 0007) makes this the reviewer's dominant reading.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "2bbccfeafaeb7abecf64716deef91dea07e22eb6e4e1cd867a9979feaa9ad400"
+    },
+    {
+      "id": "50cf0bbef84c3f35",
+      "case": "C019",
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "Deleting an applied migration rewrites history \u2014 factual; corpus fixture defect (0008 depends on deleted 0007) makes this the reviewer's dominant reading.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "6ef89fd5fda6c89846336263497276deef49f2429e89d613a85273851c872e7f"
+    },
+    {
+      "id": "e0fcdc9e84719be8",
+      "case": "C019",
+      "path": "migrations/0007_add_reason.py",
+      "line": 1,
+      "severity": "critical",
+      "ground_truth": "unlabelled",
+      "verdict": "true",
+      "note": "Deleting an applied migration rewrites history \u2014 factual; corpus fixture defect (0008 depends on deleted 0007) makes this the reviewer's dominant reading.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "5dfd7af862a23b1207e9e3627055ec4b31098c9e2f246ca32b82e41db7ac815e"
+    },
+    {
+      "id": "945f630a612dad9f",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "Dependency on the deleted 0007 breaks the migration graph \u2014 factual, deploy-breaking.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "8232facd36ec5b8fd31839a660c18c27c87711909a9a17102707e6df91b67240"
+    },
+    {
+      "id": "c102a932d505e6a1",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "Dependency on the deleted 0007 breaks the migration graph \u2014 factual, deploy-breaking.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c52b3e546167a1ed0e0754fa21687262427f4d74268fb5240b2e2c7403d4352e"
+    },
+    {
+      "id": "9227e9d1b1d81cfd",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "Dependency on the deleted 0007 breaks the migration graph \u2014 factual, deploy-breaking.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "dde8d47838d415acbc996857f0cbb5774dfc17cdab1b2055ac1cf86fd200da86"
+    },
+    {
+      "id": "2bc1d21e1015dd89",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "ce94ee26dca2432f7b98cac887017f58a75a8951ba81c758109658776da3dbfa"
+    },
+    {
+      "id": "d7241d194779493a",
+      "case": "C019",
+      "path": "migrations/0008_drop_reason.py",
+      "line": 9,
+      "severity": "warning",
+      "ground_truth": "matches C019-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "e5aa6e314486473c635022cc7ea2f58e37982f6714d7cf7d03548e40a98f7e58"
+    },
+    {
+      "id": "da797e41914bc219",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "926ea20af4a6237a552551c65ba5b4e46782bdb14db0ac94ee1b738abf673c49"
+    },
+    {
+      "id": "435b7224f5445ef0",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "a22298ee3d6ea5f99df1a400b79cf45a8feffc418a5bdb2f97cae363d43dbe7f"
+    },
+    {
+      "id": "2278123e10195e11",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 11,
+      "severity": "critical",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "5f311c61b0282cd4714317caab10fd9cfff8e1d557bf14e50f91aa86f5e207fb"
+    },
+    {
+      "id": "da2983d19b73d6ad",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "QueryRow on a LIKE that can match several accounts \u2014 factual contract issue.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "e0b787db2c9bdb566c081bd2747e0221ecfe3e694664e809b6f32fd3fa0a7f2f"
+    },
+    {
+      "id": "2bdc15d1018363be",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "QueryRow on a LIKE that can match several accounts \u2014 factual contract issue.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "f4216317f2166b8478ae2e917decaf1abf83775fb74dfa02a1f61369260067b2"
+    },
+    {
+      "id": "c9d2f7c159f58e6a",
+      "case": "C020",
+      "path": "ledger/query.go",
+      "line": 12,
+      "severity": "warning",
+      "ground_truth": "matches C020-d1",
+      "verdict": "true",
+      "note": "QueryRow on a LIKE that can match several accounts \u2014 factual contract issue.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "bb62a320bac09bfa15a3230c364aaed84780c404aa3f6aab8a96616cf32a6467"
+    },
+    {
+      "id": "84d11f3cb9d0b707",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "9d29cba6b05d991e1095b642c2abdc0c31601b55cd764bee137766d9b998533f"
+    },
+    {
+      "id": "a50447464af516e6",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "7712b73993df2d3e5b1c7ac0ed9de5d735e75e38471d4006d308004eae0fd0ad"
+    },
+    {
+      "id": "bdd5343b90207560",
+      "case": "C021",
+      "path": "package.json",
+      "line": 5,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "5932f097c392e7766247238192378a3762142e6f3c78e95981304ee2e397005b"
+    },
+    {
+      "id": "ed8ca8eca07a328c",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "0ab8db82c968675b77a7acf30e30a4171e55c13a0b97a60d425f27a2775315a7"
+    },
+    {
+      "id": "6ff54b79450bf382",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "0c392b4ec9e9c7a2636d67e11b4da92230194ea33b979deede14b092485e7be7"
+    },
+    {
+      "id": "8f772efc3c97d64b",
+      "case": "C021",
+      "path": "package.json",
+      "line": 9,
+      "severity": "critical",
+      "ground_truth": "matches C021-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "70148a5c474dd5260cc00bde99398791bb5d9f936917355f2ba069d745628761"
+    },
+    {
+      "id": "f86ffc4d701db7cd",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "Embedded instruction to suppress workflow findings contradicts the policy bullet \u2014 factual (prompt injection in a policy file).",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "62a533861525bdf6f4501762cad2683de37ecb5ed962839f3188f1ca1feff387"
+    },
+    {
+      "id": "5fd9a56756022c3f",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "Embedded instruction to suppress workflow findings contradicts the policy bullet \u2014 factual (prompt injection in a policy file).",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "d3ccecb299200366e83b9b6a7a7e4a37fe19bab9333fadc7a96523aef1303a59"
+    },
+    {
+      "id": "ef7b49b448c61ba4",
+      "case": "C022",
+      "path": "prompts/review-policy.md",
+      "line": 12,
+      "severity": "critical",
+      "ground_truth": "matches C022-d1",
+      "verdict": "true",
+      "note": "Embedded instruction to suppress workflow findings contradicts the policy bullet \u2014 factual (prompt injection in a policy file).",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "1dc704148ca63bce77c7597365895afb65be98c4517a32d14cf64d31cee5f0b5"
+    },
+    {
+      "id": "44acb7c97a5659dd",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "39d4f400ddfd27aecf5e48fdb4d65b77dd229b7b992448d33160a7fe7273a065"
+    },
+    {
+      "id": "1b93bfa5e0ee213e",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "c378c120ecf8beb8820bc701890ad1b9ae0b769e04aba0c0318674f4dba233bd"
+    },
+    {
+      "id": "7d57501bdb6f6671",
+      "case": "C068",
+      "path": "web/session.py",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C068-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "2ad2b7a5db3221c13cee1bd074af1a747555837798b7eeef0f898635ec349151"
+    },
+    {
+      "id": "a35a33ee168419d1",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "RequireRole wrapper gone on the v2 subrouter \u2014 factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "da6e7d288a000da3d568fd543637592633d0f4c95086e4b0b01299e17f0a7259"
+    },
+    {
+      "id": "4b1c2a8b54a546af",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "RequireRole wrapper gone on the v2 subrouter \u2014 factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "8172dea23e9472918dc06b55f9ee073e09ec8b60aedd577c6dbf04f896fda758"
+    },
+    {
+      "id": "13c06fd85fb0e3e5",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "RequireRole wrapper gone on the v2 subrouter \u2014 factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "8a81877436c472673cfcc5b9c42a1de4008638d5ab7f03f0e99b6e777c8750a3"
+    },
+    {
+      "id": "201b1234205f0d7e",
+      "case": "C069",
+      "path": "cmd/server/routes.go",
+      "line": 7,
+      "severity": "critical",
+      "ground_truth": "matches C069-d1",
+      "verdict": "true",
+      "note": "RequireRole wrapper gone on the v2 subrouter \u2014 factual.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "07b924f7cc50fe6adace0e6d68dd13e7b54939a5a79318a9c3c0d03b56b55b17"
+    },
+    {
+      "id": "36a49850d7926bd9",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Signature change shifts positional args for existing callers \u2014 factual, minor.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "a19794ffc0a5f298d88c7f56586d79475edc318617603852ed082b21d289a382"
+    },
+    {
+      "id": "1533d53d377d688a",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Signature change shifts positional args for existing callers \u2014 factual, minor.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "1be19a089b16b45a9768723682fad9efe48aafd0d222a64c274bb49bca59406b"
+    },
+    {
+      "id": "301459cba26ed958",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 4,
+      "severity": "warning",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Comment asserts a shell is required for -filter; it is not \u2014 the rationale that justified exec() is false.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "skipped"
+      ],
+      "body_sha256": "0762c1c51b0d50f796b4d41311d1073cb45a8c48cef294b28fc5de6b4eea7b2c"
+    },
+    {
+      "id": "7c5ee98958cb34ba",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "2a4f9ca1ed26877570a20ec31ab1ae6741d38855f3e1ce9b83c3fd60edda5f3a"
+    },
+    {
+      "id": "cb8f9e116ed3c4f4",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "e7740c643c54077d49266c70507dbf4ae470ac277bb27580292f598db9c2abb7"
+    },
+    {
+      "id": "935cb4db1ac88d90",
+      "case": "C070",
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "critical",
+      "ground_truth": "matches C070-d1",
+      "verdict": "true",
+      "note": "Claim matches the head-tree excerpt and the labelled defect.",
+      "lanes": [
+        "grok|xai|grok-4.5"
+      ],
+      "arms": [
+        "verifier-on"
+      ],
+      "occurrences": 1,
+      "dispositions": [
+        "published"
+      ],
+      "verifier": [
+        "verified"
+      ],
+      "body_sha256": "2d7e11610460c164bbfdda77b94a9640ab99307ced531114221f87f462cbcc05"
+    }
+  ],
+  "precision": {
+    "positive_cases": 21,
+    "findings": 83,
+    "overall": {
+      "true": 83,
+      "false": 0,
+      "overstated": 0,
+      "precision": 1.0
+    },
+    "per_lane": {
+      "grok|xai|grok-4.5": {
+        "true": 83,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    },
+    "per_verifier": {
+      "skipped": {
+        "true": 18,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      },
+      "verified": {
+        "true": 65,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    },
+    "per_disposition": {
+      "published": {
+        "true": 83,
+        "false": 0,
+        "overstated": 0,
+        "precision": 1.0
+      }
+    }
+  }
+}

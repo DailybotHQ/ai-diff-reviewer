@@ -1,0 +1,92 @@
+{
+  "case": "C070",
+  "pr": "C070",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 36.4,
+  "setup_seconds": 0.0,
+  "total_seconds": 36.4,
+  "usage": {
+    "in": 19052,
+    "cache_read": 103296,
+    "cache_write": 0,
+    "out": 3720,
+    "source": "cli"
+  },
+  "cost_usd": 0.0914128,
+  "changed_files": [
+    "src/images/resize.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** Switching from `execFile` (argv, no shell) to `exec` (shell) and interpolating `src` and `filter` into the command string enables OS command injection. `filter` is unquoted; `src` is only double-quoted \u2014 both are breakable with standard shell metacharacters. The PR description says filter expressions are user-composed, so this is attacker-reachable if those strings come from request input.\n\n**Failure mode:** A `filter` value such as `Lanczos; evil-command` or a `src` value that closes the surrounding quotes runs arbitrary commands as the process user and may still write `/tmp/out.png`.\n\n**Fix:** Keep a non-shell spawn and pass arguments as an array. Validate `filter` against an allowlist of ImageMagick filter names if power-user composition is required:\n\n```ts\nimport { execFile } from \"child_process\";\n\nconst ALLOWED_FILTERS = new Set([\"Lanczos\", \"Mitchell\", \"Catrom\", \"Gaussian\", \"Point\"]);\n\nexport function resize(src: string, filter: string, w: number): Promise<string> {\n  if (!ALLOWED_FILTERS.has(filter)) {\n    return Promise.reject(new Error(`unsupported filter: ${filter}`));\n  }\n  return new Promise((res, rej) => {\n    execFile(\"convert\", [src, \"-filter\", filter, \"-resize\", `${w}x`, \"/tmp/out.png\"], (e) =>\n      e ? rej(e) : res(\"/tmp/out.png\")\n    );\n  });\n}\n```\n\nShell is not required for `-filter`; a single argv element is enough."
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity": "warning",
+      "body": "**Issue:** `resize(src, w)` became `resize(src, filter, w)`. Existing callers that still pass `(path, width)` will treat the numeric width as `filter` and leave `w` as `undefined`, producing a broken `-resize undefinedx` invocation (and under the new shell path, stringifying unexpected values into the command line).\n\n**Fix:** Add an overload or put `filter` last with a default (`filter = \"Lanczos\"`) so positional `(src, w)` callers keep working, and document the break in a changelog if this package is published."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical command-injection vulnerability by replacing safe `execFile` argv invocation with shell `exec` and interpolating caller-controlled strings into the command line.\n\n## Analysis\n\n`resize()` previously ran ImageMagick via `execFile(\"convert\", [src, \"-resize\", ...])`, which never invokes a shell. The new code builds a shell string:\n\n```ts\nexec(`convert \"${src}\" -filter ${filter} -resize ${w}x /tmp/out.png`, ...)\n```\n\nBoth `src` and `filter` are typed as plain `string` and are described as user-composed. That is enough to break out of the quotes / unquoted `-filter` slot and run arbitrary commands on the host (for example a `filter` value containing `;` plus a second command, or a `src` value that closes the double quotes early).\n\nThe comment claiming that `-filter` needs a shell for user-composed filter expressions is incorrect: ImageMagick accepts filter names and complex expressions as a single argv element. Keep `execFile` / `spawn` with an argument array (and ideally allowlist known `-filter` values).\n\nSecondary note: the signature change `(src, w)` to `(src, filter, w)` is a breaking API change for any external callers; no in-repo callers were found, but consumers outside this tree would need a coordinated bump.\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "src/images/resize.ts",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "src/images/resize.ts",
+      "line": 3,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C070-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "case": "C013",
+  "pr": "C013",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 9,
+  "tool_calls": null,
+  "seconds": 82.3,
+  "setup_seconds": 0.0,
+  "total_seconds": 82.4,
+  "usage": {
+    "in": 63097,
+    "cache_read": 202752,
+    "cache_write": 0,
+    "out": 4297,
+    "source": "cli"
+  },
+  "cost_usd": 0.2128016,
+  "changed_files": [
+    "src/auth/reset.ts"
+  ],
+  "findings": [],
+  "summary": "## Code Review Summary\n\n_The xAI Grok agent finished without writing its findings file (2 attempt(s)), so this round carries no findings. This is an incomplete review \u2014 re-run (toggle the label) or check the workflow log for the agent's own output._",
+  "verification": [],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 0,
+    "hits": [],
+    "misses": [
+      "C013-d1"
+    ],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 0,
+    "changed_files": 1
+  }
+}

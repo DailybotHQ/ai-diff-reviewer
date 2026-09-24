@@ -1,0 +1,51 @@
+{
+  "case": "C003",
+  "pr": "C003",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 20.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 20.6,
+  "usage": {
+    "in": 27967,
+    "cache_read": 54912,
+    "cache_write": 0,
+    "out": 1052,
+    "source": "cli"
+  },
+  "cost_usd": 0.0787196,
+  "changed_files": [
+    "mailer.py"
+  ],
+  "findings": [
+    {
+      "path": "mailer.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Hard-coded production SMTP password in source.**\n\n`os.environ.get(\"SMTP_PASSWORD\", \"smtp-prod-backup-77\")` ships a real-looking credential as the default when the env var is missing. Anyone with repo access (and all of git history after merge) gets the SMTP login secret. Cron without the secret mounted will still authenticate successfully using the baked-in password, which hides the misconfiguration and expands blast radius if the repo leaks.\n\nRemove the default and require the secret from the environment (or skip send with a clear log when mail is optional):\n\n```suggestion\n        s.login(\"notifications\", os.environ[\"SMTP_PASSWORD\"])\n```\n\nIf this value is a real password, rotate it on the SMTP server now \u2014 it is already in the PR diff and commit object."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change embeds a production SMTP credential in source as a default fallback.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `mailer.py:8` | Hard-coded production SMTP password in `os.environ.get` default |\n\n## Discussion\n\nCron jobs crashing when `SMTP_PASSWORD` is unset is a real ops problem, but the fix must not put a live secret in the repo. Once committed, the value is in git history for anyone with clone access and will show up in PR diffs, logs, and mirrors.\n\nSafer directions: fail fast with a clear error when the env var is missing; skip send and log when mail is optional in that environment; or mount the secret correctly in the cron runtime (K8s secret, systemd `EnvironmentFile`, CI secret, etc.).\n\nIf `smtp-prod-backup-77` is or was a real password, rotate it on the SMTP side immediately after removing it from the tree.\n\n**Recommendation:** request-changes",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C003-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

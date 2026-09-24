@@ -1,0 +1,92 @@
+{
+  "case": "C002",
+  "pr": "C002",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 8,
+  "tool_calls": null,
+  "seconds": 74.6,
+  "setup_seconds": 0.1,
+  "total_seconds": 74.7,
+  "usage": {
+    "in": 62184,
+    "cache_read": 175488,
+    "cache_write": 0,
+    "out": 4937,
+    "source": "cli"
+  },
+  "cost_usd": 0.2066364,
+  "changed_files": [
+    "store.py"
+  ],
+  "findings": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**SQL injection:** `email` is interpolated into the query via an f-string, so a value like `x' OR '1'='1` changes the predicate and can return or affect every row.\n\nRestore a bound parameter. If partial match is required, use `LIKE` with a placeholder (and escape `%`/`_` in the user input):\n\n```suggestion\n        \"SELECT id, total FROM orders WHERE email LIKE ?\", (f\"%{email}%\",)\n```\n\nDo not build SQL with f-strings or concatenation for user-controlled values."
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity": "warning",
+      "body": "Comment claims partial-match search, but the query still uses `email = ...` (exact match). Support pasting a fragment will not find orders unless the fragment equals the full email.\n\nPoint the predicate at `LIKE ?` with a bound pattern (e.g. `%fragment%`), or update the comment so it does not promise behavior the SQL does not implement."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a classic SQL injection by interpolating `email` into the query string.\n\n## Narrative\n\n`get_orders` previously used a parameterized SQLite query (`WHERE email = ?` with `(email,)`). The PR replaces that with an f-string that embeds the raw `email` value inside single quotes. Any caller-supplied value containing a quote can alter the SQL, read or modify unintended rows, or run additional statements depending on how the connection is used.\n\nThe PR title and comment claim partial-match search for support, but the predicate is still equality (`=`), so the stated product goal is also unmet. Partial match should use a bound parameter with `LIKE` (and appropriate escaping of `%`/`_`), keeping the value out of the SQL text.\n\n## Release decision\n\n**Recommendation:** request-changes\n\n---\n\n_Retried once: the first attempt ended without a findings file._",
+  "verification": [
+    {
+      "path": "store.py",
+      "line": 6,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    },
+    {
+      "path": "store.py",
+      "line": 4,
+      "severity_claimed": "warning",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 2,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C002-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

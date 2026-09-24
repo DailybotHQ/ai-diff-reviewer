@@ -1,0 +1,79 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 44.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 44.9,
+  "usage": {
+    "in": 30591,
+    "cache_read": 117376,
+    "cache_write": 0,
+    "out": 1953,
+    "source": "cli"
+  },
+  "cost_usd": 0.1081128,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity": "critical",
+      "body": "Disabling `verify_signature` (and aud/iss checks) means `identity()` accepts any crafted JWT payload without proving possession of `SECRET`. Anyone who can send a token can impersonate any subject; the PR title says staging, but nothing in this function limits the bypass to non-production.\n\nRestore cryptographic verification. If old staging tokens must keep working during re-issuance, verify against the previous key/issuer set (or a controlled multi-key accept list) instead of turning verification off.\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification in `identity()`, which is a complete authentication bypass.\n\n## Why this is blocking\n\n`jwt.decode(..., options={\"verify_signature\": False, \"verify_aud\": False, \"verify_iss\": False})` trusts any well-formed JWT payload. An attacker can mint a token with an arbitrary `sub` / claims set and pass `identity()` without knowing `SECRET`. The PR frames this as a staging unblock for token re-issuance (TICKET-412), but the code path has no environment, host, or config guard \u2014 it applies everywhere this module is loaded.\n\nThe previous call verified HS256 with `SECRET`, `audience=\"api\"`, and `issuer=\"accounts.internal.example\"`. Removing all three checks simultaneously removes every cryptographic and claim bound on the token.\n\n## Suggested direction\n\nKeep verification on. If staging tokens were signed under a prior key or issuer, accept the old key/issuer set explicitly (multi-key / multi-issuer verify), or gate a temporary bypass behind an explicit non-production runtime check that fails closed in prod. Do not ship `verify_signature: False` on a shared code path.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "auth.py",
+      "line": 9,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "auth.py identity() now calls jwt.decode with verify_signature/verify_aud/verify_iss all False and no SECRET, so any crafted JWT is accepted. The base version verified HS256 with SECRET, audience, and issuer; nothing in the function scopes this bypass to staging."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 7.418,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 2035,
+      "out": 294
+    },
+    "cost_usd": 0.006295
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

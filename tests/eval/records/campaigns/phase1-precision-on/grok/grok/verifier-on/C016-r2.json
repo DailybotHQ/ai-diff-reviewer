@@ -1,0 +1,79 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 39.6,
+  "setup_seconds": 0.0,
+  "total_seconds": 39.6,
+  "usage": {
+    "in": 16129,
+    "cache_read": 100352,
+    "cache_write": 0,
+    "out": 1541,
+    "source": "cli"
+  },
+  "cost_usd": 0.0716096,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "`InsecureSkipVerify: true` is hard-coded in `NewClient()` with no environment, build-tag, or config guard. Every consumer of this client \u2014 including production \u2014 will skip server certificate validation and is vulnerable to MITM on ledger traffic.\n\nThe staging self-signed cert should be fixed by trusting the staging CA (`tls.Config.RootCAs`), or by an explicit opt-in that defaults to verification enabled and cannot silently ship to prod.\n\n```suggestion\n\t\t\tTLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},\n```\n\nIf a temporary staging bypass is unavoidable, gate it behind something like `os.Getenv(\"LEDGER_TLS_INSECURE\") == \"1\"` and fail closed when unset."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge as-is.** `NewClient()` now disables TLS certificate verification for every caller, with no environment or config gate \u2014 despite the comment framing this as a staging-only workaround.\n\n## Why this is blocking\n\n`tls.Config{InsecureSkipVerify: true}` makes the ledger HTTP client accept any certificate (self-signed, expired, or attacker-controlled). Because `NewClient()` takes no options and the transport is hard-coded, any production binary that links this package inherits the same MITM exposure on ledger traffic.\n\nA ticket reference (`TICKET-77`) and a comment are not runtime controls. Staging self-signed certs should be handled by one of:\n\n- mounting/trusting the staging CA in `RootCAs` / system trust,\n- an explicit opt-in (e.g. env/config flag defaulting to verify-on), or\n- a separate staging-only client constructor that production code paths cannot call.\n\n## Scope note\n\nOnly `internal/ledger/client.go` changed (+11/-2). No tests or call-site guards appear in the tree to limit blast radius.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "InsecureSkipVerify is hard-coded in NewClient with no env, build-tag, or config guard; base returned a plain http.Client that verified certificates. Any consumer of this ledger client skips TLS verification and is exposed to MITM."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 10.31,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1168,
+      "out": 404
+    },
+    "cost_usd": 0.005963
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

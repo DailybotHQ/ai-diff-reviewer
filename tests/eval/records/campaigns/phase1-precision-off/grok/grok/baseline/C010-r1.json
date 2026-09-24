@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 32.8,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.8,
+  "usage": {
+    "in": 30969,
+    "cache_read": 86912,
+    "cache_write": 0,
+    "out": 1768,
+    "source": "cli"
+  },
+  "cost_usd": 0.0986196,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\nAny authenticated caller can pass `accountId` in the JSON body and read another account. The previous behavior always used `caller.accountId` from `auth(req)`; this prefers `body.accountId` with no staff/role check.\n\nFailure mode: `POST/GET` with `{\"accountId\": \"<victim-id>\"}` after a normal user session returns the victim account via `Response.json(account)`.\n\nEnforce authorization before using a client-supplied id, for example:\n\n```suggestion\n  const body = await req.json().catch(() => ({}));\n  const id: string =\n    body.accountId && caller.isSupport ? body.accountId : caller.accountId;\n  if (body.accountId && id !== body.accountId) {\n    return Response.json({ error: \"forbidden\" }, { status: 403 });\n  }\n  const account = await db.accounts.findUnique({ where: { id } });\n```\n\n(Adapt `caller.isSupport` to whatever role field `auth()` actually provides.)"
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this change introduces a critical broken-access-control (IDOR) bug on the account lookup path.\n\n## Narrative\n\n`getAccount` previously scoped the query to `caller.accountId` from `auth(req)`, so a caller could only read their own account. The new code prefers `body.accountId` whenever it is present, with **no** check that the caller is support staff (or otherwise authorized to read another account).\n\nAny authenticated user who can hit this route can send `{\"accountId\": \"<victim>\"}` and receive that account record. The comment documents staff-tool intent; the code does not enforce it.\n\n## Recommendation\n\nGate cross-account lookup on an explicit staff/role check (e.g. `caller.isSupport` / equivalent), and keep the default path bound to `caller.accountId`. Reject unauthorized cross-account requests with 403 before querying.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

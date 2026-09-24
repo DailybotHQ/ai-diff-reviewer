@@ -1,0 +1,51 @@
+{
+  "case": "C016",
+  "pr": "C016",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 111.5,
+  "setup_seconds": 0.0,
+  "total_seconds": 111.5,
+  "usage": {
+    "in": 55895,
+    "cache_read": 55168,
+    "cache_write": 0,
+    "out": 1326,
+    "source": "cli"
+  },
+  "cost_usd": 0.1362964,
+  "changed_files": [
+    "internal/ledger/client.go"
+  ],
+  "findings": [
+    {
+      "path": "internal/ledger/client.go",
+      "line": 14,
+      "severity": "critical",
+      "body": "**TLS verification is disabled for every caller of `NewClient()`, with no staging-only gate.**\n\n`InsecureSkipVerify: true` accepts any certificate (self-signed, expired, or attacker-controlled). Combined with a shared `NewClient()` that takes no environment or base-URL argument, this ships to production the moment this package is deployed and enables MITM on ledger traffic (credentials, transfers, account data).\n\nGate it in code, for example:\n\n```go\ntlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}\nif os.Getenv(\"LEDGER_TLS_INSECURE\") == \"1\" { // staging-only\n    tlsCfg.InsecureSkipVerify = true\n}\n```\n\nPrefer fixing staging with a real CA or pinned cert (`Certificates` / `RootCAs` / `VerifyPeerCertificate`) and keep verification on by default. A comment pointing at TICKET-77 does not prevent prod misuse."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 this unconditionally disables TLS certificate verification for every ledger HTTP client, including production.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `internal/ledger/client.go:14` | `InsecureSkipVerify: true` with no env/build gate enables MITM on all ledger traffic |\n\n## Notes\n\n`NewClient()` is the sole constructor and always returns this transport. A comment and ticket reference do not constrain runtime behavior: any binary built from this package will skip cert validation against whatever host it calls.\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C016-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

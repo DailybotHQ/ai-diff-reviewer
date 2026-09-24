@@ -1,0 +1,79 @@
+{
+  "case": "C010",
+  "pr": "C010",
+  "repo": "fixture",
+  "provider": "grok",
+  "endpoint_kind": "xai",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "ef19c30e9434",
+  "turns": 4,
+  "tool_calls": null,
+  "seconds": 43.7,
+  "setup_seconds": 0.0,
+  "total_seconds": 43.7,
+  "usage": {
+    "in": 30575,
+    "cache_read": 86400,
+    "cache_write": 0,
+    "out": 1622,
+    "source": "cli"
+  },
+  "cost_usd": 0.096802,
+  "changed_files": [
+    "src/routes/account.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity": "critical",
+      "body": "Any authenticated caller can set `body.accountId` and load a different account. The comment says this is for support staff tools, but there is no role, permission, or service-identity check before the override \u2014 only `auth(req)`, which previously scoped the read to `caller.accountId`.\n\nFailure mode: attacker with any valid session sends `{\"accountId\":\"victim-id\"}` and receives that account via `Response.json(account)` (IDOR).\n\nRequire an explicit staff/internal authorization check before honoring `body.accountId`; otherwise always use `caller.accountId`."
+    }
+  ],
+  "summary": "## Verdict\n\nCritical authorization hole: `getAccount` now trusts a client-supplied `accountId` with no staff/role check, so any authenticated caller can read any account.\n\n## Analysis\n\nPreviously the handler always loaded `caller.accountId` from `auth(req)`, which scopes the response to the authenticated principal. This PR still authenticates the caller, then overrides the lookup key with `body.accountId` whenever that field is present.\n\nThe comment claims the body field is for support staff tools, but nothing in the handler (or elsewhere in this tree) verifies a support role, permission, or service identity before honoring it. Any session that passes `auth` can POST `{\"accountId\": \"<victim>\"}` and receive that account record.\n\nThat is a classic IDOR / broken-authorization failure on an account-read endpoint. Ship a staff gate (role claim, internal service token, or allowlisted principal) before using the override; keep the `caller.accountId` fallback only for the self-read path.\n\nNo other files changed; `auth` / `db` are imported but not present in-repo, so role APIs could not be confirmed beyond the missing check in this handler.\n\n**Recommendation:** request-changes",
+  "verification": [
+    {
+      "path": "src/routes/account.ts",
+      "line": 8,
+      "severity_claimed": "critical",
+      "status": "verified",
+      "reason": "The patch replaces a caller-scoped lookup (`caller.accountId`) with `body.accountId ?? caller.accountId` and returns that account with no staff/role check after `auth(req)`, so any authenticated client can IDOR another account."
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 1,
+    "seconds": 11.65,
+    "verified": 1,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 0,
+    "model": "grok-4.5",
+    "alias": "economy",
+    "endpoint_kind": "xai",
+    "reason": "",
+    "usage": {
+      "in": 1314,
+      "out": 433
+    },
+    "cost_usd": 0.006967
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C010-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

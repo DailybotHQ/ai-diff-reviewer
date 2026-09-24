@@ -1,0 +1,51 @@
+{
+  "case": "C006",
+  "pr": "C006",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 25.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 25.9,
+  "usage": {
+    "in": 54946,
+    "cache_read": 27776,
+    "cache_write": 0,
+    "out": 1130,
+    "source": "cli"
+  },
+  "cost_usd": 0.1250048,
+  "changed_files": [
+    "auth.py"
+  ],
+  "findings": [
+    {
+      "path": "auth.py",
+      "line": 8,
+      "severity": "critical",
+      "body": "**Authentication bypass:** `jwt.decode` is called with `verify_signature`, `verify_aud`, and `verify_iss` all set to `False`, and the signing key / algorithm / audience / issuer checks were removed.\n\nAny client can present an arbitrary JWT (or a token with forged `sub`/`role` claims) and `identity()` will accept it. This is unconditional \u2014 there is no staging/env guard \u2014 so the same code path would trust forged tokens in every environment that runs this module.\n\n**Failure mode:** attacker crafts `{\"sub\":\"admin\",\"aud\":\"api\",...}` with no valid signature \u2192 `identity()` returns those claims \u2192 downstream authz treats them as real.\n\n**Fix:** restore signature verification with the real key and constraints. If staging tokens truly cannot verify until re-issuance, gate a *separate* staging verifier (different issuer/key or explicit `ENV == staging` branch), and keep production on full verify:\n\n```suggestion\n    return jwt.decode(\n        token,\n        SECRET,\n        algorithms=[\"HS256\"],\n        audience=\"api\",\n        issuer=\"accounts.internal.example\",\n    )\n```\n\nDo not ship `verify_signature: False` on a shared code path."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge.** This change disables JWT signature, audience, and issuer verification unconditionally in `identity()`, which is a production authentication bypass.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `auth.py:8` | JWT decode with all verification disabled \u2014 any forged token is accepted |\n\n## Notes\n\nThere is no staging-only guard, feature flag, or environment check around this path. `SECRET` remains defined but unused, so the signing key is never consulted. Anyone who can call the API with a self-signed or unsigned JWT can impersonate any identity claims in the token payload.\n\nEven as a temporary staging workaround, this belongs behind an explicit non-production gate (and ideally a separate staging key/issuer), not a blanket `verify_signature: False`.\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C006-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 1,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

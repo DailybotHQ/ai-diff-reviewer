@@ -1,0 +1,51 @@
+{
+  "case": "C012",
+  "pr": "C012",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "426aa0eb574d",
+  "turns": 5,
+  "tool_calls": null,
+  "seconds": 102.3,
+  "setup_seconds": 0.1,
+  "total_seconds": 102.4,
+  "usage": {
+    "in": 40598,
+    "cache_read": 103808,
+    "cache_write": 0,
+    "out": 2975,
+    "source": "cli"
+  },
+  "cost_usd": 0.1301884,
+  "changed_files": [
+    "src/config/merge.ts"
+  ],
+  "findings": [
+    {
+      "path": "src/config/merge.ts",
+      "line": 3,
+      "severity": "critical",
+      "body": "**Prototype pollution:** Removing the `BLOCKED` set lets keys like `__proto__`, `constructor`, and `prototype` flow into the merge loop.\n\n`JSON.parse` *does* yield these as own keys \u2014 e.g. `Object.entries(JSON.parse('{\"__proto__\":{\"polluted\":true}}'))` returns `[[\"__proto__\", {polluted: true}]]`. On the recursive path, `(base as any)[k] ??= {}` with `k === \"__proto__\"` resolves to `Object.prototype`, so nested fields are written onto the shared prototype. Confirmed in Node: after merging that patch into `{}`, `({}).polluted === true`.\n\nRestore the blocklist (or otherwise reject / use `Object.hasOwn`-safe assignment for those keys) before merge. The prior guard was load-bearing defense-in-depth for any config/API JSON patch path that calls `deepMerge`."
+    }
+  ],
+  "summary": "## Verdict\n\n**Do not merge** \u2014 removing the key blocklist reintroduces prototype pollution in `deepMerge`. The PR claim that `JSON.parse` never yields dangerous keys is incorrect.\n\n## Findings\n\n| # | Severity | File | Summary |\n|---|----------|------|---------|\n| 1 | \ud83d\udea8 critical | `src/config/merge.ts:3` | Removing `__proto__` / `constructor` / `prototype` blocklist allows prototype pollution via merged JSON patches |\n\n## Details\n\n`JSON.parse('{\"__proto__\": {\"polluted\": true}}')` produces an object whose **own** keys include `__proto__` (`Object.keys` / `Object.entries` both surface it). The recursive branch then does:\n\n```ts\ndeepMerge((base as any)[k] ??= {}, v)\n```\n\nFor `k === \"__proto__\"`, `(base)[k]` resolves to `Object.prototype`, and nested properties are written onto the prototype. Verified in Node: after `deepMerge({}, JSON.parse('{\"__proto__\":{\"polluted\":true}}'))`, `({}).polluted === true`.\n\nThe same class of issue applies to `constructor` / `prototype` keys (e.g. `{\"constructor\":{\"prototype\":{\"polluted\":true}}}`).\n\n## Release decision\n\n**Recommendation:** request-changes\n",
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C012-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 1,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}

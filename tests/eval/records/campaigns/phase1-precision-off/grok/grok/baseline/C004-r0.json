@@ -1,0 +1,79 @@
+{
+  "case": "C004",
+  "pr": "C004",
+  "repo": "fixture",
+  "provider": "grok",
+  "api_base": "",
+  "model": "grok-4.5",
+  "prompt": "composed",
+  "extension": false,
+  "runtime_head": "4e469f0c6687",
+  "turns": 3,
+  "tool_calls": null,
+  "seconds": 31.9,
+  "setup_seconds": 0.0,
+  "total_seconds": 32.0,
+  "usage": {
+    "in": 30402,
+    "cache_read": 57856,
+    "cache_write": 0,
+    "out": 1873,
+    "source": "cli"
+  },
+  "cost_usd": 0.0893988,
+  "changed_files": [
+    "reports.py"
+  ],
+  "findings": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity": "warning",
+      "body": "**Claimed critical; verifier found:** verifier off\n\n**Issue:** `request.args.get(\"path\", name)` is passed straight into `os.path.join(REPORTS, \u2026)` after removing `os.path.basename()`. Any client can read files outside `/srv/reports`.\n\n**Failure mode:**\n- `GET /reports/x?path=../../etc/passwd` \u2192 serves `/etc/passwd`\n- `GET /reports/x?path=/etc/shadow` \u2192 `os.path.join` drops the base on absolute second args \u2192 serves `/etc/shadow`\n\n**Fix:** resolve the path under `REPORTS` and reject escapes (and absolute inputs). Example:\n\n```python\n@app.route(\"/reports/<name>\")\ndef download(name: str):\n    rel = request.args.get(\"path\", name)\n    # disallow absolute segments; allow nested relative paths only\n    candidate = os.path.realpath(os.path.join(REPORTS, rel))\n    reports_root = os.path.realpath(REPORTS)\n    if not candidate.startswith(reports_root + os.sep) and candidate != reports_root:\n        abort(400)\n    return send_file(candidate)\n```\n\nAlso prefer a path-style route (`/reports/<path:subpath>`) over a free-form query param so the allowed shape is explicit."
+    }
+  ],
+  "summary": "## Verdict\n\n**Critical security regression** \u2014 this change replaces path sanitization with an unsanitized query parameter and enables arbitrary file read on the server.\n\n## Analysis\n\nThe previous handler used `os.path.basename(name)` so only a single filename under `/srv/reports` could be served. The new code does:\n\n```python\nreturn send_file(os.path.join(REPORTS, request.args.get(\"path\", name)))\n```\n\nConcrete failure modes:\n\n1. **Relative traversal:** `GET /reports/x?path=../../etc/passwd` resolves to `/etc/passwd` (join does not re-anchor after `..`).\n2. **Absolute path override:** `GET /reports/x?path=/etc/shadow` \u2014 `os.path.join` discards the base when the second segment is absolute, so `send_file` serves that path directly.\n3. **Sanitizer removed:** even the fallback `name` no longer goes through `basename`, so any future route change to `<path:name>` would widen the hole further.\n\nSupporting nested folders (e.g. `2024/q3/report.pdf`) is a valid goal; it requires resolving the candidate under `REPORTS` and rejecting anything whose real path is outside that root (and typically still rejecting absolute inputs).\n\n**Recommendation:** request-changes\n",
+  "verification": [
+    {
+      "path": "reports.py",
+      "line": 10,
+      "severity_claimed": "critical",
+      "status": "skipped",
+      "reason": "verifier off"
+    }
+  ],
+  "refuted": [],
+  "verifier": {
+    "runs": 0,
+    "seconds": 0.0,
+    "verified": 0,
+    "refuted": 0,
+    "downgraded": 0,
+    "unverified": 0,
+    "skipped": 1,
+    "model": "",
+    "alias": "",
+    "endpoint_kind": "",
+    "reason": "verifier off",
+    "usage": {
+      "in": 0,
+      "out": 0
+    },
+    "cost_usd": null
+  },
+  "score": {
+    "must_find_total": 1,
+    "must_find_hits": 1,
+    "hits": [
+      "C004-d1"
+    ],
+    "misses": [],
+    "false_positives": [],
+    "unlabelled_findings": 0,
+    "severity_matches": 0,
+    "summary_present": true,
+    "suggestion_blocks": 0,
+    "coverage_paths": 1,
+    "changed_files": 1
+  }
+}
