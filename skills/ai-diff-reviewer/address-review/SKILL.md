@@ -1,7 +1,7 @@
 ---
 name: ai-diff-reviewer-address-review
 description: Close the review loop in one invocation — find the open PR(s) for the current branch, survey ALL the PR's CI health (every workflow and check, not just the reviewer — a failing codecheck/test/lint run is diagnosed from its logs and fixed, a branch behind its base is updated, a flaky failure earns one offered re-run), check whether the AI Diff Reviewer run covered the current head, walk its findings (apply / defer / skip; apply here commits and pushes in small Conventional Commits batches), then re-arm the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Reads the v3 review-output artifact first (marker fallback), skips minimized and stale reviews, multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "fix the failing workflows", "loop the review", or repeats the resolve-then-ready instruction.
-version: "3.2.0"
+version: "3.2.1"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/address-review/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🔁","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git","gh"]}}}
