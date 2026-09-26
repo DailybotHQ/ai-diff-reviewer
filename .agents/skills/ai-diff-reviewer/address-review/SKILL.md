@@ -1,7 +1,7 @@
 ---
 name: ai-diff-reviewer-address-review
 description: Close the review loop in one invocation — find the open PR(s) for the current branch, survey ALL the PR's CI health (every workflow and check, not just the reviewer — a failing codecheck/test/lint run is diagnosed from its logs and fixed, a branch behind its base is updated, a flaky failure earns one offered re-run), check whether the AI Diff Reviewer run covered the current head, walk its findings (apply / defer / skip; apply here commits and pushes in small Conventional Commits batches), then re-arm the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Reads the v3 review-output artifact first (marker fallback), skips minimized and stale reviews, multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "fix the failing workflows", "loop the review", or repeats the resolve-then-ready instruction.
-version: "3.2.0"
+version: "3.2.1"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/address-review/SKILL.md
 user-invocable: true
 metadata: {"openclaw":{"emoji":"🔁","homepage":"https://github.com/DailybotHQ/ai-diff-reviewer","requires":{"anyBins":["git","gh"]}}}
@@ -103,7 +103,8 @@ local pre-flight review → parent skill; wants the PR body refreshed →
 ## Step 2 — Survey the PR's CI health (every workflow, not just the reviewer)
 
 1. **Every check on the PR:** `gh pr checks <n>` (read its table, not its
-   exit code — it exits non-zero exactly when something failed). Complement
+   exit code — it exits non-zero while checks are failing or pending).
+   Complement
    with `gh run list --branch <branch> --limit 20` for push-triggered runs
    that don't surface as PR checks. The AI Diff Reviewer runs on the list
    are recorded separately for Step 3 — a failed reviewer run is still
@@ -278,7 +279,7 @@ abort, nothing has been written.
 
 | Situation | Behaviour |
 |---|---|
-| Review still running on the current head | Report + hand back with the watch command; never address a stale review |
+| Review still running on the current head | Offer the Step 3 choice — wait (hand back with the watch command) or run the CI-health half now and re-arm; findings always wait for the fresh round |
 | Several open PRs for the branch | Ask which; handle each independently |
 | No reviewer workflow in the repo | Say so; offer the local review flow; do not install anything |
 | A finding can't be mapped to code | Mark it `ask`, never guess an edit |
