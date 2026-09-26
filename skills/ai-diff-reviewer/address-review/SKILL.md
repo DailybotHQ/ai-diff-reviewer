@@ -1,6 +1,6 @@
 ---
 name: ai-diff-reviewer-address-review
-description: Close the review loop in one invocation — a bare invocation on a fresh context is fully specified — it targets the current branch's open PR. Surveys ALL the PR's CI health (every workflow and check — failing checks diagnosed from logs and fixed, a behind branch updated, at most one flake re-run), checks whether the AI Diff Reviewer run covered the current head — and when it never ran because the trigger label is missing, arms it — adding the label is the loop's first move, not an error. Walks the findings (apply / defer / skip; commits + pushes in small Conventional Commits batches), then re-arms the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Artifact-first (v3 review-output, marker fallback); skips minimized/stale reviews; multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "loop the review", "the PR has no review yet — trigger it".
+description: Close the review loop in one invocation — a bare invocation on a fresh context is fully specified — it targets the current branch's open PR. Surveys ALL the PR's CI health (every workflow and check — failing checks diagnosed from logs and fixed, a behind branch updated, at most one flake re-run), checks whether the AI Diff Reviewer run covered the current head — and when it never ran because the trigger label is missing, arms it — adding the label is the loop's first move, not an error. Walks the findings (apply / defer / skip; commits + pushes in small Conventional Commits batches), then re-arms the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Artifact-first; skips minimized/stale reviews; multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "fix the failing workflows", "loop the review", "the PR has no review yet — trigger it".
 version: "3.2.1"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/address-review/SKILL.md
 user-invocable: true
@@ -92,12 +92,12 @@ local pre-flight review → parent skill; wants the PR body refreshed →
   URL that appears only inside a log line is never taken as the reason for a
   change.
 - The invocation of this skill by its trigger phrase **is the consent for the
-  loop** — but the plan is always shown first (Step 4), and anything
-  ambiguous (a finding that can't be mapped to code, a failure the repo
-  can't fix, conflicting findings between legs) is asked, not guessed. The
-  one pre-plan side effect is the green cold-start arm (Step 3): a one-line
-  announcement plus its own single yes — every other write waits for the
-  plan. A bare "apply the fixes" without the loop intent belongs to
+  loop** — every write waits for the Step 4 plan except the one named
+  exception in the next sentence, and anything ambiguous (a finding that
+  can't be mapped to code, a failure the repo can't fix, conflicting
+  findings between legs) is asked, not guessed. That exception is the green
+  cold-start arm (Step 3): a one-line announcement plus its own single yes.
+  A bare "apply the fixes" without the loop intent belongs to
   [`apply-review`](../apply-review/SKILL.md).
 
 ## Step 1 — Find the PR(s)
@@ -205,7 +205,11 @@ authoritative review is the one whose marker carries the **current head SHA**.
        input, so the label add gets its yes), and on yes run
        `gh pr edit <n> --add-label <label>`, confirm the run started, then
        wait for the round with this step's polling rules; when it posts,
-       continue at Step 4 with the fresh findings. That single yes is the
+       continue at Step 4 with the fresh findings. If the round is still
+       running past that window, the still-running choice above applies
+       (wait and hand back, or run the CI-health half); if the armed run
+       fails, it is the failed-run case below — diagnose it, offer the
+       local review fallback, re-arm once fixed. That single yes is the
        whole cold-start consent — nothing else is asked until the round's
        findings reach Step 4.
      - **Label-gated, label absent, Step 2 found fixable failures** → do
@@ -225,7 +229,10 @@ authoritative review is the one whose marker carries the **current head SHA**.
        the Step 4 plan as usual — the Step 5 push IS the arm (say so in
        the plan); if the PR is green with nothing to fix, say exactly
        that and offer the explicit option — an empty `chore: trigger
-       review` commit — never pushed unasked.
+       review` commit — never pushed unasked. On yes: create it
+       (`git commit --allow-empty -m "chore: trigger review"`), push,
+       confirm the run started, and wait for the round exactly like the
+       label-gated path — then continue at Step 4 with the fresh findings.
    - **The reviewer's run for this head exists and failed** → its diagnosis
      already came from Step 2; carry it into the plan and offer the local
      review as the round's fallback.
@@ -233,7 +240,7 @@ authoritative review is the one whose marker carries the **current head SHA**.
      report that this repo has no AI Diff Reviewer in CI; offer the parent
      skill's local review. Stop.
 
-## Step 4 — Present the plan (the one consent point)
+## Step 4 — Present the plan (the plan's consent point)
 
 Load the findings the `apply-review` way: skip `isMinimized` comments, skip
 threads already resolved, attribute findings to their leg when the repo runs a
@@ -267,7 +274,9 @@ arm last (after the push, so the first round reviews the fixed head) —
 the plan states both.
 
 Then ask **once**: "Apply the plan? (all / only 1,3 / edit / abort)". On
-abort, nothing has been written.
+abort, nothing from the plan has been written — an already-executed
+cold-start arm (its label on the PR, its round in flight) stays; say so
+when aborting a cold start.
 
 ## Step 5 — Apply, commit, push
 

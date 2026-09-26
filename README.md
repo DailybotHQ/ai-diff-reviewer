@@ -693,7 +693,7 @@ Unlike [`apply-review`](#sub-skill-apply-review--read-the-ci-review-and-walk-the
 
 Two routing guarantees for bare invocations. First, *"loop the review"* on a fresh context — no PR number, nothing else — is fully specified: the current branch's open PR is the target, no clarifying question needed. Second, a PR the reviewer has **never** run on — most often a label-gated PR opened without its trigger label — is a **cold start**, not a dead end: on an otherwise-green PR the loop arms the reviewer with its one yes (announces it, asks *"arm it now?"*, adds the label, waits for the round, then addresses its findings); on a red one it fixes the CI failures first and arms after the push, so the first round reviews the fixed head.
 
-*"Address the review and re-run"* · *"Resolve the reviewer comments and toggle ready"* · *"Fix the failing workflows"* · *"Loop the review"*
+*"Address the review and re-run"* · *"Resolve the reviewer comments and toggle ready"* · *"Fix the failing workflows"* · *"Loop the review"* · *"The PR has no review yet — trigger it"*
 
 ## Bringing them together — `.review/extension.md`
 
