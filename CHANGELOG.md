@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.2.2] — 2026-09-26
+
 ### Added
 
 - **`address-review` cold start + bare invocation.** The one-invocation loop is now fully specified from a fresh context: a bare *"loop the review"* (no PR number, no other instruction, or the sub-skill invoked as a slash command with no arguments) targets the current branch's open PR with no clarifying question, and a PR the reviewer has never run on — most often a label-gated PR opened without its trigger label — is a **cold start** the loop arms itself instead of stopping between Step 3's cases: on an otherwise-green PR it announces the arm, asks its single yes (*"arm it now?"* — one side effect, one yes, the loop's consent contract), arms the repo's way (label add, or the empty trigger commit when the workflow is push-triggered), waits for the round, and continues with the fresh findings; on a red PR it sequences the CI fixes first and arms after the push, so the first round reviews the fixed head. A label that was present but never picked up, and a push-triggered repo with no run ever, get explicit detection-and-report paths (an empty trigger commit is offered, never pushed unasked — and on yes it is created, pushed and waited on like the label arm). The arm's wait has explicit exits (the still-running choice, the failed-run diagnosis), and a plan abort after an arm leaves the arm's label and round standing — only the plan's writes are unwritten. Trigger added: *"the PR has no review yet — trigger it"*; new failure-mode rows cover the cold start, the no-PR bare invocation, and the label-added-but-no-run case. (`skills/ai-diff-reviewer/address-review/SKILL.md`, parent skill Activation, `README.md`, `docs/PROMPTS.md`, `docs/PR_REVIEW_WORKFLOW.md`)
