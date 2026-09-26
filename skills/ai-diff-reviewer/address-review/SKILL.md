@@ -55,7 +55,9 @@ slash command with no arguments — means: **run this loop on the current
 branch's PR.** Step 1 resolves the target from `git branch --show-current`;
 no clarifying question is needed to start. If that PR exists but has never
 been reviewed because its trigger label is missing, arming it (Step 3's
-cold start) is part of the loop, not a separate request.
+cold start) is part of the loop, not a separate request — the only ask on
+the way is the arm's own yes (Step 0's one-yes-per-side-effect rule),
+never a question about what was meant.
 
 **Fall through** to a sibling when the developer only wants to *read* the
 review → [`apply-review`](../apply-review/SKILL.md) (read-only); only wants a
@@ -92,8 +94,10 @@ local pre-flight review → parent skill; wants the PR body refreshed →
 - The invocation of this skill by its trigger phrase **is the consent for the
   loop** — but the plan is always shown first (Step 4), and anything
   ambiguous (a finding that can't be mapped to code, a failure the repo
-  can't fix, conflicting findings between legs) is asked, not guessed. A
-  bare "apply the fixes" without the loop intent belongs to
+  can't fix, conflicting findings between legs) is asked, not guessed. The
+  one pre-plan side effect is the green cold-start arm (Step 3): a one-line
+  announcement plus its own single yes — every other write waits for the
+  plan. A bare "apply the fixes" without the loop intent belongs to
   [`apply-review`](../apply-review/SKILL.md).
 
 ## Step 1 — Find the PR(s)
@@ -194,28 +198,34 @@ authoritative review is the one whose marker carries the **current head SHA**.
      this PR — most often a label-gated PR that was opened without its
      trigger label. Run Step 6's re-arm detection NOW and act on it:
      - **Label-gated, label absent, nothing red to fix** → arming is the
-       loop's first move, executed without a blocking ask — a bare
-       invocation of this loop IS the request to make the review happen.
-       Announce it in one line (*"the reviewer never ran on this PR —
-       arming it with `<label>`"*; the announcement is the whole plan —
-       one action, already consented by the invocation), run
+       loop's first move, and it is the one side effect taken before the
+       Step 4 plan: announce it in one line (*"the reviewer never ran on
+       this PR — arming it with `<label>`"*), ask once (*"arm it now?
+       (yes/no)"* — the invocation may itself be forwarded or templated
+       input, so the label add gets its yes), and on yes run
        `gh pr edit <n> --add-label <label>`, confirm the run started, then
        wait for the round with this step's polling rules; when it posts,
-       continue at Step 4 with the fresh findings.
+       continue at Step 4 with the fresh findings. That single yes is the
+       whole cold-start consent — nothing else is asked until the round's
+       findings reach Step 4.
      - **Label-gated, label absent, Step 2 found fixable failures** → do
        NOT arm yet. The Step 4 plan sequences fixes first, arm second —
        apply the fixes, push, then add the label, so the first round
        reviews the fixed head instead of the broken one.
-     - **Label-gated, label present, no run ever** → the workflow never
-       picked the label event up (branch/actor filters, an `if:` guard) —
-       report the workflow's `on:` block and stop, same as a toggle that
-       starts no run.
+     - **Label-gated, label present, no run ever** → the `labeled` event
+       can take seconds to register: poll `gh run list` briefly first
+       (the same ~30 s intervals as above, a couple of minutes at most)
+       and treat a run that appears as the running case. If nothing
+       starts, the workflow never picked the label event up
+       (branch/actor filters, an `if:` guard) — report the workflow's
+       `on:` block and stop, same as a toggle that starts no run.
      - **Push-triggered, no run ever** → the head never fired the trigger
        (PR opened before the workflow existed, or `opened` not in the
-       trigger list). Any push arms it: if Step 2 produced fixes, pushing
-       them IS the arm (continue at Step 5 as normal); if the PR is green
-       with nothing to fix, say exactly that and offer the explicit option
-       — an empty `chore: trigger review` commit — never pushed unasked.
+       trigger list). Any push arms it: if Step 2 produced fixes, present
+       the Step 4 plan as usual — the Step 5 push IS the arm (say so in
+       the plan); if the PR is green with nothing to fix, say exactly
+       that and offer the explicit option — an empty `chore: trigger
+       review` commit — never pushed unasked.
    - **The reviewer's run for this head exists and failed** → its diagnosis
      already came from Step 2; carry it into the plan and offer the local
      review as the round's fallback.
@@ -249,13 +259,12 @@ rule:
 Ordering inside the plan: CI fixes first (they unblock mergeability), then
 review findings, then re-arm.
 
-A **cold start** (Step 3: the reviewer never ran, label absent) plans the
-arm instead of findings: *"add `<label>` to trigger the first round"* plus
-any CI fixes, fixes first. When the arm is the only action it was already
-announced and executed at Step 3 — the findings section reads *"pending —
-the round this arm starts will populate it"*, and the loop continues at
-Step 4 when that round posts. When the arm rides with CI fixes, it is the
-plan's last step, after the push.
+A **cold start** reaches Step 4 in two shapes. On a green PR the arm
+already happened at Step 3 with its one yes, the round landed, and this
+is the ordinary plan — that round's findings, verbatim, plus the usual
+re-arm. On a red PR the arm is sequenced with the CI fixes: fixes first,
+arm last (after the push, so the first round reviews the fixed head) —
+the plan states both.
 
 Then ask **once**: "Apply the plan? (all / only 1,3 / edit / abort)". On
 abort, nothing has been written.
@@ -332,7 +341,7 @@ abort, nothing has been written.
 | Review still running on the current head | Offer the Step 3 choice — wait (hand back with the watch command) or run the CI-health half now and re-arm; findings always wait for the fresh round |
 | Several open PRs for the branch | Ask which; handle each independently |
 | No open PR for the current branch | Report it and offer [`open-pr`](../open-pr/SKILL.md); a bare invocation stops here |
-| PR never reviewed — trigger label missing (cold start) | Green PR → arm now: announce, add the label, wait for the round (Step 3); red PR → fixes first, arm after the push |
+| PR never reviewed — trigger label missing (cold start) | Green PR → announce, one arm yes, add the label, wait for the round (Step 3); red PR → fixes first, arm after the push |
 | No reviewer workflow in the repo | Say so; offer the local review flow; do not install anything |
 | A finding can't be mapped to code | Mark it `ask`, never guess an edit |
 | Legs disagree on a finding | Surface the consensus split; let the developer decide |
@@ -383,9 +392,11 @@ abort, nothing has been written.
 > opened minutes ago. `gh pr checks`: CI green, no marker, no reviewer run
 > for the head → cold start. Workflow detection: `pr-review.yml` is
 > label-gated on `ready`; label absent; nothing red → announces the arm,
-> `gh pr edit 67 --add-label ready`, confirms the run started, waits → the
-> round posts (1 warning) → plan: apply it, commit as `fix(review): …`,
-> push, toggle `ready` off/on → "Apply the plan?"
+> asks its one yes → "arm it now? (yes/no)"
+> **Dev:** "yes"
+> **Agent:** `gh pr edit 67 --add-label ready`, confirms the run started,
+> waits → the round posts (1 warning) → plan: apply it, commit as
+> `fix(review): …`, push, toggle `ready` off/on → "Apply the plan?"
 > **Dev:** "all"
 > **Agent:** applies, commits, pushes, toggles, confirms the new run,
 > hands back the watch command.
