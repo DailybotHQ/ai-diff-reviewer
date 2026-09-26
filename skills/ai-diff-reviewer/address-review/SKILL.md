@@ -1,6 +1,6 @@
 ---
 name: ai-diff-reviewer-address-review
-description: Close the review loop in one invocation — find the open PR(s) for the current branch, survey ALL the PR's CI health (every workflow and check, not just the reviewer — a failing codecheck/test/lint run is diagnosed from its logs and fixed, a branch behind its base is updated, a flaky failure earns one offered re-run), check whether the AI Diff Reviewer run covered the current head, walk its findings (apply / defer / skip; apply here commits and pushes in small Conventional Commits batches), then re-arm the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Reads the v3 review-output artifact first (marker fallback), skips minimized and stale reviews, multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "fix the failing workflows", "loop the review", or repeats the resolve-then-ready instruction.
+description: Close the review loop in one invocation — a bare invocation on a fresh context is fully specified — it targets the current branch's open PR. Surveys ALL the PR's CI health (every workflow and check — failing checks diagnosed from logs and fixed, a behind branch updated, at most one flake re-run), checks whether the AI Diff Reviewer run covered the current head — and when it never ran because the trigger label is missing, arms it — adding the label is the loop's first move, not an error. Walks the findings (apply / defer / skip; commits + pushes in small Conventional Commits batches), then re-arms the reviewer adaptively (label-gated → toggle off/on or add; push-triggered → confirm the new run; no workflow → offer the local review). Artifact-first (v3 review-output, marker fallback); skips minimized/stale reviews; multi-leg aware. Use when the developer says "address the review and re-run", "resolve the reviewer comments and toggle ready", "loop the review", "the PR has no review yet — trigger it".
 version: "3.2.1"
 documentation_url: https://github.com/DailybotHQ/ai-diff-reviewer/blob/main/skills/ai-diff-reviewer/address-review/SKILL.md
 user-invocable: true
@@ -44,9 +44,18 @@ Relationship to the family:
 - "Fix the failing workflows" / "make CI green and re-run the reviewer"
 - "The PR is red — loop the review"
 - "Loop the review" / "run the review loop"
+- "The PR has no review yet — trigger it" / "start the first review round"
 - The repeated instruction itself: *"revisa los comentarios del reviewer,
   resuélvelos y haz toggle del ready label"*
 - "What's left from the review? Handle it and re-arm CI"
+
+**A bare invocation is fully specified.** The trigger phrase alone — fresh
+context, no PR number, no other instruction, or the sub-skill invoked as a
+slash command with no arguments — means: **run this loop on the current
+branch's PR.** Step 1 resolves the target from `git branch --show-current`;
+no clarifying question is needed to start. If that PR exists but has never
+been reviewed because its trigger label is missing, arming it (Step 3's
+cold start) is part of the loop, not a separate request.
 
 **Fall through** to a sibling when the developer only wants to *read* the
 review → [`apply-review`](../apply-review/SKILL.md) (read-only); only wants a
@@ -88,6 +97,9 @@ local pre-flight review → parent skill; wants the PR body refreshed →
   [`apply-review`](../apply-review/SKILL.md).
 
 ## Step 1 — Find the PR(s)
+
+A bare invocation starts here — the current branch is the target (see
+*When it fires*).
 
 1. Current branch: `git branch --show-current`; head: `git rev-parse HEAD`.
 2. `gh pr list --head <branch> --state open --json number,title,headRefName,url`.
@@ -177,6 +189,33 @@ authoritative review is the one whose marker carries the **current head SHA**.
      (never address a stale review) — findings wait for the fresh round.
      Other checks still pending are fine to leave in flight — they are
      re-surveyed after the push.
+   - **No marker at all and no review run for this head, but the repo HAS a
+     reviewer workflow** → **cold start**: the reviewer has never reviewed
+     this PR — most often a label-gated PR that was opened without its
+     trigger label. Run Step 6's re-arm detection NOW and act on it:
+     - **Label-gated, label absent, nothing red to fix** → arming is the
+       loop's first move, executed without a blocking ask — a bare
+       invocation of this loop IS the request to make the review happen.
+       Announce it in one line (*"the reviewer never ran on this PR —
+       arming it with `<label>`"*; the announcement is the whole plan —
+       one action, already consented by the invocation), run
+       `gh pr edit <n> --add-label <label>`, confirm the run started, then
+       wait for the round with this step's polling rules; when it posts,
+       continue at Step 4 with the fresh findings.
+     - **Label-gated, label absent, Step 2 found fixable failures** → do
+       NOT arm yet. The Step 4 plan sequences fixes first, arm second —
+       apply the fixes, push, then add the label, so the first round
+       reviews the fixed head instead of the broken one.
+     - **Label-gated, label present, no run ever** → the workflow never
+       picked the label event up (branch/actor filters, an `if:` guard) —
+       report the workflow's `on:` block and stop, same as a toggle that
+       starts no run.
+     - **Push-triggered, no run ever** → the head never fired the trigger
+       (PR opened before the workflow existed, or `opened` not in the
+       trigger list). Any push arms it: if Step 2 produced fixes, pushing
+       them IS the arm (continue at Step 5 as normal); if the PR is green
+       with nothing to fix, say exactly that and offer the explicit option
+       — an empty `chore: trigger review` commit — never pushed unasked.
    - **The reviewer's run for this head exists and failed** → its diagnosis
      already came from Step 2; carry it into the plan and offer the local
      review as the round's fallback.
@@ -209,6 +248,14 @@ rule:
 
 Ordering inside the plan: CI fixes first (they unblock mergeability), then
 review findings, then re-arm.
+
+A **cold start** (Step 3: the reviewer never ran, label absent) plans the
+arm instead of findings: *"add `<label>` to trigger the first round"* plus
+any CI fixes, fixes first. When the arm is the only action it was already
+announced and executed at Step 3 — the findings section reads *"pending —
+the round this arm starts will populate it"*, and the loop continues at
+Step 4 when that round posts. When the arm rides with CI fixes, it is the
+plan's last step, after the push.
 
 Then ask **once**: "Apply the plan? (all / only 1,3 / edit / abort)". On
 abort, nothing has been written.
@@ -265,7 +312,10 @@ abort, nothing has been written.
    - **Label-gated:** label **present** on the PR → toggle it to re-trigger
      a label-once run: `gh pr edit <n> --remove-label <label>`, wait a few
      seconds, `gh pr edit <n> --add-label <label>`. Label **absent** → add
-     it (a fresh gate application triggers the run).
+     it (a fresh gate application triggers the run). On a **cold start**
+     this arm was sequenced at Step 3: it already ran there on a green PR,
+     and on a PR that needed fixes it happens here — after the push, so the
+     first round reviews the fixed head.
    - **Push-triggered:** the Step 5 push already re-triggered the review —
      verify with `gh run list` that a new run started for the new head, and
      say so.
@@ -281,10 +331,12 @@ abort, nothing has been written.
 |---|---|
 | Review still running on the current head | Offer the Step 3 choice — wait (hand back with the watch command) or run the CI-health half now and re-arm; findings always wait for the fresh round |
 | Several open PRs for the branch | Ask which; handle each independently |
+| No open PR for the current branch | Report it and offer [`open-pr`](../open-pr/SKILL.md); a bare invocation stops here |
+| PR never reviewed — trigger label missing (cold start) | Green PR → arm now: announce, add the label, wait for the round (Step 3); red PR → fixes first, arm after the push |
 | No reviewer workflow in the repo | Say so; offer the local review flow; do not install anything |
 | A finding can't be mapped to code | Mark it `ask`, never guess an edit |
 | Legs disagree on a finding | Surface the consensus split; let the developer decide |
-| Label toggled but no run starts | The workflow may filter the label event (branches filter, actor filters) — report the workflow's `on:` block and stop |
+| Label toggled or cold-start-added but no run starts | The workflow may filter the label event (branches filter, actor filters) — report the workflow's `on:` block and stop |
 | Working tree dirty before Step 5 | Ask first: stash, commit separately, or proceed around the dirt; never sweep unrelated changes into a fix commit |
 | Check fails again after the fix is pushed | A second failure with no code cause stops the rerun path — report both failure signatures and `ask` (flake vs. real, escalate?) |
 | Failure needs something the repo can't provide | Report exactly what's missing (secret, external outage, another team's check); never disable or weaken the check to get green |
@@ -325,3 +377,15 @@ abort, nothing has been written.
 > **Agent:** `gh pr update-branch`, confirms the branch is up to date,
 > toggles `ready` off/on, reports checks before → after, and hands back the
 > watch command for the fresh round.
+
+> **Dev:** "loop the review" (fresh session — nothing else)
+> **Agent:** branch `feat/xyz` → `gh pr list --head feat/xyz` → PR #67,
+> opened minutes ago. `gh pr checks`: CI green, no marker, no reviewer run
+> for the head → cold start. Workflow detection: `pr-review.yml` is
+> label-gated on `ready`; label absent; nothing red → announces the arm,
+> `gh pr edit 67 --add-label ready`, confirms the run started, waits → the
+> round posts (1 warning) → plan: apply it, commit as `fix(review): …`,
+> push, toggle `ready` off/on → "Apply the plan?"
+> **Dev:** "all"
+> **Agent:** applies, commits, pushes, toggles, confirms the new run,
+> hands back the watch command.
