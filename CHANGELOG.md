@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **`address-review` is green-CI aware.** The one-invocation loop no longer stops at the reviewer's comments: a new Step 2 surveys every workflow and check on the PR (`gh pr checks` + `gh run list` + `mergeStateStatus`), reads each failing run's logs (`gh run view --log-failed`), reproduces the failure locally when the command is available, and fixes it in the same consented pass — a failing codecheck (tests / lint / typecheck / build) is fixed in code and committed as its own Conventional Commit, a branch `BEHIND` its base is updated (`gh pr update-branch` or a local merge of the base), merge conflicts are surfaced and asked, and a flaky or infrastructure failure earns at most one offered `gh run rerun --failed` — never a retry loop, never a weakened check (workflow files are edited only as the direct, plan-named fix of a diagnosed failure). The plan, the consent point and the re-arm step now cover CI health + review findings + reviewer re-arm as one loop; triggers added: *"fix the failing workflows"*, *"make CI green and re-run the reviewer"*. (`skills/ai-diff-reviewer/address-review/`)
 
 ## [3.1.1] — 2026-09-24
 
