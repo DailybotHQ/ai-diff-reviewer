@@ -96,8 +96,9 @@ local pre-flight review → parent skill; wants the PR body refreshed →
   exception in the next sentence, and anything ambiguous (a finding that
   can't be mapped to code, a failure the repo can't fix, conflicting
   findings between legs) is asked, not guessed. That exception is the green
-  cold-start arm (Step 3): a one-line announcement plus its own single yes.
-  A bare "apply the fixes" without the loop intent belongs to
+  cold-start arm (Step 3 — adding the label, or the empty trigger commit
+  on a push-triggered repo): a one-line announcement plus its own single
+  yes. A bare "apply the fixes" without the loop intent belongs to
   [`apply-review`](../apply-review/SKILL.md).
 
 ## Step 1 — Find the PR(s)
@@ -209,9 +210,10 @@ authoritative review is the one whose marker carries the **current head SHA**.
        running past that window, the still-running choice above applies
        (wait and hand back, or run the CI-health half); if the armed run
        fails, it is the failed-run case below — diagnose it, offer the
-       local review fallback, re-arm once fixed. That single yes is the
-       whole cold-start consent — nothing else is asked until the round's
-       findings reach Step 4.
+       local review fallback, re-arm once fixed. That single yes consents
+       to the arm and the wait only — the still-running choice and any
+       failure handling ask on their own terms, and the plan's yes comes
+       at Step 4.
      - **Label-gated, label absent, Step 2 found fixable failures** → do
        NOT arm yet. The Step 4 plan sequences fixes first, arm second —
        apply the fixes, push, then add the label, so the first round
@@ -350,7 +352,7 @@ when aborting a cold start.
 | Review still running on the current head | Offer the Step 3 choice — wait (hand back with the watch command) or run the CI-health half now and re-arm; findings always wait for the fresh round |
 | Several open PRs for the branch | Ask which; handle each independently |
 | No open PR for the current branch | Report it and offer [`open-pr`](../open-pr/SKILL.md); a bare invocation stops here |
-| PR never reviewed — trigger label missing (cold start) | Green PR → announce, one arm yes, add the label, wait for the round (Step 3); red PR → fixes first, arm after the push |
+| PR never reviewed — trigger label missing (cold start) | Green PR → announce, one arm yes, arm the repo's way (label or empty commit), wait for the round (Step 3); red PR → fixes first, arm after the push |
 | No reviewer workflow in the repo | Say so; offer the local review flow; do not install anything |
 | A finding can't be mapped to code | Mark it `ask`, never guess an edit |
 | Legs disagree on a finding | Surface the consensus split; let the developer decide |
