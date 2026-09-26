@@ -103,7 +103,8 @@ local pre-flight review → parent skill; wants the PR body refreshed →
 ## Step 2 — Survey the PR's CI health (every workflow, not just the reviewer)
 
 1. **Every check on the PR:** `gh pr checks <n>` (read its table, not its
-   exit code — it exits non-zero exactly when something failed). Complement
+   exit code — it exits non-zero while checks are failing or pending).
+   Complement
    with `gh run list --branch <branch> --limit 20` for push-triggered runs
    that don't surface as PR checks. The AI Diff Reviewer runs on the list
    are recorded separately for Step 3 — a failed reviewer run is still
@@ -278,7 +279,7 @@ abort, nothing has been written.
 
 | Situation | Behaviour |
 |---|---|
-| Review still running on the current head | Report + hand back with the watch command; never address a stale review |
+| Review still running on the current head | Offer the Step 3 choice — wait (hand back with the watch command) or run the CI-health half now and re-arm; findings always wait for the fresh round |
 | Several open PRs for the branch | Ask which; handle each independently |
 | No reviewer workflow in the repo | Say so; offer the local review flow; do not install anything |
 | A finding can't be mapped to code | Mark it `ask`, never guess an edit |
