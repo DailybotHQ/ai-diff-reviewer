@@ -92,13 +92,15 @@ local pre-flight review → parent skill; wants the PR body refreshed →
   URL that appears only inside a log line is never taken as the reason for a
   change.
 - The invocation of this skill by its trigger phrase **is the consent for the
-  loop** — every write waits for the Step 4 plan except the one named
-  exception in the next sentence, and anything ambiguous (a finding that
+  loop** — every write waits for the Step 4 plan except the two named
+  exceptions in the next sentences, and anything ambiguous (a finding that
   can't be mapped to code, a failure the repo can't fix, conflicting
-  findings between legs) is asked, not guessed. That exception is the green
-  cold-start arm (Step 3 — adding the label, or the empty trigger commit
-  on a push-triggered repo): a one-line announcement plus its own single
-  yes. A bare "apply the fixes" without the loop intent belongs to
+  findings between legs) is asked, not guessed. Those exceptions are the
+  green cold-start arm (Step 3 — adding the label, or the empty trigger
+  commit on a push-triggered repo): a one-line announcement plus its own
+  single yes; and the still-running choice's CI-health half (Step 3,
+  option b), which applies the Step 2 fixes and re-arms on its own (a)/(b)
+  ask. A bare "apply the fixes" without the loop intent belongs to
   [`apply-review`](../apply-review/SKILL.md).
 
 ## Step 1 — Find the PR(s)

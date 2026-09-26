@@ -212,7 +212,7 @@ here and is authoritative for routing.
 - "Fix the review findings and re-trigger CI", "fix the failing workflows",
   "make CI green and re-run the reviewer"
 - "Loop the review" / "run the review loop"
-- "The PR has no review yet — trigger it" (cold start on a label-gated PR)
+- "The PR has no review yet — trigger it" (cold start — the arm covers both trigger modes)
 - A bare invocation with a fresh context — just "loop the review", no PR
   number, nothing else — is fully specified: the current branch's PR is the
   target, and if the review hasn't been triggered yet, arming it is part of
