@@ -135,6 +135,7 @@ The real, runnable commands for local work on this repo. No install phase — Py
 | Validate the `action.yml` public contract (CI parity — needs `pip install pyyaml`) | `python3 .github/scripts/validate_action.py` |
 | Parse `action.yml` (quick sanity check, needs `pip install pyyaml`) | `python3 -c 'import yaml; yaml.safe_load(open("action.yml"))'` |
 | Objectively verify DWP conformance | `bash .agents/skills/deepworkplan/verify/conformance.sh` |
+| Verify a v6 plan (its folder carries `manifest.json`/`contract.json`; `conformance.sh` runs the v5 plan checker) | `python3 .agents/skills/deepworkplan/shared/contract_v6.py validate-contract <plan>/contract.json` then `… validate-journal <plan>/journal.ndjson --contract <plan>/contract.json` |
 | Verify auth to Dailybot (never prompts, safe to run) | `dailybot status --auth` |
 
 Every one of these runs on a vanilla `ubuntu-latest` matching the CI environment ([`.github/workflows/code_check.yml`](.github/workflows/code_check.yml)) — if it passes locally, it passes in CI.
