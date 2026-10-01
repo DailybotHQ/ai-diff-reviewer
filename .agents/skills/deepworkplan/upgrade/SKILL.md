@@ -1,7 +1,7 @@
 ---
 name: deepworkplan-upgrade
 description: Check whether a newer DeepWorkPlan skill and DWP standard exists and — only after the developer explicitly accepts — install the latest published tag through the documented channel and re-run onboarding exactly as if https://deepworkplan.com/init.md were executed fresh, preserving every plan under .dwp/ and surfacing local adaptations instead of silently overwriting them. Use when the developer asks to upgrade, update, or refresh DWP in a repository that already has it installed. Do not use it to onboard a repo for the first time (that is the onboard sub-skill) or to migrate an old plan's shape (that is refine migrate, and plans are never migrated by an upgrade).
-version: "5.3.0"
+version: "6.0.2"
 documentation_url: https://deepworkplan.com
 user-invocable: true
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
@@ -43,43 +43,6 @@ was read from (in a repo, typically `.agents/skills/deepworkplan/`; a global
 install lives under `~/.<agent>/skills/deepworkplan/`). Everything below reads
 versions relative to that directory.
 
-## Trust boundary (write scope)
-
-`allowed-tools` includes write-capable `Edit`, `Write`, and `Bash`. Phase 1 is
-read-only; Phase 3 writes only after Phase 2 acceptance. Skills.sh / Gen Agent
-Trust Hub treat `allowed-tools` as a trust boundary; this section is the
-human-readable contract for that field. Anything not listed here does not
-happen.
-
-**Reads (Phase 1 — always allowed, no consent needed):**
-
-- Installed pack frontmatter (`version:`), `verify/conformance.sh`
-  (`SUPPORTED_SPEC`), the repository's `DWP standard:` provenance line in
-  `AGENTS.md`, and upstream release tags via `git ls-remote` / `gh release view`.
-
-**Reads (Phase 2 — before overwrite):**
-
-- Diff between the installed vendored tree and the incoming tag staged in a
-  temporary directory (`diff -r --brief`).
-
-**Writes (Phase 3 only — after explicit Phase 2 acceptance):**
-
-- The vendored skill pack under `.agents/skills/deepworkplan/` (or the global
-  install path), replaced by the accepted tag via the documented channel.
-- `skills-lock.json` content hash for the `deepworkplan` entry.
-- Harness reconciliation from re-running `../onboard/SKILL.md` end-to-end:
-  `AGENTS.md`, `docs/`, `.agents/` (commands, catalog, addon sections) — merged,
-  never clobbering existing content without asking.
-- Optional addon re-offers under each addon's standing consent policy.
-- Local adaptation re-applies the developer accepted on top of the new tag.
-
-**It MUST NOT:** touch `.dwp/` (plans, state, evidence — never migrated by an
-upgrade), install an unpinned or unverified tag (Phase 7 install-verification
-from `../onboard/SKILL.md` is mandatory; fall back to `git archive <tag>` on
-mismatch), run `git pull && ./setup.sh` without a pinned checkout, read or store
-credentials, commit or push without the developer's instruction, or start Phase
-3 on silence or an ambiguous reply.
-
 ---
 
 ## Phase 1 — Check (read-only)
@@ -99,8 +62,7 @@ credentials, commit or push without the developer's instruction, or start Phase
    GitHub CLI is present.)
 3. **Report, then stop.** State, in a few lines: installed skill version,
    latest published version, the standard each implements (the series are
-   2.x and 4.x historical and 5.x current — `../spec/DWP_SPECIFICATION.md`
-   "Status"),
+   2.x, 4.x and 5.x historical and 6.x current — `../spec/README.md`),
    and where the changelog lives
    (`https://github.com/DailybotHQ/deepworkplan-skill/blob/main/CHANGELOG.md`).
    If installed == latest, say the repository is current and **end here**.
@@ -141,8 +103,7 @@ credentials, commit or push without the developer's instruction, or start Phase
    ```
    A repository that installed via Method 2 or 3 upgrades through its own
    documented channel instead (`openclaw skills update deepworkplan`, or
-   `git fetch --tags && git checkout vX.Y.Z && ./setup.sh` in the clone — the
-   accepted tag, never an unpinned `git pull`). Around every CLI install, run the
+   `git pull && ./setup.sh` in the clone). Around every CLI install, run the
    Phase 7 install-verification contract from `../onboard/SKILL.md` (two CLI
    defects are known from round-1 evidence — `../shared/troubleshooting.md`
    §2): pre-create `.agents/skills/deepworkplan/` before the call, then

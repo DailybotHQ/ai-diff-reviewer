@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **Vendored agent harness upgraded.** `deepworkplan` 5.3.0 → 6.0.2 (DWP standard 6.0.0; new plans use v6, existing v5 plans untouched), `dailybot` 3.10.3 → 3.23.2, `ai-diff-reviewer` 3.2.1 → 3.2.2; `.agents/commands/dwp-*` delegators refreshed from the skill templates and `AGENTS.md` carries the v6 host/authority records.
 
 ## [3.2.0] — 2026-09-26
 
