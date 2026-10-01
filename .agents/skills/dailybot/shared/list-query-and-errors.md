@@ -1,10 +1,10 @@
 # Shared reference — list query flags, pagination, and machine-readable errors
 
-> **Requires `dailybot-cli >= 3.7.0`** (the skill-pack baseline). Everything on this page — the shared
+> **Requires `dailybot-cli >= 3.9.0`** (the skill-pack baseline). Everything on this page — the shared
 > list query flags, the `{count, next, previous, results}` pagination envelope,
 > the `Showing X of N` footer, the machine-readable error `code` dispatch, and
 > the API-key / Bearer parity + free-plan gating rules — is available at this
-> floor. If `dailybot --version` is below 3.7.0, ask the developer to run
+> floor. If `dailybot --version` is below 3.9.0, ask the developer to run
 > `dailybot upgrade`.
 
 This is the **single source of truth** for behavior shared across every
@@ -138,6 +138,9 @@ In `--json` mode the error surfaces as `{ error, status, code, detail }`.
 
 | `code` | Meaning | What to do |
 |--------|---------|------------|
+| `actor_required` | Not a 403 on Plan: an agent or organization key on an admin or person door gets 403 `insufficient_scope` (next row). `actor_required` is the 400 in the table below; the CLI maps it to exit 3 whatever the status. | See the 400 table. |
+| `insufficient_scope` | **HTTP 403, CLI exit 4.** On a Plan admin door or a person door in general (structure, membership, participants, mute, saved views, pins, …) with a missing `tasks:admin`: the credential is an **agent or organization key** (nobody behind it), or a personal key whose own `tasks:*` scopes are a narrower ceiling its person chose (`tasks:read` only). A personal key with no `tasks:*` scopes is that person and needs no grant. | `dailybot login` or a personal API key of a non-guest member. For a narrowed personal key, the person issues a key with `tasks:write` (or no Tasks scopes at all). Not an organization-admin problem. |
+| `update_not_author` | **HTTP 403, CLI exit 4.** A Plan project update was edited (`project update-edit`), or had a file attached or renamed (`update-attach`, `update-attachment rename`), by someone other than its author; or deleted (`update-delete`, `update-attachment delete`) by someone who is neither its author nor an organization admin. Only the update's author can edit it or change its attachments; an org admin may delete. | Do not retry with another credential. Post a new update (`project update-post`) instead, or ask the author (or an org admin, to delete). |
 | `plan_upgrade_required` | The feature isn't on the org's current plan. Carries an `upgrade_url`. | Tell the developer the feature needs a plan upgrade; surface the `upgrade_url`. Do not retry. |
 | `plan_free_api_keys_forbidden` | API keys are fully blocked on the FREE plan. | Suggest `dailybot login` (a Bearer session) instead of an API key. |
 | `plan_missing_core_api_integrations` | The org's plan lacks the core API integration this call needs. | Explain the integration/plan gap; do not retry. |
@@ -145,6 +148,10 @@ In `--json` mode the error surfaces as `{ error, status, code, detail }`.
 | `insufficient_role` | The caller's role is below what the action requires. Carries the required and current role. | Name the required role; suggest an admin/manager runs it. |
 | `member_in_scope_required` | The caller must be a member of the targeted scope (team/check-in/form). | Pick a scope the caller belongs to. |
 | `org_admin_required` | The endpoint is org-admin only (e.g. `kudos org`, `chat send --send-as-user`, webhook/team-member management). | Only an org admin can run it — a member must ask an admin or use an admin API key. Not a session problem. |
+| `workflow_execute_not_allowed` | The caller doesn't have permission to execute (trigger) workflows. | An admin or a user with the execute permission must run it. |
+| `workflow_frozen` | The workflow is disabled (frozen) and cannot be triggered. | Tell the developer; the workflow must be re-enabled in the Dailybot web app. |
+| `feature_not_available` | Organization Labels (or another gated feature) are not enabled for this org. | For Labels: stop tagging work; surface the entitlement gap (`dailybot label entitlement`). Do not retry. |
+| `paid_plan_required` | The org's plan lacks Feature.LABELS (or similar). | Surface any upgrade path; do not retry Labels commands. |
 
 ### 400 — bad input
 
@@ -160,8 +167,38 @@ In `--json` mode the error surfaces as `{ error, status, code, detail }`.
 | `send_as_user_not_found` | The `--send-as-user` UUID doesn't resolve to a user. | Confirm the user exists (`dailybot user list`). |
 | `invalid_kudos_filter` | `kudos list --filter` got an unrecognized value. | Use `received` or `given` (the CLI also accepts `KUDOS_RECEIVED` / `KUDOS_GIVEN`). |
 | `send_message_validation_error` | `chat send` payload is missing content or otherwise invalid. | Read the `detail` — it names the problem (e.g. no message/buttons/image). |
+| `button_link_and_callback_conflict` | A button has both a link `url` and a `callback_*` field. | Use one or the other — a button is either a link or an interactive callback. |
+| `button_callback_conflict` | A button has more than one `callback_*` field. | Only one of `callback_url`/`callback_form`/`callback_command`/`callback_prompt`/`callback_workflow` per button. |
+| `button_callback_url_invalid` | `callback_url` is not a valid URL. | Fix the URL. |
+| `button_modal_body_invalid` | `modal_body` JSON is malformed or has invalid field types. | Use `{title, submit_label?, blocks: [{type, name, label, …}]}` — not a bare array of fields. |
+| `button_callback_form_not_found` | `callback_form` UUID doesn't match a form. | Verify the form UUID (`dailybot form list`). |
+| `button_callback_command_invalid` | `callback_command` is not a recognized ChatOps command. | Check the command string. |
+| `button_callback_prompt_invalid` | `callback_prompt` is empty or too long. | Fix the prompt text. |
+| `button_callback_workflow_not_found` | `callback_workflow` UUID doesn't match a workflow, or the workflow isn't API-triggerable. | Verify the UUID (`dailybot workflow list --filter api_trigger`). |
+| `button_response_invalid` | `response` text is empty or too long. | Fix the response text. |
+| `button_callback_auth_invalid` | `callback_auth` value is malformed. | Use an object: `{type: "bearer"\|"basic"\|"custom_header", …}` — only with `callback_url`. |
+| `buttons_count_out_of_range` | More than 25 buttons on a single message. | Reduce to ≤25 buttons. |
+| `workflow_not_triggerable` | `workflow trigger` targeted a workflow whose event type is not `api_trigger`. | Only `api_trigger` workflows can be triggered. Use `workflow list --filter api_trigger`. |
+| `workflow_trigger_payload_invalid` | `workflow trigger --payload` is not a valid JSON object or exceeds 8 KiB. | Fix the payload — must be a JSON object ≤8 KiB (measured as sent on the wire). |
 | `invalid_owner_user_id` | `--owner` value isn't a valid UUID (after resolution). | Fix the UUID or name. |
 | `too_many_owner_user_ids` | More than 50 `--owner` values. | Narrow the filter — max 50 owners per request. |
+| `actor_required` | **HTTP 400, CLI exit 3.** An `owner=me`-style Plan person filter (`tasks mine`, `tasks counts`, inbox, cursor), or a comment reaction (`task comment-react` / `comment-unreact`), was called with an agent or organization key — nobody is behind it. Other person doors answer such a key with 403 `insufficient_scope` (exit 4). A guest gets `guest_not_allowed` (exit 4). | `dailybot login` **or a personal API key** (a key bound to a person); see the Plan sub-skill (`dailybot-tasks`), Step 2. Not a permissions bug. |
+| `invalid_agent_attribution` | The agent name on a Plan write (`--agent-name` / `DAILYBOT_AGENT_NAME`) is longer than 128 characters, undecodable, uses a character outside letters, numbers, spaces and `. - _ ( ) ' # + / & , :`, or belongs to a deactivated agent, or an agent or organization key sent a name. CLI exit 2. Refused, never truncated; not a bad task key. | Shorten or drop the name, or use a person-bound credential (`dailybot login` or a personal API key). |
+| `archived_label` | `label assign` / `label batch` used an archived Label. | Create a new Label or stop assigning that UUID. |
+| `guest_not_allowed` | Guest caller (login session or the guest's own personal API key) hit a Labels endpoint, or a Plan structure door their role cannot use. | Stop; this is a **role** limit. Labels and Plan structure need a non-guest member — ask an organization admin to change the role, not a new credential. |
+| `label_in_use` | **HTTP 409, CLI exit 4.** `label delete` while the Label still has attachments, or Plan `board label delete` while tasks still use the label (the body carries `usage_count`). | Depends on the surface. **Plan labels:** archive with `board label update <label-uuid> --archive`. **Organization Labels** (forms, check-ins, workflows): clear or reassign the entities (`label assign <entity-uuid> --type <type> --clear`, or `label batch --mode remove`), then delete — or archive with `label archive`. |
+| `label_limit_exceeded` | Assign/batch would exceed the per-entity Label limit. | Remove a Label first, then retry. |
+| `duplicate_name` | Label name collides with an existing org Label (409). | Pick another `--name` or update the existing UUID. |
+| `attachment_not_ready` | A Plan attachment was downloaded (`…/content/`) before its upload was confirmed (409). Applies to task, comment, project, goal, milestone and project-update attachments. | Wait, then retry the download. The file is not lost. CLI exit 4. |
+| `reaction_invalid_emoji` | **HTTP 400, CLI exit 2.** `task comment-react` / `comment-unreact` got text, a `:shortcode:` or something that is not one emoji (1–8 code points from U+1F300–U+1FAFF and U+2600–U+27BF, plus U+FE0F and U+200D). The CLI refuses it locally too. | Pass the emoji character itself (`👍`), not its name. |
+| `invalid_color` | Label create/update color is not a valid hex color. | Fix `--color` (e.g. `#4A90E2`). |
+| `permission_denied` | Caller lacks permission for this Labels action. | Ask an admin/manager; do not retry blindly. |
+
+### 401 — credential
+
+| `code` | Meaning | What to do |
+|--------|---------|------------|
+| `credential_expired` | The API key has expired. | Create a new key in the Dailybot web app (or run `dailybot login`). A revoked key, or one whose owner was deactivated, answers a plain 401. |
 
 ### 429 — rate limit
 

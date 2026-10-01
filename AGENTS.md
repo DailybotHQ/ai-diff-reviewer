@@ -135,6 +135,7 @@ The real, runnable commands for local work on this repo. No install phase — Py
 | Validate the `action.yml` public contract (CI parity — needs `pip install pyyaml`) | `python3 .github/scripts/validate_action.py` |
 | Parse `action.yml` (quick sanity check, needs `pip install pyyaml`) | `python3 -c 'import yaml; yaml.safe_load(open("action.yml"))'` |
 | Objectively verify DWP conformance | `bash .agents/skills/deepworkplan/verify/conformance.sh` |
+| Verify a v6 plan (its folder carries `manifest.json`/`contract.json`; `conformance.sh` runs the v5 plan checker) | `python3 .agents/skills/deepworkplan/shared/contract_v6.py validate-contract <plan>/contract.json` then `… validate-journal <plan>/journal.ndjson --contract <plan>/contract.json` |
 | Verify auth to Dailybot (never prompts, safe to run) | `dailybot status --auth` |
 
 Every one of these runs on a vanilla `ubuntu-latest` matching the CI environment ([`.github/workflows/code_check.yml`](.github/workflows/code_check.yml)) — if it passes locally, it passes in CI.
@@ -281,7 +282,7 @@ The nine `dwp-*` / `skill-create` / `agent-create` entries are thin delegators t
 
 ## Deep Work Plan
 
-This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 5.0.0 (onboarded 2026-07-04; upgraded 2026-09-13; skill 5.3.0).
+This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 6.0.0 (onboarded 2026-07-04; upgraded 2026-09-13 and 2026-10-01; skill 6.0.2). New plans use v6 by default; existing v5 plans keep their recorded generation and move only through an explicit, previewed migration.
 
 ### Deep Work Plans — invocation
 
@@ -298,13 +299,17 @@ Structured work runs through the local DWP flows (`.agents/commands/dwp-*` deleg
 | "upgrade the DWP skill / harness" | `/dwp-upgrade` (read-only until consent; then installs the accepted tag and re-onboards) |
 | ordinary direct edit ("fix this", "rename that") | done directly — never silently becomes a plan |
 
-Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only.
-
-The [DeepWorkPlan sub-skill reference](docs/AI_AGENT_ONBOARDING.md#deepworkplan-sub-skills) describes the nine flows.
+Hosts without slash commands invoke the same flows by name (`#deepworkplan-create` or plain text). `trust`/`auto` authorizes unattended continuation within the requested flow; it is not a flow selector, and read-only routes stay read-only. The nine flows: [sub-skill reference](docs/AI_AGENT_ONBOARDING.md#deepworkplan-sub-skills).
 
 ### Where plans live
 
-Deep Work Plan outputs — `plans/` (`PLAN_{name}/` directories) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+Deep Work Plan outputs — `plans/` (`PLAN_<id>_<name>/` directories, numeric ID allocated per plan; older unnumbered `PLAN_{name}/` stay valid) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+
+### v6 host and authority records
+
+- **Host capabilities** (`stop_agent`, `meter_spend`, `meter_tokens`, `meter_wall_clock`, `cancel_children`, `model_routing`, `subagents`, `telemetry`): all `false` unless runtime support is verified; unstated means `false`, and limits the host cannot meter are advisory. `telemetry` is opt-in and stays `false` without consent.
+- **Authority:** developers author and approve plans. Unattended runs stop before a push to `main`, a release or publication, an external message or secret access unless authorized; prior authorization persists.
+- **Outcome checks:** acceptance criteria draw on the real commands in [Quick Commands](#quick-commands) and [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
 
 ### When to reach for it
 

@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- **Vendored agent harness upgraded.** `deepworkplan` 5.3.0 → 6.0.2 (DWP standard 6.0.0; new plans use v6, existing v5 plans untouched) and `dailybot` 3.10.3 → 3.23.2, both re-pinned in `skills-lock.json`; the vendored `ai-diff-reviewer` was already at 3.2.2 on `main` and the DWP addon pin text now matches. The `dwp-create` delegator now documents numbered `PLAN_<id>_<name>/` folders (the other delegators are byte-identical to the new templates). `AGENTS.md` carries the v6 host/authority records and the v6 plan-verify commands; the skills catalog row is updated.
 
 ## [3.2.2] — 2026-09-26
 
