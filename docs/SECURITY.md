@@ -4,9 +4,9 @@ This document covers the security model of AI Diff Reviewer — the runtime, the
 
 ## Reporting a vulnerability
 
-Please **do not** open a public GitHub issue. Report vulnerabilities privately through GitHub's Security Advisory flow — any GitHub account can submit:
+Please **do not** open a public GitHub issue. Report vulnerabilities privately through either channel:
 
-- Open a private advisory at [`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new) (preferred), or
+- Open a private advisory at [`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new) (preferred — any GitHub account can submit), or
 - email `security@dailybot.com`.
 
 We aim to acknowledge within 48 hours and ship a fix or workaround within 14 days for high-severity issues. Supported versions and the full response targets live in the root [`SECURITY.md`](../SECURITY.md).
@@ -134,7 +134,7 @@ Each is pinned by major version. The choice to pin major rather than commit-SHA 
 ### Releases
 
 - Releases are cut by `.github/workflows/auto-release.yml` from an annotated `vX.Y.Z` tag. Each release attaches `git archive` source archives (`.tar.gz`, `.zip`) of the tagged tree and a `SHA256SUMS` manifest the workflow verifies before publishing; consumers verify downloads with `sha256sum -c SHA256SUMS`. The publishing action (`softprops/action-gh-release`) is pinned to a commit SHA.
-- The moving major tag for the current line (`v3`) is updated by `.github/workflows/release.yml` immediately after each `v3.x.y` publish, automated by the `release` event; pre-release tags never move it.
+- The moving major tag for the current line (`v3`) is force-moved by `.github/workflows/auto-release.yml` Step 3 (peeled to the release commit) when it cuts a `v3.x.y`, and again by `.github/workflows/release.yml` on the `release` event for any published release (including manual ones); pre-release tags never move it.
 - Consumers who require pinned-SHA security can pin to a specific commit instead of `@v3`.
 
 ### Repository hygiene
