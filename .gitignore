@@ -21,8 +21,11 @@ tmp/
 
 # Deep Work Plan output — plans/ and onboarding recon/report live
 # here. Working artifacts, not tracked source. See AGENTS.md → "Deep Work Plan"
-# and .agents/skills/deepworkplan/shared/dwp-paths.md.
-.dwp/
+# and .agents/skills/deepworkplan/shared/dwp-paths.md. The addon registry
+# (.dwp/config.json — decisions, never secrets) is tracked so teammates and
+# CI read the same one (.agents/skills/deepworkplan/spec/CONFIG.md §1).
+.dwp/*
+!.dwp/config.json
 
 # Per-run reviewer artefacts written into the workspace (findings file, run record, structured output)
 .aiprr/
