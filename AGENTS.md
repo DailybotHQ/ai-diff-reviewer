@@ -480,34 +480,15 @@ For the full collaboration model — when to spawn sub-agents, how to coordinate
 
 ## Reading PR Review Comments
 
-This repository **dogfoods itself**: every PR is reviewed by the action it ships, via `.github/workflows/self-review.yml`. When applying review feedback:
-
-- Skip `isMinimized == true` comments (those are previous reviews collapsed by `collapse-previous`).
-- Anchor on the most recent `<!-- ai-pr-reviewer-marker -->` comment to identify the authoritative review SHA. Since v3 the self-review runs the RFC-04 ensemble topology: the provider legs emit artifacts and post nothing, and **one** aggregate job publishes the review — its body and tracking comment carry `<!-- ai-pr-reviewer-aggregate -->` beside the marker, one `self-reviewed` label replaces the per-provider labels, and each finding says how many legs reported it.
-- The action collapses prior reviews on every push, so reading all comments blindly will mix live and stale feedback.
-- Prefer the structured artifact (`review-output/3.0`, uploaded by the aggregate job) over scraping the body: it carries the findings with evidence, verification and agreement, the refuted list and the legs block.
-
-Full workflow + ready-to-copy GraphQL query: [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md).
+This repo dogfoods itself (`self-review.yml`). When applying review feedback: skip `isMinimized == true` comments, anchor on the newest `<!-- ai-pr-reviewer-marker -->` (since v3 the single aggregate review also carries `<!-- ai-pr-reviewer-aggregate -->`), and prefer the `review-output/3.0` artifact over scraping the body. Full workflow + GraphQL query: [docs/PR_REVIEW_WORKFLOW.md](docs/PR_REVIEW_WORKFLOW.md).
 
 ## Small-Batch Delivery
 
-For larger initiatives (multi-provider rollout, prompt overhaul, output schema redesign):
-
-1. Pick only tasks whose dependencies are complete.
-2. 1–3 tightly related tasks per PR.
-3. Each PR self-reviewable via `self-review.yml`.
-4. Verify each batch before starting the next.
-5. Keep each batch publishable as a `vX.Y.Z` release behind clear changelog entries.
+For larger initiatives (multi-provider rollout, prompt overhaul, output schema redesign): pick only tasks whose dependencies are complete; ship 1–3 tightly related tasks per PR, each self-reviewable via `self-review.yml`; verify each batch before the next; keep each batch publishable as a `vX.Y.Z` release with clear changelog entries.
 
 ## Temporary Files (tmp/)
 
-The `tmp/` folder at project root is **git-ignored** and available for scratch
-work, inter-agent prompts, data exports, and temporary files. Agents can freely
-write to `tmp/` without affecting the repository.
-
-**Nothing inside `tmp/` is ever tracked or committed** — the whole folder is
-ignored by git. Write freely (scratch notes, inter-agent prompts, data exports,
-query results); it will never show up in `git status` or a diff.
+`tmp/` at the project root is **git-ignored** scratch space (notes, inter-agent prompts, data exports): nothing inside it is ever tracked or committed.
 
 ## License
 
