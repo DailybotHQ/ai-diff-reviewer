@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# No pathname expansion: matched values are split into words below and must
+# never glob against the working directory.
+set -f
 
 # Public-hygiene check — DeepWorkPlan ecosystem public repository standard
 # (amendment A3, S3).
