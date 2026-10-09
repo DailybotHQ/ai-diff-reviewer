@@ -310,7 +310,7 @@ Hosts without slash commands invoke the same flows by name (`#deepworkplan-creat
 
 ### Where plans live
 
-Deep Work Plan outputs — `plans/` (`PLAN_<id>_<name>/` directories, numeric ID allocated per plan; older unnumbered `PLAN_{name}/` stay valid) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore)); plans are working artifacts, not tracked source. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
+Deep Work Plan outputs — `plans/` (`PLAN_<id>_<name>/` directories, numeric ID allocated per plan; older unnumbered `PLAN_{name}/` stay valid) and `onboard/` (RECON.md + REPORT.md) — live under **`.dwp/`** at the repo root. That directory is **gitignored** (see [`.gitignore`](.gitignore): `.dwp/*`); plans are working artifacts, not tracked source. The one tracked file is the addon registry `.dwp/config.json` (decisions, never secrets), so teammates and CI read the same one. Full path convention: [.agents/skills/deepworkplan/shared/dwp-paths.md](.agents/skills/deepworkplan/shared/dwp-paths.md).
 
 ### Host and authority records (v6+)
 
