@@ -2,10 +2,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
 *.swp
 .env
+.env.*
+!.env.example
 .venv
 venv/
 .python-version

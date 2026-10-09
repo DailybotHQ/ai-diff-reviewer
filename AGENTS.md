@@ -95,7 +95,8 @@ correctness, clarity, simplicity, and verified completion.
 .
 ├── action.yml                      # Composite-action contract (inputs/outputs/branding)
 ├── scripts/
-│   └── reviewer.py                 # All runtime logic — stdlib only
+│   ├── reviewer.py                 # All runtime logic — stdlib only
+│   └── check-public-hygiene.sh     # CI-only public-hygiene scan (allowlist: .public-hygiene-allow)
 ├── prompts/
 │   └── default.md                  # Bundled default system prompt (technology-agnostic)
 ├── examples/                       # Copy-paste workflow snippets for common setups
@@ -103,8 +104,10 @@ correctness, clarity, simplicity, and verified completion.
 ├── docs/                           # User-facing + contributor-facing documentation
 ├── .github/
 │   ├── workflows/                  # code_check, auto-release, release, self-review
-│   ├── scripts/                    # CI-only helpers (action.yml validator)
+│   ├── scripts/                    # CI-only helpers (action.yml validator, changelog tools)
 │   ├── ISSUE_TEMPLATE/             # Bug + feature issue forms
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── CODEOWNERS                  # Default reviewers (* @xergioalex)
 │   └── dependabot.yml              # Weekly GitHub Actions bumps
 ├── .agents/                        # Canonical AI-agent configuration (symlinked from .claude)
 │   ├── agents/                     # Sub-agent definitions
@@ -119,6 +122,9 @@ correctness, clarity, simplicity, and verified completion.
 ├── CLAUDE.md                       # Symlink → AGENTS.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md              # Contributor Covenant 2.1
+├── SECURITY.md                     # Private vulnerability reporting policy
+├── .public-hygiene-allow           # Allowlisted fake fixtures for the hygiene scan
 └── LICENSE                         # MIT
 ```
 
