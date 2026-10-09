@@ -81,6 +81,7 @@ class LocalReviewBaseTest(unittest.TestCase):
 
     def test_explicit_sha_reviews_exactly_the_plan_range(self) -> None:
         result = self._run(self.plan_start)
+        self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stderr, "")
         self.assertIn("plan_task_1.txt", result.stdout)
         self.assertIn("plan_task_2.txt", result.stdout)
@@ -103,6 +104,7 @@ class LocalReviewBaseTest(unittest.TestCase):
 
     def test_unresolvable_base_stops_without_fallback(self) -> None:
         result = self._run("no-such-rev")
+        self.assertNotEqual(result.returncode, 0)
         self.assertIn("ERROR: --base 'no-such-rev' does not resolve", result.stderr)
         self.assertNotIn("plan_task_1.txt", result.stdout)
 

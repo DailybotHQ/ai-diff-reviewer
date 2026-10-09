@@ -320,7 +320,9 @@ context; do not print it to the user unless they ask.
 **Explicit base (`--base <rev>`).** When the request names a base revision —
 `--base <rev>`, "review against `<rev>`", "review the range since `<rev>`" —
 set `REVIEW_BASE` to that revision before running the block. Any revision git
-resolves to a commit works: a SHA, a tag, a branch, `HEAD~5`. It wins over the
+resolves to a commit works: a SHA, a tag, a branch, `HEAD~5`. A bare branch
+name means the **local** branch; pass `origin/<branch>` for the remote one.
+Requires git ≥ 2.24 (`--end-of-options`). It wins over the
 tracked upstream, so a Deep Work Plan Final Review can review exactly the
 plan's range (its starting commit) instead of whatever the branch tracks.
 Leave `REVIEW_BASE` empty for the default detection.
@@ -356,6 +358,7 @@ if [ -n "$DIFF_BASE" ]; then
   git diff "${DIFF_BASE}...HEAD"           # the actual diff
   git log "${DIFF_BASE}..HEAD" --oneline   # the commit trail
 fi
+[ -n "$DIFF_BASE" ]   # block exit status: non-zero when --base did not resolve
 ```
 
 If `--base` was given and did not resolve, report the error to the

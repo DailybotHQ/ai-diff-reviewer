@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+import zipfile
 from pathlib import Path
 
 REPO_ROOT: Path = Path(__file__).resolve().parent.parent
@@ -91,6 +92,10 @@ class ReleaseAssetStepTest(unittest.TestCase):
             ).stdout
             self.assertIn("ai-diff-reviewer-v9.8.7/action.yml", listing)
             self.assertNotIn("later.txt", listing)
+            with zipfile.ZipFile(out_dir / "ai-diff-reviewer-v9.8.7.zip") as archive:
+                members: list[str] = archive.namelist()
+            self.assertIn("ai-diff-reviewer-v9.8.7/action.yml", members)
+            self.assertFalse(any(m.endswith("later.txt") for m in members))
 
 
 class ReleasePublishStepTest(unittest.TestCase):
