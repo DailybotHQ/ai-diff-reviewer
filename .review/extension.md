@@ -276,7 +276,7 @@ extend the security posture to the whole surface consumers touch.
   secrets and a full write token; combined with `actions/checkout@vN`
   on `github.head_ref` it is the most-exploited RCE pattern on GitHub
   Actions. This repo's [`docs/SECURITY.md` → *Agent-runner providers:
-  residual exfiltration surface*](docs/SECURITY.md#agent-runner-providers-residual-exfiltration-surface-read-before-enabling)
+  residual exfiltration surface*](../docs/SECURITY.md#agent-runner-providers-residual-exfiltration-surface-read-before-enabling)
   codifies the position in that section's mitigation bullets:
   **never use `pull_request_target` with an agent-runner provider**,
   and gate untrusted checkouts with

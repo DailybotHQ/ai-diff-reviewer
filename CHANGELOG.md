@@ -2249,7 +2249,7 @@ Full threat model + per-value semantics: [`docs/SECURITY.md` § "Author-associat
 
 ## [1.1.0] — 2026-07-05
 
-**Headline:** three new agent-runner providers (`claude-code`, `cursor`, `codex`) alongside the incumbent `anthropic` chat-completions provider — zero migration cost for consumers on `@v1`. See [`.dwp/plans/PLAN_multi_cli_provider_expansion/analysis_results/EXECUTIVE_REPORT.md`](.dwp/plans/PLAN_multi_cli_provider_expansion/analysis_results/EXECUTIVE_REPORT.md) for the full breakdown.
+**Headline:** three new agent-runner providers (`claude-code`, `cursor`, `codex`) alongside the incumbent `anthropic` chat-completions provider — zero migration cost for consumers on `@v1`. See the maintainers' plan record `PLAN_multi_cli_provider_expansion/analysis_results/EXECUTIVE_REPORT.md` (local, not published) for the full breakdown.
 
 ### Added
 - **Multi-CLI provider expansion** — three new agent-runner providers that shell out to their vendor's coding-agent CLI in headless mode and receive findings via a file-based contract (`.aiprr/findings.json`):
