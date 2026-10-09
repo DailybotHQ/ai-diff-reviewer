@@ -332,17 +332,45 @@ jobs:
       - name: Step 4 - 📋 Generate release notes
         id: notes
         if: steps.version.outputs.skip == 'false'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          PREV: ${{ steps.version.outputs.previous_tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          PREV="${{ steps.version.outputs.previous_tag }}"
-          NOTES=$(git log "${PREV}..${{ steps.version.outputs.new_version }}" --pretty=format:"- %s (%h)" 2>/dev/null || echo "")
+          # Release notes come from the tag's CHANGELOG section (stamped in
+          # Step 2.5); the commit list is the fallback when it has none.
+          git show "${NEW_VERSION}:CHANGELOG.md" > "$RUNNER_TEMP/CHANGELOG.md"
+          if ! NOTES=$(python3 .github/scripts/changelog_section.py --version "$NEW_VERSION" "$RUNNER_TEMP/CHANGELOG.md"); then
+            NOTES=$(git log "${PREV}..${NEW_VERSION}" --pretty=format:"- %s (%h)" 2>/dev/null || echo "")
+          fi
           {
             echo "notes<<RELEASE_NOTES_EOF"
             echo "$NOTES"
             echo ""
-            echo "**Full changelog:** [\`${PREV}...${{ steps.version.outputs.new_version }}\`](https://github.com/${{ github.repository }}/compare/${PREV}...${{ steps.version.outputs.new_version }})"
+            echo "**Full changelog:** [\`${PREV}...${NEW_VERSION}\`](https://github.com/${REPO}/compare/${PREV}...${NEW_VERSION})"
+            echo ""
+            echo "Verify downloads with \`sha256sum -c SHA256SUMS\`."
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Step 4.5 - 📦 Build release archives and SHA256SUMS
+        id: assets
+        if: steps.version.outputs.skip == 'false'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          # Source archives of the tagged tree plus a checksum manifest, so
+          # consumers can verify what they vendor or audit (public repository
+          # standard, S4). Built from the annotated tag, not the work tree.
+          OUT="$RUNNER_TEMP/release-assets"
+          mkdir -p "$OUT"
+          NAME="ai-diff-reviewer-${NEW_VERSION}"
+          git archive --format=tar.gz --prefix="${NAME}/" -o "$OUT/${NAME}.tar.gz" "$NEW_VERSION"
+          git archive --format=zip --prefix="${NAME}/" -o "$OUT/${NAME}.zip" "$NEW_VERSION"
+          (cd "$OUT" && sha256sum "${NAME}.tar.gz" "${NAME}.zip" > SHA256SUMS && sha256sum -c SHA256SUMS)
+          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
 
       - name: Step 5 - 🚀 Create GitHub Release
         if: steps.version.outputs.skip == 'false'
@@ -351,4 +379,10 @@ jobs:
           tag_name: ${{ steps.version.outputs.new_version }}
           name: ${{ steps.version.outputs.new_version }}
           body: ${{ steps.notes.outputs.notes }}
+          prerelease: ${{ contains(steps.version.outputs.new_version, '-') }}
+          files: |
+            ${{ steps.assets.outputs.dir }}/*.tar.gz
+            ${{ steps.assets.outputs.dir }}/*.zip
+            ${{ steps.assets.outputs.dir }}/SHA256SUMS
+          fail_on_unmatched_files: true
           token: ${{ secrets.AUTOMATION_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}

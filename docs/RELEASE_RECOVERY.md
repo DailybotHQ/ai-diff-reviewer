@@ -445,6 +445,10 @@ commit body unless you mean it — spell it `skip-release marker` in prose.
 
 ---
 
+## Release assets and SHA256SUMS
+
+Since the public repository standard, Step 4 takes the release notes from the tag's CHANGELOG section (`.github/scripts/changelog_section.py`; the commit list is the fallback) and Step 4.5 builds `ai-diff-reviewer-vX.Y.Z.tar.gz` and `.zip` from the tag with `git archive`, writes `SHA256SUMS` and verifies it before Step 5 attaches all three (`fail_on_unmatched_files: true`). Tags containing `-` are published as pre-releases. If a release was created without assets (for example a re-run after a partial failure), rebuild them locally from the tag with the same two `git archive` commands, run `sha256sum ai-diff-reviewer-vX.Y.Z.* > SHA256SUMS`, and upload with `gh release upload vX.Y.Z <files>`. Consumers verify with `sha256sum -c SHA256SUMS`.
+
 ## Contact
 
 For anything not covered here, file a bug at
