@@ -18,6 +18,14 @@ python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
 
 CI does this; locally it's a smoke check after editing the action file.
 
+## Public-hygiene check
+
+```bash
+bash scripts/check-public-hygiene.sh
+```
+
+Scans tracked files (vendored `.agents/skills/` excluded) for personal paths, private org/repo and internal tooling names, non-role `@dailybot.com` addresses and secret-shaped strings. CI runs it as the `Public hygiene` job. Allowlist and fixture rules: [`TESTING_GUIDE.md` § Public-hygiene check](TESTING_GUIDE.md#public-hygiene-check).
+
 ## Run actionlint locally
 
 ```bash

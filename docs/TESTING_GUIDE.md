@@ -19,6 +19,7 @@ The [`.github/workflows/code_check.yml`](../.github/workflows/code_check.yml) wo
 | `eval-gate-offline` | `schema_check.py --all` · `records_validate.py --records tests/eval/records` · `corpus_validate.py` · `determinism.py --selftest` — the offline half of the v3 eval gate (RFC-01), no secrets, no spend. | Catches a broken instrument (schema, stored record, corpus pin, verdict computation) before it can gate a release. |
 | `unit-tests` | `python3 -m unittest discover -s tests` — the full unit-test stdlib suite (49 files, listed below), including the offline corpus-validation suite (`test_eval_corpus*`). | Catches regressions in pure logic without any network dependency. |
 | `cli-install-smoke` (matrix: `claude-code`, `cursor`, `codex`, `grok`) | Runs each agent-runner CLI's install command on a fresh runner (Cursor and Grok through `.github/scripts/verified_install.sh`, plus a dry-run proving the sha256 gate accepts the right hash and refuses a wrong one), verifies `--version`, then imports `scripts/reviewer.py` and asserts `build_provider(PROVIDER_ID)` returns an `AgentRunnerProvider` instance. | Catches upstream CLI-installer breakage before it hits consumers. |
+| `public-hygiene` | `bash scripts/check-public-hygiene.sh` — bash + grep, no network, over tracked files (vendored `.agents/skills/` excluded). Allowlist: `.public-hygiene-allow`. Unit-tested by `tests/test_public_hygiene.py`. | Keeps the public repository free of personal paths, private org/repo and internal tooling names, non-role `@dailybot.com` addresses and real-looking secrets (public repository standard). |
 | `actionlint` | Downloads the official actionlint binary and runs it across `.github/workflows/`. | Catches malformed workflow YAML, unsafe `${{ }}` interpolations in `run:` blocks, and shellcheck issues in inline shell. |
 
 The [`.github/workflows/self-review.yml`](../.github/workflows/self-review.yml) workflow runs on every PR and **invokes the action under review against itself**. The `anthropic` leg runs on every PR/push as the baseline reviewer with a tighter self-review turn cap. The matrix is built from **secret presence only**: `anthropic`, `claude-code`, `cursor`, `codex` (the four original legs, unchanged), plus — when their secrets/variables exist — `grok` (`XAI_API_KEY`), `claude-code` on Z.ai GLM (`ZAI_CODING_API_KEY`, `api-base: https://api.z.ai/api/anthropic`), `codex` on Azure Foundry (`AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` / `AZURE_OPENAI_MODEL_DAILY` variables) and the in-process `openai` leg (default-on whenever `OPENAI_API_KEY` exists; opt out with the repo variable `SELF_REVIEW_OPENAI_CHAT=false`). Smoke legs use the `economy` tier alias so the dated defaults matrix stays the single source of truth. A leg without its secret is absent from the matrix (never a misleading green). Each active leg applies a distinct `self-reviewed:<provider>` label so reviews are identifiable in the PR conversation. The local checkout (`uses: ./`) is what gets executed, so the version of the action proposed by the PR is what reviews the PR.
@@ -154,6 +155,15 @@ For a specific file or class:
 python3 -m unittest tests.test_agent_runner_providers
 python3 -m unittest tests.test_findings_parser.ParseFindingsFileHappyPath
 ```
+
+### Public-hygiene check
+
+```bash
+bash scripts/check-public-hygiene.sh          # exit 0 clean · 1 findings · 2 usage error
+python3 -m unittest tests.test_public_hygiene  # scoped: the script's own tests
+```
+
+A secret-shaped test fixture must be obviously fake (contain `fake`, `test`, `planted` or `example`) **and** its file must be listed in `.public-hygiene-allow` with a reason. Secret values are never printed.
 
 ### Validate `action.yml`
 

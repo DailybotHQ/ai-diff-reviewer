@@ -404,10 +404,11 @@ class AutoRetiredIsVisibleInTheFooter(unittest.TestCase):
         self.assertEqual([p.fingerprint for p in rec.auto_retired], [fp])
 
 
-class RealWorldRegression_ApiServices7987(unittest.TestCase):
-    """The exact production scenario, replayed from the real PR.
+class RealWorldRegression_DownstreamAdvisoryRun(unittest.TestCase):
+    """The exact production scenario, replayed from a real PR.
 
-    DailyBot-Inc/api-services#7987, grok, block-on-critical, advisory,
+    A pull request in a downstream consumer repository (not public), reviewed
+    with grok, block-on-critical, advisory,
     collapse-previous: round 1 at `30f1675` posted 5 findings (1 critical);
     round 2 at `66003ff` reported all 5 resolved with 0 new inline comments.
 
@@ -488,7 +489,7 @@ class RealWorldRegression_ApiServices7987(unittest.TestCase):
         self.assertFalse(blocked, "v2.3.0 kept this check red with no way to unblock")
 
     def test_next_run_after_upgrade_passes_clean(self) -> None:
-        """What happens on #7987 the first time 2.3.1 runs: the fix already
+        """What happens on that PR the first time 2.3.1 runs: the fix already
         landed in `66003ff`, so whether the trigger is a same-head re-run
         (empty delta) or an unrelated push, the last-round delta no longer
         touches the four files. `changed_since_raised` (review SHA

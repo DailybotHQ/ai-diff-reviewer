@@ -130,6 +130,7 @@ The real, runnable commands for local work on this repo. No install phase — Py
 
 | Purpose | Command |
 |---|---|
+| Public-hygiene scan (CI job `Public hygiene`; allowlist `.public-hygiene-allow`) | `bash scripts/check-public-hygiene.sh` |
 | Compile-check the runtime (MANDATORY before commit — [Rule #5](#5-compile-check-before-commit)) | `python3 -m py_compile scripts/reviewer.py` |
 | Run the full unit-test suite (stdlib `unittest`, no third-party runner) | `python3 -m unittest discover -s tests -v` |
 | Validate the `action.yml` public contract (CI parity — needs `pip install pyyaml`) | `python3 .github/scripts/validate_action.py` |
