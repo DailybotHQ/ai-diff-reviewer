@@ -633,6 +633,8 @@ The skill uses your local agent's own tools (Read / Grep / Glob) to gather conte
 **Recommendation:** approve / request-changes / comment-only
 ```
 
+**Choosing the base.** By default the review covers `origin/<tracked upstream>...HEAD`. Pass an explicit base — `--base <rev>` or *"review against `<rev>`"* — to review a precise range instead (any SHA, tag, branch or `HEAD~N`); an unresolvable base stops the review rather than falling back. Deep Work Plan Final Reviews use it to review exactly the plan's commits.
+
 Reproducing this exact shape (verdict → findings table → per-finding body → notes → recommendation) is what lets you trust the same methodology and severity model on both surfaces. On CI round 2+ of a generation, Iteration-Aware Review may additionally dedupe findings a local full pass would still list — expected, not a parity bug. Full flow: [`skills/ai-diff-reviewer/SKILL.md`](skills/ai-diff-reviewer/SKILL.md).
 
 ## Sub-skill: `setup` — install the Action via wizard

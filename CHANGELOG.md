@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Public repository standard: `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `.github/CODEOWNERS`, and a `Public hygiene` CI job (`scripts/check-public-hygiene.sh` + `.public-hygiene-allow`) that fails on personal paths, private names and real-looking secrets in tracked files.
 - Releases attach source archives and a `SHA256SUMS` file; release notes come from this changelog.
+- Local review: an explicit `--base <rev>` (or "review against `<rev>`") sets the diff base to any commit-ish, so a Deep Work Plan Final Review can review exactly the plan range instead of the tracked upstream. An unresolvable base stops the review instead of falling back. Covered by `tests/test_skill_local_review_base.py`, which executes the documented Step 1 block.
+- `tests/test_release_assets_step.py` executes the release workflow's asset step (archives + `SHA256SUMS`) against a throwaway tagged repository, guarding the checksum promise. `v3.2.3` predates the step; its archives and `SHA256SUMS` were attached retroactively from the tag.
 
 ### Changed
 
