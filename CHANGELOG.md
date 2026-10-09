@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.3.0] — 2026-10-09
+
 ### Added
 
 - Public repository standard: `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `.github/CODEOWNERS`, and a `Public hygiene` CI job (`scripts/check-public-hygiene.sh` + `.public-hygiene-allow`) that fails on personal paths, private names and real-looking secrets in tracked files.
