@@ -374,7 +374,9 @@ jobs:
 
       - name: Step 5 - 🚀 Create GitHub Release
         if: steps.version.outputs.skip == 'false'
-        uses: softprops/action-gh-release@v3
+        # Third-party action pinned to a commit SHA (it publishes the
+        # consumer-verifiable assets); Dependabot bumps the SHA + comment.
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.version.outputs.new_version }}
           name: ${{ steps.version.outputs.new_version }}

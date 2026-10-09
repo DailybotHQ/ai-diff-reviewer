@@ -23,6 +23,7 @@ PRIVATE_EMAIL: str = "jane" + "@dailybot.com"
 ROLE_EMAIL: str = "security" + "@dailybot.com"
 REAL_LOOKING_KEY: str = "sk-" + "ant-" + "api03-" + "Q7rX2mVb9LpZk4TnW8yHc3"
 FAKE_KEY: str = "sk-" + "ant-" + "api03-" + "fake-key-for-tests-only"
+LATEST_KEY: str = "sk-" + "ant-" + "api03-" + "latestQ7rX2mVb9LpZk4TnW8"
 ENV_NAME_VALUE: str = "OPENAI" + "_API_KEY_FOR_EVAL"
 
 
@@ -82,6 +83,22 @@ class PublicHygieneScriptTest(unittest.TestCase):
         self._write(".public-hygiene-allow", "tests/t.py  fake key fixture\n")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_marker_must_be_its_own_token_in_the_value(self) -> None:
+        # `latest` contains "test" but is not a fake marker; a "test" word
+        # elsewhere on the line does not vouch for the value either.
+        self._write("tests/t.py", "api_key_test = " + '"' + LATEST_KEY + '"  # test\n')
+        self._write(".public-hygiene-allow", "tests/t.py  fixture\n")
+        result = self._run()
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn(LATEST_KEY, result.stdout + result.stderr)
+
+    def test_name_findings_print_the_name_not_the_line(self) -> None:
+        self._write("a.md", f"{PRIVATE_ORG} api_key = " + '"' + REAL_LOOKING_KEY + '"\n')
+        result = self._run()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[private-org] a.md:1: " + PRIVATE_ORG, result.stdout)
+        self.assertNotIn(REAL_LOOKING_KEY, result.stdout + result.stderr)
 
     def test_vendored_skills_are_excluded(self) -> None:
         self._write(".agents/skills/vendor/SKILL.md", f"{PRIVATE_ORG}\n")

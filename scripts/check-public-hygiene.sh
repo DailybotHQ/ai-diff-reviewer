@@ -14,16 +14,18 @@ set -f
 # network, bash 3.2 compatible (macOS default shell).
 #
 # Scope: `git ls-files` of the repository (or of $1), excluding the vendored
-# skill copies under .agents/skills/ (pinned, owned upstream), this script
-# and the allowlist itself. Binary files are skipped.
+# skill copies under .agents/skills/ (pinned, owned upstream) and this
+# script. Binary files are skipped.
 #
 # Allowlist: .public-hygiene-allow — one entry per line,
 #   <tracked path><whitespace><reason>
 # An allowlisted file may carry name-rule hits (the reason says why). A
-# secret-shaped hit is accepted only when the file is allowlisted AND the
-# matching line looks obviously fake (contains fake, test, planted or
-# example) — a real-looking secret never passes, allowlisted or not, and its
-# value is never printed.
+# secret-shaped hit is accepted only when the file is allowlisted AND every
+# matched value carries an obviously-fake marker as its own token (fake,
+# test, planted or example, not preceded by a letter — so `latest` or
+# `attestation` do not count) — a real-looking secret never passes,
+# allowlisted or not. Findings print the matched name only, never the line,
+# and secret values are never printed.
 #
 # `/home/runner/` is the GitHub-hosted runner's workspace, not a person's
 # home directory, so it is not a personal-path hit. A quoted-assignment whose
@@ -63,7 +65,7 @@ private-key	-----BEGIN [A-Z ]*PRIVATE [K]EY-----
 quoted-assignment	(api[_-]?key|secret|token|passw(or)?d)[A-Za-z_]*["']?[[:space:]]*[:=][[:space:]]*["'][^"'[:space:]]{16,}["']
 EOF
 PUBLIC_ALIASES='^(security|support|ops|conduct)@dailybot\.com$'
-FAKE_MARKERS='fake|test|planted|example'
+FAKE_MARKERS='(^|[^A-Za-z])(fake|test|planted|example)'
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/public-hygiene.XXXXXX")"
 trap 'rm -rf -- "$WORK"' EXIT
@@ -80,8 +82,7 @@ allowlisted() {  # $1 = repo-relative path
 
 git -C "$ROOT" ls-files \
     | grep -vE '^\.agents/skills/' \
-    | grep -vxF 'scripts/check-public-hygiene.sh' \
-    | grep -vxF '.public-hygiene-allow' > "$WORK/files" || true
+    | grep -vxF 'scripts/check-public-hygiene.sh' > "$WORK/files" || true
 scanned="$(wc -l < "$WORK/files" | tr -d ' ')"
 
 # grep_all <pattern> — prints path:line:content for every hit (text files only).
@@ -117,6 +118,17 @@ secret_counts() {
     return 1
 }
 
+# all_fake <pattern> <content> — 0 when every matched value carries a
+# fake marker token.
+all_fake() {
+    printf '%s\n' "$2" | grep -oE -- "$1" | while IFS= read -r m; do
+        # For an assignment, only the quoted value can vouch for itself.
+        v="$(printf '%s' "$m" | sed -E "s/^.*[:=][[:space:]]*[\"']//")"
+        printf '%s' "$v" | grep -qiE "$FAKE_MARKERS" || { echo real; break; }
+    done | grep -q real && return 1
+    return 0
+}
+
 : > "$WORK/out"
 while IFS="$(printf '\t')" read -r label pattern; do
     [ -n "$label" ] || continue
@@ -124,7 +136,8 @@ while IFS="$(printf '\t')" read -r label pattern; do
         rel="${hit%%:*}"; rest="${hit#*:}"; lineno="${rest%%:*}"; content="${rest#*:}"
         keep_line "$label" "$content" || continue
         allowlisted "$rel" && continue
-        printf 'FAIL [%s] %s:%s: %s\n' "$label" "$rel" "$lineno" "$(printf '%s' "$content" | cut -c1-160)"
+        names="$(printf '%s' "$content" | grep -oE -- "$pattern" | sort -u | tr '\n' ' ')"
+        printf 'FAIL [%s] %s:%s: %s\n' "$label" "$rel" "$lineno" "${names% }"
     done >> "$WORK/out"
 done <<EOF_RULES
 $RULES
@@ -135,7 +148,7 @@ while IFS="$(printf '\t')" read -r label pattern; do
     grep_all "$pattern" | while IFS= read -r hit; do
         rel="${hit%%:*}"; rest="${hit#*:}"; lineno="${rest%%:*}"; content="${rest#*:}"
         secret_counts "$label" "$pattern" "$content" || continue
-        if allowlisted "$rel" && printf '%s' "$content" | grep -qiE "$FAKE_MARKERS"; then
+        if allowlisted "$rel" && all_fake "$pattern" "$content"; then
             continue
         fi
         printf 'FAIL [%s] %s:%s: (value not printed)\n' "$label" "$rel" "$lineno"
