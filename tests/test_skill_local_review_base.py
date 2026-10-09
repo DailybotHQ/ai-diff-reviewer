@@ -106,6 +106,12 @@ class LocalReviewBaseTest(unittest.TestCase):
         self.assertIn("ERROR: --base 'no-such-rev' does not resolve", result.stderr)
         self.assertNotIn("plan_task_1.txt", result.stdout)
 
+    def test_option_shaped_base_is_not_an_option(self) -> None:
+        result = self._run("--output=pwned")
+        self.assertIn("does not resolve", result.stderr)
+        self.assertFalse((self.work / "pwned").exists())
+        self.assertNotIn("plan_task_1.txt", result.stdout)
+
     def test_default_uses_the_tracked_upstream(self) -> None:
         # Upstream origin/feature already has before_plan.txt, so only the
         # two unpushed plan commits are in range.

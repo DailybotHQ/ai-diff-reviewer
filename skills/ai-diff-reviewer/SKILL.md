@@ -330,7 +330,9 @@ REVIEW_BASE="${REVIEW_BASE:-}"   # from --base <rev>; empty = detect from the up
 
 if [ -n "$REVIEW_BASE" ]; then
   # Explicit base: must resolve to a commit — never fall back silently.
-  if DIFF_BASE=$(git rev-parse --verify --quiet "${REVIEW_BASE}^{commit}"); then
+  # `--end-of-options` keeps a value starting with `-` from becoming an option;
+  # DIFF_BASE is the resolved SHA, so the commands below never see raw input.
+  if DIFF_BASE=$(git rev-parse --verify --quiet --end-of-options "${REVIEW_BASE}^{commit}"); then
     BASE_LABEL="$REVIEW_BASE"
   else
     echo "ERROR: --base '${REVIEW_BASE}' does not resolve to a commit in this repository" >&2
