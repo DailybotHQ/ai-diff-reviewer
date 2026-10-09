@@ -165,10 +165,10 @@ class ClaudeCodeCustomBackendTests(unittest.TestCase):
 
     def test_default_profile_env_snapshot_oauth(self) -> None:
         captured = _capture_provider_call(
-            reviewer.ClaudeCodeProvider(api_key="sk-ant-oat01-tok", model="auto")
+            reviewer.ClaudeCodeProvider(api_key="sk-ant-oat01-fake-tok", model="auto")
         )
         env = captured["kwargs"]["env"]
-        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-tok")
+        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-fake-tok")
         self.assertNotIn("ANTHROPIC_API_KEY", env)
         self.assertNotIn("--model", captured["argv"])
 
@@ -200,9 +200,9 @@ class ClaudeCodeCustomBackendTests(unittest.TestCase):
 
     def test_subscription_token_on_custom_backend_fails_fast(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            self._zai_provider(api_key="sk-ant-oat01-tok").auth_env_vars()
+            self._zai_provider(api_key="sk-ant-oat01-fake-tok").auth_env_vars()
         self.assertIn("api.z.ai", str(ctx.exception))
-        self.assertNotIn("sk-ant-oat01-tok", str(ctx.exception))
+        self.assertNotIn("sk-ant-oat01-fake-tok", str(ctx.exception))
 
     def test_xai_anthropic_compatible_profile(self) -> None:
         prof = reviewer.resolve_endpoint_profile("https://api.x.ai", "claude-code")

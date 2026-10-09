@@ -6,6 +6,8 @@
 
 | Script | Purpose |
 |---|---|
+| [`stamp_changelog.py`](stamp_changelog.py) | Release Step 2.5: stamps `## [Unreleased]` as `## [X.Y.Z] — date`. |
+| [`changelog_section.py`](changelog_section.py) | Release Step 4: prints a version's CHANGELOG section as the release notes (git log fallback). Tested by `tests/test_changelog_section.py`. |
 | [`validate_action.py`](validate_action.py) | Validates the `action.yml` public contract: YAML parses, required top-level keys exist, `runs.using == 'composite'`, required inputs are declared, every declared input is wired into the composite step's `env:` block, every output has a `value:` expression. |
 
 ## Runtime vs CI tooling — the split

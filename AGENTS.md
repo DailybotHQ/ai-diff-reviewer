@@ -95,7 +95,8 @@ correctness, clarity, simplicity, and verified completion.
 .
 ├── action.yml                      # Composite-action contract (inputs/outputs/branding)
 ├── scripts/
-│   └── reviewer.py                 # All runtime logic — stdlib only
+│   ├── reviewer.py                 # All runtime logic — stdlib only
+│   └── check-public-hygiene.sh     # CI-only public-hygiene scan (allowlist: .public-hygiene-allow)
 ├── prompts/
 │   └── default.md                  # Bundled default system prompt (technology-agnostic)
 ├── examples/                       # Copy-paste workflow snippets for common setups
@@ -103,8 +104,10 @@ correctness, clarity, simplicity, and verified completion.
 ├── docs/                           # User-facing + contributor-facing documentation
 ├── .github/
 │   ├── workflows/                  # code_check, auto-release, release, self-review
-│   ├── scripts/                    # CI-only helpers (action.yml validator)
+│   ├── scripts/                    # CI-only helpers (action.yml validator, changelog tools)
 │   ├── ISSUE_TEMPLATE/             # Bug + feature issue forms
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   ├── CODEOWNERS                  # Default reviewers (* @xergioalex)
 │   └── dependabot.yml              # Weekly GitHub Actions bumps
 ├── .agents/                        # Canonical AI-agent configuration (symlinked from .claude)
 │   ├── agents/                     # Sub-agent definitions
@@ -119,6 +122,9 @@ correctness, clarity, simplicity, and verified completion.
 ├── CLAUDE.md                       # Symlink → AGENTS.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
+├── CODE_OF_CONDUCT.md              # Contributor Covenant 2.1
+├── SECURITY.md                     # Private vulnerability reporting policy
+├── .public-hygiene-allow           # Allowlisted fake fixtures for the hygiene scan
 └── LICENSE                         # MIT
 ```
 
@@ -130,6 +136,7 @@ The real, runnable commands for local work on this repo. No install phase — Py
 
 | Purpose | Command |
 |---|---|
+| Public-hygiene scan (CI job `Public hygiene`; allowlist `.public-hygiene-allow`) | `bash scripts/check-public-hygiene.sh` |
 | Compile-check the runtime (MANDATORY before commit — [Rule #5](#5-compile-check-before-commit)) | `python3 -m py_compile scripts/reviewer.py` |
 | Run the full unit-test suite (stdlib `unittest`, no third-party runner) | `python3 -m unittest discover -s tests -v` |
 | Validate the `action.yml` public contract (CI parity — needs `pip install pyyaml`) | `python3 .github/scripts/validate_action.py` |

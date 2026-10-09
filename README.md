@@ -10,9 +10,13 @@
 
 > One review methodology, two surfaces — an **LLM-driven code reviewer** that ships as a **GitHub Action** for CI **and** a **coding-agent skill** for your local machine.
 
+[![Code Check](https://github.com/DailybotHQ/ai-diff-reviewer/actions/workflows/code_check.yml/badge.svg?branch=main)](https://github.com/DailybotHQ/ai-diff-reviewer/actions/workflows/code_check.yml)
+[![Release](https://img.shields.io/github/v/release/DailybotHQ/ai-diff-reviewer?sort=semver)](https://github.com/DailybotHQ/ai-diff-reviewer/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub Marketplace](https://img.shields.io/github/v/release/DailybotHQ/ai-diff-reviewer?label=Marketplace&logo=github&color=success)](https://github.com/marketplace/actions/ai-diff-reviewer)
 [![Powered by Dailybot](https://img.shields.io/badge/Powered%20by-Dailybot-6C5CE7.svg)](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer)
+
+## What it is
 
 Reviews `git diff origin/<base>...HEAD` on every pull request (or on your feature branch, before you push), posts findings with severity tags (`critical` / `warning` / `info`), gates the check based on configurable strictness, collapses prior reviews, and auto-labels the PR when it passes. Stdlib-only Python — no Docker image, no Node modules, no infrastructure beyond your provider's API key.
 
@@ -20,7 +24,9 @@ The same [`prompts/default.md`](prompts/default.md) drives both surfaces. Pinnin
 
 ---
 
-## Two ways to run the same review
+## Install
+
+Two ways to run the same review. Pin a release tag (for example `@v3.2.3`, or the moving `@v3` major alias) so CI and the local skill run the same prompt.
 
 | Surface | Where it runs | Install |
 |---|---|---|
@@ -846,16 +852,24 @@ They're intended to be identical. `uses: DailybotHQ/ai-diff-reviewer@v3.0.0` in 
 
 ---
 
+## Security
+
+Please report vulnerabilities privately — never in a public issue. See [SECURITY.md](SECURITY.md) for supported versions, the private reporting channels and response targets, and [docs/SECURITY.md](docs/SECURITY.md) for the full trust model.
+
 ## Contributing
 
 Bug reports, feature requests, provider implementations, sub-skills, and prompt improvements are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) (the single source of truth for repo standards, canonical file paths, and the mandatory-rules checklist).
 
 ## License
 
-[MIT](LICENSE) © 2026 AI Diff Reviewer contributors.
+[MIT](LICENSE) © 2026 DailybotHQ contributors.
 
 ---
 
 ## :electric_plug: Powered by [Dailybot](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer)
 
 [Dailybot](https://www.dailybot.com/product/ai) is an AI-powered async communication platform that keeps **people and agents** visible — without adding more meetings or tools. It lives where your team already works (Slack, Teams, Google Chat, Discord, VS Code, and the CLI) and turns scattered signals into clear progress: async check-ins and standups, AI summaries that detect blockers and read team sentiment, workflow automation and approvals, team analytics, and recognition. As AI agents join the workflow, Dailybot surfaces their status and activity right alongside your team's — so long-running agents never go dark. [Learn more](https://www.dailybot.com?utm_source=dailybotopensource&utm_medium=ai-pr-reviewer).
+
+---
+
+Part of the [DeepWorkPlan](https://deepworkplan.com) ecosystem — works on its own.

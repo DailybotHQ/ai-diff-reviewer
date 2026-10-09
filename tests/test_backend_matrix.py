@@ -128,7 +128,7 @@ class RunnerBackendMatrixTests(unittest.TestCase):
 
     def test_claude_code_oauth_token_with_custom_backend_fails_fast(self) -> None:
         with mock.patch.object(reviewer, "log"):
-            provider = reviewer.build_provider("claude-code", api_key="sk-ant-oat01-abc", model="", api_base="https://api.z.ai/api/anthropic")
+            provider = reviewer.build_provider("claude-code", api_key="sk-ant-oat01-fake-abc", model="", api_base="https://api.z.ai/api/anthropic")
         with self.assertRaises(ValueError):
             self._run(provider)
 

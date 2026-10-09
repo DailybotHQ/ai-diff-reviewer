@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- Public repository standard: `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `.github/CODEOWNERS`, and a `Public hygiene` CI job (`scripts/check-public-hygiene.sh` + `.public-hygiene-allow`) that fails on personal paths, private names and real-looking secrets in tracked files.
+- Releases attach source archives and a `SHA256SUMS` file; release notes come from this changelog.
+
+### Changed
+
+- `SECURITY.md`: v3 is the supported line; `security@dailybot.com` added as a private reporting channel; response targets documented.
+- `CONTRIBUTING.md`, the PR template and the issue-template contact links describe the gate, the PR flow and the no-secrets rule; `LICENSE` holder is "DailybotHQ contributors".
+
+### Security
+
+- Test fixtures shaped like credentials are now obviously fake, and a test no longer cites a private repository.
 
 ## [3.2.3] — 2026-10-01
 

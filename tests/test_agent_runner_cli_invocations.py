@@ -407,19 +407,19 @@ class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
 
     def test_api_key_maps_to_anthropic_api_key(self) -> None:
         p = reviewer.ClaudeCodeProvider(
-            api_key="sk-ant-api03-abc123", model=""
+            api_key="sk-ant-api03-fake-abc123", model=""
         )
         self.assertEqual(
-            p.auth_env_vars(), {"ANTHROPIC_API_KEY": "sk-ant-api03-abc123"}
+            p.auth_env_vars(), {"ANTHROPIC_API_KEY": "sk-ant-api03-fake-abc123"}
         )
 
     def test_oauth_token_maps_to_oauth_env(self) -> None:
         p = reviewer.ClaudeCodeProvider(
-            api_key="sk-ant-oat01-subtoken", model=""
+            api_key="sk-ant-oat01-fake-subtoken", model=""
         )
         self.assertEqual(
             p.auth_env_vars(),
-            {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-subtoken"},
+            {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-fake-subtoken"},
         )
 
     def test_oauth_token_never_sets_api_key_var(self) -> None:
@@ -427,18 +427,18 @@ class ClaudeCodeSubscriptionAuthTests(unittest.TestCase):
         ANTHROPIC_API_KEY, or Claude Code would try metered API auth with a
         subscription token and fail."""
         p = reviewer.ClaudeCodeProvider(
-            api_key="sk-ant-oat01-subtoken", model=""
+            api_key="sk-ant-oat01-fake-subtoken", model=""
         )
         self.assertNotIn("ANTHROPIC_API_KEY", p.auth_env_vars())
 
     def test_oauth_env_forwarded_into_subprocess_env(self) -> None:
         captured = _capture_provider_call(
             reviewer.ClaudeCodeProvider(
-                api_key="sk-ant-oat01-subtoken", model=""
+                api_key="sk-ant-oat01-fake-subtoken", model=""
             )
         )
         env = captured["kwargs"]["env"]
-        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-subtoken")
+        self.assertEqual(env.get("CLAUDE_CODE_OAUTH_TOKEN"), "sk-ant-oat01-fake-subtoken")
         self.assertNotIn("ANTHROPIC_API_KEY", env)
 
 if __name__ == "__main__":

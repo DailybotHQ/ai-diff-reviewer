@@ -2,31 +2,39 @@
 
 ## Reporting a vulnerability
 
-**Please do not open a public GitHub issue.** Report vulnerabilities
-privately through GitHub's Security Advisory flow:
+**Please do not open a public GitHub issue, discussion or pull request for a
+vulnerability.** Report it privately through either channel:
 
-**→ [Open a private advisory](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new)**
-(`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`)
+- **GitHub private vulnerability reporting (preferred)** —
+  **→ [Open a private advisory](https://github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new)**
+  (`github.com/DailybotHQ/ai-diff-reviewer/security/advisories/new`). Any
+  GitHub account can submit; the advisory is visible only to the maintainers
+  and lets us collaborate on the fix before a coordinated disclosure.
+- **Email** — `security@dailybot.com`. Include the affected version, a
+  description of the issue and reproduction steps. Never include live
+  credentials; a redacted value is enough.
 
-The advisory is scoped to a small circle of maintainers and lets us
-collaborate on the fix privately before a coordinated disclosure. You do
-not need special permissions to open one — any GitHub account can submit.
+## Response targets
 
-We aim to acknowledge within **48 hours** and ship a fix or workaround
-within **14 days** for high-severity issues. Lower-severity issues are
-triaged on the same schedule but may take longer to resolve.
+| Stage | Target |
+|---|---|
+| Acknowledge the report | within **48 hours** |
+| Initial assessment and severity | within **5 business days** |
+| Fix or workaround for high/critical severity | within **14 days** |
+| Lower severity | triaged on the same schedule; may take longer to resolve |
+
+We credit reporters in the release notes unless you ask us not to.
 
 ## Supported versions
 
-We publish releases as SemVer git tags (`vX.Y.Z`) and maintain a moving
-major-version alias for the current line (`v2`). Security fixes ship as
-`patch` releases against the current major only; older majors are
-unsupported.
+We publish releases as SemVer git tags (`vX.Y.Z`) with a moving major alias
+for each maintained line. Security fixes ship as `patch` releases.
 
 | Version | Supported |
 |---------|-----------|
-| `v2.x` (`@v2`) | ✅ current major — receives security patches |
-| < `v2.0` | ❌ unsupported — upgrade to `@v2` |
+| `v3.x` (`@v3`) | ✅ current major — receives security patches |
+| `v2.x` (`@v2`) | ⚠️ frozen line maintained from `release/v2` for six months after v3.0.0 (see [docs/MIGRATION_v3.md](docs/MIGRATION_v3.md)) — security and catalog fixes |
+| < `v2.0` | ❌ unsupported — upgrade to `@v3` |
 
 ## Full security model
 

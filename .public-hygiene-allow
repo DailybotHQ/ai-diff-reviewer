@@ -1,0 +1,7 @@
+# Public-hygiene allowlist — see scripts/check-public-hygiene.sh.
+# <tracked path> <reason>. Secret-shaped hits in a listed file pass only when
+# the matching line is obviously fake (fake / test / planted / example).
+tests/test_agent_runner_backends.py          Fake Claude Code OAuth token fixture (sk-ant-oat01-fake-…) for credential-routing tests.
+tests/test_agent_runner_cli_invocations.py   Fake Anthropic API / OAuth token fixtures (…-fake-…) for CLI auth-env tests.
+tests/test_backend_matrix.py                 Fake OAuth token fixture (sk-ant-oat01-fake-…) for the backend matrix.
+tests/test_bedrock_sigv4.py                  AWS documentation example session token (EXAMPLE-TOKEN-123) for SigV4 vectors.

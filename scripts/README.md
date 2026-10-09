@@ -6,6 +6,7 @@
 
 | File | Purpose |
 |---|---|
+| [`check-public-hygiene.sh`](check-public-hygiene.sh) | CI-only public-hygiene scan (bash + grep, no network) — the `Public hygiene` job in `code_check.yml`. Not part of the runtime. |
 | [`reviewer.py`](reviewer.py) | ~1600 lines of stdlib-only Python 3.10+. All runtime logic — provider abstraction, agentic loop, tool implementations, GitHub API, review submission, strictness gate. |
 
 ## The load-bearing constraint

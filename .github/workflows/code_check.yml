@@ -65,6 +65,19 @@ jobs:
       - name: Step 1 - 🧪 Run the unit-test suite (stdlib unittest)
         run: python3 -m unittest discover -s tests -v
 
+  public-hygiene:
+    # Public repository standard (S3): no personal paths, private org/repo or
+    # internal tooling names, non-role @dailybot.com addresses, or real-looking
+    # secrets in tracked files. Bash + grep, no network; vendored skills under
+    # .agents/skills/ are excluded. Allowlist: .public-hygiene-allow.
+    name: 'Public hygiene'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Step 1 - 🧼 Scan tracked files for private context and secrets
+        run: bash scripts/check-public-hygiene.sh
+
   eval-gate-offline:
     name: 'Eval gate — offline (schemas, records, corpus, determinism)'
     needs: validate
