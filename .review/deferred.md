@@ -8,3 +8,5 @@
 ## Vendored DWP skill upgrade (v7.0.0)
 
 - `.agents/skills/deepworkplan/verify/plan_contract.py` — the unresolved-critical heuristic matches the phrase `open critical finding` anywhere, so a clean review line such as "Open critical findings: **none**" is reported as an unresolved critical. Vendored upstream script; reword to "no unresolved critical finding" in the meantime and contribute the fix upstream.
+- `.agents/skills/deepworkplan/shared/resources.py:407` — an addon's `detect` command output is read without a byte cap (CI self-review on PR #74). The command comes from an in-pack `addon.json`, not from untrusted input, so the exposure is a misbehaving local binary; vendored upstream script (byte-identical to the v7.0.0 release) — contribute a bounded read upstream.
+- The same review re-flagged the `plan_contract.py` heuristic above for the v6/v7 path; same disposition (upstream fix).
