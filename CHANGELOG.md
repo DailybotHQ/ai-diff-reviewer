@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.3.9] — 2026-10-11
+
 ### Added
 
 - A shipped independent-reviewer lane guide: select a different vendor/account, freeze the review base/head, collect findings through herdr-peers, and gate integration on verified findings and repository checks.
