@@ -555,6 +555,11 @@ The second surface: the **exact same review methodology** the CI Action runs, ex
 
 The skill's [`prompt.md`](skills/ai-diff-reviewer/prompt.md) is a byte-identical copy of the Action's shipped [`prompts/default.md`](prompts/default.md), kept in sync by [`auto-release.yml`](.github/workflows/auto-release.yml) on every release cut. Pin the same version on both surfaces → **same methodology and severity model locally and in CI** (CI may additionally dedupe on round 2+ via Iteration-Aware Review; local reviews stay a full pass).
 
+**Reviewing an orchestra:** assign the local review to a dedicated lane on a
+different vendor/account, selected with `ak pick`. The lead collects its
+findings through herdr-peers and gates the merge on a completed review of the
+current candidate. See the [orchestra review guide](skills/ai-diff-reviewer/orchestra.md).
+
 ## Quick start (skill)
 
 ```bash

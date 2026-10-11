@@ -43,6 +43,7 @@ The action also ships a **local companion skill** that runs the same review meth
 
 | Skill file | Purpose |
 |---|---|
+| [`skills/ai-diff-reviewer/orchestra.md`](../skills/ai-diff-reviewer/orchestra.md) | Dedicated independent reviewer lane: AgentKit account selection, frozen candidate, herdr-peers findings handoff, and lead merge gate. |
 | [`skills/ai-diff-reviewer/SKILL.md`](../skills/ai-diff-reviewer/SKILL.md) | Parent skill — routes to the five sub-skills, defines the trust boundary, and runs the default "review the current branch's diff" flow when no sub-skill is invoked. |
 | [`skills/ai-diff-reviewer/generate-extension/SKILL.md`](../skills/ai-diff-reviewer/generate-extension/SKILL.md) | Sub-skill that inspects THIS repo (stack, architecture, security surface, existing conventions, historical pain) and writes a tailored `.review/extension.md` — no copy-paste, no manual authoring. |
 | [`skills/ai-diff-reviewer/setup/SKILL.md`](../skills/ai-diff-reviewer/setup/SKILL.md) | Interactive installer for the GitHub Action itself — six-question wizard that writes `.github/workflows/pr-review.yml` tailored to the repo's stack and visibility. |
