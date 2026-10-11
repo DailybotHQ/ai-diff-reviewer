@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- A shipped independent-reviewer lane guide: select a different vendor/account, freeze the review base/head, collect findings through herdr-peers, and gate integration on verified findings and repository checks.
+
+### Changed
+
+- Rebuilt the README around pinned local/CI quickstarts, release archive verification, core review requests, orchestra usage, and the shared DeepWorkPlan ecosystem index.
 
 ## [3.3.1] — 2026-10-11
 

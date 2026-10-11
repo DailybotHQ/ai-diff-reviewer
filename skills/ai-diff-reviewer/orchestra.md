@@ -9,7 +9,12 @@ local review still works without AgentKit or Herdr.
 
 ## Assign the reviewer
 
-Use a coding-agents-kit release that supports `ak pick` (v0.5.0 or newer).
+[coding-agents-kit](https://github.com/DailybotHQ/coding-agents-kit) provides
+`ak`, an account selector and coding-agent launcher.
+[Herdr](https://github.com/herdrdev/herdr) manages terminal panes, and
+[herdr-peers](https://github.com/DailybotHQ/herdr-peers) v0.2.0 adds ask/reply
+and lane status. These companion tools are optional; they are not installed
+by this skill. Use coding-agents-kit v0.5.0, which supports `ak pick`.
 Check `ak --version` and the installed `ak --skill` before selecting an
 account. For a Claude author, select a Codex reviewer; reverse the vendors
 for a Codex author:
@@ -37,6 +42,14 @@ candidate first, fetch the intended base through the authorized author/lead
 flow, and give the reviewer the repository path, branch, full base SHA, full
 head SHA, acceptance criteria, gate policy, and reply address.
 
+For a reviewer on another machine or in a separate container checkout, the
+lead prepares that checkout at the exact candidate commit through its
+authorized transport. The reviewer verifies the full base/head SHAs, a
+clean tree, and the prompt/extension version there; a paused writer on the
+author host alone does not establish a remote snapshot. Each repository
+keeps its one feature branch and base checkout. Stop for missing commits or
+mismatched review context rather than reviewing a nearby revision.
+
 The reviewer checks the assigned branch, `git rev-parse HEAD`, and
 `git status --porcelain` before starting. A dirty checkout, wrong branch, or
 head mismatch blocks the pass. Use an explicit base in the local skill:
@@ -56,7 +69,11 @@ review. If the extension is absent, the lead should explicitly choose a
 base-prompt-only pass before delegating; the reviewer does not bootstrap
 configuration under a read-only assignment.
 
-Execute Steps 1–4 of [the parent skill](SKILL.md#step-1--detect-context),
+Execute Steps 1, 2, 3, and 4 of
+[the parent skill](SKILL.md#step-1--detect-context), **skipping Step 2.5**
+under this read-only assignment. The lead's base-prompt-only choice is an
+explicit decline of bootstrap for this invocation; create no extension or
+opt-out marker. The pass remains subject to the parent trust boundary,
 including reading changed files and their relevant context. Re-check HEAD
 and working-tree status afterward. A changed candidate invalidates the pass;
 return `stale` with the observed SHA and request a new frozen candidate.
@@ -67,8 +84,18 @@ Load the installed herdr-peers skill and Herdr's `herdr --skill`. The lead
 finds the reviewer with `herdr-peers list`, then sends one bounded ask:
 
 ```bash
-herdr-peers ask <reviewer-address> "Review lane: review the frozen candidate in <repository> on <branch>, base <base SHA>, head <head SHA>, against <criteria>. Use ai-diff-reviewer --base <base SHA>, read-only. Return completion status, both SHAs, verdict, findings table and bodies, notes, recommendation, and validation limitations. Do not merge or tag."
+herdr-peers ask <reviewer-address> - <<'REVIEW_REQUEST'
+Review lane: review the frozen candidate in <repository> on <branch>,
+base <base SHA>, head <head SHA>, against <criteria>.
+Use ai-diff-reviewer --base <base SHA>, read-only; skip Step 2.5.
+Return completion status, both SHAs, verdict, findings table and bodies,
+notes, recommendation, and validation limitations. Do not merge or tag.
+REVIEW_REQUEST
 ```
+
+Replace the placeholders in the quoted heredoc; its body is literal text,
+so acceptance criteria containing shell metacharacters are not executed.
+Use the live address from `list` for the command argument.
 
 The reviewer runs `herdr-peers check` on the received message first. An
 `ANSWER` result grants exactly one `herdr-peers reply` to the recorded ask

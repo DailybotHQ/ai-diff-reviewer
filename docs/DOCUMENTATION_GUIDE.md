@@ -6,7 +6,7 @@ How documentation is organised in this repo, who each file is for, and what to u
 
 | File | Audience | Purpose |
 |---|---|---|
-| `README.md` | Marketplace browsers + first-time consumers | Hero copy, quick-start, full input/output table, recipes, FAQ. Scannable in 60 seconds. |
+| `README.md` | Marketplace browsers + first-time consumers | Product introduction, pinned local/CI quickstarts, core usage, ecosystem links, and trust summary. Detailed inputs/outputs and recipes are linked from the shipped reference and docs. |
 | `AGENTS.md` | AI coding agents + contributors | Source of truth: rules, standards, structure, do/don't, pre-commit checklist. |
 | `CLAUDE.md` | Claude Code | Symlink → AGENTS.md. Don't edit. |
 | `CHANGELOG.md` | Existing consumers | What changed in each release; impact assessment. |
@@ -112,7 +112,7 @@ Docs version with the code. A change in `scripts/reviewer.py` plus a doc update 
 
 When cutting a release:
 - `CHANGELOG.md` is updated *in the same commit* that bumps to the release tag.
-- The README's "Quick start" example pins to `@v3` (or whichever current major), not to a specific patch — so it doesn't need updating per release.
+- The README quickstart pins the exact release tag on both the Action and skill. Determine that tag from the auto-release configuration and releasable commit types, check the commands structurally before release, and verify the published install and checksum paths after release.
 - `docs/PROVIDERS.md` "Status" table updates only when a provider's status actually changes.
 
 ## Translations
