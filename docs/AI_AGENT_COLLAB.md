@@ -57,6 +57,15 @@ If two agents are working on overlapping areas in the same conversation:
 - **Parallel only with disjoint files.** If agent A is editing `scripts/reviewer.py` and agent B is editing `docs/PROMPTS.md`, parallel is fine. If both are touching `scripts/reviewer.py`, run them sequentially.
 - **Communicate via the PR description.** Update the PR description as you make significant changes so a later agent (or human) can reconstruct the chain of decisions.
 
+## Dedicated review lane
+
+For an orchestra, use the shipped [local reviewer lane guide](../skills/ai-diff-reviewer/orchestra.md).
+The lead assigns a different vendor/account with `ak pick`, freezes the
+shared branch's candidate SHA, collects findings through herdr-peers, and
+holds the merge for verified blockers and the repository's required gates.
+The reviewer works read-only in the base checkout; author fixes and a new
+review stay on the same feature branch.
+
 ## Coordinating with human reviewers
 
 The action ships to a global audience. Human review remains essential for:

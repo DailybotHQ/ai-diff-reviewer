@@ -280,6 +280,16 @@ four sibling sub-skills have their own procedures in their respective
 
 ---
 
+## Dedicated orchestra reviewer
+
+When the lead assigns an independent review lane, read
+[`orchestra.md`](orchestra.md) before the default flow. It covers choosing a
+different vendor/account with `ak pick`, reviewing a frozen base/head range
+in the shared base checkout, returning findings through herdr-peers, and the
+lead's merge gate. The assignment does not expand this skill's write scope.
+
+---
+
 ## Step 0 — Trust boundary
 
 This skill is **near read-only** on the working tree and does **not**
