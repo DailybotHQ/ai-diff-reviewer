@@ -320,3 +320,7 @@ Full spec: [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md). Cost + latency mo
 - **No `setup.py` / package install.** This is a GitHub Action, not a library. Consumers `uses:` it; nobody `pip install`s it.
 - **No Sentry, no telemetry, no analytics.** Logs go to the workflow log; there's no phone-home.
 - **No plugin system.** The provider abstraction is the only extension point; adding new ones is a code change in this repo, not a runtime hook.
+
+## Vendored contributor harness
+
+The contributor-only `.agents/skills/` snapshots are pinned in `skills-lock.json`: DeepWorkPlan v7.6.0 (DWP standard 7.0.0), AI Diff Reviewer v3.3.9, and Dailybot v3.23.12; vendored 2026-10-11. They are installed through exact tag URLs and checked against released source bytes. These trees are separate from the consumer-facing `skills/` source. The addon registry is `.dwp/config.json`; machine availability does not by itself enable an addon.
