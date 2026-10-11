@@ -12,6 +12,7 @@
     }
   },
   "benchmark": {
-    "enabled": true
+    "enabled": true,
+    "learnings": true
   }
 }

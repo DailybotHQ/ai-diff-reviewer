@@ -244,7 +244,7 @@ Use `enum.Enum` only when type-safe state machines are clearly load-bearing.
 
 ## Test discipline
 
-There's a stdlib `unittest` suite in `tests/` (720 tests as of v2.1.0, across 24 files) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
+There's a stdlib `unittest` suite in `tests/` (1152 tests across 64 files as of v3.3.0) plus dogfooding via `self-review.yml`. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for the full breakdown. For pure-function logic that warrants a new test:
 
 - Place at `tests/test_<area>.py` — **not** at `scripts/test_<area>.py`. The tests live in a sibling directory to keep `scripts/reviewer.py` importable as a plain module (`sys.path.insert(0, 'scripts'); import reviewer as r` — see the pattern in the existing test files).
 - Use stdlib `unittest`. No `pytest`.

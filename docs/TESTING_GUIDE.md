@@ -279,7 +279,7 @@ To skip the auto-release for a docs-only or infrastructure-only merge, put `[ski
 
 ## When the bar might rise
 
-We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus thirteen bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 1042 tests across 49 files. The remaining triggers for tightening the bar further:
+We already crossed some of the thresholds from earlier versions of this doc: the runtime sits around **~10k LOC as of v2.1.0**, we ship six runtime providers across two families (plus thirteen bring-your-own-endpoint backends), we ship a companion local skill with its own sub-skills, and the unit suite has grown to 1152 tests across 64 files (v3.3.0). The remaining triggers for tightening the bar further:
 
 1. The runtime file is already past the historical ~4500 LOC soft ceiling (see `docs/STANDARDS.md § "File size"`); the "split into modules" decision is open and should be made deliberately — the next feature that adds significant surface (a Gemini provider, a v2 findings schema) should not land as more lines in the single file.
 2. A class of bug ships repeatedly that `py_compile` + the unit suite + dogfooding doesn't catch.

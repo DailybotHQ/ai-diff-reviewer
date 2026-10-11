@@ -119,7 +119,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md). The summary:
 
 - `py_compile` is the static gate.
 - `actionlint` is the workflow gate.
-- The stdlib `unittest` suite in `tests/` is the unit gate (720 tests across 17 files as of v2.1.0, no third-party deps).
+- The stdlib `unittest` suite in `tests/` is the unit gate (1152 tests across 64 files as of v3.3.0, no third-party deps).
 - `cli-install-smoke` is the CLI-installer gate (matrix over the four agent-runner providers: `claude-code`, `cursor`, `codex`, `grok`).
 - `self-review.yml` is the integration gate (always-on Anthropic baseline plus scoped CLI-provider dogfooding for provider-sensitive changes).
 
