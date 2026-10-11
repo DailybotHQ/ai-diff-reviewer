@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [3.3.1] — 2026-10-11
+
 ### Changed
 
 - Documentation audit: refreshed stale test counts, the shipping-runner list in `docs/ARCHITECTURE.md`, the `@v3` pin guidance and the runner/backend wording in `docs/PROVIDERS.md`; enabled DWP benchmark learnings in `.dwp/config.json`.
