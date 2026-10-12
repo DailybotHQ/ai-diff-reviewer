@@ -323,4 +323,4 @@ Full spec: [`ITERATION_AWARENESS.md`](ITERATION_AWARENESS.md). Cost + latency mo
 
 ## Vendored contributor harness
 
-The contributor-only `.agents/skills/` snapshots are pinned in `skills-lock.json`: DeepWorkPlan v7.6.1 (DWP standard 7.0.0), AI Diff Reviewer v3.3.10, and Dailybot v3.23.12; vendored 2026-10-11. They are installed through exact tag URLs and checked against released source bytes. These trees are separate from the consumer-facing `skills/` source. The addon registry is `.dwp/config.json`; machine availability does not by itself enable an addon.
+The contributor-only `.agents/skills/` snapshots are pinned in `skills-lock.json`: DeepWorkPlan v7.6.3 (DWP standard 7.0.0), AI Diff Reviewer v3.3.11, and Dailybot v3.23.14; vendored 2026-10-12. They are installed through exact tag URLs and checked against released source bytes. These trees are separate from the consumer-facing `skills/` source. The addon registry is `.dwp/config.json`; machine availability does not by itself enable an addon.
