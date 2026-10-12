@@ -7,8 +7,8 @@
     },
     "ai-diff-reviewer": {
       "enabled": true,
-      "note": "Dogfood upgrade: verified pinned skill",
-      "version": "v3.3.9"
+      "note": "Existing auto-release dogfood snapshot is newer than the pack pin; verified and preserved without downgrade",
+      "version": "v3.3.10"
     },
     "dailybot": {
       "enabled": true,
