@@ -2,7 +2,7 @@
   "addons": {
     "agentkit": {
       "enabled": true,
-      "version": "v1.0.0"
+      "version": "v1.0.1"
     },
     "ai-diff-reviewer": {
       "enabled": true,
@@ -14,7 +14,8 @@
     },
     "devcontainer": {
       "enabled": false,
-      "note": "Pure tooling repository with no development container/editor layer; host tools left untouched"
+      "note": "Pure tooling repository with no development container/editor layer; host tools left untouched",
+      "version": "v1.0.1"
     },
     "vim": {
       "enabled": false,
