@@ -6,7 +6,7 @@
     },
     "ai-diff-reviewer": {
       "enabled": true,
-      "version": "v3.3.14"
+      "version": "v3.3.16"
     },
     "dailybot": {
       "enabled": true,
