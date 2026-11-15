@@ -29,5 +29,8 @@
   "benchmark": {
     "enabled": true,
     "learnings": true
+  },
+  "decisions": {
+    "debate": "auto"
   }
 }

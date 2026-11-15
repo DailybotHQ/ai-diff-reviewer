@@ -74,6 +74,7 @@ correctness, clarity, simplicity, and verified completion.
 | Skills & Agents Catalog | [.agents/docs/skills_agents_catalog.md](.agents/docs/skills_agents_catalog.md) |
 | Deep Work Plan skill | [.agents/skills/deepworkplan/SKILL.md](.agents/skills/deepworkplan/SKILL.md) |
 | Dailybot agent skill | [.agents/skills/dailybot/SKILL.md](.agents/skills/dailybot/SKILL.md) |
+| herdr-peers agent skill | [.agents/skills/herdr-peers/SKILL.md](.agents/skills/herdr-peers/SKILL.md) |
 
 ---
 
@@ -289,7 +290,7 @@ The nine `dwp-*` / `skill-create` / `agent-create` entries are thin delegators t
 
 ## Deep Work Plan
 
-This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 7.0.0 (onboarded 2026-07-04; upgraded 2026-09-13, 2026-10-01, 2026-10-09, 2026-10-11, 2026-10-12, 2026-10-13, 2026-10-25 and 2026-11-15; skill 7.10.1, vendored 2026-11-15). New plans use v7 by default; existing v5 and v6 plans keep their recorded generation and move only through an explicit, previewed migration. The addon registry is the tracked `.dwp/config.json` (`ai-diff-reviewer`, `dailybot`, `agentkit`, `herdr` enabled; `devcontainer`, `vim` declined — `.agents/skills/deepworkplan/spec/CONFIG.md`).
+This repository ships the **Deep Work Plan (DWP)** methodology as an installed skill so any AI agent can plan, execute, and verify structured engineering work here. DWP rests on two pillars: **spec-driven development** (the plan is the spec — atomic tasks with binary validation gates) and **harness engineering** (the repository itself is the harness: `AGENTS.md`, `docs/`, `.agents/` kit, and the gitignored `.dwp/` state layer). DWP standard: 7.0.0 (onboarded 2026-07-04; upgraded 2026-09-13, 2026-10-01, 2026-10-09, 2026-10-11, 2026-10-12, 2026-10-13, 2026-10-25 and 2026-11-15; skill 7.10.1, vendored 2026-11-15). New plans use v7 by default; existing v5 and v6 plans keep their recorded generation and move only through an explicit, previewed migration. The addon registry is the tracked `.dwp/config.json` (`ai-diff-reviewer`, `dailybot`, `agentkit`, `herdr` enabled; `devcontainer`, `vim` declined — `.agents/skills/deepworkplan/spec/CONFIG.md`). The registry also records `decisions.debate` as `auto` (the pack default, CONFIG.md §3b): a plan's consequential decisions may be settled by a herdr-peers debate — `auto` authorizes nothing by itself; a debate additionally needs the plan's `agent_delegation` grant and the developer's approval of a plan that lists the debate.
 
 ### Deep Work Plans — invocation
 
