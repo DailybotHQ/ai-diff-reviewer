@@ -17,6 +17,10 @@
       "note": "Pure tooling repository with no development container/editor layer; host tools left untouched",
       "version": "v1.0.1"
     },
+    "herdr": {
+      "enabled": true,
+      "version": "v1.2.1"
+    },
     "vim": {
       "enabled": false,
       "note": "Pure tooling repository with no development container/editor layer; host tools left untouched"
@@ -25,5 +29,8 @@
   "benchmark": {
     "enabled": true,
     "learnings": true
+  },
+  "decisions": {
+    "debate": "auto"
   }
 }
