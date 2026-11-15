@@ -1,25 +1,32 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "ai-diff-reviewer": {
       "source": "DailybotHQ/ai-diff-reviewer",
       "sourceType": "github",
       "skillPath": "skills/ai-diff-reviewer/SKILL.md",
-      "computedHash": "bf441b47b88ff1250702da4d55bc49a0ddabf7078fa65b48eac1cca947f7dcb8"
+      "computedHash": "a76f75ef76c00ecba349d61e6eab5be1cbec84e324a8e7820cff2d9cce39f69a"
     },
     "dailybot": {
       "source": "DailybotHQ/agent-skill",
       "ref": "v3.23.17",
       "sourceType": "github",
       "skillPath": "skills/dailybot/SKILL.md",
-      "computedHash": "7be02d9eeafc49d9da5e6a8279d69a672b05c27c4673f651d7a6f51c48f138b9"
+      "computedHash": "a134facca72c20f693b48e6d71c6356d866e9d35d3c890fbfdfb24e91b7c2cb1"
     },
     "deepworkplan": {
       "source": "DailybotHQ/deepworkplan-skill",
-      "ref": "v7.9.0",
+      "ref": "v7.10.1",
       "sourceType": "github",
       "skillPath": "skills/deepworkplan/SKILL.md",
-      "computedHash": "bbc42d1db71fc0355bc582b2aa51bed0956cbcfa10f425267b69640b06e9191d"
+      "computedHash": "c2cd2c726e9c2531f8b43e043b7058e4a134b759229d5b48f4b9b303ccc13763"
+    },
+    "herdr-peers": {
+      "source": "DailybotHQ/herdr-peers",
+      "ref": "v1.2.1",
+      "sourceType": "github",
+      "skillPath": "skills/herdr-peers/SKILL.md",
+      "computedHash": "009aab7b175ae877eff14aa96db00d5789cd23a14af949a174abe97425783bc5"
     }
   }
 }
