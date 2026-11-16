@@ -376,7 +376,7 @@ npx skills update deepworkplan dailybot herdr-peers
 # Re-add a skill from scratch (e.g. after upstream renames the repo)
 npx skills add DailybotHQ/deepworkplan-skill --skill deepworkplan -y
 npx skills add DailybotHQ/agent-skill --skill dailybot -y
-npx skills add DailybotHQ/herdr-peers@v1.2.1 --skill herdr-peers -y
+npx skills add DailybotHQ/herdr-peers@v1.3.0 --skill herdr-peers -y
 ```
 
 The four in-house skills (`release`, `prompt-test`, `add-provider`, plus the agent personas) are **not** vendored — they're authored directly in this repo and not tracked by the lockfile.

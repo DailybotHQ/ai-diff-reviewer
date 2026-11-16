@@ -23,10 +23,10 @@
     },
     "herdr-peers": {
       "source": "DailybotHQ/herdr-peers",
-      "ref": "v1.2.1",
+      "ref": "v1.3.0",
       "sourceType": "github",
       "skillPath": "skills/herdr-peers/SKILL.md",
-      "computedHash": "009aab7b175ae877eff14aa96db00d5789cd23a14af949a174abe97425783bc5"
+      "computedHash": "75c8864bbf7351f5808168ad1bb41e76528ec6f523a2b8fcf7edbf173d96eab7"
     }
   }
 }
