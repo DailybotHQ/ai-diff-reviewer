@@ -2,7 +2,7 @@
   "addons": {
     "agentkit": {
       "enabled": true,
-      "version": "v1.0.1"
+      "version": "v1.5.0"
     },
     "ai-diff-reviewer": {
       "enabled": true,
@@ -10,20 +10,21 @@
     },
     "dailybot": {
       "enabled": true,
-      "version": "v3.23.17"
+      "version": "v3.23.20"
     },
     "devcontainer": {
       "enabled": false,
       "note": "Pure tooling repository with no development container/editor layer; host tools left untouched",
-      "version": "v1.0.1"
+      "version": "v1.4.0"
     },
     "herdr": {
       "enabled": true,
-      "version": "v2.1.0"
+      "version": "v2.2.0"
     },
     "vim": {
       "enabled": false,
-      "note": "Pure tooling repository with no development container/editor layer; host tools left untouched"
+      "note": "Pure tooling repository with no development container/editor layer; host tools left untouched",
+      "version": "v1.1.0"
     }
   },
   "benchmark": {
