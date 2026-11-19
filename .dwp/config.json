@@ -2,7 +2,7 @@
   "addons": {
     "agentkit": {
       "enabled": true,
-      "version": "v1.5.0"
+      "version": "v1.5.1"
     },
     "ai-diff-reviewer": {
       "enabled": true,
@@ -15,7 +15,7 @@
     "devcontainer": {
       "enabled": false,
       "note": "Pure tooling repository with no development container/editor layer; host tools left untouched",
-      "version": "v1.4.2"
+      "version": "v1.4.3"
     },
     "herdr": {
       "enabled": true,
