@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Contributor tooling only (no runtime or prompt change): the vendored DeepWorkPlan pack moves to v8.0.6, herdr-peers to v2.2.2 and the Dailybot skill to v3.23.21, each verified against its release; the addon registry records coding-agents-kit v1.5.2, devcontainer-kit v1.4.4 and DeepWorkPlan Vim v1.1.1.
 
 ## [3.3.9] — 2026-10-11
 
